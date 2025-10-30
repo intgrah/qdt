@@ -7,3 +7,4 @@ type t =
   | Colon_equals
   | Let
   | Fun
+  | Underscore
