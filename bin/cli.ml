@@ -2,10 +2,10 @@ type options = {
   input_file : string;
   show_lex : bool;
   show_parse : bool;
-  show_elaboration : bool;
+  show_elab : bool;
 }
 
-let usage_msg = "Usage: code [options] <file>\n\nOptions:"
+let usage_msg = "Usage: qdt [options] <file>\n\nOptions:"
 
 let parse_args () =
   let input_file : string option ref = ref None in
@@ -38,5 +38,5 @@ let parse_args () =
         input_file = file;
         show_lex = !show_lex;
         show_parse = !show_parse;
-        show_elaboration = !show_elab;
+        show_elab = !show_elab;
       }
