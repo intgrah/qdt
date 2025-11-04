@@ -1,26 +1,18 @@
 (lang dune 3.20)
 
-(name code)
+(name qdt)
 
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github intgrah/qdt))
 
-(authors "Author Name <author@example.com>")
-
-(maintainers "Maintainer Name <maintainer@example.com>")
+(authors "Jeremy Chen <git@sl.intgrah.com>")
 
 (license LICENSE)
 
-(documentation https://url/to/documentation)
-
 (package
- (name code)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml)
- (tags
-  ("add topics" "to describe" your project)))
-
-; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
+ (name qdt)
+ (synopsis "Query-based Dependent Type Elaborator")
+ (description "Query-based Dependent Type Elaborator")
+ (depends ocaml))
