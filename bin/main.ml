@@ -1,14 +1,21 @@
-(* open Code
+let main () =
+  let args = Cli.parse_args () in
 
-type env *)
+  let src = In_channel.with_open_text args.input_file In_channel.input_all in
+  let src_chars = String.to_seq src |> List.of_seq in
 
-(* let force : Val.t -> Val.t = failwith ""
-let eval_type : env -> Type.t -> Val_type.t = failwith ""
-let eval_term : env -> Type.t -> Val.t = failwith ""
-let inst : Clo.t -> Type.t -> Val.t = failwith ""
-let apply : Val.t -> Val.t -> Val.t = failwith ""
-let proj : Val.t -> Val.t -> Val.t = failwith ""
-let quote : int -> Val.t -> Term.t = failwith "" *)
-(* let parse source_code = failwith ""
-let elaborate cst = failwith ""
-let type_check ast = failwith "" *)
+  (* Lex *)
+  let tokens = Lang.Lexer.scan [] src_chars in
+  if args.show_lex then
+    Format.printf "%a\n\n"
+      (Format.pp_print_list
+         ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
+         Lang.Token.pp)
+      tokens;
+
+  (* Parse *)
+  let program = Lang.Parser.parse tokens in
+  if args.show_parse then
+    Format.printf "%a\n\n" Lang.Raw_syntax.pp_program program
+
+let () = main ()
