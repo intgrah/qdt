@@ -1,6 +1,6 @@
 type options = {
   input_file : string;
-  show_tokens : bool;
+  show_lex : bool;
   show_parse : bool;
   show_elaboration : bool;
 }
@@ -9,13 +9,13 @@ let usage_msg = "Usage: code [options] <file>\n\nOptions:"
 
 let parse_args () =
   let input_file : string option ref = ref None in
-  let show_tokens : bool ref = ref false in
+  let show_lex : bool ref = ref false in
   let show_parse : bool ref = ref false in
   let show_elab : bool ref = ref false in
 
   let spec =
     [
-      ("--lex", Arg.Set show_tokens, " Show lexer output");
+      ("--lex", Arg.Set show_lex, " Show lexer output");
       ("--parse", Arg.Set show_parse, " Show parser output");
       ("--elab", Arg.Set show_elab, " Show elaboration output");
     ]
@@ -36,7 +36,7 @@ let parse_args () =
   | Some file ->
       {
         input_file = file;
-        show_tokens = !show_tokens;
+        show_lex = !show_lex;
         show_parse = !show_parse;
         show_elaboration = !show_elab;
       }
