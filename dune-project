@@ -17,4 +17,5 @@
  (description "Query-based Dependent Type Elaborator")
  (depends
   ocaml
-  (alcotest :with-test)))
+  (alcotest :with-test)
+  (bisect_ppx :with-test)))
