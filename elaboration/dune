@@ -1,3 +1,4 @@
 (library
  (name elaboration)
- (libraries lang))
+ (libraries lang)
+ (instrumentation (backend bisect_ppx)))
