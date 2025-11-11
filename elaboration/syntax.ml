@@ -17,10 +17,21 @@ type tm =
   | InsertedMeta of meta_id * bd list
   | Unit
   | UnitTerm
+  | Prod of tm * tm (* non-dependent product A × B *)
+  | Pair of tm * tm
+  | Fst of tm
+  | Snd of tm
 
 type ty = tm
 
-type val_ty =
+type frame =
+  | FApp of val_ty
+  | FFst
+  | FSnd
+
+and spine = frame list
+
+and val_ty =
   | VFlex of meta_id * spine
   | VRigid of lvl * spine
   | VLam of string * closure
@@ -28,10 +39,11 @@ type val_ty =
   | VU
   | VUnit
   | VUnitTerm
+  | VProd of val_ty * val_ty (* non-dependent product *)
+  | VPair of val_ty * val_ty
 
 and closure = Closure of env * tm
 and env = val_ty list
-and spine = val_ty list
 
 let meta_table : (meta_id, val_ty option) Hashtbl.t = Hashtbl.create 16
 

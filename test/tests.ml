@@ -59,7 +59,7 @@ module Test_eval = struct
     reset_meta_context ();
     let m = fresh_meta () in
     solve_meta m (VLam ("x", Closure ([], Var 0)));
-    let v = VFlex (m, [ VU ]) in
+    let v = VFlex (m, [ FApp VU ]) in
     let result = Eval.force v in
     match result with
     | VU -> ()
@@ -180,7 +180,7 @@ module Test_unify = struct
   let pattern () =
     reset_meta_context ();
     let m = fresh_meta () in
-    let spine = [ VRigid (0, []); VRigid (1, []) ] in
+    let spine = [ FApp (VRigid (0, [])); FApp (VRigid (1, [])) ] in
     let rhs = VRigid (0, []) in
     Unify.solve 2 m spine rhs;
     match lookup_meta m with
@@ -216,27 +216,27 @@ module Test_unify = struct
     Unify.unify 1 lam1 lam2
 
   let spine_multiple () =
-    let v1 = VRigid (0, [ VU; VU ]) in
-    let v2 = VRigid (0, [ VU; VU ]) in
+    let v1 = VRigid (0, [ FApp VU; FApp VU ]) in
+    let v2 = VRigid (0, [ FApp VU; FApp VU ]) in
     Unify.unify 0 v1 v2
 
   let spine_different_length () =
-    let v1 = VRigid (0, [ VU ]) in
-    let v2 = VRigid (0, [ VU; VU ]) in
+    let v1 = VRigid (0, [ FApp VU ]) in
+    let v2 = VRigid (0, [ FApp VU; FApp VU ]) in
     Alcotest.check_raises "spine length error" Unify.Unify_error (fun () ->
         Unify.unify 0 v1 v2)
 
   let meta_spine_same () =
     reset_meta_context ();
     let m = fresh_meta () in
-    let v1 = VFlex (m, [ VU ]) in
-    let v2 = VFlex (m, [ VU ]) in
+    let v1 = VFlex (m, [ FApp VU ]) in
+    let v2 = VFlex (m, [ FApp VU ]) in
     Unify.unify 0 v1 v2
 
   let pattern_complex () =
     reset_meta_context ();
     let m = fresh_meta () in
-    let spine = [ VRigid (1, []); VRigid (0, []) ] in
+    let spine = [ FApp (VRigid (1, [])); FApp (VRigid (0, [])) ] in
     let rhs = VPi ("x", VRigid (1, []), Closure ([ VRigid (1, []) ], Var 0)) in
     Unify.solve 2 m spine rhs;
     match lookup_meta m with
@@ -251,7 +251,7 @@ module Test_unify = struct
   let pattern_with_lambda () =
     reset_meta_context ();
     let m = fresh_meta () in
-    let spine = [ VRigid (0, []) ] in
+    let spine = [ FApp (VRigid (0, [])) ] in
     let rhs = VLam ("y", Closure ([ VRigid (0, []) ], Var 1)) in
     Unify.solve 1 m spine rhs;
     match lookup_meta m with
@@ -259,6 +259,22 @@ module Test_unify = struct
         let tm = Quote.quote 0 v in
         Alcotest.(check tm_testable) "same" (Lam ("x0", Lam ("y", Var 1))) tm
     | None -> Alcotest.fail "pattern with lambda not solved"
+
+  let prod_unify () =
+    let p1 = VProd (VU, VUnit) in
+    let p2 = VProd (VU, VUnit) in
+    Unify.unify 0 p1 p2
+
+  let prod_unify_different () =
+    let p1 = VProd (VU, VUnit) in
+    let p2 = VProd (VUnit, VU) in
+    Alcotest.check_raises "prod unify error" Unify.Unify_error (fun () ->
+        Unify.unify 0 p1 p2)
+
+  let pair_unify () =
+    let p1 = VPair (VU, VUnitTerm) in
+    let p2 = VPair (VU, VUnitTerm) in
+    Unify.unify 0 p1 p2
 
   let tests =
     [
@@ -279,6 +295,9 @@ module Test_unify = struct
       Alcotest.test_case "meta spine same" `Quick meta_spine_same;
       Alcotest.test_case "pattern complex" `Quick pattern_complex;
       Alcotest.test_case "pattern with lambda" `Quick pattern_with_lambda;
+      Alcotest.test_case "prod unify" `Quick prod_unify;
+      Alcotest.test_case "prod unify different" `Quick prod_unify_different;
+      Alcotest.test_case "pair unify" `Quick pair_unify;
     ]
 end
 
@@ -529,6 +548,52 @@ module Test_elab = struct
     | VUnit -> ()
     | _ -> Alcotest.fail "id _ () should have type Unit"
 
+  let prod_type_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Prod (U, Unit)) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Prod (U, Unit), VU -> ()
+    | _ -> Alcotest.fail "product type infer failed"
+
+  let pair_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Pair (U, UnitTerm)) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Pair (U, UnitTerm), VProd (VU, VUnit) -> ()
+    | _ -> Alcotest.fail "pair infer failed"
+
+  let fst_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Fst (Pair (U, UnitTerm))) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Fst (Pair (U, UnitTerm)), VU -> ()
+    | _ -> Alcotest.fail "fst infer failed"
+
+  let snd_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Snd (Pair (U, UnitTerm))) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Snd (Pair (U, UnitTerm)), VUnit -> ()
+    | _ -> Alcotest.fail "snd infer failed"
+
+  let prod_normalize () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Fst (Pair (UnitTerm, U))) in
+    let tm, _ty = Elab.infer ctx [] raw in
+    let normalized = Quote.nf [] tm in
+    match normalized with
+    | UnitTerm -> ()
+    | _ -> Alcotest.failf "expected (), got %s" (Pretty.tm_to_string normalized)
+
   let tests =
     [
       Alcotest.test_case "check identity" `Quick check_identity;
@@ -553,6 +618,11 @@ module Test_elab = struct
       Alcotest.test_case "unit term infer" `Quick unit_term_infer;
       Alcotest.test_case "unit term check" `Quick unit_term_check;
       Alcotest.test_case "id _ () infers hole as Unit" `Quick id_hole_unit;
+      Alcotest.test_case "product type infer" `Quick prod_type_infer;
+      Alcotest.test_case "pair infer" `Quick pair_infer;
+      Alcotest.test_case "fst infer" `Quick fst_infer;
+      Alcotest.test_case "snd infer" `Quick snd_infer;
+      Alcotest.test_case "product normalize" `Quick prod_normalize;
     ]
 end
 

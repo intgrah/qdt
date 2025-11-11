@@ -36,6 +36,10 @@ let rec pp_tm (fmt : Format.formatter) (t : tm) : unit =
       Format.fprintf fmt "?%d[%d]" m bound_count
   | Unit -> Format.fprintf fmt "Unit"
   | UnitTerm -> Format.fprintf fmt "()"
+  | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ ×@ %a@]" pp_tm a pp_tm b
+  | Pair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp_tm a pp_tm b
+  | Fst t -> Format.fprintf fmt "@[<hov 2>fst@ %a@]" pp_tm t
+  | Snd t -> Format.fprintf fmt "@[<hov 2>snd@ %a@]" pp_tm t
 
 let pp_val (fmt : Format.formatter) (v : val_ty) : unit =
   let tm = Quote.quote 0 v in

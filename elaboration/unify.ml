@@ -25,7 +25,7 @@ let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
   let rec go sp dom ren =
     match sp with
     | [] -> (dom, ren)
-    | t :: rest -> (
+    | FApp t :: rest -> (
         match force t with
         | VRigid (x, []) ->
             if IntMap.mem x ren then
@@ -33,6 +33,7 @@ let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
             else
               go rest (dom + 1) (IntMap.add x dom ren)
         | _ -> raise Unify_error)
+    | _ :: _ -> raise Unify_error (* can't invert projections *)
   in
   let dom, ren = go sp 0 IntMap.empty in
   { dom; cod = gamma; ren }
@@ -42,7 +43,9 @@ let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
   let rec go t sp =
     match sp with
     | [] -> t
-    | u :: rest -> App (go t rest, rename m pren u)
+    | FApp u :: rest -> App (go t rest, rename m pren u)
+    | FFst :: rest -> Fst (go t rest)
+    | FSnd :: rest -> Snd (go t rest)
   in
 
   match force v with
@@ -68,6 +71,8 @@ let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
   | VU -> U
   | VUnit -> Unit
   | VUnitTerm -> UnitTerm
+  | VProd (a, b) -> Prod (rename m pren a, rename m pren b)
+  | VPair (a, b) -> Pair (rename m pren a, rename m pren b)
 
 (* Wrap term in n lambdas *)
 let lams (n : lvl) (t : tm) : tm =
@@ -90,9 +95,11 @@ let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : val_ty) : unit =
 let rec unify_spine (l : lvl) (sp1 : spine) (sp2 : spine) : unit =
   match (sp1, sp2) with
   | [], [] -> ()
-  | t1 :: rest1, t2 :: rest2 ->
+  | FApp t1 :: rest1, FApp t2 :: rest2 ->
       unify_spine l rest1 rest2;
       unify l t1 t2
+  | FFst :: rest1, FFst :: rest2 -> unify_spine l rest1 rest2
+  | FSnd :: rest1, FSnd :: rest2 -> unify_spine l rest1 rest2
   | _ -> raise Unify_error
 
 and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
@@ -104,9 +111,13 @@ and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
         (appl_clos t (VRigid (l, [])))
         (appl_clos u (VRigid (l, [])))
   | VLam (_, t), u ->
-      unify (l + 1) (appl_clos t (VRigid (l, []))) (apply_ty u (VRigid (l, [])))
+      unify (l + 1)
+        (appl_clos t (VRigid (l, [])))
+        (apply_frame u (FApp (VRigid (l, []))))
   | t, VLam (_, u) ->
-      unify (l + 1) (apply_ty t (VRigid (l, []))) (appl_clos u (VRigid (l, [])))
+      unify (l + 1)
+        (apply_frame t (FApp (VRigid (l, []))))
+        (appl_clos u (VRigid (l, [])))
   (* Rigid cases *)
   | VU, VU -> ()
   | VUnit, VUnit -> ()
@@ -116,6 +127,12 @@ and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
       unify (l + 1)
         (appl_clos b (VRigid (l, [])))
         (appl_clos b' (VRigid (l, [])))
+  | VProd (a, b), VProd (a', b') ->
+      unify l a a';
+      unify l b b'
+  | VPair (a, b), VPair (a', b') ->
+      unify l a a';
+      unify l b b'
   | VRigid (x, sp), VRigid (x', sp') when x = x' -> unify_spine l sp sp'
   | VFlex (m, sp), VFlex (m', sp') when m = m' -> unify_spine l sp sp'
   (* Pattern unification *)

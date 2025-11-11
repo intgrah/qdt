@@ -47,7 +47,8 @@ let parse_parens (p : 'a t) : 'a t =
 
 let rec parse_atom : Raw_syntax.t t =
  fun input ->
-  (parse_var <|> parse_hole <|> parse_type <|> parse_unit <|> parse_unit_term
+  (parse_fst <|> parse_snd <|> parse_var <|> parse_hole <|> parse_type
+ <|> parse_unit <|> parse_pair <|> parse_unit_term
  <|> parse_parens parse_preterm)
     input
 
@@ -72,6 +73,30 @@ and parse_unit : Raw_syntax.t t = function
 and parse_unit_term : Raw_syntax.t t = function
   | Token.LParen :: Token.RParen :: rest -> Some (Raw_syntax.UnitTerm, rest)
   | _ -> None
+
+and parse_pair : Raw_syntax.t t =
+ fun input ->
+  (let* () = token Token.LParen in
+   let* a = parse_preterm in
+   let* () = token Token.Comma in
+   let* b = parse_preterm in
+   let* () = token Token.RParen in
+   return (Raw_syntax.Pair (a, b)))
+    input
+
+and parse_fst : Raw_syntax.t t =
+ fun input ->
+  (let* () = token Token.Fst in
+   let* t = parse_atom in
+   return (Raw_syntax.Fst t))
+    input
+
+and parse_snd : Raw_syntax.t t =
+ fun input ->
+  (let* () = token Token.Snd in
+   let* t = parse_atom in
+   return (Raw_syntax.Snd t))
+    input
 
 and parse_lambda : Raw_syntax.t t =
  fun input ->
@@ -107,6 +132,14 @@ and parse_arrow : Raw_syntax.t t =
    return (Raw_syntax.Arrow (a, b)))
     input
 
+and parse_prod : Raw_syntax.t t =
+ fun input ->
+  (let* a = parse_app in
+   let* _ = token Token.Times in
+   let* b = parse_preterm in
+   return (Raw_syntax.Prod (a, b)))
+    input
+
 and parse_app : Raw_syntax.t t =
  fun input ->
   (let* head = parse_atom in
@@ -115,7 +148,8 @@ and parse_app : Raw_syntax.t t =
     input
 
 and parse_preterm : Raw_syntax.t t =
- fun input -> (parse_lambda <|> parse_pi <|> parse_arrow <|> parse_app) input
+ fun input ->
+  (parse_lambda <|> parse_pi <|> parse_prod <|> parse_arrow <|> parse_app) input
 
 and parse_def : Raw_syntax.def t = function
   | Token.Def :: rest ->

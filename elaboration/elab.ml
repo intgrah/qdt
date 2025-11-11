@@ -148,6 +148,38 @@ and infer (ctx : Check.context) (names : name_ctx) :
   | Unit -> (Unit, VU)
   (* Unit term *)
   | UnitTerm -> (UnitTerm, VUnit)
+  (* Product type *)
+  | Prod (a, b) ->
+      let a' = check ctx names a VU in
+      let b' = check ctx names b VU in
+      (Prod (a', b'), VU)
+  (* Pair *)
+  | Pair (a, b) ->
+      let a', a_ty = infer ctx names a in
+      let b', b_ty = infer ctx names b in
+      (Pair (a', b'), VProd (a_ty, b_ty))
+  (* First projection *)
+  | Fst t -> (
+      let t', t_ty = infer ctx names t in
+      match Eval.force t_ty with
+      | VProd (a, _) -> (Fst t', a)
+      | _ ->
+          let a_val = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+          let b_val = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+          let prod_ty = VProd (a_val, b_val) in
+          unify_catch ctx prod_ty t_ty;
+          (Fst t', a_val))
+  (* Second projection *)
+  | Snd t -> (
+      let t', t_ty = infer ctx names t in
+      match Eval.force t_ty with
+      | VProd (_, b) -> (Snd t', b)
+      | _ ->
+          let a_val = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+          let b_val = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+          let prod_ty = VProd (a_val, b_val) in
+          unify_catch ctx prod_ty t_ty;
+          (Snd t', b_val))
   (* Hole in inference mode - create meta for both term and type *)
   | Hole ->
       let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
