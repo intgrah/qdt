@@ -305,7 +305,7 @@ module Test_elab = struct
   let check_identity () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Lambda ("x", Some U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLambda ("x", Some RU, RIdent "x")) in
     let expected = VPi ("_", VU, Closure ([], U)) in
     let tm = Elab.check ctx [] raw expected in
     match tm with
@@ -315,7 +315,7 @@ module Test_elab = struct
   let infer_unannotated () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Lambda ("x", None, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLambda ("x", None, RIdent "x")) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Lam ("x", Var 0), VPi _ -> ()
@@ -324,7 +324,7 @@ module Test_elab = struct
   let hole_check () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.Hole in
+    let raw = Lang.Raw_syntax.RHole in
     let tm = Elab.check ctx [] raw VU in
     match tm with
     | InsertedMeta (_, []) -> ()
@@ -333,7 +333,7 @@ module Test_elab = struct
   let hole_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.Hole in
+    let raw = Lang.Raw_syntax.RHole in
     let tm, _ty = Elab.infer ctx [] raw in
     match tm with
     | InsertedMeta (_, []) -> ()
@@ -344,7 +344,7 @@ module Test_elab = struct
     let id_ty = VPi ("_", VU, Closure ([], U)) in
     let id_val = VLam ("x", Closure ([], Var 0)) in
     let ctx = Check.bind_def Check.empty_context id_val id_ty in
-    let raw = Lang.Raw_syntax.(App (Ident "id", U)) in
+    let raw = Lang.Raw_syntax.(RApp (RIdent "id", RU)) in
     let _tm, ty = Elab.infer ctx [ "id" ] raw in
     match ty with
     | VU -> ()
@@ -353,7 +353,7 @@ module Test_elab = struct
   let pi_type () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Pi ("A", U, Arrow (Ident "A", Ident "A"))) in
+    let raw = Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A"))) in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
     | VU ->
@@ -366,7 +366,7 @@ module Test_elab = struct
   let let_annotated_check () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Let ("x", Some U, U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLet ("x", Some RU, RU, RIdent "x")) in
     let tm = Elab.check ctx [] raw VU in
     match tm with
     | Let ("x", U, U, Var 0) -> ()
@@ -375,7 +375,7 @@ module Test_elab = struct
   let let_unannotated_check () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Let ("x", None, U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLet ("x", None, RU, RIdent "x")) in
     let tm = Elab.check ctx [] raw VU in
     match tm with
     | Let ("x", U, U, Var 0) -> ()
@@ -384,7 +384,7 @@ module Test_elab = struct
   let let_annotated_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Let ("x", Some U, U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLet ("x", Some RU, RU, RIdent "x")) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Let ("x", U, U, Var 0), VU -> ()
@@ -393,7 +393,7 @@ module Test_elab = struct
   let let_unannotated_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Let ("x", None, U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLet ("x", None, RU, RIdent "x")) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Let ("x", U, U, Var 0), VU -> ()
@@ -402,7 +402,7 @@ module Test_elab = struct
   let arrow_type () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Arrow (U, U)) in
+    let raw = Lang.Raw_syntax.(RArrow (RU, RU)) in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
     | VU -> Alcotest.(check tm_testable) "same" (Pi ("_", U, U)) tm
@@ -411,7 +411,7 @@ module Test_elab = struct
   let error_var_not_in_scope () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Ident "x") in
+    let raw = Lang.Raw_syntax.(RIdent "x") in
     Alcotest.check_raises "var not in scope"
       (Elab.Elab_error "Variable not in scope: x") (fun () ->
         ignore (Elab.infer ctx [] raw))
@@ -419,7 +419,7 @@ module Test_elab = struct
   let error_unify_mismatch () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Lambda ("x", Some U, Ident "x")) in
+    let raw = Lang.Raw_syntax.(RLambda ("x", Some RU, RIdent "x")) in
     try
       ignore (Elab.check ctx [] raw VU);
       Alcotest.fail "expected unify error"
@@ -433,7 +433,7 @@ module Test_elab = struct
   let non_pi_application () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(App (U, U)) in
+    let raw = Lang.Raw_syntax.(RApp (RU, RU)) in
     try
       let _tm, _ty = Elab.infer ctx [] raw in
       Alcotest.fail "expected unify error when applying to non-function"
@@ -449,7 +449,7 @@ module Test_elab = struct
     let ctx = Check.empty_context in
     let raw =
       Lang.Raw_syntax.(
-        Let ("x", Some U, U, Let ("y", Some (Ident "x"), Ident "x", Ident "y")))
+        RLet ("x", Some RU, RU, RLet ("y", Some (RIdent "x"), RIdent "x", RIdent "y")))
     in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
@@ -463,7 +463,7 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     let raw =
-      Lang.Raw_syntax.(Lambda ("x", Some (Pi ("A", U, Ident "A")), Ident "x"))
+      Lang.Raw_syntax.(RLambda ("x", Some (RPi ("A", RU, RIdent "A")), RIdent "x"))
     in
     let expected =
       VPi
@@ -480,7 +480,7 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     let raw =
-      Lang.Raw_syntax.(Pi ("A", U, Pi ("B", U, Arrow (Ident "A", Ident "B"))))
+      Lang.Raw_syntax.(RPi ("A", RU, RPi ("B", RU, RArrow (RIdent "A", RIdent "B"))))
     in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
@@ -493,7 +493,7 @@ module Test_elab = struct
   let let_with_hole () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Let ("x", None, Hole, Hole)) in
+    let raw = Lang.Raw_syntax.(RLet ("x", None, RHole, RHole)) in
     let tm, _ty = Elab.infer ctx [] raw in
     match tm with
     | Let ("x", _, InsertedMeta _, InsertedMeta _) -> ()
@@ -502,7 +502,7 @@ module Test_elab = struct
   let unit_type_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.Unit in
+    let raw = Lang.Raw_syntax.RUnit in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Unit, VU -> ()
@@ -511,7 +511,7 @@ module Test_elab = struct
   let unit_term_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.UnitTerm in
+    let raw = Lang.Raw_syntax.RUnitTerm in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | UnitTerm, VUnit -> ()
@@ -520,7 +520,7 @@ module Test_elab = struct
   let unit_term_check () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.UnitTerm in
+    let raw = Lang.Raw_syntax.RUnitTerm in
     let tm = Elab.check ctx [] raw VUnit in
     match tm with
     | UnitTerm -> ()
@@ -530,10 +530,10 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     (* forall A : Type, A -> A *)
-    let id_ty = Lang.Raw_syntax.(Pi ("A", U, Arrow (Ident "A", Ident "A"))) in
+    let id_ty = Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A"))) in
     (* def id : forall A : Type, A -> A := λA => λx => x *)
     let id_body =
-      Lang.Raw_syntax.(Lambda ("A", None, Lambda ("x", None, Ident "x")))
+      Lang.Raw_syntax.(RLambda ("A", None, RLambda ("x", None, RIdent "x")))
     in
     let id_tm =
       Elab.check ctx [] id_body (Eval.eval [] (Elab.check ctx [] id_ty VU))
@@ -542,7 +542,7 @@ module Test_elab = struct
     let id_ty_val = Eval.eval [] (Elab.check ctx [] id_ty VU) in
     let ctx = Check.bind_def ctx id_val id_ty_val in
     (* id _ () should infer the hole as Unit *)
-    let raw = Lang.Raw_syntax.(App (App (Ident "id", Hole), UnitTerm)) in
+    let raw = Lang.Raw_syntax.(RApp (RApp (RIdent "id", RHole), RUnitTerm)) in
     let _tm, ty = Elab.infer ctx [ "id" ] raw in
     match Eval.force ty with
     | VUnit -> ()
@@ -551,7 +551,7 @@ module Test_elab = struct
   let prod_type_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Prod (U, Unit)) in
+    let raw = Lang.Raw_syntax.(RProd (RU, RUnit)) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Prod (U, Unit), VU -> ()
@@ -560,7 +560,7 @@ module Test_elab = struct
   let pair_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Pair (U, UnitTerm)) in
+    let raw = Lang.Raw_syntax.(RPair (RU, RUnitTerm)) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Pair (U, UnitTerm), VProd (VU, VUnit) -> ()
@@ -569,7 +569,7 @@ module Test_elab = struct
   let fst_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Fst (Pair (U, UnitTerm))) in
+    let raw = Lang.Raw_syntax.(RFst (RPair (RU, RUnitTerm))) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Fst (Pair (U, UnitTerm)), VU -> ()
@@ -578,7 +578,7 @@ module Test_elab = struct
   let snd_infer () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Snd (Pair (U, UnitTerm))) in
+    let raw = Lang.Raw_syntax.(RSnd (RPair (RU, RUnitTerm))) in
     let tm, ty = Elab.infer ctx [] raw in
     match (tm, ty) with
     | Snd (Pair (U, UnitTerm)), VUnit -> ()
@@ -587,7 +587,7 @@ module Test_elab = struct
   let prod_normalize () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(Fst (Pair (UnitTerm, U))) in
+    let raw = Lang.Raw_syntax.(RFst (RPair (RUnitTerm, RU))) in
     let tm, _ty = Elab.infer ctx [] raw in
     let normalized = Quote.nf [] tm in
     match normalized with
@@ -632,8 +632,8 @@ module Programs = struct
     let prog =
       [
         ( "id",
-          Some Lang.Raw_syntax.(Arrow (U, U)),
-          Lang.Raw_syntax.(Lambda ("x", Some U, Ident "x")) );
+          Some Lang.Raw_syntax.(RArrow (RU, RU)),
+          Lang.Raw_syntax.(RLambda ("x", Some RU, RIdent "x")) );
       ]
     in
     let result = Elab.elab_program prog in
@@ -651,22 +651,22 @@ module Programs = struct
         ( "const",
           Some
             Lang.Raw_syntax.(
-              Pi
+              RPi
                 ( "A",
-                  U,
-                  Pi ("B", U, Arrow (Ident "A", Arrow (Ident "B", Ident "A")))
+                  RU,
+                  RPi ("B", RU, RArrow (RIdent "A", RArrow (RIdent "B", RIdent "A")))
                 )),
           Lang.Raw_syntax.(
-            Lambda
+            RLambda
               ( "A",
-                Some U,
-                Lambda
+                Some RU,
+                RLambda
                   ( "B",
-                    Some U,
-                    Lambda
+                    Some RU,
+                    RLambda
                       ( "x",
-                        Some (Ident "A"),
-                        Lambda ("y", Some (Ident "B"), Ident "x") ) ) )) );
+                        Some (RIdent "A"),
+                        RLambda ("y", Some (RIdent "B"), RIdent "x") ) ) )) );
       ]
     in
     let result = Elab.elab_program prog in
@@ -681,7 +681,7 @@ module Programs = struct
   let hole_solved () =
     reset_meta_context ();
     let prog =
-      [ ("id", None, Lang.Raw_syntax.(Lambda ("x", None, Ident "x"))) ]
+      [ ("id", None, Lang.Raw_syntax.(RLambda ("x", None, RIdent "x"))) ]
     in
     let result = Elab.elab_program prog in
     match result with
@@ -692,10 +692,10 @@ module Programs = struct
     reset_meta_context ();
     let prog =
       [
-        ("A", Some Lang.Raw_syntax.U, Lang.Raw_syntax.U);
+        ("A", Some Lang.Raw_syntax.RU, Lang.Raw_syntax.RU);
         ( "id",
-          Some Lang.Raw_syntax.(Arrow (Ident "A", Ident "A")),
-          Lang.Raw_syntax.(Lambda ("x", Some (Ident "A"), Ident "x")) );
+          Some Lang.Raw_syntax.(RArrow (RIdent "A", RIdent "A")),
+          Lang.Raw_syntax.(RLambda ("x", Some (RIdent "A"), RIdent "x")) );
       ]
     in
     let result = Elab.elab_program prog in
@@ -708,9 +708,9 @@ module Programs = struct
     let prog =
       [
         ( "f",
-          Some Lang.Raw_syntax.(Arrow (U, U)),
+          Some Lang.Raw_syntax.(RArrow (RU, RU)),
           Lang.Raw_syntax.(
-            Lambda ("x", Some U, Let ("y", Some U, Ident "x", Ident "y"))) );
+            RLambda ("x", Some RU, RLet ("y", Some RU, RIdent "x", RIdent "y"))) );
       ]
     in
     let result = Elab.elab_program prog in

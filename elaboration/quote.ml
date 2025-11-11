@@ -23,5 +23,4 @@ and quote (l : lvl) (v : val_ty) : tm =
   | VProd (a, b) -> Prod (quote l a, quote l b)
   | VPair (a, b) -> Pair (quote l a, quote l b)
 
-(* Normalize term *)
 let nf (env : env) (t : tm) : tm = quote (List.length env) (Eval.eval env t)

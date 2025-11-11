@@ -55,23 +55,23 @@ let rec parse_atom : Raw_syntax.t t =
 and parse_var : Raw_syntax.t t =
  fun input ->
   (let* name = parse_ident in
-   return (Raw_syntax.Ident name))
+   return (Raw_syntax.RIdent name))
     input
 
 and parse_hole : Raw_syntax.t t = function
-  | Token.Underscore :: rest -> Some (Raw_syntax.Hole, rest)
+  | Token.Underscore :: rest -> Some (Raw_syntax.RHole, rest)
   | _ -> None
 
 and parse_type : Raw_syntax.t t = function
-  | Token.Type :: rest -> Some (Raw_syntax.U, rest)
+  | Token.Type :: rest -> Some (Raw_syntax.RU, rest)
   | _ -> None
 
 and parse_unit : Raw_syntax.t t = function
-  | Token.Unit :: rest -> Some (Raw_syntax.Unit, rest)
+  | Token.Unit :: rest -> Some (Raw_syntax.RUnit, rest)
   | _ -> None
 
 and parse_unit_term : Raw_syntax.t t = function
-  | Token.LParen :: Token.RParen :: rest -> Some (Raw_syntax.UnitTerm, rest)
+  | Token.LParen :: Token.RParen :: rest -> Some (Raw_syntax.RUnitTerm, rest)
   | _ -> None
 
 and parse_pair : Raw_syntax.t t =
@@ -81,21 +81,21 @@ and parse_pair : Raw_syntax.t t =
    let* () = token Token.Comma in
    let* b = parse_preterm in
    let* () = token Token.RParen in
-   return (Raw_syntax.Pair (a, b)))
+   return (Raw_syntax.RPair (a, b)))
     input
 
 and parse_fst : Raw_syntax.t t =
  fun input ->
   (let* () = token Token.Fst in
    let* t = parse_atom in
-   return (Raw_syntax.Fst t))
+   return (Raw_syntax.RFst t))
     input
 
 and parse_snd : Raw_syntax.t t =
  fun input ->
   (let* () = token Token.Snd in
    let* t = parse_atom in
-   return (Raw_syntax.Snd t))
+   return (Raw_syntax.RSnd t))
     input
 
 and parse_lambda : Raw_syntax.t t =
@@ -110,7 +110,7 @@ and parse_lambda : Raw_syntax.t t =
    in
    let* _ = token Token.Eq_gt in
    let* body = parse_preterm in
-   return (Raw_syntax.Lambda (name, ty_opt, body)))
+   return (Raw_syntax.RLambda (name, ty_opt, body)))
     input
 
 and parse_pi : Raw_syntax.t t = function
@@ -120,7 +120,7 @@ and parse_pi : Raw_syntax.t t = function
        let* a = parse_preterm in
        let* _ = token Token.Comma in
        let* b = parse_preterm in
-       return (Raw_syntax.Pi (name, a, b)))
+       return (Raw_syntax.RPi (name, a, b)))
         rest
   | _ -> None
 
@@ -129,7 +129,7 @@ and parse_arrow : Raw_syntax.t t =
   (let* a = parse_app in
    let* _ = token Token.Hyphen_gt in
    let* b = parse_preterm in
-   return (Raw_syntax.Arrow (a, b)))
+   return (Raw_syntax.RArrow (a, b)))
     input
 
 and parse_prod : Raw_syntax.t t =
@@ -137,14 +137,14 @@ and parse_prod : Raw_syntax.t t =
   (let* a = parse_app in
    let* _ = token Token.Times in
    let* b = parse_preterm in
-   return (Raw_syntax.Prod (a, b)))
+   return (Raw_syntax.RProd (a, b)))
     input
 
 and parse_app : Raw_syntax.t t =
  fun input ->
   (let* head = parse_atom in
    let* args = many parse_atom in
-   return (List.fold_left (fun f a -> Raw_syntax.App (f, a)) head args))
+   return (List.fold_left (fun f a -> Raw_syntax.RApp (f, a)) head args))
     input
 
 and parse_preterm : Raw_syntax.t t =

@@ -1,35 +1,35 @@
 type t =
-  | Ident of string
-  | App of t * t
-  | Lambda of string * t option * t
-  | Pi of string * t * t
-  | Arrow of t * t
-  | Let of string * t option * t * t
-  | Hole
-  | U
-  | Unit
-  | UnitTerm
-  | Prod of t * t
-  | Pair of t * t
-  | Fst of t
-  | Snd of t
+  | RIdent of string
+  | RApp of t * t
+  | RLambda of string * t option * t
+  | RPi of string * t * t
+  | RArrow of t * t
+  | RLet of string * t option * t * t
+  | RHole
+  | RU
+  | RUnit
+  | RUnitTerm
+  | RProd of t * t
+  | RPair of t * t
+  | RFst of t
+  | RSnd of t
 
 type def = string * t option * t
 type program = def list
 
 let rec pp (fmt : Format.formatter) (t : t) : unit =
   match t with
-  | Ident name -> Format.fprintf fmt "%s" name
-  | App (f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp f pp a
-  | Lambda (name, ty_opt, body) -> (
+  | RIdent name -> Format.fprintf fmt "%s" name
+  | RApp (f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp f pp a
+  | RLambda (name, ty_opt, body) -> (
       match ty_opt with
       | None -> Format.fprintf fmt "@[<hov 2>(λ%s.@ %a)@]" name pp body
       | Some ty ->
           Format.fprintf fmt "@[<hov 2>(λ%s :@ %a.@ %a)@]" name pp ty pp body)
-  | Pi (name, a, b) ->
+  | RPi (name, a, b) ->
       Format.fprintf fmt "@[<hov 2>(Π %s :@ %a.@ %a)@]" name pp a pp b
-  | Arrow (a, b) -> Format.fprintf fmt "@[<hov 2>(%a@ →@ %a)@]" pp a pp b
-  | Let (name, ty_opt, rhs, body) -> (
+  | RArrow (a, b) -> Format.fprintf fmt "@[<hov 2>(%a@ →@ %a)@]" pp a pp b
+  | RLet (name, ty_opt, rhs, body) -> (
       match ty_opt with
       | None ->
           Format.fprintf fmt "@[<hov 2>(let %s :=@ %a@ in@ %a)@]" name pp rhs pp
@@ -37,14 +37,14 @@ let rec pp (fmt : Format.formatter) (t : t) : unit =
       | Some ty ->
           Format.fprintf fmt "@[<hov 2>(let %s :@ %a :=@ %a@ in@ %a)@]" name pp
             ty pp rhs pp body)
-  | Hole -> Format.fprintf fmt "_"
-  | U -> Format.fprintf fmt "Type"
-  | Unit -> Format.fprintf fmt "Unit"
-  | UnitTerm -> Format.fprintf fmt "()"
-  | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ ×@ %a@]" pp a pp b
-  | Pair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp a pp b
-  | Fst t -> Format.fprintf fmt "@[<hov 2>fst@ %a@]" pp t
-  | Snd t -> Format.fprintf fmt "@[<hov 2>snd@ %a@]" pp t
+  | RHole -> Format.fprintf fmt "_"
+  | RU -> Format.fprintf fmt "Type"
+  | RUnit -> Format.fprintf fmt "Unit"
+  | RUnitTerm -> Format.fprintf fmt "()"
+  | RProd (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ ×@ %a@]" pp a pp b
+  | RPair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp a pp b
+  | RFst t -> Format.fprintf fmt "@[<hov 2>fst@ %a@]" pp t
+  | RSnd t -> Format.fprintf fmt "@[<hov 2>snd@ %a@]" pp t
 
 let pp_def (fmt : Format.formatter) ((name, ty_opt, body) : def) : unit =
   match ty_opt with
