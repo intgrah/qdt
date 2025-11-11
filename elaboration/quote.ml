@@ -2,7 +2,6 @@ open Syntax
 
 let ix_of_lvl (l : lvl) (x : lvl) : ix = l - x - 1
 
-(* Quote spine *)
 let rec quote_sp (l : lvl) (t : tm) (sp : spine) : tm =
   match sp with
   | [] -> t
@@ -10,7 +9,6 @@ let rec quote_sp (l : lvl) (t : tm) (sp : spine) : tm =
   | FFst :: sp' -> Fst (quote_sp l t sp')
   | FSnd :: sp' -> Snd (quote_sp l t sp')
 
-(* Quote value back to term *)
 and quote (l : lvl) (v : val_ty) : tm =
   match Eval.force v with
   | VFlex (m, sp) -> quote_sp l (Meta m) sp
