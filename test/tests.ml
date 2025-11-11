@@ -18,10 +18,70 @@ module Test_eval = struct
     | VU -> ()
     | _ -> Alcotest.fail "beta reduction failed"
 
+  let let_eval () =
+    let term = Let ("x", U, U, Var 0) in
+    let result = Eval.eval [] term in
+    match result with
+    | VU -> ()
+    | _ -> Alcotest.fail "let evaluation failed"
+
+  let inserted_meta_bound () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    solve_meta m (VLam ("x", Closure ([], Var 0)));
+    let term = InsertedMeta (m, [ Bound ]) in
+    let result = Eval.eval [ VU ] term in
+    match result with
+    | VU -> ()
+    | _ -> Alcotest.fail "inserted meta bound failed"
+
+  let inserted_meta_defined () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    solve_meta m VU;
+    let term = InsertedMeta (m, [ Defined ]) in
+    let result = Eval.eval [ VU ] term in
+    match result with
+    | VU -> ()
+    | _ -> Alcotest.fail "inserted meta defined failed"
+
+  let inserted_meta_mixed () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    solve_meta m (VLam ("x", Closure ([], Var 0)));
+    let term = InsertedMeta (m, [ Bound; Defined ]) in
+    let result = Eval.eval [ VU; VU ] term in
+    match result with
+    | VU -> ()
+    | _ -> Alcotest.fail "inserted meta mixed failed"
+
+  let force_with_spine () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    solve_meta m (VLam ("x", Closure ([], Var 0)));
+    let v = VFlex (m, [ VU ]) in
+    let result = Eval.force v in
+    match result with
+    | VU -> ()
+    | _ -> Alcotest.fail "force with spine failed"
+
+  let pi_eval () =
+    let term = Pi ("x", U, Var 0) in
+    let result = Eval.eval [] term in
+    match result with
+    | VPi ("x", VU, Closure ([], Var 0)) -> ()
+    | _ -> Alcotest.fail "pi evaluation failed"
+
   let tests =
     [
       Alcotest.test_case "identity" `Quick identity;
       Alcotest.test_case "beta" `Quick beta;
+      Alcotest.test_case "let eval" `Quick let_eval;
+      Alcotest.test_case "inserted meta bound" `Quick inserted_meta_bound;
+      Alcotest.test_case "inserted meta defined" `Quick inserted_meta_defined;
+      Alcotest.test_case "inserted meta mixed" `Quick inserted_meta_mixed;
+      Alcotest.test_case "force with spine" `Quick force_with_spine;
+      Alcotest.test_case "pi eval" `Quick pi_eval;
     ]
 end
 
@@ -134,6 +194,72 @@ module Test_unify = struct
     let lam = VLam ("x", Closure ([ f ], App (Var 1, Var 0))) in
     Unify.unify 1 lam f
 
+  let pi_unify () =
+    let pi1 = VPi ("x", VU, Closure ([], U)) in
+    let pi2 = VPi ("y", VU, Closure ([], U)) in
+    Unify.unify 0 pi1 pi2
+
+  let pi_unify_different () =
+    let pi1 = VPi ("x", VU, Closure ([], U)) in
+    let pi2 = VPi ("y", VU, Closure ([], Pi ("_", U, U))) in
+    Alcotest.check_raises "pi unify error" Unify.Unify_error (fun () ->
+        Unify.unify 0 pi1 pi2)
+
+  let eta_right () =
+    let f = VRigid (0, []) in
+    let lam = VLam ("x", Closure ([ f ], App (Var 1, Var 0))) in
+    Unify.unify 1 f lam
+
+  let eta_both () =
+    let lam1 = VLam ("x", Closure ([ VRigid (0, []) ], App (Var 1, Var 0))) in
+    let lam2 = VLam ("y", Closure ([ VRigid (0, []) ], App (Var 1, Var 0))) in
+    Unify.unify 1 lam1 lam2
+
+  let spine_multiple () =
+    let v1 = VRigid (0, [ VU; VU ]) in
+    let v2 = VRigid (0, [ VU; VU ]) in
+    Unify.unify 0 v1 v2
+
+  let spine_different_length () =
+    let v1 = VRigid (0, [ VU ]) in
+    let v2 = VRigid (0, [ VU; VU ]) in
+    Alcotest.check_raises "spine length error" Unify.Unify_error (fun () ->
+        Unify.unify 0 v1 v2)
+
+  let meta_spine_same () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    let v1 = VFlex (m, [ VU ]) in
+    let v2 = VFlex (m, [ VU ]) in
+    Unify.unify 0 v1 v2
+
+  let pattern_complex () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    let spine = [ VRigid (1, []); VRigid (0, []) ] in
+    let rhs = VPi ("x", VRigid (1, []), Closure ([ VRigid (1, []) ], Var 0)) in
+    Unify.solve 2 m spine rhs;
+    match lookup_meta m with
+    | Some v ->
+        let tm = Quote.quote 0 v in
+        Alcotest.(check tm_testable)
+          "same"
+          (Lam ("x1", Lam ("x0", Pi ("x", Var 1, Var 0))))
+          tm
+    | None -> Alcotest.fail "pattern complex not solved"
+
+  let pattern_with_lambda () =
+    reset_meta_context ();
+    let m = fresh_meta () in
+    let spine = [ VRigid (0, []) ] in
+    let rhs = VLam ("y", Closure ([ VRigid (0, []) ], Var 1)) in
+    Unify.solve 1 m spine rhs;
+    match lookup_meta m with
+    | Some v ->
+        let tm = Quote.quote 0 v in
+        Alcotest.(check tm_testable) "same" (Lam ("x0", Lam ("y", Var 1))) tm
+    | None -> Alcotest.fail "pattern with lambda not solved"
+
   let tests =
     [
       Alcotest.test_case "reflexive" `Quick reflexive;
@@ -144,6 +270,15 @@ module Test_unify = struct
       Alcotest.test_case "scope check" `Quick scope_check;
       Alcotest.test_case "pattern" `Quick pattern;
       Alcotest.test_case "eta" `Quick eta;
+      Alcotest.test_case "pi unify" `Quick pi_unify;
+      Alcotest.test_case "pi unify different" `Quick pi_unify_different;
+      Alcotest.test_case "eta right" `Quick eta_right;
+      Alcotest.test_case "eta both" `Quick eta_both;
+      Alcotest.test_case "spine multiple" `Quick spine_multiple;
+      Alcotest.test_case "spine different length" `Quick spine_different_length;
+      Alcotest.test_case "meta spine same" `Quick meta_spine_same;
+      Alcotest.test_case "pattern complex" `Quick pattern_complex;
+      Alcotest.test_case "pattern with lambda" `Quick pattern_with_lambda;
     ]
 end
 
@@ -290,6 +425,88 @@ module Test_elab = struct
         else
           Alcotest.failf "wrong error: %s" msg
 
+  let nested_let () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw =
+      Lang.Raw_syntax.(
+        Let ("x", Some U, U, Let ("y", Some (Ident "x"), Ident "x", Ident "y")))
+    in
+    let tm, ty = Elab.infer ctx [] raw in
+    match ty with
+    | VU -> (
+        match tm with
+        | Let ("x", U, U, Let ("y", _, Var 0, Var 0)) -> ()
+        | _ -> Alcotest.failf "wrong term structure")
+    | _ -> Alcotest.fail "nested let failed"
+
+  let check_lambda_pi () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw =
+      Lang.Raw_syntax.(Lambda ("x", Some (Pi ("A", U, Ident "A")), Ident "x"))
+    in
+    let expected =
+      VPi
+        ( "_",
+          VPi ("A", VU, Closure ([], Var 0)),
+          Closure ([], Pi ("A", U, Var 0)) )
+    in
+    let tm = Elab.check ctx [] raw expected in
+    match tm with
+    | Lam ("x", Var 0) -> ()
+    | _ -> Alcotest.fail "check lambda pi failed"
+
+  let infer_nested_pi () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw =
+      Lang.Raw_syntax.(Pi ("A", U, Pi ("B", U, Arrow (Ident "A", Ident "B"))))
+    in
+    let tm, ty = Elab.infer ctx [] raw in
+    match ty with
+    | VU -> (
+        match tm with
+        | Pi ("A", U, Pi ("B", U, Pi ("_", Var 1, Var 1))) -> ()
+        | _ -> Alcotest.fail "wrong term for nested pi")
+    | _ -> Alcotest.fail "infer nested pi failed"
+
+  let let_with_hole () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Let ("x", None, Hole, Hole)) in
+    let tm, _ty = Elab.infer ctx [] raw in
+    match tm with
+    | Let ("x", _, InsertedMeta _, InsertedMeta _) -> ()
+    | _ -> Alcotest.fail "let with hole failed"
+
+  let unit_type_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.Unit in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Unit, VU -> ()
+    | _ -> Alcotest.fail "unit type infer failed"
+
+  let unit_term_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.UnitTerm in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | UnitTerm, VUnit -> ()
+    | _ -> Alcotest.fail "unit term infer failed"
+
+  let unit_term_check () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.UnitTerm in
+    let tm = Elab.check ctx [] raw VUnit in
+    match tm with
+    | UnitTerm -> ()
+    | _ -> Alcotest.fail "unit term check failed"
+
   let tests =
     [
       Alcotest.test_case "check identity" `Quick check_identity;
@@ -306,6 +523,13 @@ module Test_elab = struct
       Alcotest.test_case "error: var not in scope" `Quick error_var_not_in_scope;
       Alcotest.test_case "error: unify mismatch" `Quick error_unify_mismatch;
       Alcotest.test_case "non-pi application" `Quick non_pi_application;
+      Alcotest.test_case "nested let" `Quick nested_let;
+      Alcotest.test_case "check lambda pi" `Quick check_lambda_pi;
+      Alcotest.test_case "infer nested pi" `Quick infer_nested_pi;
+      Alcotest.test_case "let with hole" `Quick let_with_hole;
+      Alcotest.test_case "unit type infer" `Quick unit_type_infer;
+      Alcotest.test_case "unit term infer" `Quick unit_term_infer;
+      Alcotest.test_case "unit term check" `Quick unit_term_check;
     ]
 end
 

@@ -66,6 +66,8 @@ let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
           rename m pren a,
           rename m pren' (eval (VRigid (pren.cod, []) :: env) b) )
   | VU -> U
+  | VUnit -> Unit
+  | VUnitTerm -> UnitTerm
 
 (* Wrap term in n lambdas *)
 let lams (n : lvl) (t : tm) : tm =
@@ -107,6 +109,8 @@ and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
       unify (l + 1) (apply_ty t (VRigid (l, []))) (appl_clos u (VRigid (l, [])))
   (* Rigid cases *)
   | VU, VU -> ()
+  | VUnit, VUnit -> ()
+  | VUnitTerm, VUnitTerm -> ()
   | VPi (_, a, b), VPi (_, a', b') ->
       unify l a a';
       unify (l + 1)

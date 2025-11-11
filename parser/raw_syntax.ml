@@ -7,6 +7,8 @@ type t =
   | Let of string * t option * t * t
   | Hole
   | U
+  | Unit
+  | UnitTerm
 
 type def = string * t option * t
 type program = def list
@@ -33,6 +35,8 @@ let rec pp (fmt : Format.formatter) (t : t) : unit =
             ty pp rhs pp body)
   | Hole -> Format.fprintf fmt "_"
   | U -> Format.fprintf fmt "Type"
+  | Unit -> Format.fprintf fmt "Unit"
+  | UnitTerm -> Format.fprintf fmt "()"
 
 let pp_def (fmt : Format.formatter) ((name, ty_opt, body) : def) : unit =
   match ty_opt with
