@@ -25,8 +25,8 @@ let main () =
       List.iter
         (fun (name, term, ty) ->
           Format.printf "%s\n" name;
-          Format.printf "Type: %a\n" Elaboration.Pretty.pp_ty_val ty;
-          Format.printf "Term: %a\n\n" Elaboration.Pretty.pp_tm term)
+          Format.printf "  Type: %a\n" Elaboration.Pretty.pp_val ty;
+          Format.printf "  Term: %a\n\n" Elaboration.Pretty.pp_tm term)
         elab_defs
     with
     | Elaboration.Elab.Elab_error msg ->

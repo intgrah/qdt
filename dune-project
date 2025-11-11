@@ -15,4 +15,6 @@
  (name qdt)
  (synopsis "Query-based Dependent Type Elaborator")
  (description "Query-based Dependent Type Elaborator")
- (depends ocaml))
+ (depends
+  ocaml
+  (alcotest :with-test)))

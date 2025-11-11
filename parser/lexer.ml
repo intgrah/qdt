@@ -15,7 +15,11 @@ let rec scan_ident front = function
 let rec skip_comment depth = function
   | [] -> raise Unterminated_comment
   | '(' :: '*' :: cs -> skip_comment (depth + 1) cs (* nested comment *)
-  | '*' :: ')' :: cs -> if depth = 0 then cs else skip_comment (depth - 1) cs
+  | '*' :: ')' :: cs ->
+      if depth = 0 then
+        cs
+      else
+        skip_comment (depth - 1) cs
   | _ :: cs -> skip_comment depth cs
 
 let rec scan front_toks = function

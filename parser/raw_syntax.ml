@@ -6,7 +6,7 @@ type t =
   | Arrow of t * t
   | Let of string * t option * t * t
   | Hole
-  | Type
+  | U
 
 type def = string * t option * t
 type program = def list
@@ -32,7 +32,7 @@ let rec pp (fmt : Format.formatter) (t : t) : unit =
           Format.fprintf fmt "@[<hov 2>(let %s :@ %a :=@ %a@ in@ %a)@]" name pp
             ty pp rhs pp body)
   | Hole -> Format.fprintf fmt "_"
-  | Type -> Format.fprintf fmt "Type"
+  | U -> Format.fprintf fmt "Type"
 
 let pp_def (fmt : Format.formatter) ((name, ty_opt, body) : def) : unit =
   match ty_opt with

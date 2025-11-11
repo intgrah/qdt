@@ -5,12 +5,14 @@ exception Unify_error
 
 module IntMap = Map.Make (Int)
 
+(* Partial renaming from Γ to Δ *)
 type partial_renaming = {
-  dom : lvl; (* size of domain context *)
-  cod : lvl; (* size of codomain context *)
-  ren : lvl IntMap.t; (* domain variables => codomain variables *)
+  dom : lvl; (* size of Γ *)
+  cod : lvl; (* size of Δ *)
+  ren : lvl IntMap.t; (* mapping from Δ vars to Γ vars *)
 }
 
+(* Lift partial renaming over an extra bound variable *)
 let lift (pren : partial_renaming) : partial_renaming =
   {
     dom = pren.dom + 1;
@@ -18,138 +20,101 @@ let lift (pren : partial_renaming) : partial_renaming =
     ren = IntMap.add pren.cod pren.dom pren.ren;
   }
 
-let ix_of_lvl (l : lvl) (x : lvl) : ix = l - x - 1
-
-let invert (gamma : lvl) (sp : spine) : partial_renaming =
-  let rec go (sp : spine) (dom : lvl) (ren : lvl IntMap.t) : lvl * lvl IntMap.t
-      =
+(* Invert spine to partial renaming *)
+let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
+  let rec go sp dom ren =
     match sp with
     | [] -> (dom, ren)
-    | FApp (v, _ty) :: rest -> (
-        let dom', ren' = go rest dom ren in
-        match force (TmVal v) with
-        | TmVal (VNeutral { head = HVar x; spine = []; boundary = _ }) ->
-            if IntMap.mem x ren' then raise Unify_error
-            else (dom' + 1, IntMap.add x dom' ren')
+    | t :: rest -> (
+        match force t with
+        | VRigid (x, []) ->
+            if IntMap.mem x ren then
+              raise Unify_error
+            else
+              go rest (dom + 1) (IntMap.add x dom ren)
         | _ -> raise Unify_error)
   in
-  let dom, ren = go (List.rev sp) 0 IntMap.empty in
+  let dom, ren = go sp 0 IntMap.empty in
   { dom; cod = gamma; ren }
 
 (* Rename rhs using partial renaming, with occurs check for m *)
-let rec rename (m : meta_id) (pren : partial_renaming) (v : tm_val) : tm =
-  let rec go_sp (t : tm) : spine -> tm = function
+let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
+  let rec goSp t sp =
+    match sp with
     | [] -> t
-    | FApp (u, _ty) :: rest ->
-        let t' = go_sp t rest in
-        App (t', rename m pren u)
+    | u :: rest -> App (goSp t rest, rename m pren u)
   in
 
-  match force (TmVal v) with
-  | TmVal (VNeutral { head = HMeta m'; spine; boundary = _ }) ->
-      if m = m' then raise Unify_error (* occurs check *)
-      else go_sp (Meta m') spine
-  | TmVal (VNeutral { head = HVar x; spine; boundary = _ }) -> (
+  match force v with
+  | VFlex (m', sp) ->
+      if m = m' then
+        raise Unify_error
+      (* occurs *)
+      else
+        goSp (Meta m') sp
+  | VRigid (x, sp) -> (
       match IntMap.find_opt x pren.ren with
-      | None -> raise Unify_error (* out of scope *)
-      | Some x' -> go_sp (Var (ix_of_lvl pren.dom x')) spine)
-  | TmVal (VLam (Closure_tm (env, body))) ->
+      | None -> raise Unify_error (* scope error *)
+      | Some x' -> goSp (Var (Quote.ix_of_lvl pren.dom x')) sp)
+  | VLam (x, Closure (env, body)) ->
       let pren' = lift pren in
-      let body_val =
-        eval_tm
-          (TmVal
-             (VNeutral
-                {
-                  head = HVar pren.cod;
-                  spine = [];
-                  boundary = lazy (Abstract VType);
-                })
-          :: env)
-          body
-      in
-      Lam (Type, rename m pren' body_val)
-  | _ -> raise Unify_error
+      Lam (x, rename m pren' (eval (VRigid (pren.cod, []) :: env) body))
+  | VPi (x, a, Closure (env, b)) ->
+      let pren' = lift pren in
+      Pi
+        ( x,
+          rename m pren a,
+          rename m pren' (eval (VRigid (pren.cod, []) :: env) b) )
+  | VU -> U
 
 (* Wrap term in n lambdas *)
-let rec lams (n : lvl) (t : tm) : tm =
-  if n = 0 then t else Lam (Type, lams (n - 1) t)
+let lams (n : lvl) (t : tm) : tm =
+  let rec go i t =
+    if i = n then
+      t
+    else
+      go (i + 1) (Lam ("x" ^ string_of_int i, t))
+  in
+  go 0 t
 
-(* ?m spine = rhs *)
-let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : tm_val) : unit =
-  let pren = invert gamma sp in
+(* Solve ?m spine = rhs *)
+let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : val_ty) : unit =
+  let pren = invert_spine gamma sp in
   let rhs_tm = rename m pren rhs in
-  let solution = eval_tm [] (lams pren.dom rhs_tm) in
+  let solution = eval [] (lams pren.dom rhs_tm) in
   solve_meta m solution
 
-let rec unify_ty (l : lvl) (t : ty_val) (u : ty_val) : unit =
-  match (t, u) with
-  | VPi (a1, Closure_ty (env1, b1)), VPi (a2, Closure_ty (env2, b2)) ->
-      unify_ty l a1 a2;
-      let x_var : tm_val =
-        VNeutral { head = HVar l; spine = []; boundary = lazy (Abstract a1) }
-      in
-      let b1_val = Eval.eval_ty (TmVal x_var :: env1) b1 in
-      let b2_val = Eval.eval_ty (TmVal x_var :: env2) b2 in
-      unify_ty (l + 1) b1_val b2_val
-  | VType, VType -> ()
-  | ( VNeutral { head = HVar x1; spine = sp1; boundary = _ },
-      VNeutral { head = HVar x2; spine = sp2; boundary = _ } ) ->
-      if x1 = x2 then unify_sp l sp1 sp2 else raise Unify_error
-  | _ -> raise Unify_error
-
-and unify_sp (l : lvl) (sp1 : spine) (sp2 : spine) : unit =
+(* Unify spines *)
+let rec unify_spine (l : lvl) (sp1 : spine) (sp2 : spine) : unit =
   match (sp1, sp2) with
   | [], [] -> ()
-  | FApp (t1, _) :: rest1, FApp (t2, _) :: rest2 ->
-      unify_sp l rest1 rest2;
+  | t1 :: rest1, t2 :: rest2 ->
+      unify_spine l rest1 rest2;
       unify l t1 t2
   | _ -> raise Unify_error
 
-and unify (l : lvl) (t : tm_val) (u : tm_val) : unit =
-  let t =
-    match force (TmVal t) with
-    | TmVal x -> x
-    | _ -> failwith "unify: force got ty_val"
-  in
-  let u =
-    match force (TmVal u) with
-    | TmVal x -> x
-    | _ -> failwith "unify: force got ty_val"
-  in
-  match (t, u) with
-  (* Pattern unification *)
-  | VNeutral { head = HMeta m; spine; boundary = _ }, u -> solve l m spine u
-  | t, VNeutral { head = HMeta m; spine; boundary = _ } -> solve l m spine t
-  (* eta expansion *)
-  | VLam (Closure_tm (env1, body1)), VLam (Closure_tm (env2, body2)) ->
-      let v : tm_val =
-        VNeutral { head = HVar l; spine = []; boundary = lazy (Abstract VType) }
-      in
+and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
+  let appl_clos (Closure (env, body)) v = eval (v :: env) body in
+  match (force t, force u) with
+  (* Eta for lambdas *)
+  | VLam (_, t), VLam (_, u) ->
       unify (l + 1)
-        (eval_tm (TmVal v :: env1) body1)
-        (eval_tm (TmVal v :: env2) body2)
-  | VLam (Closure_tm (env, body)), u ->
-      let v : tm_val =
-        VNeutral { head = HVar l; spine = []; boundary = lazy (Abstract VType) }
-      in
-      let t_app = eval_tm (TmVal v :: env) body in
-      let u_app =
-        match apply (TmVal u) (TmVal v) with
-        | TmVal x -> x
-        | _ -> failwith "unify: apply got ty_val"
-      in
-      unify (l + 1) t_app u_app
-  | t, VLam (Closure_tm (env, body)) ->
-      let v : tm_val =
-        VNeutral { head = HVar l; spine = []; boundary = lazy (Abstract VType) }
-      in
-      let t_app =
-        match apply (TmVal t) (TmVal v) with
-        | TmVal x -> x
-        | _ -> failwith "unify: apply got ty_val"
-      in
-      let u_app = eval_tm (TmVal v :: env) body in
-      unify (l + 1) t_app u_app
-  | ( VNeutral { head = HVar x1; spine = sp1; boundary = _ },
-      VNeutral { head = HVar x2; spine = sp2; boundary = _ } ) ->
-      if x1 = x2 then unify_sp l sp1 sp2 else raise Unify_error
+        (appl_clos t (VRigid (l, [])))
+        (appl_clos u (VRigid (l, [])))
+  | VLam (_, t), u ->
+      unify (l + 1) (appl_clos t (VRigid (l, []))) (apply_ty u (VRigid (l, [])))
+  | t, VLam (_, u) ->
+      unify (l + 1) (apply_ty t (VRigid (l, []))) (appl_clos u (VRigid (l, [])))
+  (* Rigid cases *)
+  | VU, VU -> ()
+  | VPi (_, a, b), VPi (_, a', b') ->
+      unify l a a';
+      unify (l + 1)
+        (appl_clos b (VRigid (l, [])))
+        (appl_clos b' (VRigid (l, [])))
+  | VRigid (x, sp), VRigid (x', sp') when x = x' -> unify_spine l sp sp'
+  | VFlex (m, sp), VFlex (m', sp') when m = m' -> unify_spine l sp sp'
+  (* Pattern unification *)
+  | VFlex (m, sp), t -> solve l m sp t
+  | t, VFlex (m, sp) -> solve l m sp t
+  | _ -> raise Unify_error
