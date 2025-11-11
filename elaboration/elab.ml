@@ -26,15 +26,15 @@ let unify_catch (ctx : Check.context) (t : val_ty) (u : val_ty) : unit =
 let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
     (expected : val_ty) : tm =
   match (raw, Eval.force expected) with
-  (* λx. body : Π x : A. B *)
-  | Lambda (x, _, body), VPi (_, a, Closure (_, b)) ->
+  (* λx => body : Π x : A. B *)
+  | RLambda (x, _, body), VPi (_, a, Closure (_, b)) ->
       let ctx' = Check.bind_var ctx a in
       let names' = x :: names in
       let b_val = Eval.eval (VRigid (ctx.lvl, []) :: ctx.env) b in
       let body' = check ctx' names' body b_val in
       Lam (x, body')
   (* let x : A = t in u *)
-  | Let (x, ty_opt, t, u), expected -> (
+  | RLet (x, ty_opt, t, u), expected -> (
       match ty_opt with
       | Some ty_raw ->
           let ty = check ctx names ty_raw VU in
@@ -54,7 +54,7 @@ let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
           (* Infer type for let binding *)
           Let (x, Quote.quote ctx.lvl val_ty, t', u'))
   (* Hole in checking mode *)
-  | Hole, _ -> fresh_meta_ctx ctx
+  | RHole, _ -> fresh_meta_ctx ctx
   (* Fallback: infer and unify *)
   | _, expected ->
       let t', inferred = infer ctx names raw in
@@ -65,12 +65,12 @@ let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
 and infer (ctx : Check.context) (names : name_ctx) :
     Lang.Raw_syntax.t -> tm * val_ty = function
   (* Variable *)
-  | Ident x ->
+  | RIdent x ->
       let ix = lookup_var names x in
       let ty = List.nth ctx.types ix in
       (Var ix, ty)
   (* Lambda - insert meta for domain type if unannotated *)
-  | Lambda (x, ty_opt, body) -> (
+  | RLambda (x, ty_opt, body) -> (
       match ty_opt with
       | Some ty_raw ->
           (* Annotated lambda *)
@@ -90,7 +90,7 @@ and infer (ctx : Check.context) (names : name_ctx) :
             VPi (x, val_ty, Closure (ctx.env, Quote.quote (ctx.lvl + 1) body_ty))
           ))
   (* Application *)
-  | App (f, a) ->
+  | RApp (f, a) ->
       let f', f_ty = infer ctx names f in
       (* Ensure f_ty is a Pi type, inserting metas if needed *)
       let a_ty, b_clos =
@@ -112,19 +112,19 @@ and infer (ctx : Check.context) (names : name_ctx) :
       let b_val = Eval.eval (a_val :: env) b in
       (App (f', a'), b_val)
   (* Pi type *)
-  | Pi (x, a, b) ->
+  | RPi (x, a, b) ->
       let a' = check ctx names a VU in
       let a_val = Eval.eval ctx.env a' in
       let b' = check (Check.bind_var ctx a_val) (x :: names) b VU in
       (Pi (x, a', b'), VU)
   (* Arrow type, desugar to Pi type *)
-  | Arrow (a, b) ->
+  | RArrow (a, b) ->
       let a' = check ctx names a VU in
       let a_val = Eval.eval ctx.env a' in
       let b' = check (Check.bind_var ctx a_val) ("_" :: names) b VU in
       (Pi ("_", a', b'), VU)
   (* Let *)
-  | Let (x, ty_opt, t, u) -> (
+  | RLet (x, ty_opt, t, u) -> (
       match ty_opt with
       | Some ty_raw ->
           let ty = check ctx names ty_raw VU in
@@ -143,23 +143,23 @@ and infer (ctx : Check.context) (names : name_ctx) :
           in
           (Let (x, Quote.quote ctx.lvl val_ty, t', u'), u_ty))
   (* Universe *)
-  | U -> (U, VU)
+  | RU -> (U, VU)
   (* Unit type *)
-  | Unit -> (Unit, VU)
+  | RUnit -> (Unit, VU)
   (* Unit term *)
-  | UnitTerm -> (UnitTerm, VUnit)
+  | RUnitTerm -> (UnitTerm, VUnit)
   (* Product type *)
-  | Prod (a, b) ->
+  | RProd (a, b) ->
       let a' = check ctx names a VU in
       let b' = check ctx names b VU in
       (Prod (a', b'), VU)
   (* Pair *)
-  | Pair (a, b) ->
+  | RPair (a, b) ->
       let a', a_ty = infer ctx names a in
       let b', b_ty = infer ctx names b in
       (Pair (a', b'), VProd (a_ty, b_ty))
   (* First projection *)
-  | Fst t -> (
+  | RFst t -> (
       let t', t_ty = infer ctx names t in
       match Eval.force t_ty with
       | VProd (a, _) -> (Fst t', a)
@@ -170,7 +170,7 @@ and infer (ctx : Check.context) (names : name_ctx) :
           unify_catch ctx prod_ty t_ty;
           (Fst t', a_val))
   (* Second projection *)
-  | Snd t -> (
+  | RSnd t -> (
       let t', t_ty = infer ctx names t in
       match Eval.force t_ty with
       | VProd (_, b) -> (Snd t', b)
@@ -181,7 +181,7 @@ and infer (ctx : Check.context) (names : name_ctx) :
           unify_catch ctx prod_ty t_ty;
           (Snd t', b_val))
   (* Hole in inference mode - create meta for both term and type *)
-  | Hole ->
+  | RHole ->
       let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
       let tm = fresh_meta_ctx ctx in
       (tm, val_ty)

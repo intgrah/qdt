@@ -1,7 +1,6 @@
 open Syntax
 
-let rec pp_tm (fmt : Format.formatter) (t : tm) : unit =
-  match t with
+let rec pp_tm (fmt : Format.formatter) : tm -> unit = function
   | Var ix -> Format.fprintf fmt "#%d" ix
   | Lam (x, body) -> Format.fprintf fmt "@[<hov 2>(λ%s.@ %a)@]" x pp_tm body
   | App (f, a) -> (
