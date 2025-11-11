@@ -507,6 +507,28 @@ module Test_elab = struct
     | UnitTerm -> ()
     | _ -> Alcotest.fail "unit term check failed"
 
+  let id_hole_unit () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    (* forall A : Type, A -> A *)
+    let id_ty = Lang.Raw_syntax.(Pi ("A", U, Arrow (Ident "A", Ident "A"))) in
+    (* def id : forall A : Type, A -> A := λA => λx => x *)
+    let id_body =
+      Lang.Raw_syntax.(Lambda ("A", None, Lambda ("x", None, Ident "x")))
+    in
+    let id_tm =
+      Elab.check ctx [] id_body (Eval.eval [] (Elab.check ctx [] id_ty VU))
+    in
+    let id_val = Eval.eval [] id_tm in
+    let id_ty_val = Eval.eval [] (Elab.check ctx [] id_ty VU) in
+    let ctx = Check.bind_def ctx id_val id_ty_val in
+    (* id _ () should infer the hole as Unit *)
+    let raw = Lang.Raw_syntax.(App (App (Ident "id", Hole), UnitTerm)) in
+    let _tm, ty = Elab.infer ctx [ "id" ] raw in
+    match Eval.force ty with
+    | VUnit -> ()
+    | _ -> Alcotest.fail "id _ () should have type Unit"
+
   let tests =
     [
       Alcotest.test_case "check identity" `Quick check_identity;
@@ -530,6 +552,7 @@ module Test_elab = struct
       Alcotest.test_case "unit type infer" `Quick unit_type_infer;
       Alcotest.test_case "unit term infer" `Quick unit_term_infer;
       Alcotest.test_case "unit term check" `Quick unit_term_check;
+      Alcotest.test_case "id _ () infers hole as Unit" `Quick id_hole_unit;
     ]
 end
 
