@@ -3,16 +3,16 @@ open Syntax
 let ix_of_lvl (l : lvl) (x : lvl) : ix = l - x - 1
 
 (* Quote spine *)
-let rec quoteSp (l : lvl) (t : tm) (sp : spine) : tm =
+let rec quote_sp (l : lvl) (t : tm) (sp : spine) : tm =
   match sp with
   | [] -> t
-  | u :: sp' -> App (quoteSp l t sp', quote l u)
+  | u :: sp' -> App (quote_sp l t sp', quote l u)
 
 (* Quote value back to term *)
 and quote (l : lvl) (v : val_ty) : tm =
   match Eval.force v with
-  | VFlex (m, sp) -> quoteSp l (Meta m) sp
-  | VRigid (x, sp) -> quoteSp l (Var (ix_of_lvl l x)) sp
+  | VFlex (m, sp) -> quote_sp l (Meta m) sp
+  | VRigid (x, sp) -> quote_sp l (Var (ix_of_lvl l x)) sp
   | VLam (x, Closure (env, body)) ->
       Lam (x, quote (l + 1) (Eval.eval (VRigid (l, []) :: env) body))
   | VPi (x, a, Closure (env, body)) ->

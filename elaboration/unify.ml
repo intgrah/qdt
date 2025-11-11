@@ -39,10 +39,10 @@ let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
 
 (* Rename rhs using partial renaming, with occurs check for m *)
 let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
-  let rec goSp t sp =
+  let rec go t sp =
     match sp with
     | [] -> t
-    | u :: rest -> App (goSp t rest, rename m pren u)
+    | u :: rest -> App (go t rest, rename m pren u)
   in
 
   match force v with
@@ -51,11 +51,11 @@ let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
         raise Unify_error
       (* occurs *)
       else
-        goSp (Meta m') sp
+        go (Meta m') sp
   | VRigid (x, sp) -> (
       match IntMap.find_opt x pren.ren with
       | None -> raise Unify_error (* scope error *)
-      | Some x' -> goSp (Var (Quote.ix_of_lvl pren.dom x')) sp)
+      | Some x' -> go (Var (Quote.ix_of_lvl pren.dom x')) sp)
   | VLam (x, Closure (env, body)) ->
       let pren' = lift pren in
       Lam (x, rename m pren' (eval (VRigid (pren.cod, []) :: env) body))
