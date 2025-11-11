@@ -4,7 +4,8 @@ exception Illegal_character
 let is_alpha_num = function
   | '0' .. '9'
   | 'A' .. 'Z'
-  | 'a' .. 'z' ->
+  | 'a' .. 'z'
+  | '_' ->
       true
   | _ -> false
 
@@ -32,7 +33,6 @@ let rec scan front_toks = function
   | ',' :: cs -> scan (Token.Comma :: front_toks) cs
   | '(' :: cs -> scan (Token.LParen :: front_toks) cs
   | ')' :: cs -> scan (Token.RParen :: front_toks) cs
-  | '_' :: cs -> scan (Token.Underscore :: front_toks) cs
   (* λ in UTF-8 *)
   | '\xCE' :: '\xBB' :: cs -> scan (Token.Fun :: front_toks) cs
   (* Π in UTF-8 *)
@@ -44,11 +44,13 @@ let rec scan front_toks = function
       let tok, cs = scan_ident [ c ] cs in
       let tok =
         match tok with
+        | "_" -> Token.Underscore
         | "def" -> Token.Def
         | "let" -> Token.Let
         | "fun" -> Token.Fun
         | "forall" -> Token.Pi
         | "Type" -> Token.Type
+        | "Unit" -> Token.Unit
         | tok -> Token.Ident tok
       in
       scan (tok :: front_toks) cs
