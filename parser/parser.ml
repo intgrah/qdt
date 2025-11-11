@@ -60,7 +60,7 @@ and parse_hole : Raw_syntax.t t = function
   | _ -> None
 
 and parse_type : Raw_syntax.t t = function
-  | Token.Type :: rest -> Some (Raw_syntax.Type, rest)
+  | Token.Type :: rest -> Some (Raw_syntax.U, rest)
   | _ -> None
 
 and parse_lambda : Raw_syntax.t t =
