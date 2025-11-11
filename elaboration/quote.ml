@@ -18,6 +18,8 @@ and quote (l : lvl) (v : val_ty) : tm =
   | VPi (x, a, Closure (env, body)) ->
       Pi (x, quote l a, quote (l + 1) (Eval.eval (VRigid (l, []) :: env) body))
   | VU -> U
+  | VUnit -> Unit
+  | VUnitTerm -> UnitTerm
 
 (* Normalize term *)
 let nf (env : env) (t : tm) : tm = quote (List.length env) (Eval.eval env t)

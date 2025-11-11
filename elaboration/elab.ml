@@ -144,6 +144,10 @@ and infer (ctx : Check.context) (names : name_ctx) :
           (Let (x, Quote.quote ctx.lvl val_ty, t', u'), u_ty))
   (* Universe *)
   | U -> (U, VU)
+  (* Unit type *)
+  | Unit -> (Unit, VU)
+  (* Unit term *)
+  | UnitTerm -> (UnitTerm, VUnit)
   (* Hole in inference mode - create meta for both term and type *)
   | Hole ->
       let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in

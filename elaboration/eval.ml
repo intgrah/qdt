@@ -9,6 +9,8 @@ let rec eval (env : env) : tm -> val_ty = function
   | Let (_, _, t, u) -> eval (eval env t :: env) u
   | Meta m -> meta m
   | InsertedMeta (m, bds) -> apply_bound env (meta m) bds
+  | Unit -> VUnit
+  | UnitTerm -> VUnitTerm
 
 and ( $$ ) (Closure (env, t) : closure) (u : val_ty) : val_ty =
   eval (u :: env) t

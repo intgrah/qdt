@@ -15,6 +15,8 @@ type tm =
   | Let of string * tm * tm * tm
   | Meta of meta_id
   | InsertedMeta of meta_id * bd list
+  | Unit
+  | UnitTerm
 
 type ty = tm
 
@@ -24,6 +26,8 @@ type val_ty =
   | VLam of string * closure
   | VPi of string * val_ty * closure
   | VU
+  | VUnit
+  | VUnitTerm
 
 and closure = Closure of env * tm
 and env = val_ty list

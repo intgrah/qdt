@@ -34,6 +34,8 @@ let rec pp_tm (fmt : Format.formatter) (t : tm) : unit =
           0 bds
       in
       Format.fprintf fmt "?%d[%d]" m bound_count
+  | Unit -> Format.fprintf fmt "Unit"
+  | UnitTerm -> Format.fprintf fmt "()"
 
 let pp_val (fmt : Format.formatter) (v : val_ty) : unit =
   let tm = Quote.quote 0 v in
