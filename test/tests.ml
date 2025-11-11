@@ -209,6 +209,87 @@ module Test_elab = struct
           tm
     | _ -> Alcotest.fail "pi type failed"
 
+  let let_annotated_check () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Let ("x", Some U, U, Ident "x")) in
+    let tm = Elab.check ctx [] raw VU in
+    match tm with
+    | Let ("x", U, U, Var 0) -> ()
+    | _ -> Alcotest.fail "let annotated check failed"
+
+  let let_unannotated_check () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Let ("x", None, U, Ident "x")) in
+    let tm = Elab.check ctx [] raw VU in
+    match tm with
+    | Let ("x", U, U, Var 0) -> ()
+    | _ -> Alcotest.fail "let unannotated check failed"
+
+  let let_annotated_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Let ("x", Some U, U, Ident "x")) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Let ("x", U, U, Var 0), VU -> ()
+    | _ -> Alcotest.fail "let annotated infer failed"
+
+  let let_unannotated_infer () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Let ("x", None, U, Ident "x")) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match (tm, ty) with
+    | Let ("x", U, U, Var 0), VU -> ()
+    | _ -> Alcotest.fail "let unannotated infer failed"
+
+  let arrow_type () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Arrow (U, U)) in
+    let tm, ty = Elab.infer ctx [] raw in
+    match ty with
+    | VU -> Alcotest.(check tm_testable) "same" (Pi ("_", U, U)) tm
+    | _ -> Alcotest.fail "arrow type failed"
+
+  let error_var_not_in_scope () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Ident "x") in
+    Alcotest.check_raises "var not in scope"
+      (Elab.Elab_error "Variable not in scope: x") (fun () ->
+        ignore (Elab.infer ctx [] raw))
+
+  let error_unify_mismatch () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(Lambda ("x", Some U, Ident "x")) in
+    try
+      ignore (Elab.check ctx [] raw VU);
+      Alcotest.fail "expected unify error"
+    with
+    | Elab.Elab_error msg ->
+        if String.starts_with ~prefix:"Cannot unify" msg then
+          ()
+        else
+          Alcotest.failf "wrong error: %s" msg
+
+  let non_pi_application () =
+    reset_meta_context ();
+    let ctx = Check.empty_context in
+    let raw = Lang.Raw_syntax.(App (U, U)) in
+    try
+      let _tm, _ty = Elab.infer ctx [] raw in
+      Alcotest.fail "expected unify error when applying to non-function"
+    with
+    | Elab.Elab_error msg ->
+        if String.starts_with ~prefix:"Cannot unify" msg then
+          ()
+        else
+          Alcotest.failf "wrong error: %s" msg
+
   let tests =
     [
       Alcotest.test_case "check identity" `Quick check_identity;
@@ -217,6 +298,14 @@ module Test_elab = struct
       Alcotest.test_case "hole infer" `Quick hole_infer;
       Alcotest.test_case "application" `Quick application;
       Alcotest.test_case "pi type" `Quick pi_type;
+      Alcotest.test_case "let annotated check" `Quick let_annotated_check;
+      Alcotest.test_case "let unannotated check" `Quick let_unannotated_check;
+      Alcotest.test_case "let annotated infer" `Quick let_annotated_infer;
+      Alcotest.test_case "let unannotated infer" `Quick let_unannotated_infer;
+      Alcotest.test_case "arrow type" `Quick arrow_type;
+      Alcotest.test_case "error: var not in scope" `Quick error_var_not_in_scope;
+      Alcotest.test_case "error: unify mismatch" `Quick error_unify_mismatch;
+      Alcotest.test_case "non-pi application" `Quick non_pi_application;
     ]
 end
 
@@ -282,11 +371,43 @@ module Programs = struct
     | [ ("id", Lam ("x", Var 0), VPi _) ] -> ()
     | _ -> Alcotest.fail "hole solving failed"
 
+  let multiple_defs () =
+    reset_meta_context ();
+    let prog =
+      [
+        ("A", Some Lang.Raw_syntax.U, Lang.Raw_syntax.U);
+        ( "id",
+          Some Lang.Raw_syntax.(Arrow (Ident "A", Ident "A")),
+          Lang.Raw_syntax.(Lambda ("x", Some (Ident "A"), Ident "x")) );
+      ]
+    in
+    let result = Elab.elab_program prog in
+    match result with
+    | [ ("A", U, VU); ("id", Lam ("x", Var 0), VPi _) ] -> ()
+    | _ -> Alcotest.fail "multiple defs failed"
+
+  let def_with_let () =
+    reset_meta_context ();
+    let prog =
+      [
+        ( "f",
+          Some Lang.Raw_syntax.(Arrow (U, U)),
+          Lang.Raw_syntax.(
+            Lambda ("x", Some U, Let ("y", Some U, Ident "x", Ident "y"))) );
+      ]
+    in
+    let result = Elab.elab_program prog in
+    match result with
+    | [ ("f", Lam ("x", Let ("y", U, Var 0, Var 0)), VPi _) ] -> ()
+    | _ -> Alcotest.fail "def with let failed"
+
   let tests =
     [
       Alcotest.test_case "simple id" `Quick simple_id;
       Alcotest.test_case "const" `Quick const;
       Alcotest.test_case "hole solved" `Quick hole_solved;
+      Alcotest.test_case "multiple defs" `Quick multiple_defs;
+      Alcotest.test_case "def with let" `Quick def_with_let;
     ]
 end
 
