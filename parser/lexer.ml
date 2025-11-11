@@ -37,6 +37,8 @@ let rec scan front_toks = function
   | '\xCE' :: '\xBB' :: cs -> scan (Token.Fun :: front_toks) cs
   (* Π in UTF-8 *)
   | '\xCE' :: '\xA0' :: cs -> scan (Token.Pi :: front_toks) cs
+  (* × in UTF-8 *)
+  | '\xC3' :: '\x97' :: cs -> scan (Token.Times :: front_toks) cs
   (* ∀ in UTF-8 *)
   | '\xE2' :: '\x88' :: '\x80' :: cs -> scan (Token.Pi :: front_toks) cs
   | (' ' | '\t' | '\n') :: cs -> scan front_toks cs
@@ -51,6 +53,8 @@ let rec scan front_toks = function
         | "forall" -> Token.Pi
         | "Type" -> Token.Type
         | "Unit" -> Token.Unit
+        | "fst" -> Token.Fst
+        | "snd" -> Token.Snd
         | tok -> Token.Ident tok
       in
       scan (tok :: front_toks) cs

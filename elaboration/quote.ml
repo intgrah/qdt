@@ -6,7 +6,9 @@ let ix_of_lvl (l : lvl) (x : lvl) : ix = l - x - 1
 let rec quote_sp (l : lvl) (t : tm) (sp : spine) : tm =
   match sp with
   | [] -> t
-  | u :: sp' -> App (quote_sp l t sp', quote l u)
+  | FApp u :: sp' -> App (quote_sp l t sp', quote l u)
+  | FFst :: sp' -> Fst (quote_sp l t sp')
+  | FSnd :: sp' -> Snd (quote_sp l t sp')
 
 (* Quote value back to term *)
 and quote (l : lvl) (v : val_ty) : tm =
@@ -20,6 +22,8 @@ and quote (l : lvl) (v : val_ty) : tm =
   | VU -> U
   | VUnit -> Unit
   | VUnitTerm -> UnitTerm
+  | VProd (a, b) -> Prod (quote l a, quote l b)
+  | VPair (a, b) -> Pair (quote l a, quote l b)
 
 (* Normalize term *)
 let nf (env : env) (t : tm) : tm = quote (List.length env) (Eval.eval env t)

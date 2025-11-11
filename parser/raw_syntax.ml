@@ -9,6 +9,10 @@ type t =
   | U
   | Unit
   | UnitTerm
+  | Prod of t * t
+  | Pair of t * t
+  | Fst of t
+  | Snd of t
 
 type def = string * t option * t
 type program = def list
@@ -37,6 +41,10 @@ let rec pp (fmt : Format.formatter) (t : t) : unit =
   | U -> Format.fprintf fmt "Type"
   | Unit -> Format.fprintf fmt "Unit"
   | UnitTerm -> Format.fprintf fmt "()"
+  | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ ×@ %a@]" pp a pp b
+  | Pair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp a pp b
+  | Fst t -> Format.fprintf fmt "@[<hov 2>fst@ %a@]" pp t
+  | Snd t -> Format.fprintf fmt "@[<hov 2>snd@ %a@]" pp t
 
 let pp_def (fmt : Format.formatter) ((name, ty_opt, body) : def) : unit =
   match ty_opt with
