@@ -9,7 +9,7 @@ let lookup_var (names : name_ctx) (name : string) : int =
   | Some ix -> ix
   | None -> raise (Elab_error ("Variable not in scope: " ^ name))
 
-let freshMeta (ctx : Check.context) : tm =
+let fresh_meta_ctx (ctx : Check.context) : tm =
   let m = fresh_meta () in
   InsertedMeta (m, ctx.bds)
 
@@ -54,7 +54,7 @@ let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
           (* Infer type for let binding *)
           Let (x, Quote.quote ctx.lvl val_ty, t', u'))
   (* Hole in checking mode *)
-  | Hole, _ -> freshMeta ctx
+  | Hole, _ -> fresh_meta_ctx ctx
   (* Fallback: infer and unify *)
   | _, expected ->
       let t', inferred = infer ctx names raw in
@@ -83,7 +83,7 @@ and infer (ctx : Check.context) (names : name_ctx) :
           )
       | None ->
           (* Unannotated lambda - insert meta for domain type *)
-          let val_ty = Eval.eval ctx.env (freshMeta ctx) in
+          let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
           let ctx' = Check.bind_var ctx val_ty in
           let body', body_ty = infer ctx' (x :: names) body in
           ( Lam (x, body'),
@@ -98,8 +98,8 @@ and infer (ctx : Check.context) (names : name_ctx) :
         | VPi (_, a, b) -> (a, b)
         | _ -> (
             (* Not a Pi - insert metas and unify *)
-            let a_val = Eval.eval ctx.env (freshMeta ctx) in
-            let b_tm = freshMeta (Check.bind_var ctx a_val) in
+            let a_val = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+            let b_tm = fresh_meta_ctx (Check.bind_var ctx a_val) in
             let pi_ty = VPi ("_", a_val, Closure (ctx.env, b_tm)) in
             unify_catch ctx pi_ty f_ty;
             match Eval.force pi_ty with
@@ -146,8 +146,8 @@ and infer (ctx : Check.context) (names : name_ctx) :
   | U -> (U, VU)
   (* Hole in inference mode - create meta for both term and type *)
   | Hole ->
-      let val_ty = Eval.eval ctx.env (freshMeta ctx) in
-      let tm = freshMeta ctx in
+      let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+      let tm = fresh_meta_ctx ctx in
       (tm, val_ty)
 
 let elab_def (ctx : Check.context) (names : name_ctx)
