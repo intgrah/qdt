@@ -11,6 +11,7 @@ type t =
   | Fun
   | Pi
   | Type
+  | Unit
   | Underscore
   | Ident of string
 
@@ -27,5 +28,6 @@ let pp (fmt : Format.formatter) : t -> unit = function
   | Fun -> Format.fprintf fmt "fun"
   | Pi -> Format.fprintf fmt "Pi"
   | Type -> Format.fprintf fmt "Type"
+  | Unit -> Format.fprintf fmt "Unit"
   | Underscore -> Format.fprintf fmt "_"
   | Ident s -> Format.fprintf fmt "%s" s

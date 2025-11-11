@@ -47,7 +47,9 @@ let parse_parens (p : 'a t) : 'a t =
 
 let rec parse_atom : Raw_syntax.t t =
  fun input ->
-  (parse_var <|> parse_hole <|> parse_type <|> parse_parens parse_preterm) input
+  (parse_var <|> parse_hole <|> parse_type <|> parse_unit <|> parse_unit_term
+ <|> parse_parens parse_preterm)
+    input
 
 and parse_var : Raw_syntax.t t =
  fun input ->
@@ -61,6 +63,14 @@ and parse_hole : Raw_syntax.t t = function
 
 and parse_type : Raw_syntax.t t = function
   | Token.Type :: rest -> Some (Raw_syntax.U, rest)
+  | _ -> None
+
+and parse_unit : Raw_syntax.t t = function
+  | Token.Unit :: rest -> Some (Raw_syntax.Unit, rest)
+  | _ -> None
+
+and parse_unit_term : Raw_syntax.t t = function
+  | Token.LParen :: Token.RParen :: rest -> Some (Raw_syntax.UnitTerm, rest)
   | _ -> None
 
 and parse_lambda : Raw_syntax.t t =
