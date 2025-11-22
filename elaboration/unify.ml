@@ -39,7 +39,7 @@ let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
   { dom; cod = gamma; ren }
 
 (* Rename rhs using partial renaming, with occurs check for m *)
-let rec rename (m : meta_id) (pren : partial_renaming) (v : val_ty) : tm =
+let rec rename (m : meta_id) (pren : partial_renaming) (v : vl) : tm =
   let rec go t sp =
     match sp with
     | [] -> t
@@ -85,7 +85,7 @@ let lams (n : lvl) (t : tm) : tm =
   go 0 t
 
 (* Solve ?m spine = rhs *)
-let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : val_ty) : unit =
+let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : vl) : unit =
   let pren = invert_spine gamma sp in
   let rhs_tm = rename m pren rhs in
   let solution = eval [] (lams pren.dom rhs_tm) in
@@ -102,7 +102,7 @@ let rec unify_spine (l : lvl) (sp1 : spine) (sp2 : spine) : unit =
   | FSnd :: rest1, FSnd :: rest2 -> unify_spine l rest1 rest2
   | _ -> raise Unify_error
 
-and unify (l : lvl) (t : val_ty) (u : val_ty) : unit =
+and unify (l : lvl) (t : vl) (u : vl) : unit =
   let appl_clos (Closure (env, body)) v = eval (v :: env) body in
   match (force t, force u) with
   (* Eta for lambdas *)

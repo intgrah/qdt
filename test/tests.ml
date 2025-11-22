@@ -353,7 +353,9 @@ module Test_elab = struct
   let pi_type () =
     reset_meta_context ();
     let ctx = Check.empty_context in
-    let raw = Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A"))) in
+    let raw =
+      Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A")))
+    in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
     | VU ->
@@ -449,7 +451,11 @@ module Test_elab = struct
     let ctx = Check.empty_context in
     let raw =
       Lang.Raw_syntax.(
-        RLet ("x", Some RU, RU, RLet ("y", Some (RIdent "x"), RIdent "x", RIdent "y")))
+        RLet
+          ( "x",
+            Some RU,
+            RU,
+            RLet ("y", Some (RIdent "x"), RIdent "x", RIdent "y") ))
     in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
@@ -463,7 +469,8 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     let raw =
-      Lang.Raw_syntax.(RLambda ("x", Some (RPi ("A", RU, RIdent "A")), RIdent "x"))
+      Lang.Raw_syntax.(
+        RLambda ("x", Some (RPi ("A", RU, RIdent "A")), RIdent "x"))
     in
     let expected =
       VPi
@@ -480,7 +487,8 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     let raw =
-      Lang.Raw_syntax.(RPi ("A", RU, RPi ("B", RU, RArrow (RIdent "A", RIdent "B"))))
+      Lang.Raw_syntax.(
+        RPi ("A", RU, RPi ("B", RU, RArrow (RIdent "A", RIdent "B"))))
     in
     let tm, ty = Elab.infer ctx [] raw in
     match ty with
@@ -530,7 +538,9 @@ module Test_elab = struct
     reset_meta_context ();
     let ctx = Check.empty_context in
     (* forall A : Type, A -> A *)
-    let id_ty = Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A"))) in
+    let id_ty =
+      Lang.Raw_syntax.(RPi ("A", RU, RArrow (RIdent "A", RIdent "A")))
+    in
     (* def id : forall A : Type, A -> A := λA => λx => x *)
     let id_body =
       Lang.Raw_syntax.(RLambda ("A", None, RLambda ("x", None, RIdent "x")))
@@ -654,8 +664,10 @@ module Programs = struct
               RPi
                 ( "A",
                   RU,
-                  RPi ("B", RU, RArrow (RIdent "A", RArrow (RIdent "B", RIdent "A")))
-                )),
+                  RPi
+                    ( "B",
+                      RU,
+                      RArrow (RIdent "A", RArrow (RIdent "B", RIdent "A")) ) )),
           Lang.Raw_syntax.(
             RLambda
               ( "A",
@@ -710,7 +722,8 @@ module Programs = struct
         ( "f",
           Some Lang.Raw_syntax.(RArrow (RU, RU)),
           Lang.Raw_syntax.(
-            RLambda ("x", Some RU, RLet ("y", Some RU, RIdent "x", RIdent "y"))) );
+            RLambda ("x", Some RU, RLet ("y", Some RU, RIdent "x", RIdent "y")))
+        );
       ]
     in
     let result = Elab.elab_program prog in

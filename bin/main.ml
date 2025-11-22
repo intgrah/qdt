@@ -19,18 +19,21 @@ let main () =
     Format.printf "%a\n\n" Lang.Raw_syntax.pp_program program;
 
   (* Elaborate *)
-  if args.show_elab then
-    try
-      let elab_defs = Elaboration.Elab.elab_program program in
+  try
+    let elab_defs = Elaboration.Elab.elab_program program in
+    if args.show_elab then
       List.iter
         (fun (name, term, ty) ->
           Format.printf "%s\n" name;
           Format.printf "  Type: %a\n" Elaboration.Pretty.pp_val ty;
           Format.printf "  Term: %a\n\n" Elaboration.Pretty.pp_tm term)
         elab_defs
-    with
-    | Elaboration.Elab.Elab_error msg ->
-        Format.printf "Elaboration error: %s\n" msg
-    | e -> Format.printf "Unexpected error: %s\n" (Printexc.to_string e)
+  with
+  | Elaboration.Elab.Elab_error msg ->
+      Format.printf "Elaboration error: %s\n" msg;
+      exit 1
+  | e ->
+      Format.printf "Unexpected error: %s\n" (Printexc.to_string e);
+      exit 1
 
 let () = main ()
