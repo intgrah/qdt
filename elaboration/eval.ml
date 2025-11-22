@@ -1,7 +1,11 @@
 open Syntax
 
-let rec eval (env : env) : tm -> val_ty = function
+let rec eval (env : env) : tm -> vl = function
   | Var ix -> List.nth env ix
+  | Global name -> (
+      match lookup_global name with
+      | Some { value; _ } -> value
+      | None -> failwith ("Undefined global: " ^ name))
   | Lam (x, t) -> VLam (x, Closure (env, t))
   | App (t, u) -> apply_frame (eval env t) (FApp (eval env u))
   | U -> VU
@@ -16,10 +20,9 @@ let rec eval (env : env) : tm -> val_ty = function
   | Fst t -> apply_frame (eval env t) FFst
   | Snd t -> apply_frame (eval env t) FSnd
 
-and ( $$ ) (Closure (env, t) : closure) (u : val_ty) : val_ty =
-  eval (u :: env) t
+and ( $$ ) (Closure (env, t) : closure) (u : vl) : vl = eval (u :: env) t
 
-and apply_frame (t : val_ty) (fr : frame) : val_ty =
+and apply_frame (t : vl) (fr : frame) : vl =
   match (t, fr) with
   | VLam (_, clos), FApp u -> clos $$ u
   | VPair (a, _), FFst -> a
@@ -28,22 +31,21 @@ and apply_frame (t : val_ty) (fr : frame) : val_ty =
   | VRigid (x, sp), _ -> VRigid (x, sp @ [ fr ])
   | _ -> failwith "apply_frame: stuck"
 
-and apply_spine (t : val_ty) (sp : spine) : val_ty =
-  List.fold_left apply_frame t sp
+and apply_spine (t : vl) (sp : spine) : vl = List.fold_left apply_frame t sp
 
-and apply_bound (env : env) (v : val_ty) (bds : bd list) : val_ty =
+and apply_bound (env : env) (v : vl) (bds : bd list) : vl =
   match (env, bds) with
   | [], [] -> v
   | t :: env', Bound :: bds' -> apply_frame (apply_bound env' v bds') (FApp t)
   | _ :: env', Defined :: bds' -> apply_bound env' v bds'
   | _ -> failwith "apply_bound: mismatched env and bds"
 
-and meta (m : meta_id) : val_ty =
+and meta (m : meta_id) : vl =
   match lookup_meta m with
   | Some v -> v
   | None -> VFlex (m, [])
 
-let rec force : val_ty -> val_ty = function
+let rec force : vl -> vl = function
   | VFlex (m, sp) -> (
       match lookup_meta m with
       | Some t -> force (apply_spine t sp)

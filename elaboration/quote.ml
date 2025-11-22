@@ -9,7 +9,7 @@ let rec quote_sp (l : lvl) (t : tm) (sp : spine) : tm =
   | FFst :: sp' -> Fst (quote_sp l t sp')
   | FSnd :: sp' -> Snd (quote_sp l t sp')
 
-and quote (l : lvl) (v : val_ty) : tm =
+and quote (l : lvl) (v : vl) : tm =
   match Eval.force v with
   | VFlex (m, sp) -> quote_sp l (Meta m) sp
   | VRigid (x, sp) -> quote_sp l (Var (ix_of_lvl l x)) sp

@@ -4,16 +4,14 @@ type name_ctx = string list
 
 exception Elab_error of string
 
-let lookup_var (names : name_ctx) (name : string) : int =
-  match List.find_index (String.equal name) names with
-  | Some ix -> ix
-  | None -> raise (Elab_error ("Variable not in scope: " ^ name))
+let lookup_var (names : name_ctx) (name : string) : int option =
+  List.find_index (String.equal name) names
 
 let fresh_meta_ctx (ctx : Check.context) : tm =
   let m = fresh_meta () in
   InsertedMeta (m, ctx.bds)
 
-let unify_catch (ctx : Check.context) (t : val_ty) (u : val_ty) : unit =
+let unify_catch (ctx : Check.context) (t : vl) (u : vl) : unit =
   try Unify.unify ctx.lvl t u with
   | Unify.Unify_error ->
       let t_str = Quote.quote ctx.lvl t in
@@ -24,7 +22,7 @@ let unify_catch (ctx : Check.context) (t : val_ty) (u : val_ty) : unit =
               Pretty.pp_tm u_str))
 
 let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
-    (expected : val_ty) : tm =
+    (expected : vl) : tm =
   match (raw, Eval.force expected) with
   (* λx => body : Π x : A. B *)
   | RLambda (x, _, body), VPi (_, a, Closure (_, b)) ->
@@ -38,21 +36,26 @@ let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
       match ty_opt with
       | Some ty_raw ->
           let ty = check ctx names ty_raw VU in
-          let val_ty = Eval.eval ctx.env ty in
-          let t' = check ctx names t val_ty in
+          let vl = Eval.eval ctx.env ty in
+          let t' = check ctx names t vl in
           let t_val = Eval.eval ctx.env t' in
           let u' =
-            check (Check.bind_def ctx t_val val_ty) (x :: names) u expected
+            check (Check.bind_def ctx t_val vl) (x :: names) u expected
           in
           Let (x, ty, t', u')
       | None ->
-          let t', val_ty = infer ctx names t in
+          let t', vl = infer ctx names t in
           let t_val = Eval.eval ctx.env t' in
           let u' =
-            check (Check.bind_def ctx t_val val_ty) (x :: names) u expected
+            check (Check.bind_def ctx t_val vl) (x :: names) u expected
           in
           (* Infer type for let binding *)
-          Let (x, Quote.quote ctx.lvl val_ty, t', u'))
+          Let (x, Quote.quote ctx.lvl vl, t', u'))
+  (* Pair in checking mode *)
+  | RPair (a, b), VProd (a_ty, b_ty) ->
+      let a' = check ctx names a a_ty in
+      let b' = check ctx names b b_ty in
+      Pair (a', b')
   (* Hole in checking mode *)
   | RHole, _ -> fresh_meta_ctx ctx
   (* Fallback: infer and unify *)
@@ -61,34 +64,38 @@ let rec check (ctx : Check.context) (names : name_ctx) (raw : Lang.Raw_syntax.t)
       unify_catch ctx expected inferred;
       t'
 
-(* Infer type for raw term *)
+(* Infer type of raw term *)
 and infer (ctx : Check.context) (names : name_ctx) :
-    Lang.Raw_syntax.t -> tm * val_ty = function
-  (* Variable *)
-  | RIdent x ->
-      let ix = lookup_var names x in
-      let ty = List.nth ctx.types ix in
-      (Var ix, ty)
+    Lang.Raw_syntax.t -> tm * vl = function
+  (* Variable or Global *)
+  | RIdent x -> (
+      match lookup_var names x with
+      | Some ix ->
+          (* Local variable *)
+          let ty = List.nth ctx.types ix in
+          (Var ix, ty)
+      | None -> (
+          match lookup_global x with
+          | Some entry -> (Global x, entry.ty)
+          | None -> raise (Elab_error ("Variable not in scope: " ^ x))))
   (* Lambda - insert meta for domain type if unannotated *)
   | RLambda (x, ty_opt, body) -> (
       match ty_opt with
       | Some ty_raw ->
           (* Annotated lambda *)
           let ty = check ctx names ty_raw VU in
-          let val_ty = Eval.eval ctx.env ty in
-          let ctx' = Check.bind_var ctx val_ty in
+          let vl = Eval.eval ctx.env ty in
+          let ctx' = Check.bind_var ctx vl in
           let body', body_ty = infer ctx' (x :: names) body in
           ( Lam (x, body'),
-            VPi (x, val_ty, Closure (ctx.env, Quote.quote (ctx.lvl + 1) body_ty))
-          )
+            VPi (x, vl, Closure (ctx.env, Quote.quote (ctx.lvl + 1) body_ty)) )
       | None ->
           (* Unannotated lambda - insert meta for domain type *)
-          let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
-          let ctx' = Check.bind_var ctx val_ty in
+          let vl = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+          let ctx' = Check.bind_var ctx vl in
           let body', body_ty = infer ctx' (x :: names) body in
           ( Lam (x, body'),
-            VPi (x, val_ty, Closure (ctx.env, Quote.quote (ctx.lvl + 1) body_ty))
-          ))
+            VPi (x, vl, Closure (ctx.env, Quote.quote (ctx.lvl + 1) body_ty)) ))
   (* Application *)
   | RApp (f, a) ->
       let f', f_ty = infer ctx names f in
@@ -128,20 +135,16 @@ and infer (ctx : Check.context) (names : name_ctx) :
       match ty_opt with
       | Some ty_raw ->
           let ty = check ctx names ty_raw VU in
-          let val_ty = Eval.eval ctx.env ty in
-          let t' = check ctx names t val_ty in
+          let vl = Eval.eval ctx.env ty in
+          let t' = check ctx names t vl in
           let t_val = Eval.eval ctx.env t' in
-          let u', u_ty =
-            infer (Check.bind_def ctx t_val val_ty) (x :: names) u
-          in
+          let u', u_ty = infer (Check.bind_def ctx t_val vl) (x :: names) u in
           (Let (x, ty, t', u'), u_ty)
       | None ->
-          let t', val_ty = infer ctx names t in
+          let t', vl = infer ctx names t in
           let t_val = Eval.eval ctx.env t' in
-          let u', u_ty =
-            infer (Check.bind_def ctx t_val val_ty) (x :: names) u
-          in
-          (Let (x, Quote.quote ctx.lvl val_ty, t', u'), u_ty))
+          let u', u_ty = infer (Check.bind_def ctx t_val vl) (x :: names) u in
+          (Let (x, Quote.quote ctx.lvl vl, t', u'), u_ty))
   (* Universe *)
   | RU -> (U, VU)
   (* Unit type *)
@@ -182,34 +185,34 @@ and infer (ctx : Check.context) (names : name_ctx) :
           (Snd t', b_val))
   (* Hole in inference mode - create meta for both term and type *)
   | RHole ->
-      let val_ty = Eval.eval ctx.env (fresh_meta_ctx ctx) in
+      let vl = Eval.eval ctx.env (fresh_meta_ctx ctx) in
       let tm = fresh_meta_ctx ctx in
-      (tm, val_ty)
+      (tm, vl)
 
 let elab_def (ctx : Check.context) (names : name_ctx)
-    ((name, ty_opt, body) : Lang.Raw_syntax.def) :
-    string * tm * val_ty * Check.context * name_ctx =
+    ((name, ty_opt, body) : Lang.Raw_syntax.def) : string * tm * vl =
   let body', body_ty =
     match ty_opt with
     | Some ty_raw ->
         let ty = check ctx names ty_raw VU in
-        let val_ty = Eval.eval ctx.env ty in
-        let body' = check ctx names body val_ty in
-        (body', val_ty)
+        let vl = Eval.eval ctx.env ty in
+        let body' = check ctx names body vl in
+        (body', vl)
     | None -> infer ctx names body
   in
   let body_val = Eval.eval ctx.env body' in
-  let ctx' = Check.bind_def ctx body_val body_ty in
-  let names' = name :: names in
-  (name, body', body_ty, ctx', names')
+  (* Add to global table instead of context *)
+  define_global name body_val body_ty;
+  (name, body', body_ty)
 
-let elab_program (program : Lang.Raw_syntax.program) :
-    (string * tm * val_ty) list =
-  let rec go ctx names defs acc =
+let elab_program (program : Lang.Raw_syntax.program) : (string * tm * vl) list =
+  let rec go defs acc =
     match defs with
     | [] -> List.rev acc
     | def :: rest ->
-        let name, term, ty, ctx', names' = elab_def ctx names def in
-        go ctx' names' rest ((name, term, ty) :: acc)
+        let name, term, ty = elab_def Check.empty_context [] def in
+        go rest ((name, term, ty) :: acc)
   in
-  go Check.empty_context [] program []
+  (* Reset global table before elaborating *)
+  reset_global_context ();
+  go program []

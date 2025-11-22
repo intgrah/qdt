@@ -2,6 +2,7 @@ open Syntax
 
 let rec pp_tm (fmt : Format.formatter) : tm -> unit = function
   | Var ix -> Format.fprintf fmt "#%d" ix
+  | Global name -> Format.fprintf fmt "%s" name
   | Lam (x, body) -> Format.fprintf fmt "@[<hov 2>(λ%s.@ %a)@]" x pp_tm body
   | App (f, a) -> (
       match f with
@@ -9,6 +10,7 @@ let rec pp_tm (fmt : Format.formatter) : tm -> unit = function
       | _ -> (
           match a with
           | Var _
+          | Global _
           | Meta _
           | U ->
               Format.fprintf fmt "@[<hov 2>%a@ %a@]" pp_tm f pp_tm a
@@ -40,9 +42,9 @@ let rec pp_tm (fmt : Format.formatter) : tm -> unit = function
   | Fst t -> Format.fprintf fmt "@[<hov 2>fst@ %a@]" pp_tm t
   | Snd t -> Format.fprintf fmt "@[<hov 2>snd@ %a@]" pp_tm t
 
-let pp_val (fmt : Format.formatter) (v : val_ty) : unit =
+let pp_val (fmt : Format.formatter) (v : vl) : unit =
   let tm = Quote.quote 0 v in
   pp_tm fmt tm
 
 let tm_to_string (t : tm) : string = Format.asprintf "%a" pp_tm t
-let val_to_string (v : val_ty) : string = Format.asprintf "%a" pp_val v
+let val_to_string (v : vl) : string = Format.asprintf "%a" pp_val v
