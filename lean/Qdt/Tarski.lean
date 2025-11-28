@@ -15,6 +15,10 @@ notation "true" => Tm.true
 notation "eq" => Tm.eq
 notation "refl" => Tm.refl
 
+infixl:67 "; " => Ctx.snoc
+notation:max A "[" u "]" => subst_ty u A
+notation:max t "[" u "]" => subst_tm u t
+
 notation:40 Γ " ⊢ " A " type" => IsType Γ A
 notation:40 Γ " ⊢ " e " : " A => HasType Γ e A
 notation:40 Γ " ⊢ " A " ≡ " B => TyEq Γ A B
@@ -47,7 +51,7 @@ end
 
 inductive Ctx : Nat → Type where
   | nil : Ctx 0
-  | cons : Ty n → Ctx n → Ctx (n + 1)
+  | snoc : Ctx n → Ty n → Ctx (n + 1)
 
 mutual
   def shift_ty : Ty n → Ty (n + 1)
@@ -76,65 +80,63 @@ end
 mutual
   def subst_ty (u : Tm n) : Ty (n + 1) → Ty n
     | 𝑢 => 𝑢
-    | Π' A B' => Π' (subst_ty u A) (subst_ty (shift_tm u) B')
-    | S' A B' => S' (subst_ty u A) (subst_ty (shift_tm u) B')
-    | El a => El (subst_tm u a)
+    | Π' A B' => Π' A[u] B'[shift_tm u]
+    | S' A B' => S' A[u] B'[shift_tm u]
+    | El a => El a[u]
     | True' => True'
-    | Eq' A a b => Eq' (subst_ty u A) (subst_tm u a) (subst_tm u b)
+    | Eq' A a b => Eq' A[u] a[u] b[u]
 
   def subst_tm (u : Tm n) : Tm (n + 1) → Tm n
     | Tm.var ⟨0, _⟩ => u
     | Tm.var ⟨i + 1, h⟩ => Tm.var ⟨i, Nat.lt_of_succ_lt_succ h⟩
-    | π a b => π (subst_tm u a) (subst_tm (shift_tm u) b)
-    | σ a b => σ (subst_tm u a) (subst_tm (shift_tm u) b)
-    | λ' A B t' => λ' (subst_ty u A) (subst_ty (shift_tm u) B) (subst_tm (shift_tm u) t')
-    | Tm.app f x => Tm.app (subst_tm u f) (subst_tm u x)
-    | mkΣ A B t' u' => mkΣ (subst_ty u A) (subst_ty (shift_tm u) B) (subst_tm u t') (subst_tm u u')
-    | Tm.proj₁ p => Tm.proj₁ (subst_tm u p)
-    | Tm.proj₂ p => Tm.proj₂ (subst_tm u p)
+    | π a b => π a[u] b[shift_tm u]
+    | σ a b => σ a[u] b[shift_tm u]
+    | λ' A B t' => λ' A[u] B[shift_tm u] t'[shift_tm u]
+    | Tm.app f x => Tm.app f[u] x[u]
+    | mkΣ A B t' u' => mkΣ A[u] B[shift_tm u] t'[u] u'[u]
+    | Tm.proj₁ p => Tm.proj₁ p[u]
+    | Tm.proj₂ p => Tm.proj₂ p[u]
     | true => true
     | Tm.trivial => Tm.trivial
-    | eq A a b => eq (subst_tm u A) (subst_tm u a) (subst_tm u b)
-    | refl A a => refl (subst_ty u A) (subst_tm u a)
+    | eq A a b => eq A[u] a[u] b[u]
+    | refl A a => refl A[u] a[u]
 end
-
-infixl:67 ", " => fun Γ A => Ctx.cons A Γ
 
 mutual
   -- Γ ⊢ t : A
   inductive HasType : Ctx n → Tm n → Ty n → Prop where
     | pi {Γ : Ctx n} {a b} :
         (Γ ⊢ a : 𝑢) →
-        (Γ, El a ⊢ b : 𝑢) →
+        (Γ; El a ⊢ b : 𝑢) →
         (Γ ⊢ π a b : 𝑢)
     | lambda {Γ : Ctx n} {A B t} :
         (Γ ⊢ A type) →
-        (Γ, A ⊢ B type) →
-        (Γ, A ⊢ t : B) →
+        (Γ; A ⊢ B type) →
+        (Γ; A ⊢ t : B) →
         (Γ ⊢ λ' A B t : Π' A B)
     | app {Γ : Ctx n} {t u A B} :
         (Γ ⊢ t : Π' A B) →
         (Γ ⊢ u : A) →
-        (Γ ⊢ Tm.app t u : subst_ty u B)  -- B{u}
-    -- Γ ⊢ mkΣ(A, B{x}, t, u) : Σ(A, B{x}) where Γ ⊢ t : A, Γ ⊢ u : B{t}
+        (Γ ⊢ Tm.app t u : B[u])
+    -- Γ ⊢ mkΣ(A, B{x}, t, u) : Σ(A, B{x}) where Γ ⊢ t : A, Γ ⊢ u : B[t]
     | mkSigma {Γ : Ctx n} {A B t u} :
         (Γ ⊢ A type) →
-        (Γ, A ⊢ B type) →
+        (Γ; A ⊢ B type) →
         (Γ ⊢ t : A) →
-        (Γ ⊢ u : subst_ty t B) →  -- B{t}
+        (Γ ⊢ u : B[t]) →
         (Γ ⊢ mkΣ A B t u : S' A B)
     -- Γ ⊢ π₁(t) : A where Γ ⊢ t : Σ(A, B{x})
     | proj₁ {Γ : Ctx n} {t A B} :
         (Γ ⊢ t : S' A B) →
         (Γ ⊢ Tm.proj₁ t : A)
-    -- Γ ⊢ π₂(t) : B{π₁(t)} where Γ ⊢ t : Σ(A, B{x})
+    -- Γ ⊢ π₂(t) : B[π₁(t)] where Γ ⊢ t : Σ(A, B{x})
     | proj₂ {Γ : Ctx n} {t A B} :
         (Γ ⊢ t : S' A B) →
-        (Γ ⊢ Tm.proj₂ t : subst_ty (Tm.proj₁ t) B)  -- B{π₁(t)}
-    -- Γ ⊢ σ(a, b{x}) : U where Γ ⊢ a : U, Γ, x : El(a) ⊢ b{x} : U
+        (Γ ⊢ Tm.proj₂ t : B[Tm.proj₁ t])
+    -- Γ ⊢ σ(a, b{x}) : U where Γ ⊢ a : U, Γ; El(a) ⊢ b{x} : U
     | sigma {Γ : Ctx n} {a b} :
         (Γ ⊢ a : 𝑢) →
-        (Γ, El a ⊢ b : 𝑢) →
+        (Γ; El a ⊢ b : 𝑢) →
         (Γ ⊢ σ a b : 𝑢)
     -- Γ ⊢ true : U
     | true {Γ : Ctx n} :
@@ -163,12 +165,12 @@ mutual
         (Γ ⊢ El A type) -- Γ ⊢ El(A) type
     | pi {Γ : Ctx n} {A B} :
         (Γ ⊢ A type) →
-        (Γ, A ⊢ B type) →
+        (Γ; A ⊢ B type) →
         (Γ ⊢ Π' A B type) -- Γ ⊢ Π(A, B{x}) type
-    -- Γ ⊢ Σ(A, B{x}) type where Γ ⊢ A type, Γ, x : A ⊢ B{x} type
+    -- Γ ⊢ Σ(A, B{x}) type where Γ ⊢ A type, Γ; A ⊢ B{x} type
     | sigma {Γ : Ctx n} {A B} :
         (Γ ⊢ A type) →
-        (Γ, A ⊢ B type) →
+        (Γ; A ⊢ B type) →
         (Γ ⊢ S' A B type)
     -- Γ ⊢ True type
     | true {Γ : Ctx n} :
