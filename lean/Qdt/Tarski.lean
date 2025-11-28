@@ -99,7 +99,7 @@ mutual
   inductive HasType : Ctx → Tm → Ty → Prop where
     | piHat {Γ a b} :
         (Γ ⊢ a : 𝑢) →
-        (Ty.el a :: Γ ⊢ b : 𝑢) →
+        (El a :: Γ ⊢ b : 𝑢) →
         (Γ ⊢ π a b : 𝑢)
     | lam {Γ A B t} :
         (Γ ⊢ A type) →
@@ -154,7 +154,7 @@ mutual
         (Γ ⊢ 𝑢 type) -- Γ ⊢ U type
     | el {Γ A} :
         (Γ ⊢ A : 𝑢) →
-        (Γ ⊢ Ty.el A type) -- Γ ⊢ El(A) type
+        (Γ ⊢ El A type) -- Γ ⊢ El(A) type
     | pi {Γ A B} :
         (Γ ⊢ A type) →
         (A :: Γ ⊢ B type) →
