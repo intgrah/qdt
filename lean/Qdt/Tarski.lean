@@ -48,54 +48,50 @@ end
 def Ctx := List Ty
 
 mutual
-  def subst_ty (B : Ty) (u : Tm) : Ty :=
-    match B with
+  def subst_ty (u : Tm) : Ty → Ty
     | 𝑢 => 𝑢
-    | Π' A B' => Π' (subst_ty A (shift_tm u 1)) (subst_ty B' (shift_tm u 1))
-    | S' A B' => S' (subst_ty A (shift_tm u 1)) (subst_ty B' (shift_tm u 1))
-    | El a => El (subst_tm a (shift_tm u 1))
+    | Π' A B' => Π' (subst_ty (shift_tm u) A) (subst_ty (shift_tm u) B')
+    | S' A B' => S' (subst_ty (shift_tm u) A) (subst_ty (shift_tm u) B')
+    | El a => El (subst_tm (shift_tm u) a)
     | True' => True'
-    | Eq' A a b => Eq' (subst_ty A (shift_tm u 1)) (subst_tm a (shift_tm u 1)) (subst_tm b (shift_tm u 1))
+    | Eq' A a b => Eq' (subst_ty (shift_tm u) A) (subst_tm (shift_tm u) a) (subst_tm (shift_tm u) b)
 
-  def subst_tm (t : Tm) (u : Tm) : Tm :=
-    match t with
+  def subst_tm (u : Tm) : Tm → Tm
     | Tm.var 0 => u
     | Tm.var (n + 1) => Tm.var n
-    | π a b => π (subst_tm a (shift_tm u 1)) (subst_tm b (shift_tm u 1))
-    | σ a b => σ (subst_tm a (shift_tm u 1)) (subst_tm b (shift_tm u 1))
-    | λ' A B t' => λ' (subst_ty A (shift_tm u 1)) (subst_ty B (shift_tm u 1)) (subst_tm t' (shift_tm u 1))
-    | Tm.app f x => Tm.app (subst_tm f (shift_tm u 1)) (subst_tm x (shift_tm u 1))
-    | mkΣ A B t' u' => mkΣ (subst_ty A (shift_tm u 1)) (subst_ty B (shift_tm u 1)) (subst_tm t' (shift_tm u 1)) (subst_tm u' (shift_tm u 1))
-    | Tm.proj₁ p => Tm.proj₁ (subst_tm p (shift_tm u 1))
-    | Tm.proj₂ p => Tm.proj₂ (subst_tm p (shift_tm u 1))
+    | π a b => π (subst_tm (shift_tm u) a) (subst_tm (shift_tm u) b)
+    | σ a b => σ (subst_tm (shift_tm u) a) (subst_tm (shift_tm u) b)
+    | λ' A B t' => λ' (subst_ty (shift_tm u) A) (subst_ty (shift_tm u) B) (subst_tm (shift_tm u) t')
+    | Tm.app f x => Tm.app (subst_tm (shift_tm u) f) (subst_tm (shift_tm u) x)
+    | mkΣ A B t' u' => mkΣ (subst_ty (shift_tm u) A) (subst_ty (shift_tm u) B) (subst_tm (shift_tm u) t') (subst_tm (shift_tm u) u')
+    | Tm.proj₁ p => Tm.proj₁ (subst_tm (shift_tm u) p)
+    | Tm.proj₂ p => Tm.proj₂ (subst_tm (shift_tm u) p)
     | true => true
     | Tm.trivial => Tm.trivial
-    | eq A a b => eq (subst_tm A (shift_tm u 1)) (subst_tm a (shift_tm u 1)) (subst_tm b (shift_tm u 1))
-    | refl A a => refl (subst_ty A (shift_tm u 1)) (subst_tm a (shift_tm u 1))
+    | eq A a b => eq (subst_tm (shift_tm u) A) (subst_tm (shift_tm u) a) (subst_tm (shift_tm u) b)
+    | refl A a => refl (subst_ty (shift_tm u) A) (subst_tm (shift_tm u) a)
 
-  def shift_tm (t : Tm) (d : Nat) : Tm :=
-    match t with
-    | Tm.var n => Tm.var (n + d)
-    | π a b => π (shift_tm a d) (shift_tm b d)
-    | σ a b => σ (shift_tm a d) (shift_tm b d)
-    | λ' A B t' => λ' (shift_ty A d) (shift_ty B d) (shift_tm t' d)
-    | Tm.app f x => Tm.app (shift_tm f d) (shift_tm x d)
-    | mkΣ A B t' u' => mkΣ (shift_ty A d) (shift_ty B d) (shift_tm t' d) (shift_tm u' d)
-    | Tm.proj₁ p => Tm.proj₁ (shift_tm p d)
-    | Tm.proj₂ p => Tm.proj₂ (shift_tm p d)
-    | true => true
-    | Tm.trivial => Tm.trivial
-    | eq A a b => eq (shift_tm A d) (shift_tm a d) (shift_tm b d)
-    | refl A a => refl (shift_ty A d) (shift_tm a d)
-
-  def shift_ty (A : Ty) (d : Nat) : Ty :=
-    match A with
+  def shift_ty : Ty → Ty
     | 𝑢 => 𝑢
-    | Π' A' B' => Π' (shift_ty A' d) (shift_ty B' d)
-    | S' A' B' => S' (shift_ty A' d) (shift_ty B' d)
-    | El a => El (shift_tm a d)
+    | Π' A' B' => Π' (shift_ty A') (shift_ty B')
+    | S' A' B' => S' (shift_ty A') (shift_ty B')
+    | El a => El (shift_tm a)
     | True' => True'
-    | Eq' A' a b => Eq' (shift_ty A' d) (shift_tm a d) (shift_tm b d)
+    | Eq' A' a b => Eq' (shift_ty A') (shift_tm a) (shift_tm b)
+
+  def shift_tm : Tm → Tm
+    | Tm.var n => Tm.var (n + 1)
+    | π a b => π (shift_tm a) (shift_tm b)
+    | σ a b => σ (shift_tm a) (shift_tm b)
+    | λ' A B t' => λ' (shift_ty A) (shift_ty B) (shift_tm t')
+    | Tm.app f x => Tm.app (shift_tm f) (shift_tm x)
+    | mkΣ A B t' u' => mkΣ (shift_ty A) (shift_ty B) (shift_tm t') (shift_tm u')
+    | Tm.proj₁ p => Tm.proj₁ (shift_tm p)
+    | Tm.proj₂ p => Tm.proj₂ (shift_tm p)
+    | true => true
+    | Tm.trivial => Tm.trivial
+    | eq A a b => eq (shift_tm A) (shift_tm a) (shift_tm b)
+    | refl A a => refl (shift_ty A) (shift_tm a)
 end
 
 mutual
@@ -113,13 +109,13 @@ mutual
     | app {Γ t u A B} :
         (Γ ⊢ t : Ty.pi A B) →
         (Γ ⊢ u : A) →
-        (Γ ⊢ Tm.app t u : subst_ty B u)  -- B{u}
+        (Γ ⊢ Tm.app t u : subst_ty u B)  -- B{u}
     -- Γ ⊢ mkΣ(A, B{x}, t, u) : Σ(A, B{x}) where Γ ⊢ t : A, Γ ⊢ u : B{t}
     | mkSigma {Γ A B t u} :
         (Γ ⊢ A type) →
         (A :: Γ ⊢ B type) →
         (Γ ⊢ t : A) →
-        (Γ ⊢ u : subst_ty B t) →  -- B{t}
+        (Γ ⊢ u : subst_ty t B) →  -- B{t}
         (Γ ⊢ mkΣ A B t u : S' A B)
     -- Γ ⊢ π₁(t) : A where Γ ⊢ t : Σ(A, B{x})
     | proj1 {Γ t A B} :
@@ -128,7 +124,7 @@ mutual
     -- Γ ⊢ π₂(t) : B{π₁(t)} where Γ ⊢ t : Σ(A, B{x})
     | proj2 {Γ t A B} :
         (Γ ⊢ t : S' A B) →
-        (Γ ⊢ Tm.proj₂ t : subst_ty B (Tm.proj₁ t))  -- B{π₁(t)}
+        (Γ ⊢ Tm.proj₂ t : subst_ty (Tm.proj₁ t) B)  -- B{π₁(t)}
     -- Γ ⊢ σ(a, b{x}) : U where Γ ⊢ a : U, Γ, x : El(a) ⊢ b{x} : U
     | sigmaHat {Γ a b} :
         (Γ ⊢ a : 𝑢) →
