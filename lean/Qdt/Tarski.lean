@@ -37,7 +37,7 @@ mutual
     | var : Fin n → Tm n -- de Bruijn index
     | pi : Tm n → Tm (n + 1) → Tm n  -- π(a x. b{x}) where b is in context Γ, El(a)
     | sigma : Tm n → Tm (n + 1) → Tm n  -- σ(a x. b{x}) where b is in context Γ, El(a)
-    | lambda : Ty n → Ty (n + 1) → Tm (n + 1) → Tm n  -- λ(A x. B{x}, t{x}) where B and t are in context Γ, A
+    | lambda : Tm (n + 1) → Tm n  -- λ(A x. B{x}, t{x}) where B and t are in context Γ, A
     | app : Tm n → Tm n → Tm n
     | mkSigma : Ty n → Ty (n + 1) → Tm n → Tm n → Tm n  -- mkΣ(A x. B{x}, t, u) where t : A and u : B{t}
     | proj₁ : Tm n → Tm n  -- proj₁(t) where t : Σ(A x. B{x})
@@ -66,7 +66,7 @@ mutual
     | Tm.var ⟨i, h⟩ => Tm.var ⟨i + 1, Nat.succ_lt_succ h⟩
     | π a b => π (shift_tm a) (shift_tm b)
     | σ a b => σ (shift_tm a) (shift_tm b)
-    | λ' A B t' => λ' (shift_ty A) (shift_ty B) (shift_tm t')
+    | λ' t' => λ' (shift_tm t')
     | Tm.app f x => Tm.app (shift_tm f) (shift_tm x)
     | mkΣ A B t' u' => mkΣ (shift_ty A) (shift_ty B) (shift_tm t') (shift_tm u')
     | Tm.proj₁ p => Tm.proj₁ (shift_tm p)
@@ -91,7 +91,7 @@ mutual
     | Tm.var ⟨i + 1, h⟩ => Tm.var ⟨i, Nat.lt_of_succ_lt_succ h⟩
     | π a b => π a[u] b[shift_tm u]
     | σ a b => σ a[u] b[shift_tm u]
-    | λ' A B t' => λ' A[u] B[shift_tm u] t'[shift_tm u]
+    | λ' t' => λ' t'[shift_tm u]
     | Tm.app f x => Tm.app f[u] x[u]
     | mkΣ A B t' u' => mkΣ A[u] B[shift_tm u] t'[u] u'[u]
     | Tm.proj₁ p => Tm.proj₁ p[u]
@@ -113,7 +113,7 @@ mutual
         (Γ ⊢ A type) →
         (Γ; A ⊢ B type) →
         (Γ; A ⊢ t : B) →
-        (Γ ⊢ λ' A B t : Π' A B)
+        (Γ ⊢ λ' t : Π' A B)
     | app {Γ : Ctx n} {t u A B} :
         (Γ ⊢ t : Π' A B) →
         (Γ ⊢ u : A) →
