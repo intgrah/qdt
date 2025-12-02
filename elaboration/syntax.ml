@@ -1,77 +1,104 @@
-type ix = int
+(* ========== Raw Syntax ========== *)
+
+type raw =
+  | RIdent of string
+  | RApp of raw * raw
+  | RLam of string option * raw option * raw
+  | RPi of string option * raw * raw
+  | RArrow of raw * raw
+  | RLet of string * raw option * raw * raw
+  | RU
+  | RUnit
+  | RUnitTm
+  | REq of raw * raw
+  | RRefl of raw
+  | RSigma of string option * raw * raw
+  | RProd of raw * raw
+  | RPair of raw * raw
+  | RProj1 of raw
+  | RProj2 of raw
+  | RInt
+  | RIntLit of int
+  | RAdd of raw * raw
+  | RAnn of raw * raw
+
+type raw_def = string * raw (* All defs generate an RAnn *)
+type raw_program = raw_def list
+
+(* ========== Core Syntax ========== *)
+
 type lvl = int
-type meta_id = int
 
-type bd =
-  | Bound
-  | Defined
+type ty =
+  | TyU
+  | TyPi of string option * ty * ty
+  | TyArrow of ty * ty
+  | TySigma of string option * ty * ty
+  | TyProd of ty * ty
+  | TyUnit
+  | TyInt
+  | TyEq of tm * tm * ty
+  | TyEl of tm
 
-type tm =
-  | Var of ix
-  | Global of string (* reference to global definition by name *)
-  | Lam of string * tm (* name for printing *)
-  | App of tm * tm
-  | U
-  | Pi of string * tm * tm
-  | Let of string * tm * tm * tm
-  | Meta of meta_id
-  | InsertedMeta of meta_id * bd list
-  | Unit
-  | UnitTerm
-  | Prod of tm * tm (* non-dependent product A × B *)
-  | Pair of tm * tm
-  | Fst of tm
-  | Snd of tm
+and tm =
+  | TmVar of lvl
+  | TmLam of string option * ty * ty * tm
+  | TmApp of tm * tm
+  | TmPiHat of string option * tm * tm
+  | TmArrowHat of tm * tm
+  | TmSigmaHat of string option * tm * tm
+  | TmProdHat of tm * tm
+  | TmMkSigma of ty * ty * tm * tm
+  | TmProj1 of tm
+  | TmProj2 of tm
+  | TmUnit
+  | TmIntLit of int
+  | TmUnitHat
+  | TmIntHat
+  | TmEqHat of tm * tm * tm
+  | TmRefl of ty * tm
+  | TmAdd of tm * tm
 
-type ty = tm
+type vl_ty =
+  | VTyU
+  | VTyPi of string option * vl_ty * clos_ty
+  | VTyArrow of vl_ty * vl_ty
+  | VTySigma of string option * vl_ty * clos_ty
+  | VTyProd of vl_ty * vl_ty
+  | VTyUnit
+  | VTyInt
+  | VTyEq of vl_tm * vl_tm * vl_ty
+  | VTyEl of neutral
 
-type frame =
-  | FApp of vl
-  | FFst
-  | FSnd
+and head =
+  | HVar of lvl
+  | HGlobal of string
 
-and spine = frame list
+and neutral = head * spine
 
-and vl =
-  | VFlex of meta_id * spine
-  | VRigid of lvl * spine
-  | VLam of string * closure
-  | VPi of string * vl * closure
-  | VU
-  | VUnit
-  | VUnitTerm
-  | VProd of vl * vl (* non-dependent product *)
-  | VPair of vl * vl
+and vl_tm =
+  | VTmNeutral of neutral
+  | VTmLam of string option * vl_ty * clos_tm
+  | VTmPiHat of string option * vl_tm * clos_tm
+  | VTmArrowHat of vl_tm * vl_tm
+  | VTmSigmaHat of string option * vl_tm * clos_tm
+  | VTmProdHat of vl_tm * vl_tm
+  | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
+  | VTmUnit
+  | VTmIntLit of int
+  | VTmUnitHat
+  | VTmIntHat
+  | VTmEqHat of vl_tm * vl_tm * vl_tm
+  | VTmRefl of vl_ty * vl_tm
+  | VTmAdd of vl_tm * vl_tm
 
-and closure = Closure of env * tm
-and env = vl list
+and spine = fname list
 
-let meta_table : (meta_id, vl option) Hashtbl.t = Hashtbl.create 16
+and fname =
+  | FApp of vl_tm
+  | FProj1
+  | FProj2
 
-let fresh_meta () : meta_id =
-  let id = Hashtbl.length meta_table in
-  Hashtbl.add meta_table id None;
-  id
-
-let lookup_meta : meta_id -> vl option = Hashtbl.find meta_table
-
-let solve_meta (id : meta_id) (v : vl) : unit =
-  Hashtbl.replace meta_table id (Some v)
-
-let reset_meta_context () : unit = Hashtbl.clear meta_table
-
-(* Global definition table *)
-type global_entry = {
-  value : vl;
-  ty : vl;
-}
-
-let global_table : (string, global_entry) Hashtbl.t = Hashtbl.create 16
-
-let define_global (name : string) (value : vl) (ty : vl) : unit =
-  Hashtbl.add global_table name { value; ty }
-
-let lookup_global (name : string) : global_entry option =
-  Hashtbl.find_opt global_table name
-
-let reset_global_context () : unit = Hashtbl.clear global_table
+and clos_ty = ClosTy of env * ty
+and clos_tm = ClosTm of env * tm
+and env = vl_tm list

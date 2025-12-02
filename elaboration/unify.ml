@@ -1,141 +1,52 @@
-open Syntax
-open Eval
+let () = failwith "Do not use"
 
-exception Unify_error
+exception Unify_error of string
 
-module IntMap = Map.Make (Int)
+type meta_var = int
+type lvl = int
 
-(* Partial renaming from Γ to Δ *)
-type partial_renaming = {
-  dom : lvl; (* size of Γ *)
-  cod : lvl; (* size of Δ *)
-  ren : lvl IntMap.t; (* mapping from Δ vars to Γ vars *)
+module MetaMap = Map.Make (Int)
+
+type meta_solution =
+  | MetaTm of Syntax.tm
+  | MetaTy of Syntax.ty
+
+type meta_body = {
+  mb_arguments : int;
+  mb_body : meta_solution;
 }
 
-(* Lift partial renaming over an extra bound variable *)
-let lift (pren : partial_renaming) : partial_renaming =
-  {
-    dom = pren.dom + 1;
-    cod = pren.cod + 1;
-    ren = IntMap.add pren.cod pren.dom pren.ren;
-  }
+type meta_entry = {
+  meta_ty : Syntax.ty;
+  meta_body : meta_body option;
+}
 
-(* Invert spine to partial renaming *)
-let invert_spine (gamma : lvl) (sp : spine) : partial_renaming =
-  let rec go sp dom ren =
-    match sp with
-    | [] -> (dom, ren)
-    | FApp t :: rest -> (
-        match force t with
-        | VRigid (x, []) ->
-            if IntMap.mem x ren then
-              raise Unify_error
-            else
-              go rest (dom + 1) (IntMap.add x dom ren)
-        | _ -> raise Unify_error)
-    | _ :: _ -> raise Unify_error (* can't invert projections *)
-  in
-  let dom, ren = go sp 0 IntMap.empty in
-  { dom; cod = gamma; ren }
+type metacontext = { metas : meta_entry MetaMap.t }
 
-(* Rename rhs using partial renaming, with occurs check for m *)
-let rec rename (m : meta_id) (pren : partial_renaming) (v : vl) : tm =
-  let rec go t sp =
-    match sp with
-    | [] -> t
-    | FApp u :: rest -> App (go t rest, rename m pren u)
-    | FFst :: rest -> Fst (go t rest)
-    | FSnd :: rest -> Snd (go t rest)
-  in
+let empty_metacontext : metacontext = { metas = MetaMap.empty }
 
-  match force v with
-  | VFlex (m', sp) ->
-      if m = m' then
-        raise Unify_error
-      (* occurs *)
-      else
-        go (Meta m') sp
-  | VRigid (x, sp) -> (
-      match IntMap.find_opt x pren.ren with
-      | None -> raise Unify_error (* scope error *)
-      | Some x' -> go (Var (Quote.ix_of_lvl pren.dom x')) sp)
-  | VLam (x, Closure (env, body)) ->
-      let pren' = lift pren in
-      Lam (x, rename m pren' (eval (VRigid (pren.cod, []) :: env) body))
-  | VPi (x, a, Closure (env, b)) ->
-      let pren' = lift pren in
-      Pi
-        ( x,
-          rename m pren a,
-          rename m pren' (eval (VRigid (pren.cod, []) :: env) b) )
-  | VU -> U
-  | VUnit -> Unit
-  | VUnitTerm -> UnitTerm
-  | VProd (a, b) -> Prod (rename m pren a, rename m pren b)
-  | VPair (a, b) -> Pair (rename m pren a, rename m pren b)
+let get_meta_type (mcxt : metacontext) (m : meta_var) : Syntax.ty option =
+  match MetaMap.find_opt m mcxt.metas with
+  | Some entry -> Some entry.meta_ty
+  | None -> None
 
-(* Wrap term in n lambdas *)
-let lams (n : lvl) (t : tm) : tm =
-  let rec go i t =
-    if i = n then
-      t
-    else
-      go (i + 1) (Lam ("x" ^ string_of_int i, t))
-  in
-  go 0 t
+let get_meta_body (mcxt : metacontext) (m : meta_var) : meta_body option =
+  match MetaMap.find_opt m mcxt.metas with
+  | Some entry -> entry.meta_body
+  | None -> None
 
-(* Solve ?m spine = rhs *)
-let solve (gamma : lvl) (m : meta_id) (sp : spine) (rhs : vl) : unit =
-  let pren = invert_spine gamma sp in
-  let rhs_tm = rename m pren rhs in
-  let solution = eval [] (lams pren.dom rhs_tm) in
-  solve_meta m solution
+let instantiate_meta (mcxt : metacontext) (m : meta_var) (body : meta_body) :
+    metacontext =
+  match MetaMap.find_opt m mcxt.metas with
+  | Some entry ->
+      { metas = MetaMap.add m { entry with meta_body = Some body } mcxt.metas }
+  | None -> raise (Unify_error "Cannot instantiate meta without type")
 
-(* Unify spines *)
-let rec unify_spine (l : lvl) (sp1 : spine) (sp2 : spine) : unit =
-  match (sp1, sp2) with
-  | [], [] -> ()
-  | FApp t1 :: rest1, FApp t2 :: rest2 ->
-      unify_spine l rest1 rest2;
-      unify l t1 t2
-  | FFst :: rest1, FFst :: rest2 -> unify_spine l rest1 rest2
-  | FSnd :: rest1, FSnd :: rest2 -> unify_spine l rest1 rest2
-  | _ -> raise Unify_error
+type constraint_ =
+  | CEqual of lvl * Syntax.vl_ty * Syntax.vl_tm * Syntax.vl_ty * Syntax.vl_tm
 
-and unify (l : lvl) (t : vl) (u : vl) : unit =
-  let appl_clos (Closure (env, body)) v = eval (v :: env) body in
-  match (force t, force u) with
-  (* Eta for lambdas *)
-  | VLam (_, t), VLam (_, u) ->
-      unify (l + 1)
-        (appl_clos t (VRigid (l, [])))
-        (appl_clos u (VRigid (l, [])))
-  | VLam (_, t), u ->
-      unify (l + 1)
-        (appl_clos t (VRigid (l, [])))
-        (apply_frame u (FApp (VRigid (l, []))))
-  | t, VLam (_, u) ->
-      unify (l + 1)
-        (apply_frame t (FApp (VRigid (l, []))))
-        (appl_clos u (VRigid (l, [])))
-  (* Rigid cases *)
-  | VU, VU -> ()
-  | VUnit, VUnit -> ()
-  | VUnitTerm, VUnitTerm -> ()
-  | VPi (_, a, b), VPi (_, a', b') ->
-      unify l a a';
-      unify (l + 1)
-        (appl_clos b (VRigid (l, [])))
-        (appl_clos b' (VRigid (l, [])))
-  | VProd (a, b), VProd (a', b') ->
-      unify l a a';
-      unify l b b'
-  | VPair (a, b), VPair (a', b') ->
-      unify l a a';
-      unify l b b'
-  | VRigid (x, sp), VRigid (x', sp') when x = x' -> unify_spine l sp sp'
-  | VFlex (m, sp), VFlex (m', sp') when m = m' -> unify_spine l sp sp'
-  (* Pattern unification *)
-  | VFlex (m, sp), t -> solve l m sp t
-  | t, VFlex (m, sp) -> solve l m sp t
-  | _ -> raise Unify_error
+type constraints = constraint_ list
+
+let add_constraint (ctx : Elab.Context.t) (ty1 : Syntax.vl_ty)
+    (t1 : Syntax.vl_tm) (ty2 : Syntax.vl_ty) (t2 : Syntax.vl_tm) : constraint_ =
+  CEqual (Elab.Context.lvl ctx, ty1, t1, ty2, t2)
