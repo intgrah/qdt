@@ -17,6 +17,7 @@ type token =
   | Snd
   | Refl
   | Absurd
+  | Sorry
   | Type
   | Unit
   | Empty

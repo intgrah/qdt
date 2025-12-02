@@ -24,6 +24,7 @@ type raw =
   | RAdd of raw * raw
   | RSub of raw * raw
   | RAnn of raw * raw
+  | RSorry
 
 type raw_def = string * raw (* All defs generate an RAnn *)
 type raw_program = raw_def list
@@ -65,6 +66,7 @@ and tm =
   | TmRefl of ty * tm
   | TmAdd of tm * tm
   | TmSub of tm * tm
+  | TmSorry of ty
 
 type vl_ty =
   | VTyU
@@ -102,6 +104,7 @@ and vl_tm =
   | VTmRefl of vl_ty * vl_tm
   | VTmAdd of vl_tm * vl_tm
   | VTmSub of vl_tm * vl_tm
+  | VTmSorry of vl_ty
 
 and spine = fname list
 

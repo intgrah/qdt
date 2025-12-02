@@ -71,6 +71,7 @@ let rec parse_atom : raw t =
       parse_snd;
       parse_refl;
       parse_absurd;
+      parse_sorry;
       parse_var;
       parse_type;
       parse_unit;
@@ -150,6 +151,10 @@ and parse_absurd : raw t =
 
 and parse_empty : raw t = function
   | Lexer.Empty :: rest -> Some (REmpty, rest)
+  | _ -> None
+
+and parse_sorry : raw t = function
+  | Lexer.Sorry :: rest -> Some (RSorry, rest)
   | _ -> None
 
 and parse_typed_binder_group : (string option list * raw) t =
@@ -331,6 +336,7 @@ let token_to_string (t : Lexer.token) : string =
   | Lexer.Snd -> "snd"
   | Lexer.Refl -> "refl"
   | Lexer.Absurd -> "absurd"
+  | Lexer.Sorry -> "sorry"
   | Lexer.Fun -> "fun"
   | Lexer.Times -> "×"
   | Lexer.Plus -> "+"

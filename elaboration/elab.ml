@@ -41,6 +41,7 @@ and subst_tm (t : tm) (u : tm) : tm =
   | TmRefl (a, e) -> TmRefl (subst_ty a u, subst_tm e u)
   | TmAdd (a, b) -> TmAdd (subst_tm a u, subst_tm b u)
   | TmSub (a, b) -> TmSub (subst_tm a u, subst_tm b u)
+  | TmSorry ty -> TmSorry (subst_ty ty u)
 
 (* ========== Evaluation ========== *)
 
@@ -98,6 +99,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmRefl (a, e) -> VTmRefl (eval_ty env a, eval_tm env e)
   | TmAdd (a, b) -> do_add (eval_tm env a) (eval_tm env b)
   | TmSub (a, b) -> do_sub (eval_tm env a) (eval_tm env b)
+  | TmSorry ty -> VTmSorry (eval_ty env ty)
 
 and do_add (a : vl_tm) (b : vl_tm) : vl_tm =
   match (a, b) with
@@ -196,6 +198,7 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
   | VTmRefl (a, e) -> TmRefl (quote_ty l a, quote_tm l e)
   | VTmAdd (a, b) -> TmAdd (quote_tm l a, quote_tm l b)
   | VTmSub (a, b) -> TmSub (quote_tm l a, quote_tm l b)
+  | VTmSorry ty -> TmSorry (quote_ty l ty)
 
 and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
   let head_tm =
@@ -363,6 +366,7 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
   | VTmAdd (a1, b1), VTmAdd (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | VTmSub (a1, b1), VTmSub (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
+  | VTmSorry ty1, VTmSorry ty2 -> eq_ty l (ty1, ty2)
   | _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
@@ -508,6 +512,7 @@ and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
         raise (Elab_error "refl: term does not match the sides of the equality");
       TmRefl (quote_ty l a, e)
   | RUnit, VTyUnit -> TmUnit
+  | RSorry, ty -> TmSorry (quote_ty (Context.lvl ctx) ty)
   | RAnn (e, ty_raw), expected_ty ->
       let ty = check_ty ctx ty_raw in
       let ty_val = eval_ty (Context.env ctx) ty in
@@ -667,6 +672,7 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       let e = check_tm ctx e ty_val in
       (e, ty_val)
   | RU -> raise (Elab_error "Cannot infer type")
+  | RSorry -> raise (Elab_error "Cannot infer type of sorry")
 
 let elab_program (program : raw_program) : (string * tm * ty) list =
   let rec go defs acc ctx =
