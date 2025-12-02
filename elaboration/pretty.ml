@@ -15,9 +15,9 @@ let rec pp_raw (fmt : Format.formatter) : raw -> unit = function
       Format.fprintf fmt "@[<hov 2>(fun %a : %a =>@ %a)@]" pp_name name pp_raw
         ty pp_raw body
   | RPi (name, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%a : %a)@ -> %a@]" pp_name name pp_raw a
+      Format.fprintf fmt "@[<hov 2>(%a : %a)@ → %a@]" pp_name name pp_raw a
         pp_raw b
-  | RArrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ -> %a@]" pp_raw a pp_raw b
+  | RArrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_raw a pp_raw b
   | RLet (name, None, rhs, body) ->
       Format.fprintf fmt "@[<hov 2>(let %s :=@ %a@ in@ %a)@]" name pp_raw rhs
         pp_raw body
@@ -26,19 +26,23 @@ let rec pp_raw (fmt : Format.formatter) : raw -> unit = function
         ty pp_raw rhs pp_raw body
   | RU -> Format.fprintf fmt "Type"
   | RUnit -> Format.fprintf fmt "Unit"
+  | REmpty -> Format.fprintf fmt "Empty"
   | RUnitTm -> Format.fprintf fmt "()"
+  | RAbsurd (c, e) ->
+      Format.fprintf fmt "@[<hov 2>(absurd %a@ %a)@]" pp_raw c pp_raw e
   | RPair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp_raw a pp_raw b
   | REq (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ = %a@]" pp_raw a pp_raw b
   | RRefl t -> Format.fprintf fmt "@[<hov 2>(refl %a)@]" pp_raw t
   | RSigma (name, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%a : %a)@ * %a@]" pp_name name pp_raw a
+      Format.fprintf fmt "@[<hov 2>(%a : %a)@ × %a@]" pp_name name pp_raw a
         pp_raw b
-  | RProd (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ * %a@]" pp_raw a pp_raw b
+  | RProd (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
   | RProj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" pp_raw t
   | RProj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" pp_raw t
   | RInt -> Format.fprintf fmt "Int"
   | RIntLit n -> Format.fprintf fmt "%d" n
   | RAdd (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ + %a@]" pp_raw a pp_raw b
+  | RSub (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_raw a pp_raw b
   | RAnn (e, ty) ->
       Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
 
@@ -65,21 +69,22 @@ let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
   | TyU -> Format.fprintf fmt "Type"
   | TyPi (name_opt, a, b) ->
       let x = get_name name_opt names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ -> %a@]" x (pp_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
   | TyArrow (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ -> %a@]" (pp_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_ty_ctx names) a
         (pp_ty_ctx names) b
   | TySigma (name_opt, a, b) ->
       let x = get_name name_opt names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ * %a@]" x (pp_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
   | TyProd (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ * %a@]" (pp_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) a
         (pp_ty_ctx names) b
   | TyUnit -> Format.fprintf fmt "Unit"
+  | TyEmpty -> Format.fprintf fmt "Empty"
   | TyInt -> Format.fprintf fmt "Int"
   | TyEq (e1, e2, _a) ->
       Format.fprintf fmt "@[<hov 2>%a@ = %a@]" (pp_tm_ctx names) e1
@@ -109,19 +114,19 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         (pp_tm_ctx names) a
   | TmPiHat (name_opt, a, b) ->
       let x = get_name name_opt names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ -> %a@]" x (pp_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_tm_ctx names) a
         (pp_tm_ctx (x :: names))
         b
   | TmArrowHat (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ -> %a@]" (pp_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
   | TmSigmaHat (name_opt, a, b) ->
       let x = get_name name_opt names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ * %a@]" x (pp_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_tm_ctx names) a
         (pp_tm_ctx (x :: names))
         b
   | TmProdHat (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ * %a@]" (pp_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
   | TmMkSigma (_a, _b, t, u) ->
       Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" (pp_tm_ctx names) t
@@ -129,8 +134,11 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmProj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" (pp_tm_ctx names) t
   | TmProj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" (pp_tm_ctx names) t
   | TmUnit -> Format.fprintf fmt "()"
+  | TmAbsurd (_c, e) ->
+      Format.fprintf fmt "@[<hov 2>(absurd %a)@]" (pp_tm_ctx names) e
   | TmIntLit n -> Format.fprintf fmt "%d" n
   | TmUnitHat -> Format.fprintf fmt "Unit"
+  | TmEmptyHat -> Format.fprintf fmt "Empty"
   | TmIntHat -> Format.fprintf fmt "Int"
   | TmEqHat (_a, t, u) ->
       Format.fprintf fmt "@[<hov 2>%a@ = %a@]" (pp_tm_ctx names) t
@@ -139,6 +147,9 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
       Format.fprintf fmt "@[<hov 2>(refl %a)@]" (pp_tm_ctx names) e
   | TmAdd (a, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ + %a@]" (pp_tm_ctx names) a
+        (pp_tm_ctx names) b
+  | TmSub (a, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ - %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
 
 let pp_ty fmt t = pp_ty_ctx [] fmt t

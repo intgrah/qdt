@@ -12,6 +12,7 @@ let rec subst_ty (b : ty) (u : tm) : ty =
   | TySigma (x, a, b') -> TySigma (x, subst_ty a u, subst_ty b' u)
   | TyProd (a, b') -> TyProd (subst_ty a u, subst_ty b' u)
   | TyUnit -> TyUnit
+  | TyEmpty -> TyEmpty
   | TyInt -> TyInt
   | TyEq (e1, e2, a) -> TyEq (subst_tm e1 u, subst_tm e2 u, subst_ty a u)
   | TyEl a -> TyEl (subst_tm a u)
@@ -31,12 +32,15 @@ and subst_tm (t : tm) (u : tm) : tm =
   | TmProj1 p -> TmProj1 (subst_tm p u)
   | TmProj2 p -> TmProj2 (subst_tm p u)
   | TmUnit -> TmUnit
+  | TmAbsurd (c, e) -> TmAbsurd (subst_ty c u, subst_tm e u)
   | TmIntLit n -> TmIntLit n
   | TmUnitHat -> TmUnitHat
+  | TmEmptyHat -> TmEmptyHat
   | TmIntHat -> TmIntHat
   | TmEqHat (a, t', u') -> TmEqHat (subst_tm a u, subst_tm t' u, subst_tm u' u)
   | TmRefl (a, e) -> TmRefl (subst_ty a u, subst_tm e u)
   | TmAdd (a, b) -> TmAdd (subst_tm a u, subst_tm b u)
+  | TmSub (a, b) -> TmSub (subst_tm a u, subst_tm b u)
 
 (* ========== Evaluation ========== *)
 
@@ -47,6 +51,7 @@ let rec eval_ty (env : env) : ty -> vl_ty = function
   | TySigma (x, a, b) -> VTySigma (x, eval_ty env a, ClosTy (env, b))
   | TyProd (a, b) -> VTyProd (eval_ty env a, eval_ty env b)
   | TyUnit -> VTyUnit
+  | TyEmpty -> VTyEmpty
   | TyInt -> VTyInt
   | TyEq (e1, e2, a) -> VTyEq (eval_tm env e1, eval_tm env e2, eval_ty env a)
   | TyEl t -> do_el env (eval_tm env t)
@@ -59,6 +64,7 @@ and do_el (env : env) : vl_tm -> vl_ty = function
       VTySigma (x, do_el env a, ClosTy (env', TyEl b))
   | VTmProdHat (a, b) -> VTyProd (do_el env a, do_el env b)
   | VTmUnitHat -> VTyUnit
+  | VTmEmptyHat -> VTyEmpty
   | VTmIntHat -> VTyInt
   | VTmEqHat (a, t, u) -> VTyEq (t, u, do_el env a)
   | VTmNeutral n -> VTyEl n
@@ -83,17 +89,30 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmProj1 p -> do_proj1 (eval_tm env p)
   | TmProj2 p -> do_proj2 (eval_tm env p)
   | TmUnit -> VTmUnit
+  | TmAbsurd (c, e) -> do_absurd (eval_ty env c) (eval_tm env e)
   | TmIntLit n -> VTmIntLit n
   | TmUnitHat -> VTmUnitHat
+  | TmEmptyHat -> VTmEmptyHat
   | TmIntHat -> VTmIntHat
   | TmEqHat (a, t, u) -> VTmEqHat (eval_tm env a, eval_tm env t, eval_tm env u)
   | TmRefl (a, e) -> VTmRefl (eval_ty env a, eval_tm env e)
   | TmAdd (a, b) -> do_add (eval_tm env a) (eval_tm env b)
+  | TmSub (a, b) -> do_sub (eval_tm env a) (eval_tm env b)
 
 and do_add (a : vl_tm) (b : vl_tm) : vl_tm =
   match (a, b) with
   | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
   | _ -> VTmAdd (a, b)
+
+and do_sub (a : vl_tm) (b : vl_tm) : vl_tm =
+  match (a, b) with
+  | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
+  | _ -> VTmSub (a, b)
+
+and do_absurd (c : vl_ty) (e : vl_tm) : vl_tm =
+  match e with
+  | VTmNeutral n -> VTmAbsurd (c, n)
+  | _ -> raise (Elab_error "do_absurd: expected neutral")
 
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
@@ -136,6 +155,7 @@ let rec quote_ty (l : lvl) : vl_ty -> ty = function
       TySigma (x, a', b')
   | VTyProd (a, b) -> TyProd (quote_ty l a, quote_ty l b)
   | VTyUnit -> TyUnit
+  | VTyEmpty -> TyEmpty
   | VTyInt -> TyInt
   | VTyEq (e1, e2, a) -> TyEq (quote_tm l e1, quote_tm l e2, quote_ty l a)
   | VTyEl n -> TyEl (quote_neutral l n)
@@ -167,12 +187,15 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
       ignore x;
       TmMkSigma (a, b, quote_tm l t, quote_tm l u)
   | VTmUnit -> TmUnit
+  | VTmAbsurd (c, n) -> TmAbsurd (quote_ty l c, quote_neutral l n)
   | VTmIntLit n -> TmIntLit n
   | VTmUnitHat -> TmUnitHat
+  | VTmEmptyHat -> TmEmptyHat
   | VTmIntHat -> TmIntHat
   | VTmEqHat (a, t, u) -> TmEqHat (quote_tm l a, quote_tm l t, quote_tm l u)
   | VTmRefl (a, e) -> TmRefl (quote_ty l a, quote_tm l e)
   | VTmAdd (a, b) -> TmAdd (quote_tm l a, quote_tm l b)
+  | VTmSub (a, b) -> TmSub (quote_tm l a, quote_tm l b)
 
 and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
   let head_tm =
@@ -193,6 +216,7 @@ let nf_tm (env : env) (t : tm) : tm = quote_tm (List.length env) (eval_tm env t)
 
 let rec ty_to_code : ty -> tm = function
   | TyUnit -> TmUnitHat
+  | TyEmpty -> TmEmptyHat
   | TyInt -> TmIntHat
   | TyEl t -> t
   | TyPi (x, a, b) -> TmPiHat (x, ty_to_code a, ty_to_code b)
@@ -266,13 +290,34 @@ let rec eq_ty (l : lvl) : vl_ty * vl_ty -> bool = function
       let var = VTmNeutral (HVar l, []) in
       eq_ty (l + 1) (inst_clos_ty clos1 var, inst_clos_ty clos2 var)
   | VTyArrow (a1, b1), VTyArrow (a2, b2) -> eq_ty l (a1, a2) && eq_ty l (b1, b2)
+  | VTyPi (_, a1, clos1), VTyArrow (a2, b2) ->
+      eq_ty l (a1, a2)
+      &&
+      let var = VTmNeutral (HVar l, []) in
+      eq_ty (l + 1) (inst_clos_ty clos1 var, b2)
+  | VTyArrow (a1, b1), VTyPi (_, a2, clos2) ->
+      eq_ty l (a1, a2)
+      &&
+      let var = VTmNeutral (HVar l, []) in
+      eq_ty (l + 1) (b1, inst_clos_ty clos2 var)
   | VTySigma (_, a1, clos1), VTySigma (_, a2, clos2) ->
       eq_ty l (a1, a2)
       &&
       let var = VTmNeutral (HVar l, []) in
       eq_ty (l + 1) (inst_clos_ty clos1 var, inst_clos_ty clos2 var)
   | VTyProd (a1, b1), VTyProd (a2, b2) -> eq_ty l (a1, a2) && eq_ty l (b1, b2)
+  | VTySigma (_, a1, clos1), VTyProd (a2, b2) ->
+      eq_ty l (a1, a2)
+      &&
+      let var = VTmNeutral (HVar l, []) in
+      eq_ty (l + 1) (inst_clos_ty clos1 var, b2)
+  | VTyProd (a1, b1), VTySigma (_, a2, clos2) ->
+      eq_ty l (a1, a2)
+      &&
+      let var = VTmNeutral (HVar l, []) in
+      eq_ty (l + 1) (b1, inst_clos_ty clos2 var)
   | VTyUnit, VTyUnit -> true
+  | VTyEmpty, VTyEmpty -> true
   | VTyInt, VTyInt -> true
   | VTyEq (e1, e2, a), VTyEq (e1', e2', a') ->
       eq_tm l (e1, e1') && eq_tm l (e2, e2') && eq_ty l (a, a')
@@ -309,11 +354,15 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmUnit, VTmUnit -> true
   | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
   | VTmUnitHat, VTmUnitHat -> true
+  | VTmEmptyHat, VTmEmptyHat -> true
   | VTmIntHat, VTmIntHat -> true
+  | VTmAbsurd (c1, n1), VTmAbsurd (c2, n2) ->
+      eq_ty l (c1, c2) && eq_neutral l n1 n2
   | VTmEqHat (a1, t1, u1), VTmEqHat (a2, t2, u2) ->
       eq_tm l (a1, a2) && eq_tm l (t1, t2) && eq_tm l (u1, u2)
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
   | VTmAdd (a1, b1), VTmAdd (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
+  | VTmSub (a1, b1), VTmSub (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
@@ -335,7 +384,14 @@ and eq_spine (l : lvl) : spine * spine -> bool = function
 let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =
   let lvl = Context.lvl ctx in
   if not (eq_ty lvl (a, b)) then
-    let to_str x = Format.asprintf "%a" Pretty.pp_ty (quote_ty lvl x) in
+    let names =
+      List.map
+        (fun (b : Context.binding) -> Option.value b.name ~default:"_")
+        ctx.bindings
+    in
+    let to_str x =
+      Format.asprintf "%a" (Pretty.pp_ty_ctx names) (quote_ty lvl x)
+    in
     raise
       (Elab_error
          (Format.sprintf "Type mismatch: expected %s, got %s" (to_str b)
@@ -376,6 +432,7 @@ let rec check_ty (ctx : Context.t) : raw -> ty = function
       let b = check_ty ctx b in
       TyProd (a, b)
   | RUnit -> TyUnit
+  | REmpty -> TyEmpty
   | RInt -> TyInt
   | REq (a, b) ->
       let a, ty = infer_tm ctx a in
@@ -555,7 +612,13 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       (TmMkSigma (a_quoted, b_quoted, a', b'), prod_ty)
   (* Types as terms *)
   | RUnit -> (TmUnitHat, VTyU)
+  | REmpty -> (TmEmptyHat, VTyU)
   | RInt -> (TmIntHat, VTyU)
+  | RAbsurd (c, e) ->
+      let c' = check_ty ctx c in
+      let c_val = eval_ty (Context.env ctx) c' in
+      let e' = check_tm ctx e VTyEmpty in
+      (TmAbsurd (c', e'), c_val)
   | REq (a, b) ->
       let a', a_ty = infer_tm ctx a in
       let b' = check_tm ctx b a_ty in
@@ -594,6 +657,10 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       let a' = check_tm ctx a VTyInt in
       let b' = check_tm ctx b VTyInt in
       (TmAdd (a', b'), VTyInt)
+  | RSub (a, b) ->
+      let a' = check_tm ctx a VTyInt in
+      let b' = check_tm ctx b VTyInt in
+      (TmSub (a', b'), VTyInt)
   | RAnn (e, ty_raw) ->
       let ty = check_ty ctx ty_raw in
       let ty_val = eval_ty (Context.env ctx) ty in

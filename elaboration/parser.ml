@@ -70,9 +70,11 @@ let rec parse_atom : raw t =
       parse_fst;
       parse_snd;
       parse_refl;
+      parse_absurd;
       parse_var;
       parse_type;
       parse_unit;
+      parse_empty;
       parse_int;
       parse_int_lit;
       parse_pair;
@@ -137,6 +139,18 @@ and parse_refl : raw t =
    let* t = parse_atom in
    return (RRefl t))
     input
+
+and parse_absurd : raw t =
+ fun input ->
+  (let* () = token Lexer.Absurd in
+   let* c = parse_atom in
+   let* e = parse_atom in
+   return (RAbsurd (c, e)))
+    input
+
+and parse_empty : raw t = function
+  | Lexer.Empty :: rest -> Some (REmpty, rest)
+  | _ -> None
 
 and parse_typed_binder_group : (string option list * raw) t =
  fun input ->
@@ -214,11 +228,24 @@ and parse_app : raw t =
 
 and parse_add_level : raw t =
  fun input ->
-  (let* a = parse_app in
-   (let* () = token Lexer.Plus in
-    let* b = parse_add_level in
-    return (RAdd (a, b)))
-   <|> return a)
+  (let* first = parse_app in
+   let* rest =
+     many
+       ((let* () = token Lexer.Plus in
+         let* b = parse_app in
+         return (`Add b))
+       <|>
+       let* () = token Lexer.Minus in
+       let* b = parse_app in
+       return (`Sub b))
+   in
+   return
+     (List.fold_left
+        (fun acc op ->
+          match op with
+          | `Add b -> RAdd (acc, b)
+          | `Sub b -> RSub (acc, b))
+        first rest))
     input
 
 and parse_eq_level : raw t =
@@ -290,6 +317,7 @@ let token_to_string (t : Lexer.token) : string =
   | Lexer.Ident s -> Format.sprintf "identifier '%s'" s
   | Lexer.Type -> "Type"
   | Lexer.Unit -> "Unit"
+  | Lexer.Empty -> "Empty"
   | Lexer.Def -> "def"
   | Lexer.Colon -> ":"
   | Lexer.Colon_eq -> ":="
@@ -302,9 +330,11 @@ let token_to_string (t : Lexer.token) : string =
   | Lexer.Fst -> "fst"
   | Lexer.Snd -> "snd"
   | Lexer.Refl -> "refl"
+  | Lexer.Absurd -> "absurd"
   | Lexer.Fun -> "fun"
   | Lexer.Times -> "×"
   | Lexer.Plus -> "+"
+  | Lexer.Minus -> "-"
   | Lexer.Let -> "let"
   | Lexer.Int -> "Int"
   | Lexer.Underscore -> "_"
