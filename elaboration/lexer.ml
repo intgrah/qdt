@@ -8,6 +8,7 @@ type token =
   | Colon_eq
   | Times
   | Plus
+  | Minus
   | Equal
   | Def
   | Let
@@ -15,8 +16,10 @@ type token =
   | Fst
   | Snd
   | Refl
+  | Absurd
   | Type
   | Unit
+  | Empty
   | Int
   | Underscore
   | Ident of string
@@ -32,6 +35,7 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Colon_eq -> Format.fprintf fmt ":="
   | Times -> Format.fprintf fmt "×"
   | Plus -> Format.fprintf fmt "+"
+  | Minus -> Format.fprintf fmt "-"
   | Equal -> Format.fprintf fmt "="
   | Def -> Format.fprintf fmt "def"
   | Let -> Format.fprintf fmt "let"
@@ -39,8 +43,10 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Fst -> Format.fprintf fmt "fst"
   | Snd -> Format.fprintf fmt "snd"
   | Refl -> Format.fprintf fmt "refl"
+  | Absurd -> Format.fprintf fmt "absurd"
   | Type -> Format.fprintf fmt "Type"
   | Unit -> Format.fprintf fmt "Unit"
+  | Empty -> Format.fprintf fmt "Empty"
   | Int -> Format.fprintf fmt "Int"
   | Underscore -> Format.fprintf fmt "_"
   | Ident s -> Format.fprintf fmt "%s" s
@@ -92,6 +98,7 @@ let rec scan front_toks = function
   | '=' :: '>' :: cs -> scan (Eq_gt :: front_toks) cs
   | '=' :: cs -> scan (Equal :: front_toks) cs
   | '-' :: '>' :: cs -> scan (Arrow :: front_toks) cs
+  | '-' :: cs -> scan (Minus :: front_toks) cs
   | ':' :: '=' :: cs -> scan (Colon_eq :: front_toks) cs
   | ':' :: cs -> scan (Colon :: front_toks) cs
   | ',' :: cs -> scan (Comma :: front_toks) cs
@@ -117,10 +124,12 @@ let rec scan front_toks = function
         | "fun" -> Fun
         | "Type" -> Type
         | "Unit" -> Unit
+        | "Empty" -> Empty
         | "Int" -> Int
         | "fst" -> Fst
         | "snd" -> Snd
         | "refl" -> Refl
+        | "absurd" -> Absurd
         | tok -> Ident tok
       in
       scan (tok :: front_toks) cs

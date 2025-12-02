@@ -8,6 +8,7 @@ type token =
   | Colon_eq
   | Times
   | Plus
+  | Minus
   | Equal
   | Def
   | Let
@@ -15,8 +16,10 @@ type token =
   | Fst
   | Snd
   | Refl
+  | Absurd
   | Type
   | Unit
+  | Empty
   | Int
   | Underscore
   | Ident of string

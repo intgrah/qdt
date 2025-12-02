@@ -10,6 +10,8 @@ type raw =
   | RU
   | RUnit
   | RUnitTm
+  | REmpty
+  | RAbsurd of raw * raw
   | REq of raw * raw
   | RRefl of raw
   | RSigma of string option * raw * raw
@@ -20,6 +22,7 @@ type raw =
   | RInt
   | RIntLit of int
   | RAdd of raw * raw
+  | RSub of raw * raw
   | RAnn of raw * raw
 
 type raw_def = string * raw (* All defs generate an RAnn *)
@@ -36,6 +39,7 @@ type ty =
   | TySigma of string option * ty * ty
   | TyProd of ty * ty
   | TyUnit
+  | TyEmpty
   | TyInt
   | TyEq of tm * tm * ty
   | TyEl of tm
@@ -52,12 +56,15 @@ and tm =
   | TmProj1 of tm
   | TmProj2 of tm
   | TmUnit
+  | TmAbsurd of ty * tm
   | TmIntLit of int
   | TmUnitHat
+  | TmEmptyHat
   | TmIntHat
   | TmEqHat of tm * tm * tm
   | TmRefl of ty * tm
   | TmAdd of tm * tm
+  | TmSub of tm * tm
 
 type vl_ty =
   | VTyU
@@ -66,6 +73,7 @@ type vl_ty =
   | VTySigma of string option * vl_ty * clos_ty
   | VTyProd of vl_ty * vl_ty
   | VTyUnit
+  | VTyEmpty
   | VTyInt
   | VTyEq of vl_tm * vl_tm * vl_ty
   | VTyEl of neutral
@@ -85,12 +93,15 @@ and vl_tm =
   | VTmProdHat of vl_tm * vl_tm
   | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
   | VTmUnit
+  | VTmAbsurd of vl_ty * neutral
   | VTmIntLit of int
   | VTmUnitHat
+  | VTmEmptyHat
   | VTmIntHat
   | VTmEqHat of vl_tm * vl_tm * vl_tm
   | VTmRefl of vl_ty * vl_tm
   | VTmAdd of vl_tm * vl_tm
+  | VTmSub of vl_tm * vl_tm
 
 and spine = fname list
 
