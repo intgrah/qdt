@@ -32,9 +32,9 @@ end =
   Inc.Observer.Update
 
 let string_of_stage_error = function
-  | Lex_error msg -> Printf.sprintf "Lexing error: %s" msg
-  | Parse_error msg -> Printf.sprintf "Parse error: %s" msg
-  | Elab_error msg -> Printf.sprintf "Elaboration error: %s" msg
+  | Lex_error msg -> Format.sprintf "Lexing error: %s" msg
+  | Parse_error msg -> Format.sprintf "Parse error: %s" msg
+  | Elab_error msg -> Format.sprintf "Elaboration error: %s" msg
 
 let summarize_tokens tokens =
   let buf = Buffer.create 128 in
@@ -52,7 +52,7 @@ let summarize_tokens tokens =
   Format.pp_print_flush fmt ();
   let summary = Buffer.contents buf in
   let truncated = List.length tokens > 5 in
-  Printf.sprintf "Unexpected tokens remaining: %s%s" summary
+  Format.sprintf "Unexpected tokens remaining: %s%s" summary
     (if truncated then
        "..."
      else
