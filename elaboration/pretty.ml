@@ -45,6 +45,7 @@ let rec pp_raw (fmt : Format.formatter) : raw -> unit = function
   | RSub (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_raw a pp_raw b
   | RAnn (e, ty) ->
       Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
+  | RSorry -> Format.fprintf fmt "sorry"
 
 let pp_raw_def (fmt : Format.formatter) ((name, body) : raw_def) : unit =
   Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
@@ -151,6 +152,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmSub (a, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ - %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
+  | TmSorry _ -> Format.fprintf fmt "sorry"
 
 let pp_ty fmt t = pp_ty_ctx [] fmt t
 let pp_tm fmt t = pp_tm_ctx [] fmt t
