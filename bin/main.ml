@@ -5,28 +5,51 @@ let main () =
   let src_chars = String.to_seq src |> List.of_seq in
 
   (* Lex *)
-  let tokens = Lang.Lexer.scan [] src_chars in
+  let tokens = Elaboration.Lexer.scan [] src_chars in
   if args.show_lex then
     Format.printf "%a\n\n"
       (Format.pp_print_list
          ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
-         Lang.Token.pp)
+         Elaboration.Lexer.pp_token)
       tokens;
 
   (* Parse *)
-  let program = Lang.Parser.parse tokens in
+  let program =
+    try Elaboration.Parser.parse tokens with
+    | Elaboration.Parser.Parse_error msg ->
+        Format.printf "Parse error: %s\n" msg;
+        exit 1
+    | Elaboration.Parser.Tokens_remaining remaining ->
+        let remaining_str =
+          let buf = Buffer.create 100 in
+          let fmt = Format.formatter_of_buffer buf in
+          List.iteri
+            (fun i t ->
+              if i < 5 then (
+                if i > 0 then
+                  Format.fprintf fmt " ";
+                Format.fprintf fmt "%a" Elaboration.Lexer.pp_token t))
+            remaining;
+          Format.pp_print_flush fmt ();
+          Buffer.contents buf
+        in
+        Format.printf "Parse error: Unexpected tokens remaining: %s%s\n"
+          remaining_str
+          (if List.length remaining > 5 then
+             "..."
+           else
+             "");
+        exit 1
+  in
   if args.show_parse then
-    Format.printf "%a\n\n" Lang.Raw_syntax.pp_program program;
+    Format.printf "%a\n\n" Elaboration.Pretty.pp_raw_program program;
 
   (* Elaborate *)
   try
     let elab_defs = Elaboration.Elab.elab_program program in
     if args.show_elab then
       List.iter
-        (fun (name, term, ty) ->
-          Format.printf "%s\n" name;
-          Format.printf "  Type: %a\n" Elaboration.Pretty.pp_val ty;
-          Format.printf "  Term: %a\n\n" Elaboration.Pretty.pp_tm term)
+        (fun def -> Format.printf "%a@.@." Elaboration.Pretty.pp_def def)
         elab_defs
   with
   | Elaboration.Elab.Elab_error msg ->
