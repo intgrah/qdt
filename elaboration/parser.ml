@@ -21,11 +21,16 @@ module Parser = struct
     | Some _ as result -> result
     | None -> p2 input
 
+  (** Succeeds*)
+  let choice (ps : 'a t list) : 'a t =
+    List.fold_right ( <|> ) ps (fun _ -> None)
+
   let token (t : Lexer.token) : unit t = function
     | [] -> None
     | tok :: rest when tok = t -> Some ((), rest)
     | _ -> None
 
+  (** 0 or more *)
   let many (p : 'a t) : 'a list t =
     let rec go acc input =
       match p input with
@@ -34,6 +39,7 @@ module Parser = struct
     in
     go []
 
+  (** 1 or more *)
   let many1 (p : 'a t) : 'a list t =
     let* first = p in
     let* rest = many p in
@@ -59,9 +65,20 @@ let parse_parens (p : 'a t) : 'a t =
 
 let rec parse_atom : raw t =
  fun input ->
-  (parse_fst <|> parse_snd <|> parse_refl <|> parse_var <|> parse_type
- <|> parse_unit <|> parse_int <|> parse_int_lit <|> parse_pair
- <|> parse_unit_term <|> parse_parens parse_preterm)
+  choice
+    [
+      parse_fst;
+      parse_snd;
+      parse_refl;
+      parse_var;
+      parse_type;
+      parse_unit;
+      parse_int;
+      parse_int_lit;
+      parse_pair;
+      parse_unit_term;
+      parse_parens parse_preterm;
+    ]
     input
 
 and parse_var : raw t =
@@ -233,7 +250,7 @@ and parse_arrow_level : raw t =
 
 and parse_preterm : raw t =
  fun input ->
-  (parse_lambda <|> parse_pi <|> parse_sigma <|> parse_arrow_level) input
+  choice [ parse_lambda; parse_pi; parse_sigma; parse_arrow_level ] input
 
 and parse_def : raw_def t = function
   | Lexer.Def :: rest ->
