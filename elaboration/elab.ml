@@ -398,8 +398,8 @@ let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =
     in
     raise
       (Elab_error
-         (Format.sprintf "Type mismatch: expected %s, got %s" (to_str b)
-            (to_str a)))
+         (Format.sprintf "Type mismatch: expected %s, got %s" (to_str a)
+            (to_str b)))
 
 (* Γ ⊢ A type *)
 let rec check_ty (ctx : Context.t) : raw -> ty = function
