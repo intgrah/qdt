@@ -31,10 +31,10 @@ module Update : sig
 end =
   Inc.Observer.Update
 
-let string_of_stage_error = function
-  | Lex_error msg -> Format.sprintf "Lexing error: %s" msg
-  | Parse_error msg -> Format.sprintf "Parse error: %s" msg
-  | Elab_error msg -> Format.sprintf "Elaboration error: %s" msg
+let pp_stage_error fmt = function
+  | Lex_error msg -> Format.fprintf fmt "Lexing error: %s" msg
+  | Parse_error msg -> Format.fprintf fmt "Parse error: %s" msg
+  | Elab_error msg -> Format.fprintf fmt "Elaboration error: %s" msg
 
 let summarize_tokens tokens =
   let buf = Buffer.create 128 in

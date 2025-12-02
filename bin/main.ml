@@ -41,7 +41,7 @@ let handle_stage_result ~show ~printer = function
         printer value
   | Update.Initialized (Error err)
   | Update.Changed (_, Error err) ->
-      Format.printf "%s@." (Pipeline.string_of_stage_error err)
+      Format.printf "%a@." Pipeline.pp_stage_error err
   | Update.Invalidated -> ()
 
 let rec watch_loop file pipeline last_mtime =

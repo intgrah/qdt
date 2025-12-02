@@ -23,7 +23,7 @@ module Update : sig
     | Invalidated
 end
 
-val string_of_stage_error : stage_error -> string
+val pp_stage_error : Format.formatter -> stage_error -> unit
 val create : unit -> t
 val set_source : t -> string -> unit
 val stabilize : unit -> unit
