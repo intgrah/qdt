@@ -9,6 +9,7 @@ bug-reports: "https://github.com/intgrah/qdt/issues"
 depends: [
   "dune" {>= "3.20"}
   "ocaml"
+  "incremental"
   "alcotest" {with-test}
   "bisect_ppx" {with-test}
   "odoc" {with-doc}
