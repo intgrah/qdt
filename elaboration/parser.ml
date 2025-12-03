@@ -214,7 +214,7 @@ and parse_pi : raw t =
   (let* group = parse_typed_binder_group in
    let* () = token Lexer.Arrow in
    let* b = parse_preterm in
-   return (RPi ([ group ], b)))
+   return (RPi (group, b)))
     input
 
 and parse_sigma : raw t =
@@ -222,7 +222,7 @@ and parse_sigma : raw t =
   (let* group = parse_typed_binder_group in
    let* () = token Lexer.Times in
    let* b = parse_preterm in
-   return (RSigma ([ group ], b)))
+   return (RSigma (group, b)))
     input
 
 and parse_app : raw t =
