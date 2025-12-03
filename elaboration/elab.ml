@@ -415,39 +415,36 @@ and check_ty (ctx : Context.t) : raw -> ty = function
       match Context.lookup_var x ctx with
       | Some (lvl, VTyU) -> TyEl (TmVar (Context.lvl ctx - lvl - 1))
       | Some (_, ty) ->
-          let ty_str =
-            Format.asprintf "%a" Pretty.pp_ty (quote_ty (Context.lvl ctx) ty)
-          in
           raise
             (Elab_error
-               (Format.sprintf "Variable %s has type %s, expected U" x ty_str))
+               (Format.asprintf "Variable %s has type %a, expected U" x
+                  Pretty.pp_ty
+                  (quote_ty (Context.lvl ctx) ty)))
       | None -> raise (Elab_error ("Type variable not in scope: " ^ x)))
   | RPi (group, b) ->
       check_ty_binder_group ctx group b (fun x a b -> TyPi (x, a, b))
-  | RArrow (a, b) ->
-      let a = check_ty ctx a in
-      let b = check_ty ctx b in
-      TyArrow (a, b)
+  | RArrow (a, b) -> TyArrow (check_ty ctx a, check_ty ctx b)
   | RSigma (group, b) ->
       check_ty_binder_group ctx group b (fun x a b -> TySigma (x, a, b))
-  | RProd (a, b) ->
-      let a = check_ty ctx a in
-      let b = check_ty ctx b in
-      TyProd (a, b)
+  | RProd (a, b) -> TyProd (check_ty ctx a, check_ty ctx b)
   | RUnit -> TyUnit
   | REmpty -> TyEmpty
   | RInt -> TyInt
   | REq (a, b) ->
       let a, ty = infer_tm ctx a in
-      let b = check_tm ctx b ty in
-      TyEq (a, b, quote_ty (Context.lvl ctx) ty)
-  | RApp (f, a) ->
-      let tm, ty = infer_tm ctx (RApp (f, a)) in
-      conv_ty ctx ty VTyU;
-      TyEl tm
-  | raw ->
-      let raw_str = Format.asprintf "%a" Pretty.pp_raw raw in
-      raise (Elab_error (Format.sprintf "Expected a type, but got: %s" raw_str))
+      TyEq (a, check_tm ctx b ty, quote_ty (Context.lvl ctx) ty)
+  | (RApp (_, _) | RAnn (_, _)) as e -> TyEl (check_tm ctx e VTyU)
+  | ( RUnitTm | RSorry
+    | RLam (_, _)
+    | RLet (_, _, _, _)
+    | RAbsurd _ | RRefl _
+    | RPair (_, _)
+    | RProj1 _ | RProj2 _ | RIntLit _
+    | RAdd (_, _)
+    | RSub (_, _) ) as raw ->
+      raise
+        (Elab_error
+           (Format.asprintf "Expected a type, but got: %a" Pretty.pp_raw raw))
 
 (* Γ ⊢ e ⇐ A *)
 and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
@@ -536,26 +533,24 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
           let a' = check_tm ctx a a_ty in
           (TmApp (f', a'), b_ty)
       | _ ->
-          let f_str = Format.asprintf "%a" Pretty.pp_raw f in
           raise
             (Elab_error
-               (Format.sprintf
-                  "Application: expected function type, but %s has a different \
+               (Format.asprintf
+                  "Application: expected function type, but %a has a different \
                    type"
-                  f_str)))
+                  Pretty.pp_raw f)))
   | RProj1 p -> (
       let p', p_ty = infer_tm ctx p in
       match p_ty with
       | VTySigma (_, a, _) -> (TmProj1 p', a)
       | VTyProd (a, _) -> (TmProj1 p', a)
       | _ ->
-          let p_str = Format.asprintf "%a" Pretty.pp_raw p in
           raise
             (Elab_error
-               (Format.sprintf
-                  "proj1: expected sigma/product type, but %s has a different \
+               (Format.asprintf
+                  "proj1: expected sigma/product type, but %a has a different \
                    type"
-                  p_str)))
+                  Pretty.pp_raw p)))
   | RProj2 p -> (
       let p', p_ty = infer_tm ctx p in
       match p_ty with
@@ -566,13 +561,12 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
           (TmProj2 p', b_val)
       | VTyProd (_, b) -> (TmProj2 p', b)
       | _ ->
-          let p_str = Format.asprintf "%a" Pretty.pp_raw p in
           raise
             (Elab_error
-               (Format.sprintf
-                  "proj2: expected sigma/product type, but %s has a different \
+               (Format.asprintf
+                  "proj2: expected sigma/product type, but %a has a different \
                    type"
-                  p_str)))
+                  Pretty.pp_raw p)))
   | RUnitTm -> (TmUnit, VTyUnit)
   | RIntLit n -> (TmIntLit n, VTyInt)
   | RLet (x, ty_opt, t, body) -> (
