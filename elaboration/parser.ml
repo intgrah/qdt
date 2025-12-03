@@ -21,7 +21,7 @@ module Parser = struct
     | Some _ as result -> result
     | None -> p2 input
 
-  (** Succeeds*)
+  (** Succeeds on the first one *)
   let choice (ps : 'a t list) : 'a t =
     List.fold_right ( <|> ) ps (fun _ -> None)
 
@@ -57,11 +57,16 @@ let parse_binder_name : string option t = function
   | Lexer.Ident name :: rest -> Some (Some name, rest)
   | _ -> None
 
-let parse_parens (p : 'a t) : 'a t =
+let parse_ann_or_parens (p : raw t) : raw t =
   let* () = token Lexer.LParen in
-  let* x = p in
+  let* e = p in
+  (let* () = token Lexer.Colon in
+   let* ty = p in
+   let* () = token Lexer.RParen in
+   return (RAnn (e, ty)))
+  <|>
   let* () = token Lexer.RParen in
-  return x
+  return e
 
 let rec parse_atom : raw t =
  fun input ->
@@ -80,7 +85,7 @@ let rec parse_atom : raw t =
       parse_int_lit;
       parse_pair;
       parse_unit_term;
-      parse_parens parse_preterm;
+      parse_ann_or_parens parse_preterm;
     ]
     input
 
@@ -144,9 +149,8 @@ and parse_refl : raw t =
 and parse_absurd : raw t =
  fun input ->
   (let* () = token Lexer.Absurd in
-   let* c = parse_atom in
    let* e = parse_atom in
-   return (RAbsurd (c, e)))
+   return (RAbsurd e))
     input
 
 and parse_empty : raw t = function
@@ -202,26 +206,23 @@ and parse_lambda : raw t =
    in
    let* () = token Lexer.Eq_gt in
    let* body = parse_preterm in
-   return
-     (List.fold_right
-        (fun (name, ty) body -> RLam (name, ty, body))
-        all_binders body))
+   return (RLam (all_binders, body)))
     input
 
 and parse_pi : raw t =
  fun input ->
-  (let* names, a = parse_typed_binder_group in
+  (let* group = parse_typed_binder_group in
    let* () = token Lexer.Arrow in
    let* b = parse_preterm in
-   return (List.fold_right (fun name body -> RPi (name, a, body)) names b))
+   return (RPi ([ group ], b)))
     input
 
 and parse_sigma : raw t =
  fun input ->
-  (let* names, a = parse_typed_binder_group in
+  (let* group = parse_typed_binder_group in
    let* () = token Lexer.Times in
    let* b = parse_preterm in
-   return (List.fold_right (fun name body -> RSigma (name, a, body)) names b))
+   return (RSigma ([ group ], b)))
     input
 
 and parse_app : raw t =
@@ -264,20 +265,24 @@ and parse_eq_level : raw t =
 
 and parse_prod_level : raw t =
  fun input ->
-  (let* a = parse_eq_level in
-   (let* () = token Lexer.Times in
-    let* b = parse_prod_level in
-    return (RProd (a, b)))
-   <|> return a)
+  (parse_sigma
+  <|>
+  let* a = parse_eq_level in
+  (let* () = token Lexer.Times in
+   let* b = parse_prod_level in
+   return (RProd (a, b)))
+  <|> return a)
     input
 
 and parse_arrow_level : raw t =
  fun input ->
-  (let* a = parse_prod_level in
-   (let* () = token Lexer.Arrow in
-    let* b = parse_arrow_level in
-    return (RArrow (a, b)))
-   <|> return a)
+  (parse_pi
+  <|>
+  let* a = parse_prod_level in
+  (let* () = token Lexer.Arrow in
+   let* b = parse_arrow_level in
+   return (RArrow (a, b)))
+  <|> return a)
     input
 
 and parse_preterm : raw t =
@@ -288,9 +293,9 @@ and parse_def : raw_def t = function
   | Lexer.Def :: rest ->
       (let* name = parse_ident in
        let* binder_groups = many parse_typed_binder_group in
-       let binders =
+       let binders : binder list =
          List.concat_map
-           (fun (names, ty) -> List.map (fun n -> (n, ty)) names)
+           (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
            binder_groups
        in
        let* ret_ty_opt =
@@ -307,9 +312,10 @@ and parse_def : raw_def t = function
          | None -> body
        in
        let full_body =
-         List.fold_right
-           (fun (n, ty) acc -> RLam (n, Some ty, acc))
-           binders body_with_ann
+         if binders = [] then
+           body_with_ann
+         else
+           RLam (binders, body_with_ann)
        in
        return (name, full_body))
         rest
@@ -317,8 +323,7 @@ and parse_def : raw_def t = function
 
 let parse_program : raw_program t = many parse_def
 
-let token_to_string (t : Lexer.token) : string =
-  match t with
+let token_to_string : Lexer.token -> string = function
   | Lexer.Ident s -> Format.sprintf "identifier '%s'" s
   | Lexer.Type -> "Type"
   | Lexer.Unit -> "Unit"

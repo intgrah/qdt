@@ -97,24 +97,19 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmIntHat -> VTmIntHat
   | TmEqHat (a, t, u) -> VTmEqHat (eval_tm env a, eval_tm env t, eval_tm env u)
   | TmRefl (a, e) -> VTmRefl (eval_ty env a, eval_tm env e)
-  | TmAdd (a, b) -> do_add (eval_tm env a) (eval_tm env b)
-  | TmSub (a, b) -> do_sub (eval_tm env a) (eval_tm env b)
+  | TmAdd (a, b) -> do_add (eval_tm env a, eval_tm env b)
+  | TmSub (a, b) -> do_sub (eval_tm env a, eval_tm env b)
   | TmSorry ty -> VTmSorry (eval_ty env ty)
 
-and do_add (a : vl_tm) (b : vl_tm) : vl_tm =
-  match (a, b) with
+and do_add : vl_tm * vl_tm -> vl_tm = function
   | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
-  | _ -> VTmAdd (a, b)
+  | a, b -> VTmAdd (a, b)
 
-and do_sub (a : vl_tm) (b : vl_tm) : vl_tm =
-  match (a, b) with
+and do_sub : vl_tm * vl_tm -> vl_tm = function
   | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
-  | _ -> VTmSub (a, b)
+  | a, b -> VTmSub (a, b)
 
-and do_absurd (c : vl_ty) (e : vl_tm) : vl_tm =
-  match e with
-  | VTmNeutral n -> VTmAbsurd (c, n)
-  | _ -> raise (Elab_error "do_absurd: expected neutral")
+and do_absurd (c : vl_ty) (e : vl_tm) : vl_tm = VTmAbsurd (c, e)
 
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
@@ -189,7 +184,7 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
       ignore x;
       TmMkSigma (a, b, quote_tm l t, quote_tm l u)
   | VTmUnit -> TmUnit
-  | VTmAbsurd (c, n) -> TmAbsurd (quote_ty l c, quote_neutral l n)
+  | VTmAbsurd (c, e) -> TmAbsurd (quote_ty l c, quote_tm l e)
   | VTmIntLit n -> TmIntLit n
   | VTmUnitHat -> TmUnitHat
   | VTmEmptyHat -> TmEmptyHat
@@ -359,8 +354,8 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmUnitHat, VTmUnitHat -> true
   | VTmEmptyHat, VTmEmptyHat -> true
   | VTmIntHat, VTmIntHat -> true
-  | VTmAbsurd (c1, n1), VTmAbsurd (c2, n2) ->
-      eq_ty l (c1, c2) && eq_neutral l n1 n2
+  | VTmAbsurd (c1, e1), VTmAbsurd (c2, e2) ->
+      eq_ty l (c1, c2) && eq_tm l (e1, e2)
   | VTmEqHat (a1, t1, u1), VTmEqHat (a2, t2, u2) ->
       eq_tm l (a1, a2) && eq_tm l (t1, t2) && eq_tm l (u1, u2)
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
@@ -401,8 +396,22 @@ let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =
          (Format.sprintf "Type mismatch: expected %s, got %s" (to_str a)
             (to_str b)))
 
+let rec check_ty_binder_groups (ctx : Context.t) (groups : binder_group list)
+    (b : raw) (mk : string option -> ty -> ty -> ty) : ty =
+  match groups with
+  | [] -> check_ty ctx b
+  | (names, a) :: rest ->
+      let a' = check_ty ctx a in
+      let av = eval_ty (Context.env ctx) a' in
+      List.fold_right
+        (fun x _acc ->
+          let ctx' = Context.bind x av ctx in
+          mk x a' (check_ty_binder_groups ctx' rest b mk))
+        names
+        (check_ty_binder_groups (Context.bind None av ctx) rest b mk)
+
 (* Γ ⊢ A type *)
-let rec check_ty (ctx : Context.t) : raw -> ty = function
+and check_ty (ctx : Context.t) : raw -> ty = function
   | RU -> TyU
   | RIdent x -> (
       match Context.lookup_var x ctx with
@@ -415,22 +424,12 @@ let rec check_ty (ctx : Context.t) : raw -> ty = function
             (Elab_error
                (Format.sprintf "Variable %s has type %s, expected U" x ty_str))
       | None -> raise (Elab_error ("Type variable not in scope: " ^ x)))
-  | RPi (x, a, b) ->
-      let a = check_ty ctx a in
-      let av = eval_ty (Context.env ctx) a in
-      let ctx = Context.bind x av ctx in
-      let b = check_ty ctx b in
-      TyPi (x, a, b)
+  | RPi (groups, b) -> check_ty_pi ctx groups b
   | RArrow (a, b) ->
       let a = check_ty ctx a in
       let b = check_ty ctx b in
       TyArrow (a, b)
-  | RSigma (x, a, b) ->
-      let a = check_ty ctx a in
-      let av = eval_ty (Context.env ctx) a in
-      let ctx = Context.bind x av ctx in
-      let b = check_ty ctx b in
-      TySigma (x, a, b)
+  | RSigma (groups, b) -> check_ty_sigma ctx groups b
   | RProd (a, b) ->
       let a = check_ty ctx a in
       let b = check_ty ctx b in
@@ -450,72 +449,105 @@ let rec check_ty (ctx : Context.t) : raw -> ty = function
       let raw_str = Format.asprintf "%a" Pretty.pp_raw raw in
       raise (Elab_error (Format.sprintf "Expected a type, but got: %s" raw_str))
 
+and check_ty_pi (ctx : Context.t) (groups : binder_group list) (b : raw) : ty =
+  match groups with
+  | [] -> check_ty ctx b
+  | (names, a) :: rest ->
+      let a' = check_ty ctx a in
+      let av = eval_ty (Context.env ctx) a' in
+      let rec go names =
+        match names with
+        | [] -> check_ty_pi ctx rest b
+        | x :: xs ->
+            let ctx' = Context.bind x av ctx in
+            TyPi (x, a', go_in_ctx ctx' xs)
+      and go_in_ctx ctx' names =
+        match names with
+        | [] -> check_ty_pi ctx' rest b
+        | x :: xs ->
+            let ctx'' = Context.bind x av ctx' in
+            TyPi (x, a', go_in_ctx ctx'' xs)
+      in
+      go names
+
+and check_ty_sigma (ctx : Context.t) (groups : binder_group list) (b : raw) : ty
+    =
+  match groups with
+  | [] -> check_ty ctx b
+  | (names, a) :: rest ->
+      let a' = check_ty ctx a in
+      let av = eval_ty (Context.env ctx) a' in
+      let rec go ctx names =
+        match names with
+        | [] -> check_ty_sigma ctx rest b
+        | x :: xs ->
+            let ctx' = Context.bind x av ctx in
+            TySigma (x, a', go ctx' xs)
+      in
+      go ctx names
+
 (* Γ ⊢ e ⇐ A *)
 and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
   match (raw, ty) with
-  | RLam (x, Some ty_raw, body), VTyPi (_, a, clos) ->
-      let a_given = check_ty ctx ty_raw in
-      let a_given_val = eval_ty (Context.env ctx) a_given in
-      conv_ty ctx a a_given_val;
+  | RLam ([], body), ty -> check_tm ctx body ty
+  | RLam ((x, a_ann) :: rest, body), VTyPi (_, a_ty, clos) ->
+      (match a_ann with
+      | Some a_ann_raw ->
+          let a' = check_ty ctx a_ann_raw in
+          let a_val = eval_ty (Context.env ctx) a' in
+          conv_ty ctx a_ty a_val
+      | None -> ());
       let var = VTmNeutral (HVar (Context.lvl ctx), []) in
-      let ctx = Context.bind x a ctx in
+      let ctx' = Context.bind x a_ty ctx in
       let b_val = inst_clos_ty clos var in
-      let b = quote_ty (Context.lvl ctx) b_val in
-      let body = check_tm ctx body b_val in
-      TmLam (x, a_given, b, body)
-  | RLam (x, None, body), VTyPi (_, a, clos) ->
+      let b' = quote_ty (Context.lvl ctx') b_val in
+      let body' = check_tm ctx' (RLam (rest, body)) b_val in
+      TmLam (x, quote_ty (Context.lvl ctx) a_ty, b', body')
+  | RLam ((x, a_ann) :: rest, body), VTyArrow (a_ty, b_ty) ->
+      (match a_ann with
+      | Some a_ann_raw ->
+          let a' = check_ty ctx a_ann_raw in
+          let a_val = eval_ty (Context.env ctx) a' in
+          conv_ty ctx a_ty a_val
+      | None -> ());
       let lvl = Context.lvl ctx in
-      let var = VTmNeutral (HVar lvl, []) in
-      let ctx = Context.bind x a ctx in
-      let b_val = inst_clos_ty clos var in
-      let b = quote_ty (Context.lvl ctx) b_val in
-      let body = check_tm ctx body b_val in
-      TmLam (x, quote_ty lvl a, b, body)
-  | RLam (x, Some ty_raw, body), VTyArrow (a, b) ->
-      let a_given = check_ty ctx ty_raw in
-      let a_given_val = eval_ty (Context.env ctx) a_given in
-      conv_ty ctx a a_given_val;
-      let lvl = Context.lvl ctx in
-      let ctx = Context.bind x a ctx in
-      let b_ty = quote_ty lvl b in
-      let body = check_tm ctx body b in
-      TmLam (x, a_given, b_ty, body)
-  | RLam (x, None, body), VTyArrow (a, b) ->
-      let lvl = Context.lvl ctx in
-      let ctx = Context.bind x a ctx in
-      let b_ty = quote_ty lvl b in
-      let body = check_tm ctx body b in
-      TmLam (x, quote_ty lvl a, b_ty, body)
-  | RPair (t, u), VTySigma (_, a_ty, clos_b) ->
-      let t = check_tm ctx t a_ty in
-      let t_val = eval_tm (Context.env ctx) t in
-      let b_ty = inst_clos_ty clos_b t_val in
-      let u = check_tm ctx u b_ty in
-      let a_quoted = quote_ty (Context.lvl ctx) a_ty in
+      let ctx' = Context.bind x a_ty ctx in
+      let b' = quote_ty lvl b_ty in
+      let body' = check_tm ctx' (RLam (rest, body)) b_ty in
+      TmLam (x, quote_ty lvl a_ty, b', body')
+  | RPair (a, b), VTySigma (_, a_ty, clos_b) ->
+      let a' = check_tm ctx a a_ty in
+      let a_val = eval_tm (Context.env ctx) a' in
+      let b_ty = inst_clos_ty clos_b a_val in
+      let b' = check_tm ctx b b_ty in
+      let a_ty' = quote_ty (Context.lvl ctx) a_ty in
       let var = VTmNeutral (HVar (Context.lvl ctx), []) in
-      let b_quoted = quote_ty (Context.lvl ctx + 1) (inst_clos_ty clos_b var) in
-      TmMkSigma (a_quoted, b_quoted, t, u)
-  | RPair (t, u), VTyProd (a_ty, b_ty) ->
-      let t = check_tm ctx t a_ty in
-      let u = check_tm ctx u b_ty in
-      let a_quoted = quote_ty (Context.lvl ctx) a_ty in
-      let b_quoted = quote_ty (Context.lvl ctx) b_ty in
-      TmMkSigma (a_quoted, b_quoted, t, u)
+      let b_ty' = quote_ty (Context.lvl ctx + 1) (inst_clos_ty clos_b var) in
+      TmMkSigma (a_ty', b_ty', a', b')
+  | RPair (a, b), VTyProd (a_ty, b_ty) ->
+      let a' = check_tm ctx a a_ty in
+      let b' = check_tm ctx b b_ty in
+      let a_ty' = quote_ty (Context.lvl ctx) a_ty in
+      let b_ty' = quote_ty (Context.lvl ctx) b_ty in
+      TmMkSigma (a_ty', b_ty', a', b')
   | RRefl e, VTyEq (e1, e2, a) ->
-      let e = check_tm ctx e a in
-      let e_val = eval_tm (Context.env ctx) e in
+      let e' = check_tm ctx e a in
+      let e_val = eval_tm (Context.env ctx) e' in
       let l = Context.lvl ctx in
       if not (eq_tm l (e1, e2)) then
         raise
           (Elab_error "refl: sides of equality are not definitionally equal");
       if not (eq_tm l (e_val, e1)) then
         raise (Elab_error "refl: term does not match the sides of the equality");
-      TmRefl (quote_ty l a, e)
+      TmRefl (quote_ty l a, e')
   | RUnit, VTyUnit -> TmUnit
+  | RAbsurd e, ty ->
+      let e' = check_tm ctx e VTyEmpty in
+      TmAbsurd (quote_ty (Context.lvl ctx) ty, e')
   | RSorry, ty -> TmSorry (quote_ty (Context.lvl ctx) ty)
   | RAnn (e, ty_raw), expected_ty ->
-      let ty = check_ty ctx ty_raw in
-      let ty_val = eval_ty (Context.env ctx) ty in
+      let ty' = check_ty ctx ty_raw in
+      let ty_val = eval_ty (Context.env ctx) ty' in
       conv_ty ctx expected_ty ty_val;
       check_tm ctx e ty_val
   | raw, ty ->
@@ -593,16 +625,17 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
           let _ = eval_tm (Context.env ctx) t' in
           let ctx' = Context.bind (Some x) t_ty ctx in
           infer_tm ctx' body)
-  | RLam (_, None, _) ->
+  | RLam ([], body) -> infer_tm ctx body
+  | RLam ((_, None) :: _, _) ->
       raise
         (Elab_error "Cannot infer type of unannotated lambda, no unifier :(")
-  | RLam (x, Some ty_raw, body) ->
-      let a = check_ty ctx ty_raw in
-      let a_val = eval_ty (Context.env ctx) a in
+  | RLam ((x, Some ty_raw) :: rest, body) ->
+      let a' = check_ty ctx ty_raw in
+      let a_val = eval_ty (Context.env ctx) a' in
       let ctx' = Context.bind x a_val ctx in
-      let body', b_val = infer_tm ctx' body in
-      let b = quote_ty (Context.lvl ctx') b_val in
-      (TmLam (x, a, b, body'), VTyPi (x, a_val, ClosTy (Context.env ctx, b)))
+      let body', b_val = infer_tm ctx' (RLam (rest, body)) in
+      let b' = quote_ty (Context.lvl ctx') b_val in
+      (TmLam (x, a', b', body'), VTyPi (x, a_val, ClosTy (Context.env ctx, b')))
   | RRefl e ->
       let e', e_ty = infer_tm ctx e in
       let e_val = eval_tm (Context.env ctx) e' in
@@ -611,47 +644,28 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       let a', a_ty = infer_tm ctx a in
       let b', b_ty = infer_tm ctx b in
       let l = Context.lvl ctx in
-      let a_quoted = quote_ty l a_ty in
-      let b_quoted = quote_ty l b_ty in
-      let prod_ty = VTyProd (a_ty, b_ty) in
-      (TmMkSigma (a_quoted, b_quoted, a', b'), prod_ty)
+      let a_ty' = quote_ty l a_ty in
+      let b_ty' = quote_ty l b_ty in
+      (TmMkSigma (a_ty', b_ty', a', b'), VTyProd (a_ty, b_ty))
   (* Types as terms *)
   | RUnit -> (TmUnitHat, VTyU)
   | REmpty -> (TmEmptyHat, VTyU)
   | RInt -> (TmIntHat, VTyU)
-  | RAbsurd (c, e) ->
-      let c' = check_ty ctx c in
-      let c_val = eval_ty (Context.env ctx) c' in
-      let e' = check_tm ctx e VTyEmpty in
-      (TmAbsurd (c', e'), c_val)
+  | RAbsurd _ -> raise (Elab_error "Cannot infer type of absurd")
   | REq (a, b) ->
       let a', a_ty = infer_tm ctx a in
       let b' = check_tm ctx b a_ty in
       let a_ty_quoted = quote_ty (Context.lvl ctx) a_ty in
       let code = ty_to_code a_ty_quoted in
       (TmEqHat (code, a', b'), VTyU)
-  | RPi (x, a, b) ->
-      let a', a_ty = infer_tm ctx a in
-      conv_ty ctx a_ty VTyU;
-      let a_val = eval_tm (Context.env ctx) a' in
-      let ctx' = Context.bind x (do_el (Context.env ctx) a_val) ctx in
-      let b', b_ty = infer_tm ctx' b in
-      conv_ty ctx' b_ty VTyU;
-      (TmPiHat (x, a', b'), VTyU)
+  | RPi (groups, b) -> infer_tm_pi ctx groups b
   | RArrow (a, b) ->
       let a', a_ty = infer_tm ctx a in
       conv_ty ctx a_ty VTyU;
       let b', b_ty = infer_tm ctx b in
       conv_ty ctx b_ty VTyU;
       (TmArrowHat (a', b'), VTyU)
-  | RSigma (x, a, b) ->
-      let a', a_ty = infer_tm ctx a in
-      conv_ty ctx a_ty VTyU;
-      let a_val = eval_tm (Context.env ctx) a' in
-      let ctx' = Context.bind x (do_el (Context.env ctx) a_val) ctx in
-      let b', b_ty = infer_tm ctx' b in
-      conv_ty ctx' b_ty VTyU;
-      (TmSigmaHat (x, a', b'), VTyU)
+  | RSigma (groups, b) -> infer_tm_sigma ctx groups b
   | RProd (a, b) ->
       let a', a_ty = infer_tm ctx a in
       conv_ty ctx a_ty VTyU;
@@ -666,13 +680,53 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       let a' = check_tm ctx a VTyInt in
       let b' = check_tm ctx b VTyInt in
       (TmSub (a', b'), VTyInt)
-  | RAnn (e, ty_raw) ->
-      let ty = check_ty ctx ty_raw in
-      let ty_val = eval_ty (Context.env ctx) ty in
-      let e = check_tm ctx e ty_val in
-      (e, ty_val)
+  | RAnn (e, ty) ->
+      let ty' = check_ty ctx ty in
+      let ty_val = eval_ty (Context.env ctx) ty' in
+      let e' = check_tm ctx e ty_val in
+      (e', ty_val)
   | RU -> raise (Elab_error "Cannot infer type")
   | RSorry -> raise (Elab_error "Cannot infer type of sorry")
+
+and infer_tm_pi (ctx : Context.t) (groups : binder_group list) (b : raw) :
+    tm * vl_ty =
+  match groups with
+  | [] -> infer_tm ctx b
+  | (names, a) :: rest ->
+      let a', a_ty = infer_tm ctx a in
+      conv_ty ctx a_ty VTyU;
+      let a_val = eval_tm (Context.env ctx) a' in
+      let a_el = do_el (Context.env ctx) a_val in
+      let rec go ctx names =
+        match names with
+        | [] -> infer_tm_pi ctx rest b
+        | x :: xs ->
+            let ctx' = Context.bind x a_el ctx in
+            let b', b_ty = go ctx' xs in
+            conv_ty ctx' b_ty VTyU;
+            (TmPiHat (x, a', b'), VTyU)
+      in
+      go ctx names
+
+and infer_tm_sigma (ctx : Context.t) (groups : binder_group list) (b : raw) :
+    tm * vl_ty =
+  match groups with
+  | [] -> infer_tm ctx b
+  | (names, a) :: rest ->
+      let a', a_ty = infer_tm ctx a in
+      conv_ty ctx a_ty VTyU;
+      let a_val = eval_tm (Context.env ctx) a' in
+      let a_el = do_el (Context.env ctx) a_val in
+      let rec go ctx names =
+        match names with
+        | [] -> infer_tm_sigma ctx rest b
+        | x :: xs ->
+            let ctx' = Context.bind x a_el ctx in
+            let b', b_ty = go ctx' xs in
+            conv_ty ctx' b_ty VTyU;
+            (TmSigmaHat (x, a', b'), VTyU)
+      in
+      go ctx names
 
 let elab_program (program : raw_program) : (string * tm * ty) list =
   let rec go defs acc ctx =
