@@ -1,4 +1,4 @@
 (executable
  (public_name code)
  (name main)
- (libraries elaboration unix))
+ (libraries elaboration unix cmdliner))
