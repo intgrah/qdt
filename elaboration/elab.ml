@@ -328,6 +328,15 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmLam (_, _, clos1), VTmLam (_, _, clos2) ->
       let var = VTmNeutral (HVar l, []) in
       eq_tm (l + 1) (inst_clos_tm clos1 var, inst_clos_tm clos2 var)
+  | VTmLam (_, _, clos), t
+  | t, VTmLam (_, _, clos) ->
+      let var = VTmNeutral (HVar l, []) in
+      eq_tm (l + 1) (inst_clos_tm clos var, do_app t var)
+  | VTmMkSigma (_, _, _, t1, u1), VTmMkSigma (_, _, _, t2, u2) ->
+      eq_tm l (t1, t2) && eq_tm l (u1, u2)
+  | VTmMkSigma (_, _, _, t, u), p
+  | p, VTmMkSigma (_, _, _, t, u) ->
+      eq_tm l (t, do_proj1 p) && eq_tm l (u, do_proj2 p)
   | VTmPiHat (_, a1, clos1), VTmPiHat (_, a2, clos2) ->
       eq_tm l (a1, a2)
       &&
@@ -342,13 +351,6 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
       eq_tm (l + 1) (inst_clos_tm clos1 var, inst_clos_tm clos2 var)
   | VTmProdHat (a1, b1), VTmProdHat (a2, b2) ->
       eq_tm l (a1, a2) && eq_tm l (b1, b2)
-  | VTmMkSigma (_, a1, clos1, t1, u1), VTmMkSigma (_, a2, clos2, t2, u2) ->
-      eq_ty l (a1, a2)
-      &&
-      let var = VTmNeutral (HVar l, []) in
-      eq_ty (l + 1) (inst_clos_ty clos1 var, inst_clos_ty clos2 var)
-      && eq_tm l (t1, t2)
-      && eq_tm l (u1, u2)
   | VTmUnit, VTmUnit -> true
   | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
   | VTmUnitHat, VTmUnitHat -> true
