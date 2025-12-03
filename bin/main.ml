@@ -84,13 +84,14 @@ let main () =
 
   Pipeline.set_source pipeline (read_file_exn args.input_file);
   Pipeline.stabilize ();
-  let initial_mtime =
-    match Unix.stat args.input_file with
-    | exception Unix.Unix_error _ -> 0.0
-    | stats -> stats.st_mtime
-  in
-  Format.eprintf "[inc] watching %s (poll %.1fs)…@." args.input_file
-    poll_seconds;
-  watch_loop args.input_file pipeline initial_mtime
+  if args.watch then (
+    let initial_mtime =
+      match Unix.stat args.input_file with
+      | exception Unix.Unix_error _ -> 0.0
+      | stats -> stats.st_mtime
+    in
+    Format.eprintf "[inc] watching %s (poll %.1fs)…@." args.input_file
+      poll_seconds;
+    watch_loop args.input_file pipeline initial_mtime)
 
 let () = main ()
