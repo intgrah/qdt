@@ -6,6 +6,7 @@ type token =
   | Eq_gt
   | Comma
   | Colon_eq
+  | Semicolon
   | Times
   | Plus
   | Minus
@@ -34,6 +35,7 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Eq_gt -> Format.fprintf fmt "=>"
   | Comma -> Format.fprintf fmt ","
   | Colon_eq -> Format.fprintf fmt ":="
+  | Semicolon -> Format.fprintf fmt ";"
   | Times -> Format.fprintf fmt "×"
   | Plus -> Format.fprintf fmt "+"
   | Minus -> Format.fprintf fmt "-"
@@ -104,6 +106,7 @@ let rec scan front_toks = function
   | ':' :: '=' :: cs -> scan (Colon_eq :: front_toks) cs
   | ':' :: cs -> scan (Colon :: front_toks) cs
   | ',' :: cs -> scan (Comma :: front_toks) cs
+  | ';' :: cs -> scan (Semicolon :: front_toks) cs
   | '(' :: cs -> scan (LParen :: front_toks) cs
   | ')' :: cs -> scan (RParen :: front_toks) cs
   | '*' :: cs -> scan (Times :: front_toks) cs

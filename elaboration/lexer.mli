@@ -6,6 +6,7 @@ type token =
   | Eq_gt
   | Comma
   | Colon_eq
+  | Semicolon
   | Times
   | Plus
   | Minus

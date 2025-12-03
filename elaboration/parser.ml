@@ -209,6 +209,23 @@ and parse_lambda : raw t =
    return (RLam (all_binders, body)))
     input
 
+and parse_let : raw t =
+ fun input ->
+  (let* () = token Lexer.Let in
+   let* name = parse_ident in
+   let* ty_opt =
+     (let* () = token Lexer.Colon in
+      let* ty = parse_preterm in
+      return (Some ty))
+     <|> return None
+   in
+   let* () = token Lexer.Colon_eq in
+   let* e = parse_preterm in
+   let* () = token Lexer.Semicolon in
+   let* body = parse_preterm in
+   return (RLet (name, ty_opt, e, body)))
+    input
+
 and parse_pi : raw t =
  fun input ->
   (let* group = parse_typed_binder_group in
@@ -287,7 +304,7 @@ and parse_arrow_level : raw t =
 
 and parse_preterm : raw t =
  fun input ->
-  choice [ parse_lambda; parse_pi; parse_sigma; parse_arrow_level ] input
+  choice [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ] input
 
 and parse_def : raw_def t = function
   | Lexer.Def :: rest ->
@@ -331,6 +348,7 @@ let token_to_string : Lexer.token -> string = function
   | Lexer.Def -> "def"
   | Lexer.Colon -> ":"
   | Lexer.Colon_eq -> ":="
+  | Lexer.Semicolon -> ";"
   | Lexer.Eq_gt -> "=>"
   | Lexer.Arrow -> "→"
   | Lexer.Equal -> "="
