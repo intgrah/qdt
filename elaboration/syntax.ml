@@ -3,18 +3,18 @@
 type raw =
   | RIdent of string
   | RApp of raw * raw
-  | RLam of string option * raw option * raw
-  | RPi of string option * raw * raw
+  | RLam of binder list * raw
+  | RPi of binder_group list * raw
   | RArrow of raw * raw
   | RLet of string * raw option * raw * raw
   | RU
   | RUnit
   | RUnitTm
   | REmpty
-  | RAbsurd of raw * raw
+  | RAbsurd of raw
   | REq of raw * raw
   | RRefl of raw
-  | RSigma of string option * raw * raw
+  | RSigma of binder_group list * raw
   | RProd of raw * raw
   | RPair of raw * raw
   | RProj1 of raw
@@ -26,7 +26,10 @@ type raw =
   | RAnn of raw * raw
   | RSorry
 
-type raw_def = string * raw (* All defs generate an RAnn *)
+and binder = string option * raw option
+and binder_group = string option list * raw
+
+type raw_def = string * raw
 type raw_program = raw_def list
 
 (* ========== Core Syntax ========== *)
@@ -68,6 +71,7 @@ and tm =
   | TmSub of tm * tm
   | TmSorry of ty
 
+(* Weak head normal form *)
 type vl_ty =
   | VTyU
   | VTyPi of string option * vl_ty * clos_ty
@@ -80,12 +84,7 @@ type vl_ty =
   | VTyEq of vl_tm * vl_tm * vl_ty
   | VTyEl of neutral
 
-and head =
-  | HVar of lvl
-  | HGlobal of string
-
-and neutral = head * spine
-
+(* Weak head normal form *)
 and vl_tm =
   | VTmNeutral of neutral
   | VTmLam of string option * vl_ty * clos_tm
@@ -95,7 +94,7 @@ and vl_tm =
   | VTmProdHat of vl_tm * vl_tm
   | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
   | VTmUnit
-  | VTmAbsurd of vl_ty * neutral
+  | VTmAbsurd of vl_ty * vl_tm
   | VTmIntLit of int
   | VTmUnitHat
   | VTmEmptyHat
@@ -113,6 +112,11 @@ and fname =
   | FProj1
   | FProj2
 
+and head =
+  | HVar of lvl
+  | HGlobal of string
+
+and neutral = head * spine
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm
 and env = vl_tm list

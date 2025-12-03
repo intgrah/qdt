@@ -6,17 +6,27 @@ let pp_name (fmt : Format.formatter) : string option -> unit = function
   | None -> Format.fprintf fmt "_"
   | Some name -> Format.fprintf fmt "%s" name
 
-let rec pp_raw (fmt : Format.formatter) : raw -> unit = function
+let rec pp_binder (fmt : Format.formatter) : binder -> unit = function
+  | name, None -> pp_name fmt name
+  | name, Some ty -> Format.fprintf fmt "(%a : %a)" pp_name name pp_raw ty
+
+and pp_binder_group (fmt : Format.formatter) ((names, ty) : binder_group) : unit
+    =
+  Format.fprintf fmt "(%a : %a)"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
+    names pp_raw ty
+
+and pp_raw (fmt : Format.formatter) : raw -> unit = function
   | RIdent name -> Format.fprintf fmt "%s" name
   | RApp (f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_raw f pp_raw a
-  | RLam (name, None, body) ->
-      Format.fprintf fmt "@[<hov 2>(fun %a =>@ %a)@]" pp_name name pp_raw body
-  | RLam (name, Some ty, body) ->
-      Format.fprintf fmt "@[<hov 2>(fun %a : %a =>@ %a)@]" pp_name name pp_raw
-        ty pp_raw body
-  | RPi (name, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%a : %a)@ → %a@]" pp_name name pp_raw a
-        pp_raw b
+  | RLam (binders, body) ->
+      Format.fprintf fmt "@[<hov 2>(fun %a =>@ %a)@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
+        binders pp_raw body
+  | RPi (groups, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
+        groups pp_raw b
   | RArrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_raw a pp_raw b
   | RLet (name, None, rhs, body) ->
       Format.fprintf fmt "@[<hov 2>(let %s :=@ %a@ in@ %a)@]" name pp_raw rhs
@@ -28,14 +38,14 @@ let rec pp_raw (fmt : Format.formatter) : raw -> unit = function
   | RUnit -> Format.fprintf fmt "Unit"
   | REmpty -> Format.fprintf fmt "Empty"
   | RUnitTm -> Format.fprintf fmt "()"
-  | RAbsurd (c, e) ->
-      Format.fprintf fmt "@[<hov 2>(absurd %a@ %a)@]" pp_raw c pp_raw e
+  | RAbsurd e -> Format.fprintf fmt "@[<hov 2>(absurd %a)@]" pp_raw e
   | RPair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp_raw a pp_raw b
   | REq (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ = %a@]" pp_raw a pp_raw b
   | RRefl t -> Format.fprintf fmt "@[<hov 2>(refl %a)@]" pp_raw t
-  | RSigma (name, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%a : %a)@ × %a@]" pp_name name pp_raw a
-        pp_raw b
+  | RSigma (groups, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
+        groups pp_raw b
   | RProd (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
   | RProj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" pp_raw t
   | RProj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" pp_raw t
