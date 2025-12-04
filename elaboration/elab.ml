@@ -2,49 +2,6 @@ open Syntax
 
 exception Elab_error of string
 
-(* ========== Substitution ========== *)
-
-let rec subst_ty (b : ty) (u : tm) : ty =
-  match b with
-  | TyU -> TyU
-  | TyPi (x, a, b') -> TyPi (x, subst_ty a u, subst_ty b' u)
-  | TyArrow (a, b') -> TyArrow (subst_ty a u, subst_ty b' u)
-  | TySigma (x, a, b') -> TySigma (x, subst_ty a u, subst_ty b' u)
-  | TyProd (a, b') -> TyProd (subst_ty a u, subst_ty b' u)
-  | TyUnit -> TyUnit
-  | TyEmpty -> TyEmpty
-  | TyInt -> TyInt
-  | TyEq (e1, e2, a) -> TyEq (subst_tm e1 u, subst_tm e2 u, subst_ty a u)
-  | TyEl a -> TyEl (subst_tm a u)
-
-and subst_tm (t : tm) (u : tm) : tm =
-  match t with
-  | TmVar 0 -> u
-  | TmVar n -> TmVar (n - 1)
-  | TmLam (x, a, b, t') -> TmLam (x, subst_ty a u, subst_ty b u, subst_tm t' u)
-  | TmApp (f, x) -> TmApp (subst_tm f u, subst_tm x u)
-  | TmPiHat (x, a, b) -> TmPiHat (x, subst_tm a u, subst_tm b u)
-  | TmArrowHat (a, b) -> TmArrowHat (subst_tm a u, subst_tm b u)
-  | TmSigmaHat (x, a, b) -> TmSigmaHat (x, subst_tm a u, subst_tm b u)
-  | TmProdHat (a, b) -> TmProdHat (subst_tm a u, subst_tm b u)
-  | TmMkSigma (a, b, t', u') ->
-      TmMkSigma (subst_ty a u, subst_ty b u, subst_tm t' u, subst_tm u' u)
-  | TmProj1 p -> TmProj1 (subst_tm p u)
-  | TmProj2 p -> TmProj2 (subst_tm p u)
-  | TmUnit -> TmUnit
-  | TmAbsurd (c, e) -> TmAbsurd (subst_ty c u, subst_tm e u)
-  | TmIntLit n -> TmIntLit n
-  | TmUnitHat -> TmUnitHat
-  | TmEmptyHat -> TmEmptyHat
-  | TmIntHat -> TmIntHat
-  | TmEqHat (a, t', u') -> TmEqHat (subst_tm a u, subst_tm t' u, subst_tm u' u)
-  | TmRefl (a, e) -> TmRefl (subst_ty a u, subst_tm e u)
-  | TmAdd (a, b) -> TmAdd (subst_tm a u, subst_tm b u)
-  | TmSub (a, b) -> TmSub (subst_tm a u, subst_tm b u)
-  | TmSorry ty -> TmSorry (subst_ty ty u)
-  | TmLet (x, ty, t', body) ->
-      TmLet (x, subst_ty ty u, subst_tm t' u, subst_tm body u)
-
 (* ========== Evaluation ========== *)
 
 let rec eval_ty (env : env) : ty -> vl_ty = function
