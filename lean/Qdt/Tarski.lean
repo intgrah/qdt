@@ -124,7 +124,7 @@ end
 mutual
 
 /--
-Type well-foundedness.
+Type well-formedness.
 
 Γ ⊢ A type
 
@@ -153,7 +153,7 @@ inductive Ty.Wf : Ctx n → Ty n → Prop where
       (Γ ⊢ Eq' A a b type)
 
 /--
-Term well-foundedness.
+Term well-formedness.
 
 Γ ⊢ t : A
 
