@@ -337,7 +337,7 @@ and parse_def : raw_def t = function
          else
            RLam (binders, body_with_ann)
        in
-       return (name, full_body))
+       return (RDef (name, full_body) : raw_def))
         rest
   | _ -> None
 
