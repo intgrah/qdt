@@ -1,10 +1,11 @@
 open Syntax
+open Lexer
 
 exception Parse_error of string
-exception Tokens_remaining of Lexer.token list
+exception Tokens_remaining of token list
 
 module Parser = struct
-  type input = Lexer.token list
+  type input = token list
   type 'a t = input -> ('a * input) option
 
   let return (x : 'a) : 'a t = fun input -> Some (x, input)
@@ -25,7 +26,7 @@ module Parser = struct
   let choice (ps : 'a t list) : 'a t =
     List.fold_right ( <|> ) ps (fun _ -> None)
 
-  let token (t : Lexer.token) : unit t = function
+  let token (t : token) : unit t = function
     | [] -> None
     | tok :: rest when tok = t -> Some ((), rest)
     | _ -> None
@@ -49,23 +50,23 @@ end
 open Parser
 
 let parse_ident : string t = function
-  | Lexer.Ident name :: rest -> Some (name, rest)
+  | Ident name :: rest -> Some (name, rest)
   | _ -> None
 
 let parse_binder_name : string option t = function
-  | Lexer.Underscore :: rest -> Some (None, rest)
-  | Lexer.Ident name :: rest -> Some (Some name, rest)
+  | Underscore :: rest -> Some (None, rest)
+  | Ident name :: rest -> Some (Some name, rest)
   | _ -> None
 
 let parse_ann_or_parens (p : raw t) : raw t =
-  let* () = token Lexer.LParen in
+  let* () = token LParen in
   let* e = p in
-  (let* () = token Lexer.Colon in
+  (let* () = token Colon in
    let* ty = p in
-   let* () = token Lexer.RParen in
+   let* () = token RParen in
    return (RAnn (e, ty)))
   <|>
-  let* () = token Lexer.RParen in
+  let* () = token RParen in
   return e
 
 let rec parse_atom : raw t =
@@ -96,105 +97,105 @@ and parse_var : raw t =
     input
 
 and parse_type : raw t = function
-  | Lexer.Type :: rest -> Some (RU, rest)
+  | Type :: rest -> Some (RU, rest)
   | _ -> None
 
 and parse_unit : raw t = function
-  | Lexer.Unit :: rest -> Some (RUnit, rest)
+  | Unit :: rest -> Some (RUnit, rest)
   | _ -> None
 
 and parse_int : raw t = function
-  | Lexer.Int :: rest -> Some (RInt, rest)
+  | Int :: rest -> Some (RInt, rest)
   | _ -> None
 
 and parse_int_lit : raw t = function
-  | Lexer.IntLit n :: rest -> Some (RIntLit n, rest)
+  | IntLit n :: rest -> Some (RIntLit n, rest)
   | _ -> None
 
 and parse_unit_term : raw t = function
-  | Lexer.LParen :: Lexer.RParen :: rest -> Some (RUnitTm, rest)
+  | LParen :: RParen :: rest -> Some (RUnitTm, rest)
   | _ -> None
 
 and parse_pair : raw t =
  fun input ->
-  (let* () = token Lexer.LParen in
+  (let* () = token LParen in
    let* a = parse_preterm in
-   let* () = token Lexer.Comma in
+   let* () = token Comma in
    let* b = parse_preterm in
-   let* () = token Lexer.RParen in
+   let* () = token RParen in
    return (RPair (a, b)))
     input
 
 and parse_fst : raw t =
  fun input ->
-  (let* () = token Lexer.Fst in
+  (let* () = token Fst in
    let* t = parse_atom in
    return (RProj1 t))
     input
 
 and parse_snd : raw t =
  fun input ->
-  (let* () = token Lexer.Snd in
+  (let* () = token Snd in
    let* t = parse_atom in
    return (RProj2 t))
     input
 
 and parse_refl : raw t =
  fun input ->
-  (let* () = token Lexer.Refl in
+  (let* () = token Refl in
    let* t = parse_atom in
    return (RRefl t))
     input
 
 and parse_absurd : raw t =
  fun input ->
-  (let* () = token Lexer.Absurd in
+  (let* () = token Absurd in
    let* e = parse_atom in
    return (RAbsurd e))
     input
 
 and parse_empty : raw t = function
-  | Lexer.Empty :: rest -> Some (REmpty, rest)
+  | Empty :: rest -> Some (REmpty, rest)
   | _ -> None
 
 and parse_sorry : raw t = function
-  | Lexer.Sorry :: rest -> Some (RSorry, rest)
+  | Sorry :: rest -> Some (RSorry, rest)
   | _ -> None
 
 and parse_typed_binder_group : (string option list * raw) t =
  fun input ->
-  (let* () = token Lexer.LParen in
+  (let* () = token LParen in
    let* names = many1 parse_binder_name in
-   let* () = token Lexer.Colon in
+   let* () = token Colon in
    let* ty = parse_preterm in
-   let* () = token Lexer.RParen in
+   let* () = token RParen in
    return (names, ty))
     input
 
 and parse_paren_binder_group : (string option * raw option) list t =
  fun input ->
-  (let* () = token Lexer.LParen in
+  (let* () = token LParen in
    let* names = many1 parse_binder_name in
    let* ty_opt =
-     (let* () = token Lexer.Colon in
+     (let* () = token Colon in
       let* ty = parse_preterm in
       return (Some ty))
      <|> return None
    in
-   let* () = token Lexer.RParen in
+   let* () = token RParen in
    return (List.map (fun n -> (n, ty_opt)) names))
     input
 
 and parse_lambda : raw t =
  fun input ->
-  (let* () = token Lexer.Fun in
+  (let* () = token Fun in
    let* paren_groups = many parse_paren_binder_group in
    let paren_binders = List.flatten paren_groups in
    let* all_binders =
      if paren_binders = [] then
        let* names = many1 parse_binder_name in
        let* ty_opt =
-         (let* () = token Lexer.Colon in
+         (let* () = token Colon in
           let* ty = parse_preterm in
           return (Some ty))
          <|> return None
@@ -204,24 +205,24 @@ and parse_lambda : raw t =
        let* bare_names = many parse_binder_name in
        return (paren_binders @ List.map (fun n -> (n, None)) bare_names)
    in
-   let* () = token Lexer.Eq_gt in
+   let* () = token Eq_gt in
    let* body = parse_preterm in
    return (RLam (all_binders, body)))
     input
 
 and parse_let : raw t =
  fun input ->
-  (let* () = token Lexer.Let in
+  (let* () = token Let in
    let* name = parse_ident in
    let* ty_opt =
-     (let* () = token Lexer.Colon in
-      let* ty = parse_preterm in
+     (let* () = token Colon in
+      let* ty = parse_arrow_level in
       return (Some ty))
      <|> return None
    in
-   let* () = token Lexer.Colon_eq in
+   let* () = token Colon_eq in
    let* e = parse_preterm in
-   let* () = token Lexer.Semicolon in
+   let* () = token Semicolon in
    let* body = parse_preterm in
    return (RLet (name, ty_opt, e, body)))
     input
@@ -229,7 +230,7 @@ and parse_let : raw t =
 and parse_pi : raw t =
  fun input ->
   (let* group = parse_typed_binder_group in
-   let* () = token Lexer.Arrow in
+   let* () = token Arrow in
    let* b = parse_preterm in
    return (RPi (group, b)))
     input
@@ -237,7 +238,7 @@ and parse_pi : raw t =
 and parse_sigma : raw t =
  fun input ->
   (let* group = parse_typed_binder_group in
-   let* () = token Lexer.Times in
+   let* () = token Times in
    let* b = parse_preterm in
    return (RSigma (group, b)))
     input
@@ -254,11 +255,11 @@ and parse_add_level : raw t =
   (let* first = parse_app in
    let* rest =
      many
-       ((let* () = token Lexer.Plus in
+       ((let* () = token Plus in
          let* b = parse_app in
          return (`Add b))
        <|>
-       let* () = token Lexer.Minus in
+       let* () = token Minus in
        let* b = parse_app in
        return (`Sub b))
    in
@@ -274,7 +275,7 @@ and parse_add_level : raw t =
 and parse_eq_level : raw t =
  fun input ->
   (let* a = parse_add_level in
-   (let* () = token Lexer.Equal in
+   (let* () = token Equal in
     let* b = parse_add_level in
     return (REq (a, b)))
    <|> return a)
@@ -285,7 +286,7 @@ and parse_prod_level : raw t =
   (parse_sigma
   <|>
   let* a = parse_eq_level in
-  (let* () = token Lexer.Times in
+  (let* () = token Times in
    let* b = parse_prod_level in
    return (RProd (a, b)))
   <|> return a)
@@ -296,7 +297,7 @@ and parse_arrow_level : raw t =
   (parse_pi
   <|>
   let* a = parse_prod_level in
-  (let* () = token Lexer.Arrow in
+  (let* () = token Arrow in
    let* b = parse_arrow_level in
    return (RArrow (a, b)))
   <|> return a)
@@ -304,10 +305,12 @@ and parse_arrow_level : raw t =
 
 and parse_preterm : raw t =
  fun input ->
-  choice [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ] input
+  choice
+    [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
+    input
 
 and parse_def : raw_def t = function
-  | Lexer.Def :: rest ->
+  | Def :: rest ->
       (let* name = parse_ident in
        let* binder_groups = many parse_typed_binder_group in
        let binders : binder list =
@@ -316,12 +319,12 @@ and parse_def : raw_def t = function
            binder_groups
        in
        let* ret_ty_opt =
-         (let* () = token Lexer.Colon in
-          let* ty = parse_preterm in
+         (let* () = token Colon in
+          let* ty = parse_arrow_level in
           return (Some ty))
          <|> return None
        in
-       let* () = token Lexer.Colon_eq in
+       let* () = token Colon_eq in
        let* body = parse_preterm in
        let body_with_ann =
          match ret_ty_opt with
@@ -340,36 +343,36 @@ and parse_def : raw_def t = function
 
 let parse_program : raw_program t = many parse_def
 
-let token_to_string : Lexer.token -> string = function
-  | Lexer.Ident s -> Format.sprintf "identifier '%s'" s
-  | Lexer.Type -> "Type"
-  | Lexer.Unit -> "Unit"
-  | Lexer.Empty -> "Empty"
-  | Lexer.Def -> "def"
-  | Lexer.Colon -> ":"
-  | Lexer.Colon_eq -> ":="
-  | Lexer.Semicolon -> ";"
-  | Lexer.Eq_gt -> "=>"
-  | Lexer.Arrow -> "→"
-  | Lexer.Equal -> "="
-  | Lexer.Comma -> ","
-  | Lexer.LParen -> "("
-  | Lexer.RParen -> ")"
-  | Lexer.Fst -> "fst"
-  | Lexer.Snd -> "snd"
-  | Lexer.Refl -> "refl"
-  | Lexer.Absurd -> "absurd"
-  | Lexer.Sorry -> "sorry"
-  | Lexer.Fun -> "fun"
-  | Lexer.Times -> "×"
-  | Lexer.Plus -> "+"
-  | Lexer.Minus -> "-"
-  | Lexer.Let -> "let"
-  | Lexer.Int -> "Int"
-  | Lexer.Underscore -> "_"
-  | Lexer.IntLit n -> Format.sprintf "%d" n
+let token_to_string : token -> string = function
+  | Ident s -> Format.sprintf "identifier '%s'" s
+  | Type -> "Type"
+  | Unit -> "Unit"
+  | Empty -> "Empty"
+  | Def -> "def"
+  | Colon -> ":"
+  | Colon_eq -> ":="
+  | Semicolon -> ";"
+  | Eq_gt -> "=>"
+  | Arrow -> "→"
+  | Equal -> "="
+  | Comma -> ","
+  | LParen -> "("
+  | RParen -> ")"
+  | Fst -> "fst"
+  | Snd -> "snd"
+  | Refl -> "refl"
+  | Absurd -> "absurd"
+  | Sorry -> "sorry"
+  | Fun -> "fun"
+  | Times -> "×"
+  | Plus -> "+"
+  | Minus -> "-"
+  | Let -> "let"
+  | Int -> "Int"
+  | Underscore -> "_"
+  | IntLit n -> Format.sprintf "%d" n
 
-let parse (input : Lexer.token list) : raw_program =
+let parse (input : token list) : raw_program =
   match parse_program input with
   | None ->
       let msg =
