@@ -32,8 +32,6 @@ inductive Raw where
 abbrev RawDef := String × Raw
 abbrev RawProgram := List RawDef
 
-abbrev Lvl := Nat
-
 mutual
   inductive Ty where
     | u : Ty
@@ -49,7 +47,7 @@ mutual
   deriving Inhabited, Repr
 
   inductive Tm where
-    | var : Lvl → Tm
+    | var : Nat → Tm
     | lam : Name → Ty → Ty → Tm → Tm
     | app : Tm → Tm → Tm
     | piHat : Name → Tm → Tm → Tm
@@ -75,7 +73,7 @@ mutual
 end
 
 inductive Head where
-  | var : Lvl → Head
+  | var : Nat → Head
   | global : String → Head
   deriving Repr, Inhabited, BEq
 

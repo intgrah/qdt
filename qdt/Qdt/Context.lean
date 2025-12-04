@@ -14,30 +14,32 @@ structure Context where
 
 namespace Context
 
-def lvl (ctx : Context) : Lvl := ctx.bindings.length
+def lvl (ctx : Context) : Nat := ctx.bindings.length
 
-def empty : Context := { bindings := [], env := .nil }
+def empty : Context where
+  bindings := []
+  env := .nil
 
 def getEnv (ctx : Context) : Env := ctx.env
 
-def bind (name : Option String) (ty : VTy) (ctx : Context) : Context :=
-  let var := VTm.neutral (.mk (.var (lvl ctx)) [])
-  { bindings := { name, ty } :: ctx.bindings, env := .cons var ctx.env }
+def bind (name : Option String) (ty : VTy) (ctx : Context) : Context where
+  bindings := { name, ty } :: ctx.bindings
+  env := .cons (VTm.neutral (.mk (.var (lvl ctx)) [])) ctx.env
 
-def bindAnon (ty : VTy) (ctx : Context) : Context := bind none ty ctx
+def bindAnon := bind none
 
-def define (name : String) (ty : VTy) (value : VTm) (ctx : Context) : Context :=
-  { bindings := { name := some name, ty } :: ctx.bindings, env := .cons value ctx.env }
+def define (name : String) (ty : VTy) (value : VTm) (ctx : Context) : Context where
+  bindings := { name := some name, ty } :: ctx.bindings
+  env := .cons value ctx.env
 
-def lookupVar (name : String) (ctx : Context) : Option (Lvl × VTy) :=
-  let rec go (bs : List Binding) (i : Nat) : Option (Lvl × VTy) :=
-    match bs with
+def lookupVar (name : String) (ctx : Context) : Option (Nat × VTy) :=
+  let rec go  (i : Nat) : List Binding → Option (Nat × VTy)
     | [] => none
     | b :: rest =>
         match b.name with
-        | some bn => if bn == name then some (lvl ctx - i - 1, b.ty) else go rest (i + 1)
-        | none => go rest (i + 1)
-  go ctx.bindings 0
+        | some bn => if bn == name then some (lvl ctx - i - 1, b.ty) else go (i + 1) rest
+        | none => go (i + 1) rest
+  go 0 ctx.bindings
 
 def names (ctx : Context) : List String :=
   ctx.bindings.map fun b => b.name.getD "_"
