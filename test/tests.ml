@@ -91,7 +91,7 @@ end
 module Test_elab = struct
   let check_identity () =
     let ctx = Context.empty in
-    let raw = RLam (Some "x", Some RU, RIdent "x") in
+    let raw = RLam ([ (Some "x", Some RU) ], RIdent "x") in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
     let tm = check_tm ctx raw expected in
     match tm with
@@ -100,7 +100,7 @@ module Test_elab = struct
 
   let pi_type () =
     let ctx = Context.empty in
-    let raw = RPi (Some "x", RU, RU) in
+    let raw = RPi (([ Some "x" ], RU), RU) in
     let ty = check_ty ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
 
@@ -146,7 +146,10 @@ end
 module Programs = struct
   let simple_id () =
     let prog =
-      [ ("id", RAnn (RLam (Some "x", Some RU, RIdent "x"), RArrow (RU, RU))) ]
+      [
+        ( "id",
+          RAnn (RLam ([ (Some "x", Some RU) ], RIdent "x"), RArrow (RU, RU)) );
+      ]
     in
     let result = elab_program prog in
     match result with
