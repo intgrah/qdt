@@ -160,8 +160,10 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         (pp_tm_ctx names) b
   | TmSorry _ -> Format.fprintf fmt "sorry"
   | TmLet (x, ty, t, body) ->
-      Format.fprintf fmt "@[<hov 2>let %s : %a :=@ %a;@ %a@]" x (pp_ty_ctx names)
-        ty (pp_tm_ctx names) t (pp_tm_ctx (x :: names)) body
+      Format.fprintf fmt "@[<hov 2>let %s : %a :=@ %a;@ %a@]" x
+        (pp_ty_ctx names) ty (pp_tm_ctx names) t
+        (pp_tm_ctx (x :: names))
+        body
 
 let pp_ty fmt t = pp_ty_ctx [] fmt t
 let pp_tm fmt t = pp_tm_ctx [] fmt t
@@ -170,4 +172,5 @@ let tm_to_string t = Format.asprintf "%a" pp_tm t
 
 let pp_def (fmt : Format.formatter) ((name, term, ty) : string * tm * ty) : unit
     =
-  Format.fprintf fmt "@[<hov 2>def %s : %a :=@ %a@]" name pp_ty ty pp_tm term
+  Format.fprintf fmt "@[<hv 2>@[<hov 4>def %s :@ %a :=@]@ %a@]" name pp_ty ty
+    pp_tm term
