@@ -159,6 +159,9 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
       Format.fprintf fmt "@[<hov 2>%a@ - %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
   | TmSorry _ -> Format.fprintf fmt "sorry"
+  | TmLet (x, ty, t, body) ->
+      Format.fprintf fmt "@[<hov 2>let %s : %a :=@ %a;@ %a@]" x (pp_ty_ctx names)
+        ty (pp_tm_ctx names) t (pp_tm_ctx (x :: names)) body
 
 let pp_ty fmt t = pp_ty_ctx [] fmt t
 let pp_tm fmt t = pp_tm_ctx [] fmt t

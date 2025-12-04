@@ -42,6 +42,8 @@ and subst_tm (t : tm) (u : tm) : tm =
   | TmAdd (a, b) -> TmAdd (subst_tm a u, subst_tm b u)
   | TmSub (a, b) -> TmSub (subst_tm a u, subst_tm b u)
   | TmSorry ty -> TmSorry (subst_ty ty u)
+  | TmLet (x, ty, t', body) ->
+      TmLet (x, subst_ty ty u, subst_tm t' u, subst_tm body u)
 
 (* ========== Evaluation ========== *)
 
@@ -100,6 +102,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmAdd (a, b) -> do_add (eval_tm env a, eval_tm env b)
   | TmSub (a, b) -> do_sub (eval_tm env a, eval_tm env b)
   | TmSorry ty -> VTmSorry (eval_ty env ty)
+  | TmLet (_, _, t, body) -> eval_tm (eval_tm env t :: env) body
 
 and do_add : vl_tm * vl_tm -> vl_tm = function
   | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
@@ -507,6 +510,22 @@ and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
       let e' = check_tm ctx e VTyEmpty in
       TmAbsurd (quote_ty (Context.lvl ctx) ty, e')
   | RSorry, ty -> TmSorry (quote_ty (Context.lvl ctx) ty)
+  | RLet (x, ty_opt, t, body), expected_ty -> (
+      match ty_opt with
+      | Some ty_raw ->
+          let ty' = check_ty ctx ty_raw in
+          let ty_val = eval_ty (Context.env ctx) ty' in
+          let t' = check_tm ctx t ty_val in
+          let t_val = eval_tm (Context.env ctx) t' in
+          let ctx' = Context.define x ty_val t_val ctx in
+          let body' = check_tm ctx' body expected_ty in
+          TmLet (x, ty', t', body')
+      | None ->
+          let t', t_ty = infer_tm ctx t in
+          let t_val = eval_tm (Context.env ctx) t' in
+          let ctx' = Context.define x t_ty t_val ctx in
+          let body' = check_tm ctx' body expected_ty in
+          TmLet (x, quote_ty (Context.lvl ctx) t_ty, t', body'))
   | RAnn (e, ty_raw), expected_ty ->
       let ty' = check_ty ctx ty_raw in
       let ty_val = eval_ty (Context.env ctx) ty' in
@@ -576,14 +595,17 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       | Some ty_raw ->
           let ty' = check_ty ctx ty_raw in
           let ty_val = eval_ty (Context.env ctx) ty' in
-          let _ = check_tm ctx t ty_val in
-          let ctx' = Context.bind (Some x) ty_val ctx in
-          infer_tm ctx' body
+          let t' = check_tm ctx t ty_val in
+          let t_val = eval_tm (Context.env ctx) t' in
+          let ctx' = Context.define x ty_val t_val ctx in
+          let body', body_ty = infer_tm ctx' body in
+          (TmLet (x, ty', t', body'), body_ty)
       | None ->
           let t', t_ty = infer_tm ctx t in
-          let _ = eval_tm (Context.env ctx) t' in
-          let ctx' = Context.bind (Some x) t_ty ctx in
-          infer_tm ctx' body)
+          let t_val = eval_tm (Context.env ctx) t' in
+          let ctx' = Context.define x t_ty t_val ctx in
+          let body', body_ty = infer_tm ctx' body in
+          (TmLet (x, quote_ty (Context.lvl ctx) t_ty, t', body'), body_ty))
   | RLam ([], body) -> infer_tm ctx body
   | RLam ((_, None) :: _, _) ->
       raise

@@ -70,6 +70,7 @@ and tm =
   | TmAdd of tm * tm
   | TmSub of tm * tm
   | TmSorry of ty
+  | TmLet of string * ty * tm * tm
 
 (* Weak head normal form *)
 type vl_ty =
