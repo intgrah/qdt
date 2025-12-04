@@ -74,12 +74,7 @@ and do_el (env : env) : vl_tm -> vl_ty = function
   | _ -> raise (Elab_error "do_el: expected type code or neutral")
 
 and eval_tm (env : env) : tm -> vl_tm = function
-  | TmVar idx ->
-      let env_len = List.length env in
-      if idx < 0 || idx >= env_len then
-        VTmNeutral (HVar (env_len - idx - 1), [])
-      else
-        List.nth env idx
+  | TmVar idx -> List.nth env idx
   | TmLam (x, a, _, body) -> VTmLam (x, eval_ty env a, ClosTm (env, body))
   | TmApp (f, a) -> do_app (eval_tm env f) (eval_tm env a)
   | TmPiHat (x, a, b) -> VTmPiHat (x, eval_tm env a, ClosTm (env, b))
@@ -639,19 +634,17 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
       let a_ty_quoted = quote_ty (Context.lvl ctx) a_ty in
       let code = ty_to_code a_ty_quoted in
       (TmEqHat (code, a', b'), VTyU)
-  | RPi (group, b) -> infer_tm_pi ctx group b
+  | RPi (group, b) ->
+      infer_tm_group (fun x a b -> TmPiHat (x, a, b)) ctx group b
   | RArrow (a, b) ->
-      let a', a_ty = infer_tm ctx a in
-      conv_ty ctx a_ty VTyU;
-      let b', b_ty = infer_tm ctx b in
-      conv_ty ctx b_ty VTyU;
+      let a' = check_tm ctx a VTyU in
+      let b' = check_tm ctx b VTyU in
       (TmArrowHat (a', b'), VTyU)
-  | RSigma (group, b) -> infer_tm_sigma ctx group b
+  | RSigma (group, b) ->
+      infer_tm_group (fun x a b -> TmSigmaHat (x, a, b)) ctx group b
   | RProd (a, b) ->
-      let a', a_ty = infer_tm ctx a in
-      conv_ty ctx a_ty VTyU;
-      let b', b_ty = infer_tm ctx b in
-      conv_ty ctx b_ty VTyU;
+      let a' = check_tm ctx a VTyU in
+      let b' = check_tm ctx b VTyU in
       (TmProdHat (a', b'), VTyU)
   | RAdd (a, b) ->
       let a' = check_tm ctx a VTyInt in
@@ -669,10 +662,9 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty = function
   | RU -> raise (Elab_error "Cannot infer type")
   | RSorry -> raise (Elab_error "Cannot infer type of sorry")
 
-and infer_tm_pi (ctx : Context.t) ((names, a) : binder_group) (b : raw) :
-    tm * vl_ty =
-  let a', a_ty = infer_tm ctx a in
-  conv_ty ctx a_ty VTyU;
+and infer_tm_group (ctor : string option -> tm -> tm -> tm) (ctx : Context.t)
+    ((names, a) : binder_group) (b : raw) =
+  let a' = check_tm ctx a VTyU in
   let a_val = eval_tm (Context.env ctx) a' in
   let a_el = do_el (Context.env ctx) a_val in
   let rec go ctx = function
@@ -681,36 +673,19 @@ and infer_tm_pi (ctx : Context.t) ((names, a) : binder_group) (b : raw) :
         let ctx' = Context.bind x a_el ctx in
         let b', b_ty = go ctx' xs in
         conv_ty ctx' b_ty VTyU;
-        (TmPiHat (x, a', b'), VTyU)
+        (ctor x a' b', VTyU)
   in
   go ctx names
 
-and infer_tm_sigma (ctx : Context.t) ((names, a) : binder_group) (b : raw) :
-    tm * vl_ty =
-  let a', a_ty = infer_tm ctx a in
-  conv_ty ctx a_ty VTyU;
-  let a_val = eval_tm (Context.env ctx) a' in
-  let a_el = do_el (Context.env ctx) a_val in
-  let rec go ctx = function
-    | [] -> infer_tm ctx b
-    | x :: xs ->
-        let ctx' = Context.bind x a_el ctx in
-        let b', b_ty = go ctx' xs in
-        conv_ty ctx' b_ty VTyU;
-        (TmSigmaHat (x, a', b'), VTyU)
-  in
-  go ctx names
-
-let elab_program (program : raw_program) : (string * tm * ty) list =
-  let rec go defs acc ctx =
-    match defs with
+let elab_program : raw_program -> (string * tm * ty) list =
+  let rec go acc ctx = function
     | [] -> List.rev acc
-    | (name, body) :: rest ->
+    | RDef (name, body) :: rest ->
         let term, ty_val = infer_tm ctx body in
         let term_val = eval_tm (Context.env ctx) term in
         let term_nf = quote_tm 0 term_val in
         let ty_nf = quote_ty 0 ty_val in
         let ctx' = Context.define name ty_val term_val ctx in
-        go rest ((name, term_nf, ty_nf) :: acc) ctx'
+        go ((name, term_nf, ty_nf) :: acc) ctx' rest
   in
-  go program [] Context.empty
+  go [] Context.empty

@@ -53,7 +53,7 @@ and pp_raw (fmt : Format.formatter) : raw -> unit = function
       Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
   | RSorry -> Format.fprintf fmt "sorry"
 
-let pp_raw_def (fmt : Format.formatter) ((name, body) : raw_def) : unit =
+let pp_raw_def (fmt : Format.formatter) (RDef (name, body) : raw_def) : unit =
   Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
 
 let pp_raw_program (fmt : Format.formatter) (prog : raw_program) : unit =
