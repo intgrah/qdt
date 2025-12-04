@@ -1,0 +1,26 @@
+name = "qdt"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["Qdt"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+
+[[require]]
+name = "Parser"
+git = "https://github.com/fgdorais/lean4-parser"
+rev = "main"
+
+[[lean_lib]]
+name = "Qdt"
+
+[[lean_exe]]
+name = "qdt"
+root = "Main"
