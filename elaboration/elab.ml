@@ -318,7 +318,7 @@ let rec eq_ty (l : lvl) : vl_ty * vl_ty -> bool = function
   | VTyEq (e1, e2, a), VTyEq (e1', e2', a') ->
       eq_tm l (e1, e1') && eq_tm l (e2, e2') && eq_ty l (a, a')
   | VTyEl n1, VTyEl n2 -> eq_neutral l n1 n2
-  | _ -> false
+  | _, _ -> false
 
 (* Γ ⊢ t ≡ u term *)
 and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
@@ -362,7 +362,7 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmAdd (a1, b1), VTmAdd (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | VTmSub (a1, b1), VTmSub (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | VTmSorry ty1, VTmSorry ty2 -> eq_ty l (ty1, ty2)
-  | _ -> false
+  | _, _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
   eq_head (h1, h2) && eq_spine l (sp1, sp2)
@@ -370,15 +370,18 @@ and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
 and eq_head : head * head -> bool = function
   | HVar x, HVar y -> x = y
   | HGlobal n1, HGlobal n2 -> String.equal n1 n2
-  | _ -> false
+  | _, _ -> false
 
 and eq_spine (l : lvl) : spine * spine -> bool = function
   | [], [] -> true
-  | FApp a1 :: rest1, FApp a2 :: rest2 ->
-      eq_tm l (a1, a2) && eq_spine l (rest1, rest2)
-  | FProj1 :: rest1, FProj1 :: rest2 -> eq_spine l (rest1, rest2)
-  | FProj2 :: rest1, FProj2 :: rest2 -> eq_spine l (rest1, rest2)
-  | _ -> false
+  | f1 :: rest1, f2 :: rest2 -> eq_fname l (f1, f2) && eq_spine l (rest1, rest2)
+  | _, _ -> false
+
+and eq_fname (l : lvl) : fname * fname -> bool = function
+  | FApp a1, FApp a2 -> eq_tm l (a1, a2)
+  | FProj1, FProj1 -> true
+  | FProj2, FProj2 -> true
+  | _, _ -> false
 
 let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =
   let lvl = Context.lvl ctx in
