@@ -16,7 +16,7 @@ def doSub : VTm → VTm → VTm
   | .intLit n, .intLit m => .intLit (n - m)
   | a, b => .sub a b
 
-def mkNeutralVar (l : Lvl) : Neutral := .mk (.var l) []
+def mkNeutralVar (l : Nat) : Neutral := .mk (.var l) []
 
 mutual
   partial def evalTy (env : Env) : Ty → ElabM VTy
@@ -102,12 +102,12 @@ mutual
     evalTm (.cons v env) body
 end
 
-def lvlToIdx (l : Lvl) (x : Lvl) : Lvl := l - x - 1
+def lvlToIdx (l : Nat) (x : Nat) : Nat := l - x - 1
 
-def mkVar (l : Lvl) : VTm := .neutral (mkNeutralVar l)
+def mkVar (l : Nat) : VTm := .neutral (mkNeutralVar l)
 
 mutual
-  partial def quoteTy (l : Lvl) : VTy → ElabM Ty
+  partial def quoteTy (l : Nat) : VTy → ElabM Ty
     | .u => return .u
     | .pi x a env b => do
         let a' ← quoteTy l a
@@ -127,7 +127,7 @@ mutual
     | .eq e1 e2 a => return .eq (← quoteTm l e1) (← quoteTm l e2) (← quoteTy l a)
     | .el n => return .el (← quoteNeutral l n)
 
-  partial def quoteTm (l : Lvl) : VTm → ElabM Tm
+  partial def quoteTm (l : Nat) : VTm → ElabM Tm
     | .neutral n => quoteNeutral l n
     | .lam x a env body => do
         let var := mkVar l
@@ -164,13 +164,13 @@ mutual
     | .sub a b => return .sub (← quoteTm l a) (← quoteTm l b)
     | .sorry ty => return .sorry (← quoteTy l ty)
 
-  partial def quoteNeutral (l : Lvl) (n : Neutral) : ElabM Tm := do
+  partial def quoteNeutral (l : Nat) (n : Neutral) : ElabM Tm := do
     let headTm := match n.head with
       | .var x => Tm.var (lvlToIdx l x)
       | .global _ => panic! "quoteNeutral: globals not yet supported"
     quoteSpine l headTm n.spine
 
-  partial def quoteSpine (l : Lvl) (tm : Tm) : List Frame → ElabM Tm
+  partial def quoteSpine (l : Nat) (tm : Tm) : List Frame → ElabM Tm
     | [] => return tm
     | .app a :: rest => do quoteSpine l (.app tm (← quoteTm l a)) rest
     | .proj1 :: rest => quoteSpine l (.proj1 tm) rest

@@ -3,7 +3,7 @@ import Qdt.Context
 namespace Qdt
 
 mutual
-  partial def eqTy (l : Lvl) : VTy → VTy → ElabM Bool
+  partial def eqTy (l : Nat) : VTy → VTy → ElabM Bool
     | .u, .u => return true
     | .pi _ a1 env1 b1, .pi _ a2 env2 b2 => do
         if !(← eqTy l a1 a2) then return false
@@ -39,7 +39,7 @@ mutual
     | .el n1, .el n2 => eqNeutral l n1 n2
     | _, _ => return false
 
-  partial def eqTm (l : Lvl) : VTm → VTm → ElabM Bool
+  partial def eqTm (l : Nat) : VTm → VTm → ElabM Bool
     | .neutral n1, .neutral n2 => eqNeutral l n1 n2
     | .lam _ _ env1 body1, .lam _ _ env2 body2 => do
         let var := mkVar l
@@ -86,7 +86,7 @@ mutual
     | .sorry ty1, .sorry ty2 => eqTy l ty1 ty2
     | _, _ => return false
 
-  partial def eqNeutral (l : Lvl) (n1 n2 : Neutral) : ElabM Bool := do
+  partial def eqNeutral (l : Nat) (n1 n2 : Neutral) : ElabM Bool := do
     if !eqHead n1.head n2.head then return false
     eqSpine l n1.spine n2.spine
 
@@ -95,7 +95,7 @@ mutual
     | .global n1, .global n2 => n1 == n2
     | _, _ => false
 
-  partial def eqSpine (l : Lvl) : List Frame → List Frame → ElabM Bool
+  partial def eqSpine (l : Nat) : List Frame → List Frame → ElabM Bool
     | [], [] => return true
     | .app a1 :: rest1, .app a2 :: rest2 =>
         return (← eqTm l a1 a2) && (← eqSpine l rest1 rest2)
