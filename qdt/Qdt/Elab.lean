@@ -37,8 +37,7 @@ mutual
         return .el (← checkTm ctx raw .u)
     | raw => throw (.msg s!"Expected a type, but got: {repr raw}")
 
-  partial def checkTm (ctx : Context) (raw : Raw) (ty : VTy) : ElabM Tm := do
-    match raw, ty with
+  partial def checkTm (ctx : Context) : Raw → VTy → ElabM Tm
     | .lam [] body, ty => checkTm ctx body ty
     | .lam ((x, aAnn) :: rest) body, .pi _ aTy env bTy => do
         match aAnn with
@@ -118,7 +117,7 @@ mutual
         convTy ctx ty inferredTy
         return t'
 
-  partial def inferTmPi (ctx : Context) (names : List Name) (a : Raw) (b : Raw) : ElabM (Tm × VTy) := do
+  partial def inferTmGroup (ctor : Name → Tm → Tm → Tm) (ctx : Context) (names : List Name) (a : Raw) (b : Raw) : ElabM (Tm × VTy) := do
     let (a', aTy) ← inferTm ctx a
     convTy ctx aTy .u
     let aVal ← evalTm ctx.env a'
@@ -129,21 +128,7 @@ mutual
           let ctx' := ctx.bind x aEl
           let (b', bTy) ← go ctx' xs
           convTy ctx' bTy .u
-          return (.piHat x a' b', .u)
-    go ctx names
-
-  partial def inferTmSigma (ctx : Context) (names : List Name) (a : Raw) (b : Raw) : ElabM (Tm × VTy) := do
-    let (a', aTy) ← inferTm ctx a
-    convTy ctx aTy .u
-    let aVal ← evalTm ctx.env a'
-    let aEl ← doEl ctx.env aVal
-    let rec go (ctx : Context) : List Name → ElabM (Tm × VTy)
-      | [] => inferTm ctx b
-      | x :: xs => do
-          let ctx' := ctx.bind x aEl
-          let (b', bTy) ← go ctx' xs
-          convTy ctx' bTy .u
-          return (.sigmaHat x a' b', .u)
+          return (ctor x a' b', .u)
     go ctx names
 
   partial def inferTm (ctx : Context) : Raw → ElabM (Tm × VTy)
@@ -227,14 +212,14 @@ mutual
         let aTyQuoted ← quoteTy ctx.lvl aTy
         let code ← tyToCode aTyQuoted
         return (.eqHat code a' b', .u)
-    | .pi (names, a) b => inferTmPi ctx names a b
+    | .pi (names, a) b => inferTmGroup .piHat ctx names a b
     | .arrow a b => do
         let (a', aTy) ← inferTm ctx a
         convTy ctx aTy .u
         let (b', bTy) ← inferTm ctx b
         convTy ctx bTy .u
         return (.arrowHat a' b', .u)
-    | .sigma (names, a) b => inferTmSigma ctx names a b
+    | .sigma (names, a) b => inferTmGroup .sigmaHat ctx names a b
     | .prod a b => do
         let (a', aTy) ← inferTm ctx a
         convTy ctx aTy .u
