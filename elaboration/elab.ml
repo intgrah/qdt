@@ -28,7 +28,7 @@ and do_el (env : env) : vl_tm -> vl_ty = function
 
 and eval_tm (env : env) : tm -> vl_tm = function
   | TmVar idx -> List.nth env idx
-  | TmLam (x, a, _, body) -> VTmLam (x, eval_ty env a, ClosTm (env, body))
+  | TmLam (x, a, body) -> VTmLam (x, eval_ty env a, ClosTm (env, body))
   | TmApp (f, a) -> do_app (eval_tm env f) (eval_tm env a)
   | TmPiHat (x, a, b) -> VTmPiHat (x, eval_tm env a, ClosTm (env, b))
   | TmSigmaHat (x, a, b) -> VTmSigmaHat (x, eval_tm env a, ClosTm (env, b))
@@ -97,9 +97,8 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
   | VTmLam (x, a, ClosTm (env, body)) ->
       let var = VTmNeutral (HVar l, []) in
       let a = quote_ty l a in
-      let b = quote_ty (l + 1) VTyU in
       let body' = quote_tm (l + 1) (eval_tm (var :: env) body) in
-      TmLam (x, a, b, body')
+      TmLam (x, a, body')
   | VTmPiHat (x, a, ClosTm (env, body)) ->
       let a = quote_tm l a in
       let var = VTmNeutral (HVar l, []) in
@@ -360,9 +359,8 @@ and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
       let var = VTmNeutral (HVar (Context.lvl ctx), []) in
       let ctx' = Context.bind x a_ty ctx in
       let b_val = eval_ty (var :: env) body_ty in
-      let b' = quote_ty (Context.lvl ctx') b_val in
       let body' = check_tm ctx' (RLam (rest, body)) b_val in
-      TmLam (x, quote_ty (Context.lvl ctx) a_ty, b', body')
+      TmLam (x, quote_ty (Context.lvl ctx) a_ty, body')
   | RPair (a, b), VTySigma (_, a_ty, ClosTy (env, body)) ->
       let a' = check_tm ctx a a_ty in
       let a_val = eval_tm (Context.env ctx) a' in
@@ -503,7 +501,7 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
       let ctx' = Context.bind x a_val ctx in
       let body', b_val = infer_tm ctx' (RLam (rest, body)) in
       let b' = quote_ty (Context.lvl ctx') b_val in
-      (TmLam (x, a', b', body'), VTyPi (x, a_val, ClosTy (Context.env ctx, b')))
+      (TmLam (x, a', body'), VTyPi (x, a_val, ClosTy (Context.env ctx, b')))
   | RRefl e ->
       let e', e_ty = infer_tm ctx e in
       let e_val = eval_tm (Context.env ctx) e' in
