@@ -38,7 +38,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmProj1 p -> do_proj1 (eval_tm env p)
   | TmProj2 p -> do_proj2 (eval_tm env p)
   | TmUnit -> VTmUnit
-  | TmAbsurd (c, e) -> do_absurd (eval_ty env c) (eval_tm env e)
+  | TmAbsurd (c, e) -> VTmAbsurd (eval_ty env c, eval_tm env e)
   | TmIntLit n -> VTmIntLit n
   | TmUnitHat -> VTmUnitHat
   | TmEmptyHat -> VTmEmptyHat
@@ -57,8 +57,6 @@ and do_add : vl_tm * vl_tm -> vl_tm = function
 and do_sub : vl_tm * vl_tm -> vl_tm = function
   | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
   | a, b -> VTmSub (a, b)
-
-and do_absurd (c : vl_ty) (e : vl_tm) : vl_tm = VTmAbsurd (c, e)
 
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
@@ -555,8 +553,7 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
   | RAnn (e, ty) ->
       let ty' = check_ty ctx ty in
       let ty_val = eval_ty (Context.env ctx) ty' in
-      let e' = check_tm ctx e ty_val in
-      (e', ty_val)
+      (check_tm ctx e ty_val, ty_val)
   | RU -> raise (Elab_error "Cannot infer type")
   | RSorry -> raise (Elab_error "Cannot infer type of sorry")
 
