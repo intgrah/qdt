@@ -145,16 +145,6 @@ and quote_spine (l : lvl) (tm : tm) : spine -> tm = function
 let nf_ty (env : env) (t : ty) : ty = quote_ty (List.length env) (eval_ty env t)
 let nf_tm (env : env) (t : tm) : tm = quote_tm (List.length env) (eval_tm env t)
 
-let rec ty_to_code : ty -> tm = function
-  | TyUnit -> TmUnitHat
-  | TyEmpty -> TmEmptyHat
-  | TyInt -> TmIntHat
-  | TyEl t -> t
-  | TyPi (x, a, b) -> TmPiHat (x, ty_to_code a, ty_to_code b)
-  | TySigma (x, a, b) -> TmSigmaHat (x, ty_to_code a, ty_to_code b)
-  | TyEq (t, u, a) -> TmEqHat (t, u, a)
-  | TyU -> raise (Elab_error "ty_to_code: U has no code")
-
 (* ========== Context Module ========== *)
 
 module Context = struct
