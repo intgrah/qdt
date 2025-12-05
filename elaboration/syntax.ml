@@ -47,7 +47,7 @@ type ty =
   | TyEl of tm
 
 and tm =
-  | TmVar of lvl
+  | TmVar of lvl (* de Bruijn index *)
   | TmLam of string option * ty * ty * tm
   | TmApp of tm * tm
   | TmPiHat of string option * tm * tm
@@ -106,7 +106,7 @@ and fname =
   | FProj2
 
 and head =
-  | HVar of lvl
+  | HVar of lvl (* de Bruijn level *)
   | HConst of string
 
 and neutral = head * spine
