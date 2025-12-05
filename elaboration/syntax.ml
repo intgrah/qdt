@@ -99,6 +99,13 @@ and vl_tm =
   | VTmAdd of vl_tm * vl_tm
   | VTmSub of vl_tm * vl_tm
 
+and neutral = head * spine
+
+and head =
+  | HVar of lvl (* de Bruijn level *)
+  | HConst of string
+  | HSorry of int * vl_ty
+
 and spine = fname list
 
 and fname =
@@ -107,12 +114,6 @@ and fname =
   | FProj2
   | FAbsurd of vl_ty
 
-and head =
-  | HVar of lvl (* de Bruijn level *)
-  | HConst of string
-  | HSorry of int * vl_ty
-
-and neutral = head * spine
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm
 and env = vl_tm list
