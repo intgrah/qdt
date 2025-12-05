@@ -64,7 +64,7 @@ let pp_raw_program (fmt : Format.formatter) (prog : raw_program) : unit =
 (* ========== Core Syntax ========== *)
 
 let fresh_name (names : string list) : string =
-  "x" ^ string_of_int (List.length names)
+  Format.sprintf "x%d†" (List.length names)
 
 let get_name (name_opt : string option) (names : string list) : string =
   match name_opt with
@@ -74,22 +74,22 @@ let get_name (name_opt : string option) (names : string list) : string =
 let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
   function
   | TyU -> Format.fprintf fmt "Type"
-  | TyPi (name_opt, a, b) ->
-      let x = get_name name_opt names in
+  | TyPi (None, a, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_ty_ctx names) a
+        (pp_ty_ctx (fresh_name names :: names))
+        b
+  | TyPi (Some x, a, b) ->
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
-  | TyArrow (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_ty_ctx names) a
-        (pp_ty_ctx names) b
-  | TySigma (name_opt, a, b) ->
-      let x = get_name name_opt names in
+  | TySigma (None, a, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) a
+        (pp_ty_ctx (fresh_name names :: names))
+        b
+  | TySigma (Some x, a, b) ->
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
-  | TyProd (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) a
-        (pp_ty_ctx names) b
   | TyUnit -> Format.fprintf fmt "Unit"
   | TyEmpty -> Format.fprintf fmt "Empty"
   | TyInt -> Format.fprintf fmt "Int"
@@ -119,22 +119,22 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmApp (f, a) ->
       Format.fprintf fmt "@[<hov 2>%a@ (%a)@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
-  | TmPiHat (name_opt, a, b) ->
-      let x = get_name name_opt names in
+  | TmPiHat (None, a, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_tm_ctx names) a
+        (pp_tm_ctx (fresh_name names :: names))
+        b
+  | TmPiHat (Some x, a, b) ->
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_tm_ctx names) a
         (pp_tm_ctx (x :: names))
         b
-  | TmArrowHat (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx names) b
-  | TmSigmaHat (name_opt, a, b) ->
-      let x = get_name name_opt names in
+  | TmSigmaHat (None, a, b) ->
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_tm_ctx names) a
+        (pp_tm_ctx (fresh_name names :: names))
+        b
+  | TmSigmaHat (Some x, a, b) ->
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_tm_ctx names) a
         (pp_tm_ctx (x :: names))
         b
-  | TmProdHat (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx names) b
   | TmMkSigma (_a, _b, t, u) ->
       Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" (pp_tm_ctx names) t
         (pp_tm_ctx names) u
