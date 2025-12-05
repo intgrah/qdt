@@ -45,7 +45,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmProj1 p -> do_proj1 (eval_tm env p)
   | TmProj2 p -> do_proj2 (eval_tm env p)
   | TmUnit -> VTmUnit
-  | TmAbsurd (c, e) -> VTmNeutral (HAbsurd (eval_ty env c, eval_tm env e), [])
+  | TmAbsurd (c, e) -> do_absurd (eval_ty env c) (eval_tm env e)
   | TmIntLit n -> VTmIntLit n
   | TmUnitHat -> VTmUnitHat
   | TmEmptyHat -> VTmEmptyHat
@@ -78,6 +78,10 @@ and do_proj2 : vl_tm -> vl_tm = function
   | VTmMkSigma (_, _, _, _, u) -> u
   | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FProj2 ])
   | _ -> raise (Elab_error "do_proj2: expected pair or neutral")
+
+and do_absurd (c : vl_ty) : vl_tm -> vl_tm = function
+  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FAbsurd c ])
+  | _ -> raise (Elab_error "do_absurd: expected neutral")
 
 (* ========== Quoting ========== *)
 
@@ -138,7 +142,6 @@ and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
     | HVar x -> TmVar (l - x - 1) (* Convert level (x) to index (l - x - 1) *)
     | HConst _ -> raise (Elab_error "quote_neutral: globals not yet supported")
     | HSorry (id, ty) -> TmSorry (id, quote_ty l ty)
-    | HAbsurd (c, e) -> TmAbsurd (quote_ty l c, quote_tm l e)
   in
   quote_spine l head_tm sp
 
@@ -147,6 +150,7 @@ and quote_spine (l : lvl) (tm : tm) : spine -> tm = function
   | FApp a :: rest -> quote_spine l (TmApp (tm, quote_tm l a)) rest
   | FProj1 :: rest -> quote_spine l (TmProj1 tm) rest
   | FProj2 :: rest -> quote_spine l (TmProj2 tm) rest
+  | FAbsurd c :: rest -> quote_spine l (TmAbsurd (quote_ty l c, tm)) rest
 
 let nf_ty (env : env) (t : ty) : ty = quote_ty (List.length env) (eval_ty env t)
 let nf_tm (env : env) (t : tm) : tm = quote_tm (List.length env) (eval_tm env t)
@@ -266,13 +270,12 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | _, _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
-  eq_head l (h1, h2) && eq_spine l (sp1, sp2)
+  eq_head (h1, h2) && eq_spine l (sp1, sp2)
 
-and eq_head (l : lvl) : head * head -> bool = function
+and eq_head : head * head -> bool = function
   | HVar x, HVar y -> x = y
   | HConst n1, HConst n2 -> String.equal n1 n2
   | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
-  | HAbsurd (c1, e1), HAbsurd (c2, e2) -> eq_ty l (c1, c2) && eq_tm l (e1, e2)
   | _, _ -> false
 
 and eq_spine (l : lvl) : spine * spine -> bool = function
@@ -284,6 +287,7 @@ and eq_fname (l : lvl) : fname * fname -> bool = function
   | FApp a1, FApp a2 -> eq_tm l (a1, a2)
   | FProj1, FProj1 -> true
   | FProj2, FProj2 -> true
+  | FAbsurd c1, FAbsurd c2 -> eq_ty l (c1, c2)
   | _, _ -> false
 
 let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =

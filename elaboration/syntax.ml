@@ -105,12 +105,12 @@ and fname =
   | FApp of vl_tm
   | FProj1
   | FProj2
+  | FAbsurd of vl_ty
 
 and head =
   | HVar of lvl (* de Bruijn level *)
   | HConst of string
   | HSorry of int * vl_ty
-  | HAbsurd of vl_ty * vl_tm
 
 and neutral = head * spine
 and clos_ty = ClosTy of env * ty
