@@ -48,7 +48,7 @@ type ty =
 
 and tm =
   | TmVar of lvl (* de Bruijn index *)
-  | TmLam of string option * ty * ty * tm
+  | TmLam of string option * ty * tm
   | TmApp of tm * tm
   | TmPiHat of string option * tm * tm
   | TmSigmaHat of string option * tm * tm

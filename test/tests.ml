@@ -6,14 +6,14 @@ let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
 
 module Test_eval = struct
   let identity () =
-    let term = TmLam (None, TyUnit, TyUnit, TmVar 0) in
+    let term = TmLam (None, TyUnit, TmVar 0) in
     let result = eval_tm [] term in
     match result with
     | VTmLam (None, VTyUnit, ClosTm ([], TmVar 0)) -> ()
     | _ -> Alcotest.fail "identity evaluation failed"
 
   let beta () =
-    let term = TmApp (TmLam (None, TyUnit, TyUnit, TmVar 0), TmUnit) in
+    let term = TmApp (TmLam (None, TyUnit, TmVar 0), TmUnit) in
     let result = eval_tm [] term in
     match result with
     | VTmUnit -> ()
@@ -44,7 +44,7 @@ module Test_quote = struct
     let v = VTmLam (None, VTyU, ClosTm ([], TmVar 0)) in
     let tm = quote_tm 0 v in
     match tm with
-    | TmLam (_, _, _, TmVar 0) -> ()
+    | TmLam (_, _, TmVar 0) -> ()
     | _ -> Alcotest.fail "lambda quoting failed"
 
   let tests =
@@ -56,7 +56,7 @@ end
 
 module Test_nbe = struct
   let beta () =
-    let term = TmApp (TmLam (None, TyUnit, TyUnit, TmVar 0), TmUnit) in
+    let term = TmApp (TmLam (None, TyUnit, TmVar 0), TmUnit) in
     let normalized = nf_tm [] term in
     match normalized with
     | TmUnit -> ()
@@ -64,18 +64,16 @@ module Test_nbe = struct
 
   let nested () =
     let term =
-      TmApp
-        ( TmLam (None, TyUnit, TyUnit, TmLam (None, TyUnit, TyUnit, TmVar 1)),
-          TmUnit )
+      TmApp (TmLam (None, TyUnit, TmLam (None, TyUnit, TmVar 1)), TmUnit)
     in
     let normalized = nf_tm [] term in
     match normalized with
-    | TmLam (_, _, _, TmUnit) -> ()
+    | TmLam (_, _, TmUnit) -> ()
     | _ ->
         Alcotest.failf "expected Lam(_, ()), got %s" (tm_to_string normalized)
 
   let idempotent () =
-    let term = TmApp (TmLam (None, TyUnit, TyUnit, TmVar 0), TmUnit) in
+    let term = TmApp (TmLam (None, TyUnit, TmVar 0), TmUnit) in
     let norm1 = nf_tm [] term in
     let norm2 = nf_tm [] norm1 in
     Alcotest.(check string) "same" (tm_to_string norm1) (tm_to_string norm2)
@@ -95,7 +93,7 @@ module Test_elab = struct
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
     let tm = check_tm ctx raw expected in
     match tm with
-    | TmLam (_, _, _, TmVar 0) -> ()
+    | TmLam (_, _, TmVar 0) -> ()
     | _ -> Alcotest.fail "check failed"
 
   let pi_type () =
@@ -155,7 +153,7 @@ module Programs = struct
     in
     let result = elab_program prog in
     match result with
-    | [ ("id", TmLam (_, _, _, TmVar 0), ty) ] -> (
+    | [ ("id", TmLam (_, _, TmVar 0), ty) ] -> (
         match ty with
         | TyPi (None, TyU, TyU) -> ()
         | _ -> Alcotest.fail "wrong type")
