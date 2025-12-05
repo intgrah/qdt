@@ -534,7 +534,7 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
       let ty' = check_ty ctx ty in
       let ty_val = eval_ty (Context.env ctx) ty' in
       (check_tm ctx e ty_val, ty_val)
-  | RU -> raise (Elab_error "Cannot infer type")
+  | RU -> raise (Elab_error "Cannot infer type of Type")
   | RSorry -> raise (Elab_error "Cannot infer type of sorry")
 
 let elab_program : raw_program -> (string * tm * ty) list =
