@@ -108,7 +108,7 @@ module Test_elab = struct
     let ctx = Context.empty in
     let raw = RArrow (RU, RU) in
     let ty = check_ty ctx raw in
-    Alcotest.(check ty_testable) "same" (TyArrow (TyU, TyU)) ty
+    Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
     let ctx = Context.empty in
@@ -147,15 +147,17 @@ module Programs = struct
   let simple_id () =
     let prog =
       [
-        ( "id",
-          RAnn (RLam ([ (Some "x", Some RU) ], RIdent "x"), RArrow (RU, RU)) );
+        RDef
+          ( "id",
+            RAnn (RLam ([ (Some "x", Some RU) ], RIdent "x"), RArrow (RU, RU))
+          );
       ]
     in
     let result = elab_program prog in
     match result with
     | [ ("id", TmLam (_, _, _, TmVar 0), ty) ] -> (
         match ty with
-        | TyArrow (TyU, TyU) -> ()
+        | TyPi (None, TyU, TyU) -> ()
         | _ -> Alcotest.fail "wrong type")
     | _ -> Alcotest.fail "program failed"
 
