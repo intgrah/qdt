@@ -45,6 +45,12 @@ module Parser = struct
     let* first = p in
     let* rest = many p in
     return (first :: rest)
+
+  let optional (p : 'a t) : 'a option t =
+   fun input ->
+    match p input with
+    | None -> Some (None, input)
+    | Some (x, input') -> Some (Some x, input')
 end
 
 open Parser
@@ -177,10 +183,9 @@ and parse_paren_binder_group : (string option * raw option) list t =
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
    let* ty_opt =
-     (let* () = token Colon in
-      let* ty = parse_preterm in
-      return (Some ty))
-     <|> return None
+     optional
+       (let* () = token Colon in
+        parse_preterm)
    in
    let* () = token RParen in
    return (List.map (fun n -> (n, ty_opt)) names))
@@ -195,10 +200,9 @@ and parse_lambda : raw t =
      if paren_binders = [] then
        let* names = many1 parse_binder_name in
        let* ty_opt =
-         (let* () = token Colon in
-          let* ty = parse_preterm in
-          return (Some ty))
-         <|> return None
+         optional
+           (let* () = token Colon in
+            parse_preterm)
        in
        return (List.map (fun n -> (n, ty_opt)) names)
      else
@@ -215,10 +219,9 @@ and parse_let : raw t =
   (let* () = token Let in
    let* name = parse_ident in
    let* ty_opt =
-     (let* () = token Colon in
-      let* ty = parse_preterm in
-      return (Some ty))
-     <|> return None
+     optional
+       (let* () = token Colon in
+        parse_preterm)
    in
    let* () = token Colon_eq in
    let* e = parse_preterm in
@@ -247,11 +250,7 @@ and parse_app : raw t =
  fun input ->
   (let* head = parse_atom in
    let* args = many parse_atom in
-   let* final =
-     (let* e = parse_lambda <|> parse_let in
-      return (Some e))
-     <|> return None
-   in
+   let* final = optional (parse_lambda <|> parse_let) in
    let all_args =
      match final with
      | Some e -> args @ [ e ]
@@ -332,10 +331,9 @@ and parse_def : raw_def t = function
            binder_groups
        in
        let* ret_ty_opt =
-         (let* () = token Colon in
-          let* ty = parse_preterm in
-          return (Some ty))
-         <|> return None
+         optional
+           (let* () = token Colon in
+            parse_preterm)
        in
        let* () = token Colon_eq in
        let* body = parse_preterm in
