@@ -45,18 +45,16 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmIntHat -> VTmIntHat
   | TmEqHat (a, t, u) -> VTmEqHat (eval_tm env a, eval_tm env t, eval_tm env u)
   | TmRefl (a, e) -> VTmRefl (eval_ty env a, eval_tm env e)
-  | TmAdd (a, b) -> do_add (eval_tm env a, eval_tm env b)
-  | TmSub (a, b) -> do_sub (eval_tm env a, eval_tm env b)
+  | TmAdd (a, b) -> (
+      match (eval_tm env a, eval_tm env b) with
+      | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
+      | a, b -> VTmAdd (a, b))
+  | TmSub (a, b) -> (
+      match (eval_tm env a, eval_tm env b) with
+      | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
+      | a, b -> VTmSub (a, b))
   | TmSorry ty -> VTmSorry (eval_ty env ty)
   | TmLet (_, _, t, body) -> eval_tm (eval_tm env t :: env) body
-
-and do_add : vl_tm * vl_tm -> vl_tm = function
-  | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
-  | a, b -> VTmAdd (a, b)
-
-and do_sub : vl_tm * vl_tm -> vl_tm = function
-  | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
-  | a, b -> VTmSub (a, b)
 
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
@@ -75,8 +73,6 @@ and do_proj2 : vl_tm -> vl_tm = function
   | _ -> raise (Elab_error "do_proj2: expected pair or neutral")
 
 (* ========== Quoting ========== *)
-
-let lvl_to_ix (l : lvl) (x : lvl) : lvl = l - x - 1
 
 let rec quote_ty (l : lvl) : vl_ty -> ty = function
   | VTyU -> TyU
@@ -135,7 +131,7 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
 and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
   let head_tm =
     match h with
-    | HVar x -> TmVar (lvl_to_ix l x)
+    | HVar x -> TmVar (l - x - 1) (* Convert level (x) to index (l - x - 1) *)
     | HConst _ -> raise (Elab_error "quote_neutral: globals not yet supported")
   in
   quote_spine l head_tm sp
