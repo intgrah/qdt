@@ -22,7 +22,7 @@ and do_el (env : env) : vl_tm -> vl_ty = function
   | VTmUnitHat -> VTyUnit
   | VTmEmptyHat -> VTyEmpty
   | VTmIntHat -> VTyInt
-  | VTmEqHat (a, t, u) -> VTyEq (t, u, do_el env a)
+  | VTmEqHat (t, u, a) -> VTyEq (t, u, a)
   | VTmNeutral n -> VTyEl n
   | _ -> raise (Elab_error "do_el: expected type code or neutral")
 
@@ -43,7 +43,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmUnitHat -> VTmUnitHat
   | TmEmptyHat -> VTmEmptyHat
   | TmIntHat -> VTmIntHat
-  | TmEqHat (a, t, u) -> VTmEqHat (eval_tm env a, eval_tm env t, eval_tm env u)
+  | TmEqHat (t, u, a) -> VTmEqHat (eval_tm env t, eval_tm env u, eval_ty env a)
   | TmRefl (a, e) -> VTmRefl (eval_ty env a, eval_tm env e)
   | TmAdd (a, b) -> (
       match (eval_tm env a, eval_tm env b) with
@@ -122,7 +122,7 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
   | VTmUnitHat -> TmUnitHat
   | VTmEmptyHat -> TmEmptyHat
   | VTmIntHat -> TmIntHat
-  | VTmEqHat (a, t, u) -> TmEqHat (quote_tm l a, quote_tm l t, quote_tm l u)
+  | VTmEqHat (t, u, a) -> TmEqHat (quote_tm l t, quote_tm l u, quote_ty l a)
   | VTmRefl (a, e) -> TmRefl (quote_ty l a, quote_tm l e)
   | VTmAdd (a, b) -> TmAdd (quote_tm l a, quote_tm l b)
   | VTmSub (a, b) -> TmSub (quote_tm l a, quote_tm l b)
@@ -152,7 +152,7 @@ let rec ty_to_code : ty -> tm = function
   | TyEl t -> t
   | TyPi (x, a, b) -> TmPiHat (x, ty_to_code a, ty_to_code b)
   | TySigma (x, a, b) -> TmSigmaHat (x, ty_to_code a, ty_to_code b)
-  | TyEq (a, b, t) -> TmEqHat (ty_to_code t, a, b)
+  | TyEq (t, u, a) -> TmEqHat (t, u, a)
   | TyU -> raise (Elab_error "ty_to_code: U has no code")
 
 (* ========== Context Module ========== *)
@@ -264,8 +264,8 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmIntHat, VTmIntHat -> true
   | VTmAbsurd (c1, e1), VTmAbsurd (c2, e2) ->
       eq_ty l (c1, c2) && eq_tm l (e1, e2)
-  | VTmEqHat (a1, t1, u1), VTmEqHat (a2, t2, u2) ->
-      eq_tm l (a1, a2) && eq_tm l (t1, t2) && eq_tm l (u1, u2)
+  | VTmEqHat (t1, u1, a1), VTmEqHat (t2, u2, a2) ->
+      eq_tm l (t1, t2) && eq_tm l (u1, u2) && eq_ty l (a1, a2)
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
   | VTmAdd (a1, b1), VTmAdd (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | VTmSub (a1, b1), VTmSub (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
@@ -534,9 +534,8 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
   | REq (a, b) ->
       let a', a_ty = infer_tm ctx a in
       let b' = check_tm ctx b a_ty in
-      let a_ty_quoted = quote_ty (Context.lvl ctx) a_ty in
-      let code = ty_to_code a_ty_quoted in
-      (TmEqHat (code, a', b'), VTyU)
+      let a_ty = quote_ty (Context.lvl ctx) a_ty in
+      (TmEqHat (a', b', a_ty), VTyU)
   | RPi (group, b) -> binders group b (fun x a b -> TmPiHat (x, a, b))
   | RArrow (a, b) -> binders ([ None ], a) b (fun x a b -> TmPiHat (x, a, b))
   | RSigma (group, b) -> binders group b (fun x a b -> TmSigmaHat (x, a, b))
