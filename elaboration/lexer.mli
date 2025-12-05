@@ -19,6 +19,7 @@ type token =
   | Refl
   | Absurd
   | Sorry
+  | Example
   | Type
   | Unit
   | Empty
