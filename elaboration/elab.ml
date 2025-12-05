@@ -2,6 +2,13 @@ open Syntax
 
 exception Elab_error of string
 
+let fresh_sorry_id =
+  let counter = ref 0 in
+  fun () ->
+    let id = !counter in
+    incr counter;
+    id
+
 (* ========== Evaluation ========== *)
 
 let rec eval_ty (env : env) : ty -> vl_ty = function
@@ -53,7 +60,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
       match (eval_tm env a, eval_tm env b) with
       | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
       | a, b -> VTmSub (a, b))
-  | TmSorry ty -> VTmSorry (eval_ty env ty)
+  | TmSorry (id, ty) -> VTmNeutral (HSorry (id, eval_ty env ty), [])
   | TmLet (_, _, t, body) -> eval_tm (eval_tm env t :: env) body
 
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
@@ -125,13 +132,13 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
   | VTmRefl (a, e) -> TmRefl (quote_ty l a, quote_tm l e)
   | VTmAdd (a, b) -> TmAdd (quote_tm l a, quote_tm l b)
   | VTmSub (a, b) -> TmSub (quote_tm l a, quote_tm l b)
-  | VTmSorry ty -> TmSorry (quote_ty l ty)
 
 and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
   let head_tm =
     match h with
     | HVar x -> TmVar (l - x - 1) (* Convert level (x) to index (l - x - 1) *)
     | HConst _ -> raise (Elab_error "quote_neutral: globals not yet supported")
+    | HSorry (id, ty) -> TmSorry (id, quote_ty l ty)
   in
   quote_spine l head_tm sp
 
@@ -258,7 +265,6 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
   | VTmAdd (a1, b1), VTmAdd (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
   | VTmSub (a1, b1), VTmSub (a2, b2) -> eq_tm l (a1, a2) && eq_tm l (b1, b2)
-  | VTmSorry ty1, VTmSorry ty2 -> eq_ty l (ty1, ty2)
   | _, _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
@@ -267,6 +273,7 @@ and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
 and eq_head : head * head -> bool = function
   | HVar x, HVar y -> x = y
   | HConst n1, HConst n2 -> String.equal n1 n2
+  | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
   | _, _ -> false
 
 and eq_spine (l : lvl) : spine * spine -> bool = function
@@ -384,7 +391,7 @@ and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
   | RUnit, VTyUnit -> TmUnit
   | RAbsurd e, ty ->
       TmAbsurd (quote_ty (Context.lvl ctx) ty, check_tm ctx e VTyEmpty)
-  | RSorry, ty -> TmSorry (quote_ty (Context.lvl ctx) ty)
+  | RSorry, ty -> TmSorry (fresh_sorry_id (), quote_ty (Context.lvl ctx) ty)
   | RLet (x, ty_opt, t, body), expected_ty -> (
       match ty_opt with
       | Some ty_raw ->
