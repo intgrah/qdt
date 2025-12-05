@@ -74,27 +74,21 @@ and do_proj2 : vl_tm -> vl_tm = function
   | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FProj2 ])
   | _ -> raise (Elab_error "do_proj2: expected pair or neutral")
 
-let inst_clos_ty (ClosTy (env, body) : clos_ty) (v : vl_tm) : vl_ty =
-  eval_ty (v :: env) body
-
-let inst_clos_tm (ClosTm (env, body) : clos_tm) (v : vl_tm) : vl_tm =
-  eval_tm (v :: env) body
-
 (* ========== Quoting ========== *)
 
 let lvl_to_ix (l : lvl) (x : lvl) : lvl = l - x - 1
 
 let rec quote_ty (l : lvl) : vl_ty -> ty = function
   | VTyU -> TyU
-  | VTyPi (x, a, clos) ->
+  | VTyPi (x, a, ClosTy (env, body)) ->
       let a' = quote_ty l a in
       let var = VTmNeutral (HVar l, []) in
-      let b' = quote_ty (l + 1) (inst_clos_ty clos var) in
+      let b' = quote_ty (l + 1) (eval_ty (var :: env) body) in
       TyPi (x, a', b')
-  | VTySigma (x, a, clos) ->
+  | VTySigma (x, a, ClosTy (env, body)) ->
       let a' = quote_ty l a in
       let var = VTmNeutral (HVar l, []) in
-      let b' = quote_ty (l + 1) (inst_clos_ty clos var) in
+      let b' = quote_ty (l + 1) (eval_ty (var :: env) body) in
       TySigma (x, a', b')
   | VTyUnit -> TyUnit
   | VTyEmpty -> TyEmpty
@@ -104,26 +98,26 @@ let rec quote_ty (l : lvl) : vl_ty -> ty = function
 
 and quote_tm (l : lvl) : vl_tm -> tm = function
   | VTmNeutral n -> quote_neutral l n
-  | VTmLam (x, a, clos) ->
+  | VTmLam (x, a, ClosTm (env, body)) ->
       let var = VTmNeutral (HVar l, []) in
       let a = quote_ty l a in
       let b = quote_ty (l + 1) VTyU in
-      let body = quote_tm (l + 1) (inst_clos_tm clos var) in
-      TmLam (x, a, b, body)
-  | VTmPiHat (x, a, clos) ->
+      let body' = quote_tm (l + 1) (eval_tm (var :: env) body) in
+      TmLam (x, a, b, body')
+  | VTmPiHat (x, a, ClosTm (env, body)) ->
       let a = quote_tm l a in
       let var = VTmNeutral (HVar l, []) in
-      let b = quote_tm (l + 1) (inst_clos_tm clos var) in
+      let b = quote_tm (l + 1) (eval_tm (var :: env) body) in
       TmPiHat (x, a, b)
-  | VTmSigmaHat (x, a, clos) ->
+  | VTmSigmaHat (x, a, ClosTm (env, body)) ->
       let a = quote_tm l a in
       let var = VTmNeutral (HVar l, []) in
-      let b = quote_tm (l + 1) (inst_clos_tm clos var) in
+      let b = quote_tm (l + 1) (eval_tm (var :: env) body) in
       TmSigmaHat (x, a, b)
-  | VTmMkSigma (x, a_ty, clos_b, t, u) ->
+  | VTmMkSigma (x, a_ty, ClosTy (env, body), t, u) ->
       let a = quote_ty l a_ty in
       let var = VTmNeutral (HVar l, []) in
-      let b = quote_ty (l + 1) (inst_clos_ty clos_b var) in
+      let b = quote_ty (l + 1) (eval_ty (var :: env) body) in
       ignore x;
       TmMkSigma (a, b, quote_tm l t, quote_tm l u)
   | VTmUnit -> TmUnit
@@ -221,16 +215,17 @@ end
 (* Γ ⊢ A ≡ B type *)
 let rec eq_ty (l : lvl) : vl_ty * vl_ty -> bool = function
   | VTyU, VTyU -> true
-  | VTyPi (_, a1, clos1), VTyPi (_, a2, clos2) ->
+  | VTyPi (_, a1, ClosTy (env1, body1)), VTyPi (_, a2, ClosTy (env2, body2)) ->
       eq_ty l (a1, a2)
       &&
       let var = VTmNeutral (HVar l, []) in
-      eq_ty (l + 1) (inst_clos_ty clos1 var, inst_clos_ty clos2 var)
-  | VTySigma (_, a1, clos1), VTySigma (_, a2, clos2) ->
+      eq_ty (l + 1) (eval_ty (var :: env1) body1, eval_ty (var :: env2) body2)
+  | ( VTySigma (_, a1, ClosTy (env1, body1)),
+      VTySigma (_, a2, ClosTy (env2, body2)) ) ->
       eq_ty l (a1, a2)
       &&
       let var = VTmNeutral (HVar l, []) in
-      eq_ty (l + 1) (inst_clos_ty clos1 var, inst_clos_ty clos2 var)
+      eq_ty (l + 1) (eval_ty (var :: env1) body1, eval_ty (var :: env2) body2)
   | VTyUnit, VTyUnit -> true
   | VTyEmpty, VTyEmpty -> true
   | VTyInt, VTyInt -> true
@@ -242,28 +237,30 @@ let rec eq_ty (l : lvl) : vl_ty * vl_ty -> bool = function
 (* Γ ⊢ t ≡ u term *)
 and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmNeutral n1, VTmNeutral n2 -> eq_neutral l n1 n2
-  | VTmLam (_, _, clos1), VTmLam (_, _, clos2) ->
+  | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar l, []) in
-      eq_tm (l + 1) (inst_clos_tm clos1 var, inst_clos_tm clos2 var)
-  | VTmLam (_, _, clos), t
-  | t, VTmLam (_, _, clos) ->
+      eq_tm (l + 1) (eval_tm (var :: env1) body1, eval_tm (var :: env2) body2)
+  | VTmLam (_, _, ClosTm (env, body)), t
+  | t, VTmLam (_, _, ClosTm (env, body)) ->
       let var = VTmNeutral (HVar l, []) in
-      eq_tm (l + 1) (inst_clos_tm clos var, do_app t var)
+      eq_tm (l + 1) (eval_tm (var :: env) body, do_app t var)
   | VTmMkSigma (_, _, _, t1, u1), VTmMkSigma (_, _, _, t2, u2) ->
       eq_tm l (t1, t2) && eq_tm l (u1, u2)
   | VTmMkSigma (_, _, _, t, u), p
   | p, VTmMkSigma (_, _, _, t, u) ->
       eq_tm l (t, do_proj1 p) && eq_tm l (u, do_proj2 p)
-  | VTmPiHat (_, a1, clos1), VTmPiHat (_, a2, clos2) ->
+  | ( VTmPiHat (_, a1, ClosTm (env1, body1)),
+      VTmPiHat (_, a2, ClosTm (env2, body2)) ) ->
       eq_tm l (a1, a2)
       &&
       let var = VTmNeutral (HVar l, []) in
-      eq_tm (l + 1) (inst_clos_tm clos1 var, inst_clos_tm clos2 var)
-  | VTmSigmaHat (_, a1, clos1), VTmSigmaHat (_, a2, clos2) ->
+      eq_tm (l + 1) (eval_tm (var :: env1) body1, eval_tm (var :: env2) body2)
+  | ( VTmSigmaHat (_, a1, ClosTm (env1, body1)),
+      VTmSigmaHat (_, a2, ClosTm (env2, body2)) ) ->
       eq_tm l (a1, a2)
       &&
       let var = VTmNeutral (HVar l, []) in
-      eq_tm (l + 1) (inst_clos_tm clos1 var, inst_clos_tm clos2 var)
+      eq_tm (l + 1) (eval_tm (var :: env1) body1, eval_tm (var :: env2) body2)
   | VTmUnit, VTmUnit -> true
   | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
   | VTmUnitHat, VTmUnitHat -> true
@@ -316,7 +313,7 @@ let conv_ty (ctx : Context.t) (a : vl_ty) (b : vl_ty) : unit =
 
 (* Γ ⊢ A type *)
 let rec check_ty (ctx : Context.t) : raw -> ty =
-  let rec binders ((names, a) : binder_group) (b : raw)
+  let binders ((names, a) : binder_group) (b : raw)
       (mk : string option -> ty -> ty -> ty) : ty =
     let a' = check_ty ctx a in
     let av = eval_ty (Context.env ctx) a' in
@@ -367,7 +364,7 @@ let rec check_ty (ctx : Context.t) : raw -> ty =
 and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
   match (raw, ty) with
   | RLam ([], body), ty -> check_tm ctx body ty
-  | RLam ((x, a_ann) :: rest, body), VTyPi (_, a_ty, clos) ->
+  | RLam ((x, a_ann) :: rest, body), VTyPi (_, a_ty, ClosTy (env, body_ty)) ->
       (match a_ann with
       | Some a_ann_raw ->
           let a' = check_ty ctx a_ann_raw in
@@ -376,18 +373,18 @@ and check_tm (ctx : Context.t) (raw : raw) (ty : vl_ty) : tm =
       | None -> ());
       let var = VTmNeutral (HVar (Context.lvl ctx), []) in
       let ctx' = Context.bind x a_ty ctx in
-      let b_val = inst_clos_ty clos var in
+      let b_val = eval_ty (var :: env) body_ty in
       let b' = quote_ty (Context.lvl ctx') b_val in
       let body' = check_tm ctx' (RLam (rest, body)) b_val in
       TmLam (x, quote_ty (Context.lvl ctx) a_ty, b', body')
-  | RPair (a, b), VTySigma (_, a_ty, clos_b) ->
+  | RPair (a, b), VTySigma (_, a_ty, ClosTy (env, body)) ->
       let a' = check_tm ctx a a_ty in
       let a_val = eval_tm (Context.env ctx) a' in
-      let b_ty = inst_clos_ty clos_b a_val in
+      let b_ty = eval_ty (a_val :: env) body in
       let b' = check_tm ctx b b_ty in
       let a_ty' = quote_ty (Context.lvl ctx) a_ty in
       let var = VTmNeutral (HVar (Context.lvl ctx), []) in
-      let b_ty' = quote_ty (Context.lvl ctx + 1) (inst_clos_ty clos_b var) in
+      let b_ty' = quote_ty (Context.lvl ctx + 1) (eval_ty (var :: env) body) in
       TmMkSigma (a_ty', b_ty', a', b')
   | RRefl e, VTyEq (e1, e2, a) ->
       let e' = check_tm ctx e a in
@@ -454,10 +451,10 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
   | RApp (f, a) -> (
       let f', f_ty = infer_tm ctx f in
       match f_ty with
-      | VTyPi (_, a_ty, clos) ->
+      | VTyPi (_, a_ty, ClosTy (env, body)) ->
           let a' = check_tm ctx a a_ty in
           let a_val = eval_tm (Context.env ctx) a' in
-          let b_val = inst_clos_ty clos a_val in
+          let b_val = eval_ty (a_val :: env) body in
           (TmApp (f', a'), b_val)
       | _ ->
           raise
@@ -480,10 +477,10 @@ and infer_tm (ctx : Context.t) : raw -> tm * vl_ty =
   | RProj2 p -> (
       let p', p_ty = infer_tm ctx p in
       match p_ty with
-      | VTySigma (_, _, clos_b) ->
+      | VTySigma (_, _, ClosTy (env, body)) ->
           let proj1_tm = TmProj1 p' in
           let proj1_val = eval_tm (Context.env ctx) proj1_tm in
-          let b_val = inst_clos_ty clos_b proj1_val in
+          let b_val = eval_ty (proj1_val :: env) body in
           (TmProj2 p', b_val)
       | _ ->
           raise
