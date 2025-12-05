@@ -32,6 +32,7 @@ and binder_group = string option list * raw
 type raw_item =
   | RDef of string * raw
   | RExample of raw
+
 type raw_program = raw_item list
 
 (* ========== Core Syntax ========== *)
@@ -67,7 +68,7 @@ and tm =
   | TmRefl of ty * tm
   | TmAdd of tm * tm
   | TmSub of tm * tm
-  | TmSorry of ty
+  | TmSorry of int * ty
   | TmLet of string * ty * tm * tm
 
 (* Weak head normal form *)
@@ -98,7 +99,6 @@ and vl_tm =
   | VTmRefl of vl_ty * vl_tm
   | VTmAdd of vl_tm * vl_tm
   | VTmSub of vl_tm * vl_tm
-  | VTmSorry of vl_ty
 
 and spine = fname list
 
@@ -110,6 +110,7 @@ and fname =
 and head =
   | HVar of lvl (* de Bruijn level *)
   | HConst of string
+  | HSorry of int * vl_ty
 
 and neutral = head * spine
 and clos_ty = ClosTy of env * ty
