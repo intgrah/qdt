@@ -343,42 +343,13 @@ and parse_def : raw_def t = function
 
 let parse_program : raw_program t = many parse_def
 
-let token_to_string : token -> string = function
-  | Ident s -> Format.sprintf "identifier '%s'" s
-  | Type -> "Type"
-  | Unit -> "Unit"
-  | Empty -> "Empty"
-  | Def -> "def"
-  | Colon -> ":"
-  | Colon_eq -> ":="
-  | Semicolon -> ";"
-  | Eq_gt -> "=>"
-  | Arrow -> "→"
-  | Equal -> "="
-  | Comma -> ","
-  | LParen -> "("
-  | RParen -> ")"
-  | Fst -> "fst"
-  | Snd -> "snd"
-  | Refl -> "refl"
-  | Absurd -> "absurd"
-  | Sorry -> "sorry"
-  | Fun -> "fun"
-  | Times -> "×"
-  | Plus -> "+"
-  | Minus -> "-"
-  | Let -> "let"
-  | Int -> "Int"
-  | Underscore -> "_"
-  | IntLit n -> Format.sprintf "%d" n
-
 let parse (input : token list) : raw_program =
   match parse_program input with
   | None ->
       let msg =
         match input with
         | [] -> "Unexpected end of input"
-        | t :: _ -> Format.sprintf "Unexpected token: %s" (token_to_string t)
+        | t :: _ -> Format.asprintf "Unexpected token: %a" pp_token t
       in
       raise (Parse_error msg)
   | Some (x, []) -> x
