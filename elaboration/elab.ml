@@ -45,7 +45,7 @@ and eval_tm (env : env) : tm -> vl_tm = function
   | TmProj1 p -> do_proj1 (eval_tm env p)
   | TmProj2 p -> do_proj2 (eval_tm env p)
   | TmUnit -> VTmUnit
-  | TmAbsurd (c, e) -> VTmAbsurd (eval_ty env c, eval_tm env e)
+  | TmAbsurd (c, e) -> VTmNeutral (HAbsurd (eval_ty env c, eval_tm env e), [])
   | TmIntLit n -> VTmIntLit n
   | TmUnitHat -> VTmUnitHat
   | TmEmptyHat -> VTmEmptyHat
@@ -123,7 +123,6 @@ and quote_tm (l : lvl) : vl_tm -> tm = function
       ignore x;
       TmMkSigma (a, b, quote_tm l t, quote_tm l u)
   | VTmUnit -> TmUnit
-  | VTmAbsurd (c, e) -> TmAbsurd (quote_ty l c, quote_tm l e)
   | VTmIntLit n -> TmIntLit n
   | VTmUnitHat -> TmUnitHat
   | VTmEmptyHat -> TmEmptyHat
@@ -139,6 +138,7 @@ and quote_neutral (l : lvl) ((h, sp) : neutral) : tm =
     | HVar x -> TmVar (l - x - 1) (* Convert level (x) to index (l - x - 1) *)
     | HConst _ -> raise (Elab_error "quote_neutral: globals not yet supported")
     | HSorry (id, ty) -> TmSorry (id, quote_ty l ty)
+    | HAbsurd (c, e) -> TmAbsurd (quote_ty l c, quote_tm l e)
   in
   quote_spine l head_tm sp
 
@@ -258,8 +258,6 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | VTmUnitHat, VTmUnitHat -> true
   | VTmEmptyHat, VTmEmptyHat -> true
   | VTmIntHat, VTmIntHat -> true
-  | VTmAbsurd (c1, e1), VTmAbsurd (c2, e2) ->
-      eq_ty l (c1, c2) && eq_tm l (e1, e2)
   | VTmEqHat (t1, u1, a1), VTmEqHat (t2, u2, a2) ->
       eq_tm l (t1, t2) && eq_tm l (u1, u2) && eq_ty l (a1, a2)
   | VTmRefl (a1, e1), VTmRefl (a2, e2) -> eq_ty l (a1, a2) && eq_tm l (e1, e2)
@@ -268,12 +266,13 @@ and eq_tm (l : lvl) : vl_tm * vl_tm -> bool = function
   | _, _ -> false
 
 and eq_neutral (l : lvl) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
-  eq_head (h1, h2) && eq_spine l (sp1, sp2)
+  eq_head l (h1, h2) && eq_spine l (sp1, sp2)
 
-and eq_head : head * head -> bool = function
+and eq_head (l : lvl) : head * head -> bool = function
   | HVar x, HVar y -> x = y
   | HConst n1, HConst n2 -> String.equal n1 n2
   | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
+  | HAbsurd (c1, e1), HAbsurd (c2, e2) -> eq_ty l (c1, c2) && eq_tm l (e1, e2)
   | _, _ -> false
 
 and eq_spine (l : lvl) : spine * spine -> bool = function

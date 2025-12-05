@@ -90,7 +90,6 @@ and vl_tm =
   | VTmSigmaHat of string option * vl_tm * clos_tm
   | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
   | VTmUnit
-  | VTmAbsurd of vl_ty * vl_tm
   | VTmIntLit of int
   | VTmUnitHat
   | VTmEmptyHat
@@ -111,6 +110,7 @@ and head =
   | HVar of lvl (* de Bruijn level *)
   | HConst of string
   | HSorry of int * vl_ty
+  | HAbsurd of vl_ty * vl_tm
 
 and neutral = head * spine
 and clos_ty = ClosTy of env * ty
