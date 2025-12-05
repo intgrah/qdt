@@ -321,38 +321,48 @@ and parse_preterm : raw t =
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-and parse_def : raw_def t = function
-  | Def :: rest ->
-      (let* name = parse_ident in
-       let* binder_groups = many parse_typed_binder_group in
-       let binders : binder list =
-         List.concat_map
-           (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
-           binder_groups
-       in
-       let* ret_ty_opt =
-         optional
-           (let* () = token Colon in
-            parse_preterm)
-       in
-       let* () = token Colon_eq in
-       let* body = parse_preterm in
-       let body_with_ann =
-         match ret_ty_opt with
-         | Some ty -> RAnn (body, ty)
-         | None -> body
-       in
-       let full_body =
-         if binders = [] then
-           body_with_ann
-         else
-           RLam (binders, body_with_ann)
-       in
-       return (RDef (name, full_body) : raw_def))
-        rest
-  | _ -> None
+let rec parse_item : raw_item t =
+ fun input ->
+  ((let* () = token Def in
+    let* name = parse_ident in
+    let* body = parse_def_body in
+    return (RDef (name, body)))
+  <|>
+  let* () = token Example in
+  let* body = parse_def_body in
+  return (RExample body))
+    input
 
-let parse_program : raw_program t = many parse_def
+and parse_def_body : raw t =
+ fun input ->
+  (let* binder_groups = many parse_typed_binder_group in
+   let binders : binder list =
+     List.concat_map
+       (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
+       binder_groups
+   in
+   let* ret_ty_opt =
+     optional
+       (let* () = token Colon in
+        parse_preterm)
+   in
+   let* () = token Colon_eq in
+   let* body = parse_preterm in
+   let body_with_ann =
+     match ret_ty_opt with
+     | Some ty -> RAnn (body, ty)
+     | None -> body
+   in
+   let full_body =
+     if binders = [] then
+       body_with_ann
+     else
+       RLam (binders, body_with_ann)
+   in
+   return full_body)
+    input
+
+let parse_program : raw_program t = many parse_item
 
 let parse (input : token list) : raw_program =
   match parse_program input with

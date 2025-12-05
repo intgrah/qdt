@@ -548,5 +548,13 @@ let elab_program : raw_program -> (string * tm * ty) list =
         let ty_nf = quote_ty 0 ty_val in
         let ctx' = Context.define name ty_val term_val ctx in
         go ((name, term_nf, ty_nf) :: acc) ctx' rest
+    | RExample body :: rest ->
+        let term, ty_val = infer_tm ctx body in
+        let term_val = eval_tm (Context.env ctx) term in
+        let term_nf = quote_tm 0 term_val in
+        let ty_nf = quote_ty 0 ty_val in
+        ignore term_nf;
+        ignore ty_nf;
+        go acc ctx rest
   in
   go [] Context.empty

@@ -2,7 +2,7 @@ open Syntax
 
 (* Raw Syntax *)
 val pp_raw : Format.formatter -> raw -> unit
-val pp_raw_def : Format.formatter -> raw_def -> unit
+val pp_raw_item : Format.formatter -> raw_item -> unit
 val pp_raw_program : Format.formatter -> raw_program -> unit
 
 (* Core Syntax *)

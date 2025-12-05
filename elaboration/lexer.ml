@@ -19,6 +19,7 @@ type token =
   | Refl
   | Absurd
   | Sorry
+  | Example
   | Type
   | Unit
   | Empty
@@ -48,6 +49,7 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Refl -> Format.fprintf fmt "refl"
   | Absurd -> Format.fprintf fmt "absurd"
   | Sorry -> Format.fprintf fmt "sorry"
+  | Example -> Format.fprintf fmt "example"
   | Type -> Format.fprintf fmt "Type"
   | Unit -> Format.fprintf fmt "Unit"
   | Empty -> Format.fprintf fmt "Empty"
@@ -136,6 +138,7 @@ let rec scan front_toks = function
         | "refl" -> Refl
         | "absurd" -> Absurd
         | "sorry" -> Sorry
+        | "example" -> Example
         | tok -> Ident tok
       in
       scan (tok :: front_toks) cs

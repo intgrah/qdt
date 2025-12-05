@@ -29,8 +29,10 @@ type raw =
 and binder = string option * raw option
 and binder_group = string option list * raw
 
-type raw_def = RDef of string * raw
-type raw_program = raw_def list
+type raw_item =
+  | RDef of string * raw
+  | RExample of raw
+type raw_program = raw_item list
 
 (* ========== Core Syntax ========== *)
 
