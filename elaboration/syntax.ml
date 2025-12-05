@@ -61,7 +61,7 @@ and tm =
   | TmUnitHat
   | TmEmptyHat
   | TmIntHat
-  | TmEqHat of tm * tm * tm
+  | TmEqHat of tm * tm * ty
   | TmRefl of ty * tm
   | TmAdd of tm * tm
   | TmSub of tm * tm
@@ -92,7 +92,7 @@ and vl_tm =
   | VTmUnitHat
   | VTmEmptyHat
   | VTmIntHat
-  | VTmEqHat of vl_tm * vl_tm * vl_tm
+  | VTmEqHat of vl_tm * vl_tm * vl_ty
   | VTmRefl of vl_ty * vl_tm
   | VTmAdd of vl_tm * vl_tm
   | VTmSub of vl_tm * vl_tm

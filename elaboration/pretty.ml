@@ -147,7 +147,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmUnitHat -> Format.fprintf fmt "Unit"
   | TmEmptyHat -> Format.fprintf fmt "Empty"
   | TmIntHat -> Format.fprintf fmt "Int"
-  | TmEqHat (_a, t, u) ->
+  | TmEqHat (t, u, _) ->
       Format.fprintf fmt "@[<hov 2>%a@ = %a@]" (pp_tm_ctx names) t
         (pp_tm_ctx names) u
   | TmRefl (_a, e) ->
