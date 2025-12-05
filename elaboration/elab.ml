@@ -332,13 +332,14 @@ let rec check_ty (ctx : Context.t) : raw -> ty =
   | REq (a, b) ->
       let a, ty = infer_tm ctx a in
       TyEq (a, check_tm ctx b ty, quote_ty (Context.lvl ctx) ty)
-  | (RApp (_, _) | RAnn (_, _)) as e -> TyEl (check_tm ctx e VTyU)
+  | (RApp (_, _) | RAnn (_, _) | RLet (_, _, _, _) | RProj1 _ | RProj2 _) as e
+    ->
+      TyEl (check_tm ctx e VTyU)
   | ( RUnitTm | RSorry
     | RLam (_, _)
-    | RLet (_, _, _, _)
     | RAbsurd _ | RRefl _
     | RPair (_, _)
-    | RProj1 _ | RProj2 _ | RIntLit _
+    | RIntLit _
     | RAdd (_, _)
     | RSub (_, _) ) as raw ->
       raise
