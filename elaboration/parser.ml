@@ -216,7 +216,7 @@ and parse_let : raw t =
    let* name = parse_ident in
    let* ty_opt =
      (let* () = token Colon in
-      let* ty = parse_arrow_level in
+      let* ty = parse_preterm in
       return (Some ty))
      <|> return None
    in
@@ -247,7 +247,17 @@ and parse_app : raw t =
  fun input ->
   (let* head = parse_atom in
    let* args = many parse_atom in
-   return (List.fold_left (fun f a -> RApp (f, a)) head args))
+   let* final =
+     (let* e = parse_lambda <|> parse_let in
+      return (Some e))
+     <|> return None
+   in
+   let all_args =
+     match final with
+     | Some e -> args @ [ e ]
+     | None -> args
+   in
+   return (List.fold_left (fun f a -> RApp (f, a)) head all_args))
     input
 
 and parse_add_level : raw t =
@@ -272,11 +282,14 @@ and parse_add_level : raw t =
         first rest))
     input
 
+and parse_eq_rhs : raw t =
+ fun input -> choice [ parse_lambda; parse_let; parse_add_level ] input
+
 and parse_eq_level : raw t =
  fun input ->
   (let* a = parse_add_level in
    (let* () = token Equal in
-    let* b = parse_add_level in
+    let* b = parse_eq_rhs in
     return (REq (a, b)))
    <|> return a)
     input
@@ -320,7 +333,7 @@ and parse_def : raw_def t = function
        in
        let* ret_ty_opt =
          (let* () = token Colon in
-          let* ty = parse_arrow_level in
+          let* ty = parse_preterm in
           return (Some ty))
          <|> return None
        in
