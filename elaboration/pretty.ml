@@ -107,6 +107,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         Format.fprintf fmt "%s" (List.nth names idx)
       else
         Format.fprintf fmt "#%d" idx
+  | TmConst name -> Format.fprintf fmt "%s" name
   | TmLam (name_opt, a, body) ->
       let x = get_name name_opt names in
       Format.fprintf fmt "@[<hov 2>(fun %s : %a =>@ %a)@]" x (pp_ty_ctx names) a

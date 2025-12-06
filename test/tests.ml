@@ -55,9 +55,11 @@ module Test_quote = struct
 end
 
 module Test_nbe = struct
+  let whnf t = quote_tm 0 (eval_tm [] t)
+
   let beta () =
     let term = TmApp (TmLam (None, TyUnit, TmVar 0), TmUnit) in
-    let normalized = nf_tm [] term in
+    let normalized = whnf term in
     match normalized with
     | TmUnit -> ()
     | _ -> Alcotest.failf "expected (), got %s" (tm_to_string normalized)
@@ -66,7 +68,7 @@ module Test_nbe = struct
     let term =
       TmApp (TmLam (None, TyUnit, TmLam (None, TyUnit, TmVar 1)), TmUnit)
     in
-    let normalized = nf_tm [] term in
+    let normalized = whnf term in
     match normalized with
     | TmLam (_, _, TmUnit) -> ()
     | _ ->
@@ -74,8 +76,8 @@ module Test_nbe = struct
 
   let idempotent () =
     let term = TmApp (TmLam (None, TyUnit, TmVar 0), TmUnit) in
-    let norm1 = nf_tm [] term in
-    let norm2 = nf_tm [] norm1 in
+    let norm1 = whnf term in
+    let norm2 = whnf norm1 in
     Alcotest.(check string) "same" (tm_to_string norm1) (tm_to_string norm2)
 
   let tests =
@@ -88,44 +90,50 @@ end
 
 module Test_elab = struct
   let check_identity () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RLam ([ (Some "x", Some RU) ], RIdent "x") in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
-    let tm = check_tm ctx raw expected in
+    let tm = check_tm genv ctx raw expected in
     match tm with
     | TmLam (_, _, TmVar 0) -> ()
     | _ -> Alcotest.fail "check failed"
 
   let pi_type () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RPi (([ Some "x" ], RU), RU) in
-    let ty = check_ty ctx raw in
+    let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RArrow (RU, RU) in
-    let ty = check_ty ctx raw in
+    let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RIdent "x" in
     Alcotest.check_raises "var not in scope"
       (Elab_error "Variable not in scope: x") (fun () ->
-        let _, _ = infer_tm ctx raw in
+        let _, _ = infer_tm genv ctx raw in
         ())
 
   let unit_type () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RUnit in
-    let ty = check_ty ctx raw in
+    let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" TyUnit ty
 
   let unit_term_infer () =
+    let genv = GlobalEnv.create () in
     let ctx = Context.empty in
     let raw = RUnitTm in
-    let tm, ty = infer_tm ctx raw in
+    let tm, ty = infer_tm genv ctx raw in
     match (tm, ty) with
     | TmUnit, VTyUnit -> ()
     | _ -> Alcotest.fail "unit term infer failed"
