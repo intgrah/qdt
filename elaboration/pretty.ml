@@ -27,11 +27,11 @@ and pp_raw (fmt : Format.formatter) : raw -> unit = function
       Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_binder_group group pp_raw b
   | RArrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_raw a pp_raw b
   | RLet (name, None, rhs, body) ->
-      Format.fprintf fmt "@[<hov 2>(let %s :=@ %a@ in@ %a)@]" name pp_raw rhs
-        pp_raw body
+      Format.fprintf fmt "@[<v 0>@[<hov 2>(let %s :=@ %a in@]@ %a)@]" name
+        pp_raw rhs pp_raw body
   | RLet (name, Some ty, rhs, body) ->
-      Format.fprintf fmt "@[<hov 2>(let %s : %a :=@ %a@ in@ %a)@]" name pp_raw
-        ty pp_raw rhs pp_raw body
+      Format.fprintf fmt "@[<v 0>@[<hov 2>(let %s : %a :=@ %a in@]@ %a)@]" name
+        pp_raw ty pp_raw rhs pp_raw body
   | RU -> Format.fprintf fmt "Type"
   | RUnit -> Format.fprintf fmt "Unit"
   | REmpty -> Format.fprintf fmt "Empty"
@@ -102,11 +102,7 @@ let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
 
 and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   function
-  | TmVar idx ->
-      if idx >= 0 && idx < List.length names then
-        Format.fprintf fmt "%s" (List.nth names idx)
-      else
-        Format.fprintf fmt "#%d" idx
+  | TmVar idx -> Format.fprintf fmt "%s" (List.nth names idx)
   | TmConst name -> Format.fprintf fmt "%s" name
   | TmLam (name_opt, a, body) ->
       let x = get_name name_opt names in
@@ -116,7 +112,10 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmApp ((TmLam _ as f), a) ->
       Format.fprintf fmt "@[<hov 2>(%a)@ (%a)@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
-  | TmApp (f, ((TmVar _ | TmUnit) as a)) ->
+  | TmApp
+      ( f,
+        ((TmVar _ | TmConst _ | TmUnit | TmIntHat | TmUnitHat | TmEmptyHat) as a)
+      ) ->
       Format.fprintf fmt "@[<hov 2>%a@ %a@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
   | TmApp (f, a) ->
@@ -141,8 +140,8 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmMkSigma (_a, _b, t, u) ->
       Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" (pp_tm_ctx names) t
         (pp_tm_ctx names) u
-  | TmProj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" (pp_tm_ctx names) t
-  | TmProj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" (pp_tm_ctx names) t
+  | TmProj1 t -> Format.fprintf fmt "@[<hov 2>fst (%a)@]" (pp_tm_ctx names) t
+  | TmProj2 t -> Format.fprintf fmt "@[<hov 2>snd (%a)@]" (pp_tm_ctx names) t
   | TmUnit -> Format.fprintf fmt "()"
   | TmAbsurd (_c, e) ->
       Format.fprintf fmt "@[<hov 2>(absurd %a)@]" (pp_tm_ctx names) e
@@ -163,7 +162,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         (pp_tm_ctx names) b
   | TmSorry _ -> Format.fprintf fmt "sorry"
   | TmLet (x, ty, t, body) ->
-      Format.fprintf fmt "@[<hov 2>let %s : %a :=@ %a;@ %a@]" x
+      Format.fprintf fmt "@[<v 0>@[<hov 2>let %s : %a :=@ %a;@]@ %a@]" x
         (pp_ty_ctx names) ty (pp_tm_ctx names) t
         (pp_tm_ctx (x :: names))
         body
