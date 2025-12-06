@@ -51,6 +51,7 @@ type ty =
 
 and tm =
   | TmVar of lvl (* de Bruijn index *)
+  | TmConst of string (* global constant *)
   | TmLam of string option * ty * tm
   | TmApp of tm * tm
   | TmPiHat of string option * tm * tm
