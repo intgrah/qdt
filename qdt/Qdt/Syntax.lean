@@ -29,16 +29,18 @@ inductive Raw where
   | sorry : Raw
   deriving Repr, Inhabited
 
-abbrev RawDef := String × Raw
-abbrev RawProgram := List RawDef
+inductive RawItem where
+  | defn : String → Raw → RawItem
+  | example : Raw → RawItem
+  deriving Repr, Inhabited
+
+abbrev RawProgram := List RawItem
 
 mutual
   inductive Ty where
     | u : Ty
     | pi : Name → Ty → Ty → Ty
-    | arrow : Ty → Ty → Ty
     | sigma : Name → Ty → Ty → Ty
-    | prod : Ty → Ty → Ty
     | unit : Ty
     | empty : Ty
     | int : Ty
@@ -48,12 +50,11 @@ mutual
 
   inductive Tm where
     | var : Nat → Tm
-    | lam : Name → Ty → Ty → Tm → Tm
+    | const : String → Tm
+    | lam : Name → Ty → Tm → Tm
     | app : Tm → Tm → Tm
     | piHat : Name → Tm → Tm → Tm
-    | arrowHat : Tm → Tm → Tm
     | sigmaHat : Name → Tm → Tm → Tm
-    | prodHat : Tm → Tm → Tm
     | mkSigma : Ty → Ty → Tm → Tm → Tm
     | proj1 : Tm → Tm
     | proj2 : Tm → Tm
@@ -63,25 +64,27 @@ mutual
     | unitHat : Tm
     | emptyHat : Tm
     | intHat : Tm
-    | eqHat : Tm → Tm → Tm → Tm
+    | eqHat : Tm → Tm → Ty → Tm
     | refl : Ty → Tm → Tm
     | add : Tm → Tm → Tm
     | sub : Tm → Tm → Tm
-    | sorry : Ty → Tm
+    | sorry : Nat → Ty → Tm
     | «let» : String → Ty → Tm → Tm → Tm
   deriving Inhabited, Repr
 end
 
-inductive Head where
-  | var : Nat → Head
-  | global : String → Head
-  deriving Repr, Inhabited, BEq
-
 mutual
+  inductive Head where
+    | var : Nat → Head
+    | const : String → Head
+    | sorry : Nat → VTy → Head
+    deriving Repr, Inhabited
+
   inductive Frame where
     | app : VTm → Frame
     | proj1 : Frame
     | proj2 : Frame
+    | absurd : VTy → Frame
 
   inductive Neutral where
     | mk : Head → List Frame → Neutral
@@ -89,9 +92,7 @@ mutual
   inductive VTy where
     | u : VTy
     | pi : Name → VTy → Env → Ty → VTy
-    | arrow : VTy → VTy → VTy
     | sigma : Name → VTy → Env → Ty → VTy
-    | prod : VTy → VTy → VTy
     | unit : VTy
     | empty : VTy
     | int : VTy
@@ -102,21 +103,17 @@ mutual
     | neutral : Neutral → VTm
     | lam : Name → VTy → Env → Tm → VTm
     | piHat : Name → VTm → Env → Tm → VTm
-    | arrowHat : VTm → VTm → VTm
     | sigmaHat : Name → VTm → Env → Tm → VTm
-    | prodHat : VTm → VTm → VTm
     | mkSigma : Name → VTy → Env → Ty → VTm → VTm → VTm
     | unit : VTm
-    | absurd : VTy → VTm → VTm
     | intLit : Int → VTm
     | unitHat : VTm
     | emptyHat : VTm
     | intHat : VTm
-    | eqHat : VTm → VTm → VTm → VTm
+    | eqHat : VTm → VTm → VTy → VTm
     | refl : VTy → VTm → VTm
     | add : VTm → VTm → VTm
     | sub : VTm → VTm → VTm
-    | sorry : VTy → VTm
 
   inductive Env where
     | nil : Env

@@ -114,7 +114,7 @@ mutual
   partial def pLet : TokenParser Raw := do
     let _ ← tok Token.let
     let name ← pIdentTok
-    let tyOpt ← option? (tok Token.colon *> pArrowLevel)
+    let tyOpt ← option? (tok Token.colon *> pPreterm)
     let _ ← tok Token.colonEq
     let e ← pPreterm
     let _ ← tok Token.semicolon
@@ -136,7 +136,12 @@ mutual
   partial def pApp : TokenParser Raw := do
     let head ← pAtom
     let args ← takeMany pAtom
-    return args.foldl (fun f a => Raw.app f a) head
+    let trailing ← option? (pLambda <|> pLet)
+    let allArgs :=
+      match trailing with
+      | some e => args.toList ++ [e]
+      | none => args.toList
+    return allArgs.foldl (fun f a => Raw.app f a) head
 
   partial def pAddLevel : TokenParser Raw := do
     let first ← pApp
@@ -146,9 +151,12 @@ mutual
       <|> pure acc
     go first
 
+  partial def pEqRhs : TokenParser Raw :=
+    first [pLambda, pLet, pAddLevel]
+
   partial def pEqLevel : TokenParser Raw := do
     let a ← pAddLevel
-    (do let _ ← tok Token.equal; let b ← pAddLevel; return Raw.eq a b)
+    (do let _ ← tok Token.equal; let b ← pEqRhs; return Raw.eq a b)
     <|> pure a
 
   partial def pProdLevel : TokenParser Raw :=
@@ -166,24 +174,36 @@ mutual
   partial def pPreterm : TokenParser Raw :=
     first [pLambda, pLet, pPi, pSigma, pArrowLevel]
 
-  partial def pDef : TokenParser RawDef := do
-    let _ ← tok Token.def
-    let name ← pIdentTok
+  partial def pDefBody : TokenParser Raw := do
     let binderGroups ← takeMany pTypedBinderGroup
     let binders : List (Name × Option Raw) :=
       binderGroups.toList.flatMap fun (names, ty) => names.map (·, some ty)
-    let retTyOpt ← option? (tok Token.colon *> pArrowLevel)
+    let retTyOpt ← option? (tok Token.colon *> pPreterm)
     let _ ← tok Token.colonEq
     let body ← pPreterm
     let bodyWithAnn := match retTyOpt with
       | some ty => Raw.ann body ty
       | none => body
-    let fullBody := if binders.isEmpty then bodyWithAnn else Raw.lam binders bodyWithAnn
-    return (name, fullBody)
+    pure <|
+      if binders.isEmpty then
+        bodyWithAnn
+      else
+        Raw.lam binders bodyWithAnn
+
+  partial def pItem : TokenParser RawItem := do
+    (do
+      let _ ← tok Token.def
+      let name ← pIdentTok
+      let body ← pDefBody
+      return RawItem.defn name body)
+    <|>
+    (do
+      let _ ← tok Token.example
+      RawItem.example <$> pDefBody)
 end
 
 def pProgram : TokenParser RawProgram := do
-  let defs ← takeMany pDef
+  let defs ← takeMany pItem
   endOfInput
   return defs.toList
 
