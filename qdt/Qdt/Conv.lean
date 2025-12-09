@@ -2,111 +2,133 @@ import Qdt.Context
 
 namespace Qdt
 
+partial def applySpine (v : VTm) : List Frame → ElabM VTm
+  | [] => return v
+  | .app a :: rest => do applySpine (← doApp v a) rest
+  | .proj1 :: rest => do applySpine (← doProj1 v) rest
+  | .proj2 :: rest => do applySpine (← doProj2 v) rest
+  | .absurd c :: rest => do applySpine (← doAbsurd c v) rest
+
+partial def forceNeutral (genv : GlobalEnv) (n : Neutral) : ElabM (Option VTm) :=
+  match n.head with
+  | .const name =>
+      match GlobalEnv.unfold genv name with
+      | some v => return some (← applySpine v n.spine)
+      | none => return none
+  | .var _ => return none
+  | .sorry _ _ => return none
+
+partial def forceTy (genv : GlobalEnv) : VTy → ElabM VTy
+  | .el n => do
+      match ← forceNeutral genv n with
+      | some v => forceTy genv (← doEl v)
+      | none => return .el n
+  | ty => return ty
+
 mutual
-  partial def eqTy (l : Nat) : VTy → VTy → ElabM Bool
+  partial def eqTy (genv : GlobalEnv) (l : Nat) : VTy → VTy → ElabM Bool
     | .u, .u => return true
     | .pi _ a1 env1 b1, .pi _ a2 env2 b2 => do
-        if !(← eqTy l a1 a2) then return false
+        if !(← eqTy genv l a1 a2) then
+          return false
         let var := mkVar l
-        eqTy (l + 1) (← instClosTy env1 b1 var) (← instClosTy env2 b2 var)
-    | .arrow a1 b1, .arrow a2 b2 => return (← eqTy l a1 a2) && (← eqTy l b1 b2)
-    | .pi _ a1 env1 b1, .arrow a2 b2 => do
-        if !(← eqTy l a1 a2) then return false
-        let var := mkVar l
-        eqTy (l + 1) (← instClosTy env1 b1 var) b2
-    | .arrow a1 b1, .pi _ a2 env2 b2 => do
-        if !(← eqTy l a1 a2) then return false
-        let var := mkVar l
-        eqTy (l + 1) b1 (← instClosTy env2 b2 var)
+        eqTy genv (l + 1) (← instClosTy env1 b1 var) (← instClosTy env2 b2 var)
     | .sigma _ a1 env1 b1, .sigma _ a2 env2 b2 => do
-        if !(← eqTy l a1 a2) then return false
+        if !(← eqTy genv l a1 a2) then
+          return false
         let var := mkVar l
-        eqTy (l + 1) (← instClosTy env1 b1 var) (← instClosTy env2 b2 var)
-    | .prod a1 b1, .prod a2 b2 => return (← eqTy l a1 a2) && (← eqTy l b1 b2)
-    | .sigma _ a1 env1 b1, .prod a2 b2 => do
-        if !(← eqTy l a1 a2) then return false
-        let var := mkVar l
-        eqTy (l + 1) (← instClosTy env1 b1 var) b2
-    | .prod a1 b1, .sigma _ a2 env2 b2 => do
-        if !(← eqTy l a1 a2) then return false
-        let var := mkVar l
-        eqTy (l + 1) b1 (← instClosTy env2 b2 var)
+        eqTy genv (l + 1) (← instClosTy env1 b1 var) (← instClosTy env2 b2 var)
     | .unit, .unit => return true
     | .empty, .empty => return true
     | .int, .int => return true
     | .eq e1 e2 a, .eq e1' e2' a' =>
-        return (← eqTm l e1 e1') && (← eqTm l e2 e2') && (← eqTy l a a')
-    | .el n1, .el n2 => eqNeutral l n1 n2
+        return (← eqTm genv l e1 e1') && (← eqTm genv l e2 e2') && (← eqTy genv l a a')
+    | .el n1, .el n2 => eqNeutral genv l n1 n2
+    | .el n, ty
+    | ty, .el n => do
+        match ← forceNeutral genv n with
+        | some v => eqTy genv l (← doEl v) ty
+        | none => return false
     | _, _ => return false
 
-  partial def eqTm (l : Nat) : VTm → VTm → ElabM Bool
-    | .neutral n1, .neutral n2 => eqNeutral l n1 n2
+  partial def eqTm (genv : GlobalEnv) (l : Nat) : VTm → VTm → ElabM Bool
+    | .neutral n1, .neutral n2 => eqNeutral genv l n1 n2
     | .lam _ _ env1 body1, .lam _ _ env2 body2 => do
         let var := mkVar l
-        eqTm (l + 1) (← instClosTm env1 body1 var) (← instClosTm env2 body2 var)
-    | .lam _ _ env body, t => do
-        let var := mkVar l
-        eqTm (l + 1) (← instClosTm env body var) (← doApp t var)
+        eqTm genv (l + 1) (← instClosTm env1 body1 var) (← instClosTm env2 body2 var)
+    | .lam _ _ env body, t
     | t, .lam _ _ env body => do
         let var := mkVar l
-        eqTm (l + 1) (← doApp t var) (← instClosTm env body var)
+        eqTm genv (l + 1) (← instClosTm env body var) (← doApp t var)
     | .mkSigma _ _ _ _ t1 u1, .mkSigma _ _ _ _ t2 u2 =>
-        return (← eqTm l t1 t2) && (← eqTm l u1 u2)
-    | .mkSigma _ _ _ _ t u, p => do
-        return (← eqTm l t (← doProj1 p)) && (← eqTm l u (← doProj2 p))
+        return (← eqTm genv l t1 t2) && (← eqTm genv l u1 u2)
+    | .mkSigma _ _ _ _ t u, p
     | p, .mkSigma _ _ _ _ t u => do
-        return (← eqTm l (← doProj1 p) t) && (← eqTm l (← doProj2 p) u)
+        return (← eqTm genv l t (← doProj1 p)) && (← eqTm genv l u (← doProj2 p))
     | .piHat _ a1 env1 b1, .piHat _ a2 env2 b2 => do
-        if !(← eqTm l a1 a2) then return false
+        if !(← eqTm genv l a1 a2) then
+          return false
         let var := mkVar l
-        eqTm (l + 1) (← instClosTm env1 b1 var) (← instClosTm env2 b2 var)
-    | .arrowHat a1 b1, .arrowHat a2 b2 =>
-        return (← eqTm l a1 a2) && (← eqTm l b1 b2)
+        eqTm genv (l + 1) (← instClosTm env1 b1 var) (← instClosTm env2 b2 var)
     | .sigmaHat _ a1 env1 b1, .sigmaHat _ a2 env2 b2 => do
-        if !(← eqTm l a1 a2) then return false
+        if !(← eqTm genv l a1 a2) then
+          return false
         let var := mkVar l
-        eqTm (l + 1) (← instClosTm env1 b1 var) (← instClosTm env2 b2 var)
-    | .prodHat a1 b1, .prodHat a2 b2 =>
-        return (← eqTm l a1 a2) && (← eqTm l b1 b2)
+        eqTm genv (l + 1) (← instClosTm env1 b1 var) (← instClosTm env2 b2 var)
     | .unit, .unit => return true
     | .intLit n1, .intLit n2 => return n1 == n2
     | .unitHat, .unitHat => return true
     | .emptyHat, .emptyHat => return true
     | .intHat, .intHat => return true
-    | .absurd c1 e1, .absurd c2 e2 =>
-        return (← eqTy l c1 c2) && (← eqTm l e1 e2)
-    | .eqHat a1 t1 u1, .eqHat a2 t2 u2 =>
-        return (← eqTm l a1 a2) && (← eqTm l t1 t2) && (← eqTm l u1 u2)
+    | .eqHat t1 u1 a1, .eqHat t2 u2 a2 =>
+        return (← eqTm genv l t1 t2) && (← eqTm genv l u1 u2) && (← eqTy genv l a1 a2)
     | .refl a1 e1, .refl a2 e2 =>
-        return (← eqTy l a1 a2) && (← eqTm l e1 e2)
+        return (← eqTy genv l a1 a2) && (← eqTm genv l e1 e2)
     | .add a1 b1, .add a2 b2 =>
-        return (← eqTm l a1 a2) && (← eqTm l b1 b2)
+        return (← eqTm genv l a1 a2) && (← eqTm genv l b1 b2)
     | .sub a1 b1, .sub a2 b2 =>
-        return (← eqTm l a1 a2) && (← eqTm l b1 b2)
-    | .sorry ty1, .sorry ty2 => eqTy l ty1 ty2
+        return (← eqTm genv l a1 a2) && (← eqTm genv l b1 b2)
+    | .neutral n, t
+    | t, .neutral n => do
+        match ← forceNeutral genv n with
+        | some v => eqTm genv l v t
+        | none => return false
     | _, _ => return false
 
-  partial def eqNeutral (l : Nat) (n1 n2 : Neutral) : ElabM Bool := do
-    if !eqHead n1.head n2.head then return false
-    eqSpine l n1.spine n2.spine
+  partial def eqNeutral (genv : GlobalEnv) (l : Nat) : Neutral → Neutral → ElabM Bool
+    | .mk h1 sp1, .mk h2 sp2 => do
+        if (← eqHead h1 h2) && (← eqSpine genv l sp1 sp2) then
+          return true
+        else
+          match (← forceNeutral genv (.mk h1 sp1), ← forceNeutral genv (.mk h2 sp2)) with
+          | (some v1, some v2) => eqTm genv l v1 v2
+          | (some v1, none) => eqTm genv l v1 (.neutral (.mk h2 sp2))
+          | (none, some v2) => eqTm genv l (.neutral (.mk h1 sp1)) v2
+          | (none, none) => return false
 
-  partial def eqHead : Head → Head → Bool
-    | .var x, .var y => x == y
-    | .global n1, .global n2 => n1 == n2
-    | _, _ => false
+  partial def eqHead : Head → Head → ElabM Bool
+    | .var x, .var y => return x == y
+    | .const n1, .const n2 => return n1 == n2
+    | .sorry id1 _, .sorry id2 _ => return id1 == id2
+    | _, _ => return false
 
-  partial def eqSpine (l : Nat) : List Frame → List Frame → ElabM Bool
+  partial def eqSpine (genv : GlobalEnv) (l : Nat) : List Frame → List Frame → ElabM Bool
     | [], [] => return true
-    | .app a1 :: rest1, .app a2 :: rest2 =>
-        return (← eqTm l a1 a2) && (← eqSpine l rest1 rest2)
-    | .proj1 :: rest1, .proj1 :: rest2 => eqSpine l rest1 rest2
-    | .proj2 :: rest1, .proj2 :: rest2 => eqSpine l rest1 rest2
+    | f1 :: rest1, f2 :: rest2 =>
+        return (← eqFrame genv l f1 f2) && (← eqSpine genv l rest1 rest2)
+    | _, _ => return false
+
+  partial def eqFrame (genv : GlobalEnv) (l : Nat) : Frame → Frame → ElabM Bool
+    | .app a1, .app a2 => eqTm genv l a1 a2
+    | .proj1, .proj1 => return true
+    | .proj2, .proj2 => return true
+    | .absurd c1, .absurd c2 => eqTy genv l c1 c2
     | _, _ => return false
 end
 
-def convTy (ctx : Context) (a b : VTy) : ElabM Unit := do
+def convTy (genv : GlobalEnv) (ctx : Context) (a b : VTy) : ElabM Unit := do
   let l := ctx.lvl
-  if !(← eqTy l a b) then
+  if !(← eqTy genv l a b) then
     let a' ← quoteTy l a
     let b' ← quoteTy l b
     throw (.msg s!"Type mismatch: expected {repr a'}, got {repr b'}")

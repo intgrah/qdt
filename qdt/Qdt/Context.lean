@@ -26,8 +26,6 @@ def bind (name : Option String) (ty : VTy) (ctx : Context) : Context where
   bindings := { name, ty } :: ctx.bindings
   env := .cons (VTm.neutral (.mk (.var (lvl ctx)) [])) ctx.env
 
-def bindAnon := bind none
-
 def define (name : String) (ty : VTy) (value : VTm) (ctx : Context) : Context where
   bindings := { name := some name, ty } :: ctx.bindings
   env := .cons value ctx.env
@@ -45,5 +43,27 @@ def names (ctx : Context) : List String :=
   ctx.bindings.map fun b => b.name.getD "_"
 
 end Context
+
+structure GlobalEntry where
+  ty : VTy
+  value : VTm
+
+structure GlobalEnv where
+  entries : List (String × GlobalEntry)
+
+namespace GlobalEnv
+
+def empty : GlobalEnv := { entries := [] }
+
+def add (env : GlobalEnv) (name : String) (ty : VTy) (value : VTm) : GlobalEnv :=
+  { entries := (name, { ty, value }) :: env.entries }
+
+def find? (env : GlobalEnv) (name : String) : Option GlobalEntry :=
+  (env.entries.find? (fun p => p.fst == name)).map Prod.snd
+
+def unfold (env : GlobalEnv) (name : String) : Option VTm :=
+  (find? env name).map (·.value)
+
+end GlobalEnv
 
 end Qdt

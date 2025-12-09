@@ -25,6 +25,7 @@ inductive Token where
   | refl
   | absurd
   | sorry
+  | example
   | type
   | unit
   | empty
@@ -55,6 +56,7 @@ def Token.toString : Token → String
   | .refl => "refl"
   | .absurd => "absurd"
   | .sorry => "sorry"
+  | .example => "example"
   | .type => "Type"
   | .unit => "Unit"
   | .empty => "Empty"
@@ -136,6 +138,7 @@ def pToken : LexerM Token :=
         | "refl" => Token.refl
         | "absurd" => Token.absurd
         | "sorry" => Token.sorry
+        | "example" => Token.example
         | _ => Token.ident s)
   <|> (Token.intLit <$> pInt)
 
