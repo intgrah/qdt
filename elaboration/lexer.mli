@@ -15,11 +15,10 @@ type token =
   | Def
   | Let
   | Fun
-  | Fst
-  | Snd
   | Sorry
   | Example
   | Inductive
+  | Structure
   | Where
   | Import
   | Type

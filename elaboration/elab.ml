@@ -9,6 +9,22 @@ let fresh_sorry_id =
     incr counter;
     id
 
+type rec_rule = {
+  rule_ctor_name : string;
+  rule_nfields : int;
+  rule_rec_args : int list;
+  rule_rec_indices : int list list;
+}
+
+type recursor_info = {
+  rec_ind_name : string;
+  rec_num_params : int;
+  rec_num_indices : int;
+  rec_num_motives : int;
+  rec_num_methods : int;
+  rec_rules : rec_rule list;
+}
+
 (* Global environment reference for evaluation unfolding *)
 let current_genv : (string -> vl_tm option) ref = ref (fun _ -> None)
 
@@ -16,6 +32,17 @@ let current_recursor_lookup : (string -> recursor_info option) ref =
   ref (fun _ -> None)
 
 let current_ctor_lookup : (string -> (string * int) option) ref =
+  ref (fun _ -> None)
+
+type structure_info = {
+  struct_ind_name : string;
+  struct_ctor_name : string;
+  struct_num_params : int;
+  struct_num_fields : int;
+  struct_field_names : string list;
+}
+
+let current_structure_lookup : (string -> structure_info option) ref =
   ref (fun _ -> None)
 
 (* ========== Evaluation ========== *)
@@ -67,8 +94,112 @@ and eval_tm (env : env) : tm -> vl_tm = function
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
   | VTmLam (_, _, ClosTm (env, body)) -> eval_tm (a :: env) body
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EApp a ])
+  | VTmNeutral (h, sp) -> (
+      let new_sp = sp @ [ EApp a ] in
+      match try_iota_reduce h new_sp with
+      | Some v -> v
+      | None -> VTmNeutral (h, new_sp))
   | _ -> raise (Elab_error "do_app: expected lambda or neutral")
+
+and try_iota_reduce (h : head) (sp : spine) : vl_tm option =
+  match h with
+  | HConst rec_name -> (
+      match !current_recursor_lookup rec_name with
+      | None -> None
+      | Some info -> (
+          let args =
+            List.filter_map
+              (function
+                | EApp v -> Some v
+                | _ -> None)
+              sp
+          in
+          let major_idx =
+            info.rec_num_params + info.rec_num_motives + info.rec_num_methods
+            + info.rec_num_indices
+          in
+          if List.length args <= major_idx then
+            None
+          else
+            let major = List.nth args major_idx in
+            match major with
+            | VTmNeutral (HConst ctor_name, ctor_sp) -> (
+                match
+                  List.find_opt
+                    (fun r -> r.rule_ctor_name = ctor_name)
+                    info.rec_rules
+                with
+                | None -> None
+                | Some rule ->
+                    let params =
+                      List.filteri (fun i _ -> i < info.rec_num_params) args
+                    in
+                    let motive = List.nth args info.rec_num_params in
+                    let methods_start = info.rec_num_params + 1 in
+                    let methods =
+                      List.filteri
+                        (fun i _ ->
+                          i >= methods_start
+                          && i < methods_start + info.rec_num_methods)
+                        args
+                    in
+                    let ctor_apps =
+                      List.filter_map
+                        (function
+                          | EApp v -> Some v
+                          | _ -> None)
+                        ctor_sp
+                    in
+                    let fields =
+                      List.filteri
+                        (fun i _ -> i >= info.rec_num_params)
+                        ctor_apps
+                    in
+                    let method_idx =
+                      match
+                        List.find_index
+                          (fun r -> r.rule_ctor_name = ctor_name)
+                          info.rec_rules
+                      with
+                      | Some i -> i
+                      | None -> 0
+                    in
+                    let method_val = List.nth methods method_idx in
+                    let ihs =
+                      List.mapi
+                        (fun ih_idx rec_arg_idx ->
+                          let field = List.nth fields rec_arg_idx in
+                          let rec_indices_for_this =
+                            List.nth rule.rule_rec_indices ih_idx
+                          in
+                          let field_indices =
+                            List.map
+                              (fun i -> List.nth fields i)
+                              rec_indices_for_this
+                          in
+                          let rec_head =
+                            VTmNeutral
+                              ( HConst
+                                  (Format.sprintf "%s.rec" info.rec_ind_name),
+                                [] )
+                          in
+                          let with_params =
+                            List.fold_left do_app rec_head params
+                          in
+                          let with_motive = do_app with_params motive in
+                          let with_methods =
+                            List.fold_left do_app with_motive methods
+                          in
+                          let with_indices =
+                            List.fold_left do_app with_methods field_indices
+                          in
+                          do_app with_indices field)
+                        rule.rule_rec_args
+                    in
+                    let with_fields = List.fold_left do_app method_val fields in
+                    Some (List.fold_left do_app with_fields ihs))
+            | _ -> None))
+  | _ -> None
 
 and do_proj1 : vl_tm -> vl_tm = function
   | VTmMkSigma (_, _, _, t, _) -> t
@@ -179,7 +310,8 @@ let rec conv_ty (l : int) (t1 : vl_ty) (t2 : vl_ty) : bool =
 
 and conv_tm (l : int) (t1 : vl_tm) (t2 : vl_tm) : bool =
   match (t1, t2) with
-  | VTmNeutral n1, VTmNeutral n2 -> conv_neutral l n1 n2
+  | VTmNeutral n1, VTmNeutral n2 ->
+      conv_neutral l n1 n2 || try_eta_struct l t1 t2 || try_eta_struct l t2 t1
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm (l + 1)
@@ -207,6 +339,57 @@ and conv_tm (l : int) (t1 : vl_tm) (t2 : vl_tm) : bool =
   | VTmSub (a1, b1), VTmSub (a2, b2) -> conv_tm l a1 a2 && conv_tm l b1 b2
   | _ -> false
 
+and try_eta_struct (l : int) (ctor_app : vl_tm) (other : vl_tm) : bool =
+  match ctor_app with
+  | VTmNeutral (HConst ctor_name, sp) -> (
+      match !current_ctor_lookup ctor_name with
+      | None -> false
+      | Some (ind_name, _ctor_idx) -> (
+          match !current_structure_lookup ind_name with
+          | None -> false
+          | Some info ->
+              let args =
+                List.filter_map
+                  (function
+                    | EApp v -> Some v
+                    | _ -> None)
+                  sp
+              in
+              if
+                List.length args
+                <> info.struct_num_params + info.struct_num_fields
+              then
+                false
+              else
+                let params =
+                  List.filteri (fun i _ -> i < info.struct_num_params) args
+                in
+                let fields =
+                  List.filteri (fun i _ -> i >= info.struct_num_params) args
+                in
+                let rec check_fields field_names fields_left =
+                  match (field_names, fields_left) with
+                  | [], [] -> true
+                  | fname :: fname_rest, field :: field_rest ->
+                      let proj_name =
+                        Format.sprintf "%s.%s" info.struct_ind_name fname
+                      in
+                      let proj_result =
+                        match !current_genv proj_name with
+                        | Some proj_fn ->
+                            let with_params =
+                              List.fold_left do_app proj_fn params
+                            in
+                            do_app with_params other
+                        | None -> VTmNeutral (HConst proj_name, [])
+                      in
+                      conv_tm l field proj_result
+                      && check_fields fname_rest field_rest
+                  | _ -> false
+                in
+                check_fields info.struct_field_names fields))
+  | _ -> false
+
 and conv_neutral (l : int) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
   conv_head l h1 h2 && conv_spine l sp1 sp2
 
@@ -231,15 +414,6 @@ and conv_spine (l : int) (sp1 : spine) (sp2 : spine) : bool =
 type inductive_info = {
   ind_ty : ty;
   ctors : (string * ty) list;
-}
-
-type recursor_info = {
-  rec_ind_name : string;
-  rec_num_params : int;
-  rec_num_indices : int;
-  rec_num_motives : int; (* always 1 for now *)
-  rec_num_methods : int;
-  rec_ctor_names : string list;
 }
 
 module GlobalEnv = struct
@@ -308,6 +482,64 @@ module GlobalEnv = struct
     match Hashtbl.find_opt env.defs name with
     | Some (Inductive info) -> Some info
     | _ -> None
+
+  let find_structure env ind_name =
+    match Hashtbl.find_opt env.defs (Format.sprintf "%s.rec" ind_name) with
+    | Some (Recursor { info; _ }) ->
+        if info.rec_num_indices = 0 && List.length info.rec_rules = 1 then
+          let rule = List.hd info.rec_rules in
+          if rule.rule_rec_args = [] then
+            let field_names =
+              match Hashtbl.find_opt env.defs rule.rule_ctor_name with
+              | Some (Constructor { ty; _ }) ->
+                  let rec extract_field_names n ty =
+                    if n = 0 then
+                      []
+                    else
+                      match
+                        ty
+                      with
+                      | VTyPi (name, _, ClosTy (env, body)) ->
+                          let var = VTmNeutral (HVar (Lvl 0), []) in
+                          let rest =
+                            extract_field_names (n - 1)
+                              (eval_ty (var :: env) body)
+                          in
+                          (match name with
+                          | Some s -> s
+                          | None -> "_")
+                          :: rest
+                      | _ -> []
+                  in
+                  let rec skip_params n ty =
+                    if n = 0 then
+                      ty
+                    else
+                      match
+                        ty
+                      with
+                      | VTyPi (_, _, ClosTy (env, body)) ->
+                          let var = VTmNeutral (HVar (Lvl 0), []) in
+                          skip_params (n - 1) (eval_ty (var :: env) body)
+                      | _ -> ty
+                  in
+                  extract_field_names rule.rule_nfields
+                    (skip_params info.rec_num_params ty)
+              | _ -> List.init rule.rule_nfields (Format.sprintf "proj%d")
+            in
+            Some
+              {
+                struct_ind_name = ind_name;
+                struct_ctor_name = rule.rule_ctor_name;
+                struct_num_params = info.rec_num_params;
+                struct_num_fields = rule.rule_nfields;
+                struct_field_names = field_names;
+              }
+          else
+            None
+        else
+          None
+    | _ -> None
 end
 
 (* ========== Context ========== *)
@@ -336,6 +568,13 @@ module Context = struct
       lvl = ctx.lvl + 1;
     }
 
+  let bind_def name ty value ctx =
+    {
+      entries = { name; ty } :: ctx.entries;
+      env = value :: ctx.env;
+      lvl = ctx.lvl + 1;
+    }
+
   let lookup_idx ctx (Idx.Idx k) =
     let e = List.nth ctx.entries k in
     e.ty
@@ -347,6 +586,14 @@ module Context = struct
       | _ :: rest -> go (k + 1) rest
     in
     go 0 ctx.entries
+
+  let names ctx =
+    List.map
+      (fun e ->
+        match e.name with
+        | Some n -> n
+        | None -> "_")
+      ctx.entries
 end
 
 (* ========== Elaboration ========== *)
@@ -401,7 +648,8 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
       if not (conv_ty (Context.lvl ctx) ty_val VTyU) then
         raise
           (Elab_error
-             (Format.asprintf "Expected Type, got %a" Pretty.pp_ty
+             (Format.asprintf "Expected Type, got %a"
+                (Pretty.pp_ty_ctx (Context.names ctx))
                 (quote_ty (Context.lvl ctx) ty_val)));
       TyEl tm
 
@@ -529,11 +777,10 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
         | None -> infer_tm genv ctx rhs
       in
       let rhs_val = eval_tm (Context.env ctx) rhs' in
-      let ctx' = Context.bind (Some name) rhs_ty ctx in
-      let env' = rhs_val :: Context.env ctx in
+      let ctx' = Context.bind_def (Some name) rhs_ty rhs_val ctx in
       let body', body_ty = infer_tm genv ctx' body in
       let body_ty_quoted = quote_ty (Context.lvl ctx') body_ty in
-      let result_ty = eval_ty env' body_ty_quoted in
+      let result_ty = eval_ty (Context.env ctx') body_ty_quoted in
       (TmLet (name, quote_ty (Context.lvl ctx) rhs_ty, rhs', body'), result_ty)
   | Raw.Sorry ->
       let id = fresh_sorry_id () in
@@ -558,9 +805,9 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
                         (Elab_error
                            (Format.asprintf
                               "Lambda annotation mismatch: expected %a, got %a"
-                              Pretty.pp_ty
+                              (Pretty.pp_ty_ctx (Context.names ctx))
                               (quote_ty (Context.lvl ctx) a_ty)
-                              Pretty.pp_ty
+                              (Pretty.pp_ty_ctx (Context.names ctx))
                               (quote_ty (Context.lvl ctx) ann_val)))
                 | None -> ());
                 let ctx' = Context.bind name a_ty ctx in
@@ -588,9 +835,7 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
         | None -> infer_tm genv ctx rhs
       in
       let rhs_val = eval_tm (Context.env ctx) rhs' in
-      let ctx' = Context.bind (Some name) rhs_ty ctx in
-      let env' = rhs_val :: Context.env ctx in
-      ignore env';
+      let ctx' = Context.bind_def (Some name) rhs_ty rhs_val ctx in
       let body' = check_tm genv ctx' body expected in
       TmLet (name, quote_ty (Context.lvl ctx) rhs_ty, rhs', body')
   | Raw.Sorry, expected ->
@@ -598,13 +843,15 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
       TmSorry (id, quote_ty (Context.lvl ctx) expected)
   | _ ->
       let tm, inferred = infer_tm genv ctx raw in
-      if not (conv_ty (Context.lvl ctx) inferred expected) then
-        raise
-          (Elab_error
-             (Format.asprintf "Type mismatch: expected %a, got %a" Pretty.pp_ty
-                (quote_ty (Context.lvl ctx) expected)
-                Pretty.pp_ty
-                (quote_ty (Context.lvl ctx) inferred)));
+      (if not (conv_ty (Context.lvl ctx) inferred expected) then
+         let names = Context.names ctx in
+         raise
+           (Elab_error
+              (Format.asprintf "Type mismatch: expected %a, got %a"
+                 (Pretty.pp_ty_ctx names)
+                 (quote_ty (Context.lvl ctx) expected)
+                 (Pretty.pp_ty_ctx names)
+                 (quote_ty (Context.lvl ctx) inferred))));
       tm
 
 (* ========== Positivity Checking ========== *)
@@ -883,14 +1130,15 @@ let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
     ((ctor_name, ctor_params, ctor_ty_opt) : Raw.ctor) : string * ty * vl_ty =
   let full_name = Format.sprintf "%s.%s" ind ctor_name in
-  let rec build_ctor_body ctx = function
+  let rec build_ctor_body ctx depth = function
     | [] -> (
         match ctor_ty_opt with
         | None ->
             let base = TmConst ind in
             let applied =
               List.fold_left
-                (fun acc i -> TmApp (acc, TmVar (Idx (num_params - 1 - i))))
+                (fun acc i ->
+                  TmApp (acc, TmVar (Idx (depth + num_params - 1 - i))))
                 base
                 (List.init num_params (fun i -> i))
             in
@@ -913,10 +1161,10 @@ let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
         in
         let param_ty_val = eval_ty (Context.env ctx) param_ty in
         let ctx' = Context.bind name param_ty_val ctx in
-        let body_ty = build_ctor_body ctx' rest in
+        let body_ty = build_ctor_body ctx' (depth + 1) rest in
         TyPi (name, param_ty, body_ty)
   in
-  let ctor_body = build_ctor_body param_ctx ctor_params in
+  let ctor_body = build_ctor_body param_ctx 0 ctor_params in
   let ctor_ty =
     List.fold_right
       (fun (name, ty) body -> TyPi (name, ty, body))
@@ -938,6 +1186,13 @@ and is_recursive_arg_tm (ind : string) : tm -> bool = function
   | TmConst name -> String.equal name ind
   | TmApp (f, _) -> is_recursive_arg_tm ind f
   | _ -> false
+
+let extract_app_args : tm -> tm list =
+  let rec go acc = function
+    | TmApp (f, a) -> go (a :: acc) f
+    | _ -> List.rev acc
+  in
+  go []
 
 let rec shift_ty (amt : int) (cutoff : int) : ty -> ty = function
   | TyU -> TyU
@@ -997,13 +1252,12 @@ let rec extract_return_indices_from_ctor (ind : string) (num_params : int) :
 
 and extract_args_after_params (ind : string) (num_params : int) (tm : tm) :
     tm list =
-  let rec collect_all_args tm acc =
-    match tm with
+  let rec collect_all_args acc = function
     | TmConst name when String.equal name ind -> acc
-    | TmApp (f, a) -> collect_all_args f (a :: acc)
+    | TmApp (f, a) -> collect_all_args (a :: acc) f
     | _ -> []
   in
-  let all_args = collect_all_args tm [] in
+  let all_args = collect_all_args [] tm in
   if List.length all_args >= num_params then
     List.filteri (fun i _ -> i >= num_params) all_args
   else
@@ -1011,8 +1265,7 @@ and extract_args_after_params (ind : string) (num_params : int) (tm : tm) :
 
 let extract_nested_rec_info (ind : string) (num_params : int) (ty : ty) :
     (string option * ty) list * tm list =
-  let rec go acc ty =
-    match ty with
+  let rec go acc = function
     | TyPi (name, arg_ty, body) -> go ((name, arg_ty) :: acc) body
     | TyEl tm ->
         let indices = extract_args_after_params ind num_params tm in
@@ -1105,7 +1358,7 @@ let gen_recursor_ty (ind : string) (num_params : int)
         let name' =
           match name with
           | Some n -> Some n
-          | None -> Some ("a" ^ string_of_int i)
+          | None -> Some (Format.sprintf "a%d" i)
         in
         add_index_binders (i - 1) (TyPi (name', idx_ty, acc))
     in
@@ -1235,9 +1488,45 @@ let gen_recursor_ty (ind : string) (num_params : int)
             TmApp
               (subst_tm_inner extra_binders f, subst_tm_inner extra_binders a)
         | TmConst n -> TmConst n
-        | t -> t
-      in
-      let rec subst_ty_inner extra_binders = function
+        | TmLam (x, a, body) ->
+            TmLam
+              ( x,
+                subst_ty_inner extra_binders a,
+                subst_tm_inner (extra_binders + 1) body )
+        | TmPiHat (x, a, b) ->
+            TmPiHat
+              ( x,
+                subst_tm_inner extra_binders a,
+                subst_tm_inner (extra_binders + 1) b )
+        | TmSigmaHat (x, a, b) ->
+            TmSigmaHat
+              ( x,
+                subst_tm_inner extra_binders a,
+                subst_tm_inner (extra_binders + 1) b )
+        | TmMkSigma (a, b, t, u) ->
+            TmMkSigma
+              ( subst_ty_inner extra_binders a,
+                subst_ty_inner (extra_binders + 1) b,
+                subst_tm_inner extra_binders t,
+                subst_tm_inner extra_binders u )
+        | TmProj1 t -> TmProj1 (subst_tm_inner extra_binders t)
+        | TmProj2 t -> TmProj2 (subst_tm_inner extra_binders t)
+        | TmIntHat -> TmIntHat
+        | TmIntLit n -> TmIntLit n
+        | TmAdd (a, b) ->
+            TmAdd
+              (subst_tm_inner extra_binders a, subst_tm_inner extra_binders b)
+        | TmSub (a, b) ->
+            TmSub
+              (subst_tm_inner extra_binders a, subst_tm_inner extra_binders b)
+        | TmSorry (n, ty) -> TmSorry (n, subst_ty_inner extra_binders ty)
+        | TmLet (x, ty, v, body) ->
+            TmLet
+              ( x,
+                subst_ty_inner extra_binders ty,
+                subst_tm_inner extra_binders v,
+                subst_tm_inner (extra_binders + 1) body )
+      and subst_ty_inner extra_binders = function
         | TyU -> TyU
         | TyInt -> TyInt
         | TyPi (x, a, b) ->
@@ -1409,18 +1698,113 @@ let elab_inductive (genv : GlobalEnv.t) (ind : string)
   let ctor_results =
     List.map (elab_ctor genv ind param_ctx param_tys num_params) ctors
   in
-  List.iter
-    (fun (name, _ty, ty_val) -> GlobalEnv.add_opaque genv name ty_val)
+  List.iteri
+    (fun idx (name, _ty, ty_val) ->
+      GlobalEnv.add_constructor genv name ty_val ind idx)
     ctor_results;
   let ctor_name_tys = List.map (fun (name, ty, _) -> (name, ty)) ctor_results in
   GlobalEnv.add_inductive genv ind ind_ty ctor_name_tys;
   let rec_name = Format.sprintf "%s.rec" ind in
   let index_tys = extract_indices result_ty in
+  let num_indices = List.length index_tys in
   let rec_ty =
     gen_recursor_ty ind num_params param_tys index_tys ctor_name_tys
   in
   let rec_ty_val = eval_ty [] rec_ty in
-  GlobalEnv.add_opaque genv rec_name rec_ty_val;
+  let rec_rules =
+    List.map
+      (fun (ctor_name, ctor_ty) ->
+        let fields_ty =
+          let rec strip n t =
+            if n = 0 then
+              t
+            else
+              match
+                t
+              with
+              | TyPi (_, _, b) -> strip (n - 1) b
+              | _ -> t
+          in
+          strip num_params ctor_ty
+        in
+        let rec collect_fields ty idx =
+          match ty with
+          | TyPi (_, arg_ty, rest) ->
+              let is_rec = is_recursive_arg_ty ind arg_ty in
+              (idx, is_rec) :: collect_fields rest (idx + 1)
+          | _ -> []
+        in
+        let all_fields = collect_fields fields_ty 0 in
+        let nfields = List.length all_fields in
+        let rec_args =
+          List.filter_map
+            (fun (idx, is_rec) ->
+              if is_rec then
+                Some idx
+              else
+                None)
+            all_fields
+        in
+        let rec_indices =
+          if num_indices = 0 then
+            List.map (fun _ -> []) rec_args
+          else
+            List.map
+              (fun rec_idx ->
+                let rec get_field_ty n ty =
+                  match ty with
+                  | TyPi (_, arg_ty, rest) ->
+                      if n = 0 then
+                        arg_ty
+                      else
+                        get_field_ty (n - 1) rest
+                  | _ -> TyU
+                in
+                let field_ty = get_field_ty rec_idx fields_ty in
+                let rec extract_indices_from_ty ty =
+                  match ty with
+                  | TyEl tm -> extract_app_args tm
+                  | TyPi (_, _, b) -> extract_indices_from_ty b
+                  | _ -> []
+                in
+                let args = extract_indices_from_ty field_ty in
+                let index_args =
+                  if List.length args > num_params then
+                    List.filteri (fun i _ -> i >= num_params) args
+                  else
+                    []
+                in
+                List.filter_map
+                  (function
+                    | TmVar (Idx i) ->
+                        let field_num = rec_idx - 1 - i in
+                        if field_num >= 0 && field_num < nfields then
+                          Some field_num
+                        else
+                          None
+                    | _ -> None)
+                  index_args)
+              rec_args
+        in
+        {
+          rule_ctor_name = ctor_name;
+          rule_nfields = nfields;
+          rule_rec_args = rec_args;
+          rule_rec_indices = rec_indices;
+        })
+      ctor_name_tys
+  in
+  let rec_info =
+    {
+      rec_ind_name = ind;
+      rec_num_params = num_params;
+      rec_num_indices = num_indices;
+      rec_num_motives = 1;
+      rec_num_methods = List.length ctor_name_tys;
+      rec_rules;
+    }
+  in
+  GlobalEnv.add_recursor genv rec_name rec_ty_val rec_info;
   ((ind, ind_ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ]
 
 (* ========== Program Elaboration ========== *)
@@ -1431,7 +1815,7 @@ exception Import_not_found of string
 let module_to_path (root : string) (module_name : string) : string =
   let parts = String.split_on_char '.' module_name in
   let path = String.concat "/" parts in
-  Filename.concat root (path ^ ".qdt")
+  Filename.concat root (Format.sprintf "%s.qdt" path)
 
 type elab_state = {
   genv : GlobalEnv.t;
@@ -1447,6 +1831,9 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     { genv = GlobalEnv.create (); importing = []; imported = Hashtbl.create 16 }
   in
   current_genv := GlobalEnv.find_tm state.genv;
+  current_recursor_lookup := GlobalEnv.find_recursor state.genv;
+  current_ctor_lookup := GlobalEnv.find_constructor state.genv;
+  current_structure_lookup := GlobalEnv.find_structure state.genv;
 
   let rec process_import module_name =
     if List.mem module_name state.importing then
