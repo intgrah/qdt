@@ -32,4 +32,4 @@ def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
 def Nat.factorial : Nat -> Nat :=
   Nat.rec (fun _ => Nat) (Nat.succ Nat.zero) (fun k ih => Nat.mul (Nat.succ k) ih)
 
-example : Eq Nat (Nat.factorial Nat.three) six := Eq.refl Nat Nat.six
+example : Eq Nat (Nat.factorial Nat.three) Nat.six := Eq.refl Nat Nat.six
