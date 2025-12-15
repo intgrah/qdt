@@ -5,7 +5,7 @@ type stage_error =
 
 type 'a stage_result = ('a, stage_error) result
 type tokens_result = Lexer.token list stage_result
-type program_result = Syntax.raw_program stage_result
+type program_result = Syntax.Raw.program stage_result
 type elaborated_result = (string * Syntax.tm * Syntax.ty) list stage_result
 
 type snapshot = {
