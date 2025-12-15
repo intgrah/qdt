@@ -1,0 +1,8 @@
+import Std.Eq
+
+def id (A : Type) (x : A) : A := x
+def const (A B : Type) (a : A) (b : B) := a
+def compose (A B C : Type) (g : B -> C) (f : A -> B) (x : A) : C := g (f x)
+
+-- Function extensionality axiom
+def funext (A B : Type) (f g : A -> B) (h : (x : A) -> Eq B (f x) (g x)) : Eq (A -> B) f g := sorry

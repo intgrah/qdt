@@ -1,0 +1,18 @@
+import Std.Init
+import Std.Eq
+
+structure Iso (A B : Type) where
+  (hom : A -> B)
+  (inv : B -> A)
+  (hom_inv_id : Eq (A -> A) (compose A B A inv hom) (id A))
+  (inv_hom_id : Eq (B -> B) (compose B A B hom inv) (id B))
+
+def Iso.refl (A : Type) : Iso A A :=
+  Iso.mk A A (id A) (id A) (Eq.refl (A -> A) (id A)) (Eq.refl (A -> A) (id A))
+
+def Iso.symm (A B : Type) (iso : Iso A B) : Iso B A :=
+  Iso.mk B A
+    (Iso.inv A B iso)
+    (Iso.hom A B iso)
+    (Iso.inv_hom_id A B iso)
+    (Iso.hom_inv_id A B iso)

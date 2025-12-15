@@ -1,0 +1,20 @@
+inductive Eq (A : Type) (a : A) : A -> Type where
+  | refl : Eq A a a
+
+def Eq.ndrec (A : Type) (a : A) (motive : A -> Type) (h : motive a) (b : A) (p : Eq A a b) : motive b :=
+  Eq.rec A a (fun x _ => motive x) h b p
+
+def Eq.subst (A : Type) (P : A -> Type) (a b : A) (p : Eq A a b) (h : P a) : P b :=
+  Eq.ndrec A a P h b p
+
+def Eq.symm (A : Type) (a b : A) (p : Eq A a b) : Eq A b a :=
+  Eq.subst A (fun y => Eq A y a) a b p (Eq.refl A a)
+
+def Eq.trans (A : Type) (a b c : A) (p : Eq A a b) (q : Eq A b c) : Eq A a c :=
+  Eq.subst A (fun z => Eq A a z) b c q p
+
+def congr_arg (A B : Type) (f : A -> B) (x y : A) (p : Eq A x y) : Eq B (f x) (f y) :=
+  Eq.subst A (fun z => Eq B (f x) (f z)) x y p (Eq.refl B (f x))
+
+def congr_fun (A B : Type) (f g : A -> B) (p : Eq (A -> B) f g) (x : A) : Eq B (f x) (g x) :=
+  Eq.subst (A -> B) (fun h => Eq B (f x) (h x)) f g p (Eq.refl B (f x))

@@ -1,0 +1,6 @@
+structure Prod (A B : Type) where
+  (fst : A)
+  (snd : B)
+
+def Prod.swap (A B : Type) (p : Prod A B) : Prod B A :=
+  Prod.mk B A (Prod.snd A B p) (Prod.fst A B p)
