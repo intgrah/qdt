@@ -64,8 +64,8 @@ let summarize_tokens tokens =
 let try_lex chars =
   match Lexer.scan [] chars with
   | tokens -> Ok tokens
-  | exception Lexer.Illegal_character ->
-      Error (Lex_error "Illegal character in input")
+  | exception Lexer.Illegal_character c ->
+      Error (Lex_error (Format.sprintf "Illegal character in input: %c" c))
   | exception Lexer.Unterminated_comment ->
       Error (Lex_error "Unterminated block comment")
   | exception exn -> Error (Lex_error (Printexc.to_string exn))
