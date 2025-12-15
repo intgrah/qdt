@@ -11,18 +11,17 @@ type token =
   | Plus
   | Minus
   | Equal
+  | Pipe
   | Def
   | Let
   | Fun
   | Fst
   | Snd
-  | Refl
-  | Absurd
   | Sorry
   | Example
+  | Inductive
+  | Where
   | Type
-  | Unit
-  | Empty
   | Int
   | Underscore
   | Ident of string
@@ -41,18 +40,17 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Plus -> Format.fprintf fmt "+"
   | Minus -> Format.fprintf fmt "-"
   | Equal -> Format.fprintf fmt "="
+  | Pipe -> Format.fprintf fmt "|"
   | Def -> Format.fprintf fmt "def"
   | Let -> Format.fprintf fmt "let"
   | Fun -> Format.fprintf fmt "fun"
   | Fst -> Format.fprintf fmt "fst"
   | Snd -> Format.fprintf fmt "snd"
-  | Refl -> Format.fprintf fmt "refl"
-  | Absurd -> Format.fprintf fmt "absurd"
   | Sorry -> Format.fprintf fmt "sorry"
   | Example -> Format.fprintf fmt "example"
+  | Inductive -> Format.fprintf fmt "inductive"
+  | Where -> Format.fprintf fmt "where"
   | Type -> Format.fprintf fmt "Type"
-  | Unit -> Format.fprintf fmt "Unit"
-  | Empty -> Format.fprintf fmt "Empty"
   | Int -> Format.fprintf fmt "Int"
   | Underscore -> Format.fprintf fmt "_"
   | Ident s -> Format.fprintf fmt "%s" s
@@ -65,7 +63,8 @@ let is_alpha_num = function
   | '0' .. '9'
   | 'A' .. 'Z'
   | 'a' .. 'z'
-  | '_' ->
+  | '_'
+  | '.' ->
       true
   | _ -> false
 
@@ -111,6 +110,7 @@ let rec scan front_toks = function
   | ';' :: cs -> scan (Semicolon :: front_toks) cs
   | '(' :: cs -> scan (LParen :: front_toks) cs
   | ')' :: cs -> scan (RParen :: front_toks) cs
+  | '|' :: cs -> scan (Pipe :: front_toks) cs
   | '*' :: cs -> scan (Times :: front_toks) cs
   | '+' :: cs -> scan (Plus :: front_toks) cs
   (* → in UTF-8 *)
@@ -130,15 +130,13 @@ let rec scan front_toks = function
         | "let" -> Let
         | "fun" -> Fun
         | "Type" -> Type
-        | "Unit" -> Unit
-        | "Empty" -> Empty
         | "Int" -> Int
         | "fst" -> Fst
         | "snd" -> Snd
-        | "refl" -> Refl
-        | "absurd" -> Absurd
         | "sorry" -> Sorry
         | "example" -> Example
+        | "inductive" -> Inductive
+        | "where" -> Where
         | tok -> Ident tok
       in
       scan (tok :: front_toks) cs

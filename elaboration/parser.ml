@@ -22,7 +22,6 @@ module Parser = struct
     | Some _ as result -> result
     | None -> p2 input
 
-  (** Succeeds on the first one *)
   let choice (ps : 'a t list) : 'a t =
     List.fold_right ( <|> ) ps (fun _ -> None)
 
@@ -31,7 +30,6 @@ module Parser = struct
     | tok :: rest when tok = t -> Some ((), rest)
     | _ -> None
 
-  (** 0 or more *)
   let many (p : 'a t) : 'a list t =
     let rec go acc input =
       match p input with
@@ -40,7 +38,6 @@ module Parser = struct
     in
     go []
 
-  (** 1 or more *)
   let many1 (p : 'a t) : 'a list t =
     let* first = p in
     let* rest = many p in
@@ -81,13 +78,9 @@ let rec parse_atom : Raw.t t =
     [
       parse_fst;
       parse_snd;
-      parse_refl;
-      parse_absurd;
       parse_sorry;
       parse_var;
       parse_type;
-      parse_unit;
-      parse_empty;
       parse_int;
       parse_int_lit;
       parse_pair;
@@ -106,10 +99,6 @@ and parse_type : Raw.t t = function
   | Type :: rest -> Some (Raw.U, rest)
   | _ -> None
 
-and parse_unit : Raw.t t = function
-  | Unit :: rest -> Some (Raw.Unit, rest)
-  | _ -> None
-
 and parse_int : Raw.t t = function
   | Int :: rest -> Some (Raw.Int, rest)
   | _ -> None
@@ -119,7 +108,7 @@ and parse_int_lit : Raw.t t = function
   | _ -> None
 
 and parse_unit_term : Raw.t t = function
-  | LParen :: RParen :: rest -> Some (Raw.UnitTm, rest)
+  | LParen :: RParen :: rest -> Some (Raw.Ident "Unit.unit", rest)
   | _ -> None
 
 and parse_pair : Raw.t t =
@@ -145,24 +134,6 @@ and parse_snd : Raw.t t =
    let* t = parse_atom in
    return (Raw.Proj2 t))
     input
-
-and parse_refl : Raw.t t =
- fun input ->
-  (let* () = token Refl in
-   let* t = parse_atom in
-   return (Raw.Refl t))
-    input
-
-and parse_absurd : Raw.t t =
- fun input ->
-  (let* () = token Absurd in
-   let* e = parse_atom in
-   return (Raw.Absurd e))
-    input
-
-and parse_empty : Raw.t t = function
-  | Empty :: rest -> Some (Raw.Empty, rest)
-  | _ -> None
 
 and parse_sorry : Raw.t t = function
   | Sorry :: rest -> Some (Raw.Sorry, rest)
@@ -321,16 +292,48 @@ and parse_preterm : Raw.t t =
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
+and parse_constructor : Raw.ctor t =
+ fun input ->
+  (let* () = token Pipe in
+   let* name = parse_ident in
+   let* params = many parse_paren_binder_group in
+   let params = List.flatten params in
+   let* ty_opt =
+     optional
+       (let* () = token Colon in
+        parse_preterm)
+   in
+   return (name, params, ty_opt))
+    input
+
+and parse_inductive : Raw.item t =
+ fun input ->
+  (let* () = token Inductive in
+   let* name = parse_ident in
+   let* params = many parse_typed_binder_group in
+   let* ty_opt =
+     optional
+       (let* () = token Colon in
+        parse_preterm)
+   in
+   let* () = token Where in
+   let* ctors = many parse_constructor in
+   return (Raw.Inductive (name, params, ty_opt, ctors)))
+    input
+
 let rec parse_item : Raw.item t =
  fun input ->
-  ((let* () = token Def in
-    let* name = parse_ident in
-    let* body = parse_def_body in
-    return (Raw.Def (name, body)))
-  <|>
-  let* () = token Example in
-  let* body = parse_def_body in
-  return (Raw.Example body))
+  choice
+    [
+      parse_inductive;
+      (let* () = token Def in
+       let* name = parse_ident in
+       let* body = parse_def_body in
+       return (Raw.Def (name, body)));
+      (let* () = token Example in
+       let* body = parse_def_body in
+       return (Raw.Example body));
+    ]
     input
 
 and parse_def_body : Raw.t t =

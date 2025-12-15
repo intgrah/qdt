@@ -11,18 +11,17 @@ type token =
   | Plus
   | Minus
   | Equal
+  | Pipe
   | Def
   | Let
   | Fun
   | Fst
   | Snd
-  | Refl
-  | Absurd
   | Sorry
   | Example
+  | Inductive
+  | Where
   | Type
-  | Unit
-  | Empty
   | Int
   | Underscore
   | Ident of string
