@@ -93,7 +93,7 @@ end
 
 module Test_elab = struct
   let check_identity () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x") in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
@@ -103,21 +103,21 @@ module Test_elab = struct
     | _ -> Alcotest.fail "check failed"
 
   let pi_type () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Pi (([ Some "x" ], Raw.U), Raw.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Arrow (Raw.U, Raw.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Ident "x" in
     Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
@@ -126,14 +126,14 @@ module Test_elab = struct
         ())
 
   let int_type () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Int in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" TyInt ty
 
   let int_lit_infer () =
-    let genv = GlobalEnv.create () in
+    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.IntLit 42 in
     let tm, ty = infer_tm genv ctx raw in
@@ -165,7 +165,7 @@ module Programs = struct
     in
     let result = elab_program prog in
     match result with
-    | [ ("id", TmLam (_, _, TmVar (Idx 0)), ty) ] -> (
+    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), ty) ] -> (
         match ty with
         | TyPi (None, TyU, TyU) -> ()
         | _ -> Alcotest.fail "wrong type")

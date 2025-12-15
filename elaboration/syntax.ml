@@ -60,7 +60,7 @@ type ty =
 
 and tm =
   | TmVar of Idx.t
-  | TmConst of string (* global constant *)
+  | TmConst of string list (* global constant, namespaced *)
   | TmLam of string option * ty * tm
   | TmApp of tm * tm
   | TmPiHat of string option * tm * tm
@@ -99,7 +99,7 @@ and neutral = head * spine
 
 and head =
   | HVar of Lvl.t (* de Bruijn level *)
-  | HConst of string
+  | HConst of string list (* global constant, namespaced *)
   | HSorry of int * vl_ty
 
 and spine = elim list

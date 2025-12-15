@@ -1,5 +1,4 @@
 (library
  (name elaboration)
- (libraries incremental)
  (instrumentation
   (backend bisect_ppx)))
