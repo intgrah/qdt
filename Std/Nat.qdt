@@ -1,4 +1,5 @@
 import Std.Eq
+import Std.Empty
 
 inductive Nat where
   | zero
@@ -32,4 +33,65 @@ def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
 def Nat.factorial : Nat -> Nat :=
   Nat.rec (fun _ => Nat) (Nat.succ Nat.zero) (fun k ih => Nat.mul (Nat.succ k) ih)
 
-example : Eq Nat (Nat.factorial Nat.three) Nat.six := Eq.refl Nat Nat.six
+example : Nat.factorial Nat.three = Nat.six := Eq.refl Nat Nat.six
+
+def Nat.zero_add (n : Nat) : Nat.add Nat.zero n = n :=
+  Nat.rec (fun k => Nat.add Nat.zero k = k)
+    (Eq.refl Nat Nat.zero)
+    (fun k ih => congr_arg Nat Nat Nat.succ (Nat.add Nat.zero k) k ih)
+    n
+
+def Nat.succ_add (m n : Nat) : Nat.add (Nat.succ m) n = Nat.succ (Nat.add m n) :=
+  Nat.rec (fun k => Nat.add (Nat.succ m) k = Nat.succ (Nat.add m k))
+    (Eq.refl Nat (Nat.succ m))
+    (fun k ih => congr_arg Nat Nat Nat.succ (Nat.add (Nat.succ m) k) (Nat.succ (Nat.add m k)) ih)
+    n
+
+def Nat.add_comm (m n : Nat) : Nat.add m n = Nat.add n m :=
+  Nat.rec (fun k => Nat.add m k = Nat.add k m)
+    (Eq.symm Nat (Nat.add Nat.zero m) m (Nat.zero_add m))
+    (fun k ih =>
+      Eq.trans Nat
+        (Nat.succ (Nat.add m k))
+        (Nat.succ (Nat.add k m))
+        (Nat.add (Nat.succ k) m)
+        (congr_arg Nat Nat Nat.succ (Nat.add m k) (Nat.add k m) ih)
+        (Eq.symm Nat (Nat.add (Nat.succ k) m) (Nat.succ (Nat.add k m)) (Nat.succ_add k m)))
+    n
+
+def Nat.add_assoc (a b c : Nat) : Nat.add (Nat.add a b) c = Nat.add a (Nat.add b c) :=
+  Nat.rec (fun k => Nat.add (Nat.add a b) k = Nat.add a (Nat.add b k))
+    (Eq.refl Nat (Nat.add a b))
+    (fun k ih => congr_arg Nat Nat Nat.succ (Nat.add (Nat.add a b) k) (Nat.add a (Nat.add b k)) ih)
+    c
+
+def Nat.pred (n : Nat) : Nat :=
+  Nat.rec (fun _ => Nat) Nat.zero (fun k _ => k) n
+
+def Nat.succ_inj (m n : Nat) (h : Nat.succ m = Nat.succ n) : m = n :=
+  congr_arg Nat Nat Nat.pred (Nat.succ m) (Nat.succ n) h
+
+def Nat.le_succ (n : Nat) : Nat.le n (Nat.succ n) :=
+  Nat.le.step n n (Nat.le.refl n)
+
+def Nat.le_trans (a b c : Nat) (hab : Nat.le a b) (hbc : Nat.le b c) : Nat.le a c :=
+  Nat.le.rec b
+    (fun k _ => Nat.le a k)
+    hab
+    (fun m _ ih => Nat.le.step a m ih)
+    c hbc
+
+-- These require case analysis that computes types, needs Type : Type
+def Nat.le_of_succ_le_succ (m n : Nat) (h : Nat.le (Nat.succ m) (Nat.succ n)) : Nat.le m n := sorry
+def Nat.not_succ_le_self (n : Nat) (h : Nat.le (Nat.succ n) n) : Empty := sorry
+
+def Nat.le_antisymm (m n : Nat) (hmn : Nat.le m n) (hnm : Nat.le n m) : m = n :=
+  Nat.le.rec m
+    (fun k _ => Nat.le k m -> m = k)
+    (fun _ => Eq.refl Nat m)
+    (fun k _ ih hskm =>
+      let hkm : Nat.le k m := Nat.le_trans k (Nat.succ k) m (Nat.le_succ k) hskm;
+      let meqk : m = k := ih hkm;
+      let hskk : Nat.le (Nat.succ k) k := Eq.subst Nat (fun x => Nat.le (Nat.succ k) x) m k meqk hskm;
+      Empty.elim (m = Nat.succ k) (Nat.not_succ_le_self k hskk))
+    n hmn hnm
