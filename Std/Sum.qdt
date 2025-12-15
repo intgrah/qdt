@@ -7,10 +7,9 @@ inductive Sum (A B : Type) where
 def Sum.elim (A B C : Type) (f : A -> C) (g : B -> C) (s : Sum A B) : C :=
   Sum.rec A B (fun _ => C) (fun a => f a) (fun b => g b) s
 
-def Sum.eta (A B : Type) (s : Sum A B) : 
-  Eq (Sum A B) (Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) s) s :=
+def Sum.eta (A B : Type) (s : Sum A B) : Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) s = s :=
   Sum.rec A B 
-    (fun x => Eq (Sum A B) (Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) x) x)
+    (fun x => Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) x = x)
     (fun a => Eq.refl (Sum A B) (Sum.inl A B a))
     (fun b => Eq.refl (Sum A B) (Sum.inr A B b))
     s

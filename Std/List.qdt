@@ -1,4 +1,5 @@
 import Std.Nat
+import Std.Eq
 
 inductive List (A : Type) where
   | nil
@@ -28,3 +29,17 @@ def List.flatMap (A B : Type) (f : A -> List B) (xs : List A) : List B :=
 
 def List.length (A : Type) (xs : List A) : Nat :=
   List.rec A (fun _ => Nat) Nat.zero (fun _ _ ih => Nat.succ ih) xs
+
+def List.length_append (A : Type) (xs ys : List A)
+    : List.length A (List.append A xs ys) = Nat.add (List.length A xs) (List.length A ys) :=
+  List.rec A
+    (fun zs => List.length A (List.append A zs ys) = Nat.add (List.length A zs) (List.length A ys))
+    (Eq.symm Nat (Nat.add Nat.zero (List.length A ys)) (List.length A ys) (Nat.zero_add (List.length A ys)))
+    (fun h t ih =>
+      Eq.trans Nat
+        (Nat.succ (List.length A (List.append A t ys)))
+        (Nat.succ (Nat.add (List.length A t) (List.length A ys)))
+        (Nat.add (Nat.succ (List.length A t)) (List.length A ys))
+        (congr_arg Nat Nat Nat.succ (List.length A (List.append A t ys)) (Nat.add (List.length A t) (List.length A ys)) ih)
+        (Eq.symm Nat (Nat.add (Nat.succ (List.length A t)) (List.length A ys)) (Nat.succ (Nat.add (List.length A t) (List.length A ys))) (Nat.succ_add (List.length A t) (List.length A ys))))
+    xs
