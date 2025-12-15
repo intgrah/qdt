@@ -1,6 +1,6 @@
 inductive Option (A : Type) where
   | none
-  | some (a : A) : Option A
+  | some (a : A)
 
 def Option.map (A B : Type) (f : A -> B) (o : Option A) : Option B :=
   Option.rec A (fun _ => Option B) (Option.none B) (fun a => Option.some B (f a)) o

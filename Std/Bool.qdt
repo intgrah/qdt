@@ -16,4 +16,3 @@ def Bool.and (a b : Bool) :=
 
 def Bool.or (a b : Bool) :=
   Bool.rec (fun _ => Bool) b Bool.true a
-
