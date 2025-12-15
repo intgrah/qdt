@@ -1,5 +1,9 @@
 import Std.Nat
+import Std.List
 
 inductive Vector (A : Type) : Nat -> Type where
   | nil : Vector A Nat.zero
   | cons (n : Nat) (head : A) (tail : Vector A n) : Vector A (Nat.succ n)
+
+def Vector.toList (A : Type) (n : Nat) (v : Vector A n) : List A :=
+  Vector.rec A (fun _ _ => List A) (List.nil A) (fun m h _ ih => List.cons A h ih) n v
