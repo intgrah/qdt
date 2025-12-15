@@ -1,11 +1,12 @@
 import Std.Init
 import Std.Eq
+import Std.Sigma
 
 structure Iso (A B : Type) where
   (hom : A -> B)
   (inv : B -> A)
-  (hom_inv_id : Eq (A -> A) (compose A B A inv hom) (id A))
-  (inv_hom_id : Eq (B -> B) (compose B A B hom inv) (id B))
+  (hom_inv_id : compose A B A inv hom = id A)
+  (inv_hom_id : compose B A B hom inv = id B)
 
 def Iso.refl (A : Type) : Iso A A :=
   Iso.mk A A (id A) (id A) (Eq.refl (A -> A) (id A)) (Eq.refl (A -> A) (id A))
@@ -16,3 +17,56 @@ def Iso.symm (A B : Type) (iso : Iso A B) : Iso B A :=
     (Iso.hom A B iso)
     (Iso.inv_hom_id A B iso)
     (Iso.hom_inv_id A B iso)
+
+def Eq.ext (A : Type) (x y : A) (p q : x = y) : p = q := sorry
+
+-- ========== Iso Int Even ==========
+
+def EvenPred (n : Int) := fun (k : Int) => n = (k + k)
+def EvenInner (n : Int) := Sigma Int (EvenPred n)
+def Even := Sigma Int EvenInner
+
+def mkInner (n k : Int) (p : n = (k + k)) : EvenInner n := Sigma.mk Int (EvenPred n) k p
+
+def int_to_even (k : Int) : Even :=
+  Sigma.mk Int EvenInner (k + k) (mkInner (k + k) k (Eq.refl Int (k + k)))
+
+def even_to_int (e : Even) : Int :=
+  Sigma.fst Int (EvenPred (Sigma.fst Int EvenInner e)) (Sigma.snd Int EvenInner e)
+
+def left_inv : compose Int Even Int even_to_int int_to_even = id Int :=
+  Eq.refl (Int -> Int) (id Int)
+
+def right_inv_pointwise (e : Even) : int_to_even (even_to_int e) = e :=
+  let n := Sigma.fst Int EvenInner e;
+  let inner := Sigma.snd Int EvenInner e;
+  let k := Sigma.fst Int (EvenPred n) inner;
+  let k2 := k + k;
+  let hnk := Sigma.snd Int (EvenPred n) inner;
+  let hkn := Eq.symm Int n k2 hnk;
+  let mkEven := fun (y : Int) (p : k2 = y) => Sigma.mk Int EvenInner y (mkInner y k (Eq.symm Int k2 y p));
+  let step1 : int_to_even k = mkEven n hkn :=
+    Eq.rec Int k2
+      (fun (y : Int) (p : k2 = y) => int_to_even k = mkEven y p)
+      (Eq.symm Even
+        (mkEven k2 (Eq.refl Int k2))
+        (Sigma.mk Int EvenInner k2 (mkInner k2 k (Eq.refl Int k2)))
+        (congr_arg (k2 = k2) Even
+          (fun (p : k2 = k2) => Sigma.mk Int EvenInner k2 (mkInner k2 k p))
+          (Eq.symm Int k2 k2 (Eq.refl Int k2))
+          (Eq.refl Int k2)
+          (Eq.ext Int k2 k2 (Eq.symm Int k2 k2 (Eq.refl Int k2)) (Eq.refl Int k2))))
+      n hkn;
+  let step2 : mkEven n hkn = e :=
+    congr_arg (n = k2) Even
+      (fun (p : n = k2) => Sigma.mk Int EvenInner n (mkInner n k p))
+      (Eq.symm Int k2 n hkn)
+      hnk
+      (Eq.ext Int n k2 (Eq.symm Int k2 n hkn) hnk);
+  Eq.trans Even (int_to_even k) (mkEven n hkn) e step1 step2
+
+def right_inv : compose Even Int Even int_to_even even_to_int = id Even :=
+  funext Even Even (compose Even Int Even int_to_even even_to_int) (id Even) right_inv_pointwise
+
+def iso_int_even : Iso Int Even :=
+  Iso.mk Int Even int_to_even even_to_int left_inv right_inv
