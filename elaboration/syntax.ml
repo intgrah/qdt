@@ -9,17 +9,12 @@ module Raw = struct
     | Arrow of t * t (* A → B *)
     | Let of string * t option * t * t (* let x : A := a; b *)
     | U (* Type *)
-    | Unit (* Unit *)
-    | UnitTm (* () *)
-    | Empty (* Empty *)
-    | Absurd of t (* absurd a *)
-    | Eq of t * t (* a = b *)
-    | Refl of t (* refl a *)
     | Sigma of binder_group * t (* (x y : A) × B *)
     | Prod of t * t (* A × B *)
     | Pair of t * t (* (a, b) *)
     | Proj1 of t (* fst e *)
     | Proj2 of t (* fst e *)
+    | Eq of t * t (* a = b, desugars to Eq _ a b *)
     | Int (* Int *)
     | IntLit of int (* 0 *)
     | Add of t * t (* a + b *)
@@ -30,9 +25,15 @@ module Raw = struct
   and binder = string option * t option
   and binder_group = string option list * t
 
+  (* Constructor: name * params * return_type_opt *)
+  type ctor = string * binder list * t option
+
   type item =
     | Def of string * t
     | Example of t
+    (* Inductive: name * params * result_type_opt * constructors *)
+    (* params are binder groups like (A B : Type) (n : Nat) *)
+    | Inductive of string * binder_group list * t option * ctor list
 
   type program = item list
 end
@@ -55,10 +56,7 @@ type ty =
   | TyU
   | TyPi of string option * ty * ty
   | TySigma of string option * ty * ty
-  | TyUnit
-  | TyEmpty
   | TyInt
-  | TyEq of tm * tm * ty
   | TyEl of tm
 
 and tm =
@@ -71,14 +69,8 @@ and tm =
   | TmMkSigma of ty * ty * tm * tm
   | TmProj1 of tm
   | TmProj2 of tm
-  | TmUnit
-  | TmAbsurd of ty * tm
   | TmIntLit of int
-  | TmUnitHat
-  | TmEmptyHat
   | TmIntHat
-  | TmEqHat of tm * tm * ty
-  | TmRefl of ty * tm
   | TmAdd of tm * tm
   | TmSub of tm * tm
   | TmSorry of int * ty
@@ -89,10 +81,7 @@ type vl_ty =
   | VTyU
   | VTyPi of string option * vl_ty * clos_ty
   | VTySigma of string option * vl_ty * clos_ty
-  | VTyUnit
-  | VTyEmpty
   | VTyInt
-  | VTyEq of vl_tm * vl_tm * vl_ty
   | VTyEl of neutral
 
 (* Weak head normal form *)
@@ -102,13 +91,8 @@ and vl_tm =
   | VTmPiHat of string option * vl_tm * clos_tm
   | VTmSigmaHat of string option * vl_tm * clos_tm
   | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
-  | VTmUnit
   | VTmIntLit of int
-  | VTmUnitHat
-  | VTmEmptyHat
   | VTmIntHat
-  | VTmEqHat of vl_tm * vl_tm * vl_ty
-  | VTmRefl of vl_ty * vl_tm
   | VTmAdd of vl_tm * vl_tm
   | VTmSub of vl_tm * vl_tm
 
@@ -125,7 +109,6 @@ and elim =
   | EApp of vl_tm
   | EProj1
   | EProj2
-  | EAbsurd of vl_ty
 
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm

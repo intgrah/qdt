@@ -1,4 +1,4 @@
-module Inc = Incremental.Make ()
+(* Simplified non-incremental implementation *)
 
 type stage_error =
   | Lex_error of string
@@ -16,20 +16,22 @@ type snapshot = {
   elaborated : elaborated_result;
 }
 
-type t = {
-  source : string Inc.Var.t;
-  tokens_obs : tokens_result Inc.Observer.t;
-  program_obs : program_result Inc.Observer.t;
-  elaborated_obs : elaborated_result Inc.Observer.t;
-}
-
-module Update : sig
-  type 'a t = 'a Inc.Observer.Update.t =
+module Update = struct
+  type 'a t =
     | Initialized of 'a
     | Changed of 'a * 'a
     | Invalidated
-end =
-  Inc.Observer.Update
+end
+
+type t = {
+  mutable source : string;
+  mutable tokens_callback : tokens_result Update.t -> unit;
+  mutable program_callback : program_result Update.t -> unit;
+  mutable elaborated_callback : elaborated_result Update.t -> unit;
+  mutable last_tokens : tokens_result option;
+  mutable last_program : program_result option;
+  mutable last_elaborated : elaborated_result option;
+}
 
 let pp_stage_error fmt = function
   | Lex_error msg -> Format.fprintf fmt "Lexing error: %s" msg
@@ -86,32 +88,71 @@ let try_elaborate = function
       | exception exn -> Error (Elab_error (Printexc.to_string exn)))
 
 let create () =
-  let source = Inc.Var.create "" in
-  let chars =
-    Inc.map (Inc.Var.watch source) ~f:(fun text ->
-        List.of_seq (String.to_seq text))
-  in
-  let tokens = Inc.map chars ~f:try_lex in
-  Inc.set_cutoff tokens (Inc.Cutoff.of_equal ( = ));
-  let program = Inc.map tokens ~f:try_parse in
-  Inc.set_cutoff program (Inc.Cutoff.of_equal ( = ));
-  let elaborated = Inc.map program ~f:try_elaborate in
-  Inc.set_cutoff elaborated (Inc.Cutoff.of_equal ( = ));
-  let tokens_obs = Inc.observe tokens in
-  let program_obs = Inc.observe program in
-  let elaborated_obs = Inc.observe elaborated in
-  { source; tokens_obs; program_obs; elaborated_obs }
-
-let set_source t text = Inc.Var.set t.source text
-let stabilize () = Inc.stabilize ()
-
-let snapshot t =
   {
-    tokens = Inc.Observer.value_exn t.tokens_obs;
-    program = Inc.Observer.value_exn t.program_obs;
-    elaborated = Inc.Observer.value_exn t.elaborated_obs;
+    source = "";
+    tokens_callback = (fun _ -> ());
+    program_callback = (fun _ -> ());
+    elaborated_callback = (fun _ -> ());
+    last_tokens = None;
+    last_program = None;
+    last_elaborated = None;
   }
 
-let on_tokens_update t ~f = Inc.Observer.on_update_exn t.tokens_obs ~f
-let on_program_update t ~f = Inc.Observer.on_update_exn t.program_obs ~f
-let on_elaborated_update t ~f = Inc.Observer.on_update_exn t.elaborated_obs ~f
+let set_source t text = t.source <- text
+
+let stabilize_t t =
+  let chars = List.of_seq (String.to_seq t.source) in
+  let tokens = try_lex chars in
+  let program = try_parse tokens in
+  let elaborated = try_elaborate program in
+
+  let make_update last new_val =
+    match last with
+    | None -> Update.Initialized new_val
+    | Some old -> Update.Changed (old, new_val)
+  in
+
+  t.tokens_callback (make_update t.last_tokens tokens);
+  t.program_callback (make_update t.last_program program);
+  t.elaborated_callback (make_update t.last_elaborated elaborated);
+
+  t.last_tokens <- Some tokens;
+  t.last_program <- Some program;
+  t.last_elaborated <- Some elaborated
+
+let current_pipeline : t option ref = ref None
+
+let stabilize () =
+  match !current_pipeline with
+  | Some t -> stabilize_t t
+  | None -> ()
+
+let snapshot t =
+  let tokens =
+    match t.last_tokens with
+    | Some r -> r
+    | None -> Error (Lex_error "not initialized")
+  in
+  let program =
+    match t.last_program with
+    | Some r -> r
+    | None -> Error (Parse_error "not initialized")
+  in
+  let elaborated =
+    match t.last_elaborated with
+    | Some r -> r
+    | None -> Error (Elab_error "not initialized")
+  in
+  { tokens; program; elaborated }
+
+let on_tokens_update t ~f =
+  t.tokens_callback <- f;
+  current_pipeline := Some t
+
+let on_program_update t ~f =
+  t.program_callback <- f;
+  current_pipeline := Some t
+
+let on_elaborated_update t ~f =
+  t.elaborated_callback <- f;
+  current_pipeline := Some t

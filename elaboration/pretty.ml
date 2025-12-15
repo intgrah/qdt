@@ -33,13 +33,8 @@ and pp_raw (fmt : Format.formatter) : Raw.t -> unit = function
       Format.fprintf fmt "@[<v 0>@[<hov 2>(let %s : %a :=@ %a in@]@ %a)@]" name
         pp_raw ty pp_raw rhs pp_raw body
   | U -> Format.fprintf fmt "Type"
-  | Unit -> Format.fprintf fmt "Unit"
-  | Empty -> Format.fprintf fmt "Empty"
-  | UnitTm -> Format.fprintf fmt "()"
-  | Absurd e -> Format.fprintf fmt "@[<hov 2>(absurd %a)@]" pp_raw e
-  | Pair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp_raw a pp_raw b
   | Eq (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ = %a@]" pp_raw a pp_raw b
-  | Refl t -> Format.fprintf fmt "@[<hov 2>(refl %a)@]" pp_raw t
+  | Pair (a, b) -> Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" pp_raw a pp_raw b
   | Sigma (group, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_binder_group group pp_raw b
   | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
@@ -52,10 +47,57 @@ and pp_raw (fmt : Format.formatter) : Raw.t -> unit = function
   | Ann (e, ty) -> Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
   | Sorry -> Format.fprintf fmt "sorry"
 
+let pp_ctor (fmt : Format.formatter)
+    ((ctor_name, ctor_params, ctor_ty) : Raw.ctor) : unit =
+  match (ctor_params, ctor_ty) with
+  | [], None -> Format.fprintf fmt "| %s" ctor_name
+  | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor_name pp_raw ty
+  | params, None ->
+      Format.fprintf fmt "| %s %a" ctor_name
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
+        params
+  | params, Some ty ->
+      Format.fprintf fmt "| %s %a : %a" ctor_name
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
+        params pp_raw ty
+
+let pp_binder_group (fmt : Format.formatter) ((names, ty) : Raw.binder_group) :
+    unit =
+  let pp_name fmt = function
+    | Some n -> Format.fprintf fmt "%s" n
+    | None -> Format.fprintf fmt "_"
+  in
+  Format.fprintf fmt "(%a : %a)"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
+    names pp_raw ty
+
+let pp_inductive (fmt : Format.formatter)
+    ((ind_name, ind_params, ind_ty, ind_ctors) :
+      string * Raw.binder_group list * Raw.t option * Raw.ctor list) : unit =
+  let pp_params fmt params =
+    if params <> [] then
+      Format.fprintf fmt " %a"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
+        params
+  in
+  match ind_ty with
+  | None ->
+      Format.fprintf fmt "@[<v 0>inductive %s%a where@,%a@]" ind_name pp_params
+        ind_params
+        (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
+        ind_ctors
+  | Some ty ->
+      Format.fprintf fmt "@[<v 0>inductive %s%a : %a where@,%a@]" ind_name
+        pp_params ind_params pp_raw ty
+        (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
+        ind_ctors
+
 let pp_raw_item (fmt : Format.formatter) : Raw.item -> unit = function
   | Def (name, body) ->
       Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
   | Example body -> Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body
+  | Inductive (name, params, ty, ctors) ->
+      pp_inductive fmt (name, params, ty, ctors)
 
 let pp_raw_program (fmt : Format.formatter) (prog : Raw.program) : unit =
   Format.pp_print_list
@@ -91,12 +133,7 @@ let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
-  | TyUnit -> Format.fprintf fmt "Unit"
-  | TyEmpty -> Format.fprintf fmt "Empty"
   | TyInt -> Format.fprintf fmt "Int"
-  | TyEq (e1, e2, _a) ->
-      Format.fprintf fmt "@[<hov 2>%a@ = %a@]" (pp_tm_ctx names) e1
-        (pp_tm_ctx names) e2
   | TyEl t -> Format.fprintf fmt "@[<hov 2>%a@]" (pp_tm_ctx names) t
 
 and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
@@ -111,10 +148,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   | TmApp ((TmLam _ as f), a) ->
       Format.fprintf fmt "@[<hov 2>(%a)@ (%a)@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
-  | TmApp
-      ( f,
-        ((TmVar _ | TmConst _ | TmUnit | TmIntHat | TmUnitHat | TmEmptyHat) as a)
-      ) ->
+  | TmApp (f, ((TmVar _ | TmConst _ | TmIntHat) as a)) ->
       Format.fprintf fmt "@[<hov 2>%a@ %a@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
   | TmApp (f, a) ->
@@ -141,18 +175,8 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         (pp_tm_ctx names) u
   | TmProj1 t -> Format.fprintf fmt "@[<hov 2>fst (%a)@]" (pp_tm_ctx names) t
   | TmProj2 t -> Format.fprintf fmt "@[<hov 2>snd (%a)@]" (pp_tm_ctx names) t
-  | TmUnit -> Format.fprintf fmt "()"
-  | TmAbsurd (_c, e) ->
-      Format.fprintf fmt "@[<hov 2>(absurd %a)@]" (pp_tm_ctx names) e
   | TmIntLit n -> Format.fprintf fmt "%d" n
-  | TmUnitHat -> Format.fprintf fmt "Unit"
-  | TmEmptyHat -> Format.fprintf fmt "Empty"
   | TmIntHat -> Format.fprintf fmt "Int"
-  | TmEqHat (t, u, _) ->
-      Format.fprintf fmt "@[<hov 2>%a@ = %a@]" (pp_tm_ctx names) t
-        (pp_tm_ctx names) u
-  | TmRefl (_a, e) ->
-      Format.fprintf fmt "@[<hov 2>(refl %a)@]" (pp_tm_ctx names) e
   | TmAdd (a, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ + %a@]" (pp_tm_ctx names) a
         (pp_tm_ctx names) b
