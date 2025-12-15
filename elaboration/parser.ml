@@ -64,18 +64,18 @@ let parse_binder_name : string option t = function
   | Ident name :: rest -> Some (Some name, rest)
   | _ -> None
 
-let parse_ann_or_parens (p : raw t) : raw t =
+let parse_ann_or_parens (p : Raw.t t) : Raw.t t =
   let* () = token LParen in
   let* e = p in
   (let* () = token Colon in
    let* ty = p in
    let* () = token RParen in
-   return (RAnn (e, ty)))
+   return (Raw.Ann (e, ty)))
   <|>
   let* () = token RParen in
   return e
 
-let rec parse_atom : raw t =
+let rec parse_atom : Raw.t t =
  fun input ->
   choice
     [
@@ -96,79 +96,79 @@ let rec parse_atom : raw t =
     ]
     input
 
-and parse_var : raw t =
+and parse_var : Raw.t t =
  fun input ->
   (let* name = parse_ident in
-   return (RIdent name))
+   return (Raw.Ident name))
     input
 
-and parse_type : raw t = function
-  | Type :: rest -> Some (RU, rest)
+and parse_type : Raw.t t = function
+  | Type :: rest -> Some (Raw.U, rest)
   | _ -> None
 
-and parse_unit : raw t = function
-  | Unit :: rest -> Some (RUnit, rest)
+and parse_unit : Raw.t t = function
+  | Unit :: rest -> Some (Raw.Unit, rest)
   | _ -> None
 
-and parse_int : raw t = function
-  | Int :: rest -> Some (RInt, rest)
+and parse_int : Raw.t t = function
+  | Int :: rest -> Some (Raw.Int, rest)
   | _ -> None
 
-and parse_int_lit : raw t = function
-  | IntLit n :: rest -> Some (RIntLit n, rest)
+and parse_int_lit : Raw.t t = function
+  | IntLit n :: rest -> Some (Raw.IntLit n, rest)
   | _ -> None
 
-and parse_unit_term : raw t = function
-  | LParen :: RParen :: rest -> Some (RUnitTm, rest)
+and parse_unit_term : Raw.t t = function
+  | LParen :: RParen :: rest -> Some (Raw.UnitTm, rest)
   | _ -> None
 
-and parse_pair : raw t =
+and parse_pair : Raw.t t =
  fun input ->
   (let* () = token LParen in
    let* a = parse_preterm in
    let* () = token Comma in
    let* b = parse_preterm in
    let* () = token RParen in
-   return (RPair (a, b)))
+   return (Raw.Pair (a, b)))
     input
 
-and parse_fst : raw t =
+and parse_fst : Raw.t t =
  fun input ->
   (let* () = token Fst in
    let* t = parse_atom in
-   return (RProj1 t))
+   return (Raw.Proj1 t))
     input
 
-and parse_snd : raw t =
+and parse_snd : Raw.t t =
  fun input ->
   (let* () = token Snd in
    let* t = parse_atom in
-   return (RProj2 t))
+   return (Raw.Proj2 t))
     input
 
-and parse_refl : raw t =
+and parse_refl : Raw.t t =
  fun input ->
   (let* () = token Refl in
    let* t = parse_atom in
-   return (RRefl t))
+   return (Raw.Refl t))
     input
 
-and parse_absurd : raw t =
+and parse_absurd : Raw.t t =
  fun input ->
   (let* () = token Absurd in
    let* e = parse_atom in
-   return (RAbsurd e))
+   return (Raw.Absurd e))
     input
 
-and parse_empty : raw t = function
-  | Empty :: rest -> Some (REmpty, rest)
+and parse_empty : Raw.t t = function
+  | Empty :: rest -> Some (Raw.Empty, rest)
   | _ -> None
 
-and parse_sorry : raw t = function
-  | Sorry :: rest -> Some (RSorry, rest)
+and parse_sorry : Raw.t t = function
+  | Sorry :: rest -> Some (Raw.Sorry, rest)
   | _ -> None
 
-and parse_typed_binder_group : (string option list * raw) t =
+and parse_typed_binder_group : Raw.binder_group t =
  fun input ->
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
@@ -178,7 +178,7 @@ and parse_typed_binder_group : (string option list * raw) t =
    return (names, ty))
     input
 
-and parse_paren_binder_group : (string option * raw option) list t =
+and parse_paren_binder_group : Raw.binder list t =
  fun input ->
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
@@ -191,7 +191,7 @@ and parse_paren_binder_group : (string option * raw option) list t =
    return (List.map (fun n -> (n, ty_opt)) names))
     input
 
-and parse_lambda : raw t =
+and parse_lambda : Raw.t t =
  fun input ->
   (let* () = token Fun in
    let* paren_groups = many parse_paren_binder_group in
@@ -211,10 +211,10 @@ and parse_lambda : raw t =
    in
    let* () = token Eq_gt in
    let* body = parse_preterm in
-   return (RLam (all_binders, body)))
+   return (Raw.Lam (all_binders, body)))
     input
 
-and parse_let : raw t =
+and parse_let : Raw.t t =
  fun input ->
   (let* () = token Let in
    let* name = parse_ident in
@@ -227,26 +227,26 @@ and parse_let : raw t =
    let* e = parse_preterm in
    let* () = token Semicolon in
    let* body = parse_preterm in
-   return (RLet (name, ty_opt, e, body)))
+   return (Raw.Let (name, ty_opt, e, body)))
     input
 
-and parse_pi : raw t =
+and parse_pi : Raw.t t =
  fun input ->
   (let* group = parse_typed_binder_group in
    let* () = token Arrow in
    let* b = parse_preterm in
-   return (RPi (group, b)))
+   return (Raw.Pi (group, b)))
     input
 
-and parse_sigma : raw t =
+and parse_sigma : Raw.t t =
  fun input ->
   (let* group = parse_typed_binder_group in
    let* () = token Times in
    let* b = parse_preterm in
-   return (RSigma (group, b)))
+   return (Raw.Sigma (group, b)))
     input
 
-and parse_app : raw t =
+and parse_app : Raw.t t =
  fun input ->
   (let* head = parse_atom in
    let* args = many parse_atom in
@@ -256,10 +256,10 @@ and parse_app : raw t =
      | Some e -> args @ [ e ]
      | None -> args
    in
-   return (List.fold_left (fun f a -> RApp (f, a)) head all_args))
+   return (List.fold_left (fun f a -> Raw.App (f, a)) head all_args))
     input
 
-and parse_add_level : raw t =
+and parse_add_level : Raw.t t =
  fun input ->
   (let* first = parse_app in
    let* rest =
@@ -276,67 +276,67 @@ and parse_add_level : raw t =
      (List.fold_left
         (fun acc op ->
           match op with
-          | `Add b -> RAdd (acc, b)
-          | `Sub b -> RSub (acc, b))
+          | `Add b -> Raw.Add (acc, b)
+          | `Sub b -> Raw.Sub (acc, b))
         first rest))
     input
 
-and parse_eq_rhs : raw t =
+and parse_eq_rhs : Raw.t t =
  fun input -> choice [ parse_lambda; parse_let; parse_add_level ] input
 
-and parse_eq_level : raw t =
+and parse_eq_level : Raw.t t =
  fun input ->
   (let* a = parse_add_level in
    (let* () = token Equal in
     let* b = parse_eq_rhs in
-    return (REq (a, b)))
+    return (Raw.Eq (a, b)))
    <|> return a)
     input
 
-and parse_prod_level : raw t =
+and parse_prod_level : Raw.t t =
  fun input ->
   (parse_sigma
   <|>
   let* a = parse_eq_level in
   (let* () = token Times in
    let* b = parse_prod_level in
-   return (RProd (a, b)))
+   return (Raw.Prod (a, b)))
   <|> return a)
     input
 
-and parse_arrow_level : raw t =
+and parse_arrow_level : Raw.t t =
  fun input ->
   (parse_pi
   <|>
   let* a = parse_prod_level in
   (let* () = token Arrow in
    let* b = parse_arrow_level in
-   return (RArrow (a, b)))
+   return (Raw.Arrow (a, b)))
   <|> return a)
     input
 
-and parse_preterm : raw t =
+and parse_preterm : Raw.t t =
  fun input ->
   choice
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-let rec parse_item : raw_item t =
+let rec parse_item : Raw.item t =
  fun input ->
   ((let* () = token Def in
     let* name = parse_ident in
     let* body = parse_def_body in
-    return (RDef (name, body)))
+    return (Raw.Def (name, body)))
   <|>
   let* () = token Example in
   let* body = parse_def_body in
-  return (RExample body))
+  return (Raw.Example body))
     input
 
-and parse_def_body : raw t =
+and parse_def_body : Raw.t t =
  fun input ->
   (let* binder_groups = many parse_typed_binder_group in
-   let binders : binder list =
+   let binders : Raw.binder list =
      List.concat_map
        (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
        binder_groups
@@ -350,21 +350,21 @@ and parse_def_body : raw t =
    let* body = parse_preterm in
    let body_with_ann =
      match ret_ty_opt with
-     | Some ty -> RAnn (body, ty)
+     | Some ty -> Raw.Ann (body, ty)
      | None -> body
    in
    let full_body =
      if binders = [] then
        body_with_ann
      else
-       RLam (binders, body_with_ann)
+       Raw.Lam (binders, body_with_ann)
    in
    return full_body)
     input
 
-let parse_program : raw_program t = many parse_item
+let parse_program : Raw.program t = many parse_item
 
-let parse (input : token list) : raw_program =
+let parse (input : token list) : Raw.program =
   match parse_program input with
   | None ->
       let msg =
