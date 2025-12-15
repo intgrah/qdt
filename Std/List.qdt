@@ -1,3 +1,5 @@
+import Std.Nat
+
 inductive List (A : Type) where
   | nil
   | cons (head : A) (tail : List A)
@@ -23,3 +25,6 @@ def List.flatten (A : Type) (xss : List (List A)) : List A :=
 
 def List.flatMap (A B : Type) (f : A -> List B) (xs : List A) : List B :=
   List.flatten B (List.map A (List B) f xs)
+
+def List.length (A : Type) (xs : List A) : Nat :=
+  List.rec A (fun _ => Nat) Nat.zero (fun _ _ ih => Nat.succ ih) xs
