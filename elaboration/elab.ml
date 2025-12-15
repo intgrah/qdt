@@ -2,6 +2,22 @@ open Syntax
 
 exception Elab_error of string
 
+(* Global names are namespaced string lists, e.g. ["Nat"; "add"] for Nat.add *)
+module Name = struct
+  type t = string list
+
+  let compare = List.compare String.compare
+  let equal = List.equal String.equal
+  let hash = Hashtbl.hash
+  let to_string name = String.concat "." name
+  let pp fmt name = Format.fprintf fmt "%s" (to_string name)
+  let child parent name = parent @ [ name ]
+  let root name = [ name ]
+  let parse s = String.split_on_char '.' s
+end
+
+module NameMap = Map.Make (Name)
+
 let fresh_sorry_id =
   let counter = ref 0 in
   fun () ->
@@ -10,14 +26,14 @@ let fresh_sorry_id =
     id
 
 type rec_rule = {
-  rule_ctor_name : string;
+  rule_ctor_name : Name.t;
   rule_nfields : int;
   rule_rec_args : int list;
   rule_rec_indices : int list list;
 }
 
 type recursor_info = {
-  rec_ind_name : string;
+  rec_ind_name : Name.t;
   rec_num_params : int;
   rec_num_indices : int;
   rec_num_motives : int;
@@ -26,23 +42,23 @@ type recursor_info = {
 }
 
 (* Global environment reference for evaluation unfolding *)
-let current_genv : (string -> vl_tm option) ref = ref (fun _ -> None)
+let current_genv : (Name.t -> vl_tm option) ref = ref (fun _ -> None)
 
-let current_recursor_lookup : (string -> recursor_info option) ref =
+let current_recursor_lookup : (Name.t -> recursor_info option) ref =
   ref (fun _ -> None)
 
-let current_ctor_lookup : (string -> (string * int) option) ref =
+let current_ctor_lookup : (Name.t -> (Name.t * int) option) ref =
   ref (fun _ -> None)
 
 type structure_info = {
-  struct_ind_name : string;
-  struct_ctor_name : string;
+  struct_ind_name : Name.t;
+  struct_ctor_name : Name.t;
   struct_num_params : int;
   struct_num_fields : int;
-  struct_field_names : string list;
+  struct_field_names : string list; (* field names are local, not namespaced *)
 }
 
-let current_structure_lookup : (string -> structure_info option) ref =
+let current_structure_lookup : (Name.t -> structure_info option) ref =
   ref (fun _ -> None)
 
 (* ========== Evaluation ========== *)
@@ -179,9 +195,7 @@ and try_iota_reduce (h : head) (sp : spine) : vl_tm option =
                           in
                           let rec_head =
                             VTmNeutral
-                              ( HConst
-                                  (Format.sprintf "%s.rec" info.rec_ind_name),
-                                [] )
+                              (HConst (Name.child info.rec_ind_name "rec"), [])
                           in
                           let with_params =
                             List.fold_left do_app rec_head params
@@ -371,9 +385,7 @@ and try_eta_struct (l : int) (ctor_app : vl_tm) (other : vl_tm) : bool =
                   match (field_names, fields_left) with
                   | [], [] -> true
                   | fname :: fname_rest, field :: field_rest ->
-                      let proj_name =
-                        Format.sprintf "%s.%s" info.struct_ind_name fname
-                      in
+                      let proj_name = Name.child info.struct_ind_name fname in
                       let proj_result =
                         match !current_genv proj_name with
                         | Some proj_fn ->
@@ -396,7 +408,7 @@ and conv_neutral (l : int) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
 and conv_head (_l : int) (h1 : head) (h2 : head) : bool =
   match (h1, h2) with
   | HVar l1, HVar l2 -> l1 = l2
-  | HConst n1, HConst n2 -> String.equal n1 n2
+  | HConst n1, HConst n2 -> Name.equal n1 n2
   | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
   | _ -> false
 
@@ -413,7 +425,7 @@ and conv_spine (l : int) (sp1 : spine) (sp2 : spine) : bool =
 
 type inductive_info = {
   ind_ty : ty;
-  ctors : (string * ty) list;
+  ctors : (Name.t * ty) list;
 }
 
 module GlobalEnv = struct
@@ -430,67 +442,67 @@ module GlobalEnv = struct
       }
     | Constructor of {
         ty : vl_ty;
-        ind_name : string;
+        ind_name : Name.t;
         ctor_idx : int;
       }
 
-  type t = { defs : (string, entry) Hashtbl.t }
+  type t = entry NameMap.t
 
-  let create () : t = { defs = Hashtbl.create 32 }
-  let add env name ty tm = Hashtbl.add env.defs name (Def { ty; tm })
-  let add_opaque env name ty = Hashtbl.add env.defs name (Opaque { ty })
+  let empty : t = NameMap.empty
+  let add_def name ty tm = NameMap.add name (Def { ty; tm })
+  let add_opaque name ty = NameMap.add name (Opaque { ty })
 
-  let add_inductive env name ind_ty ctors =
-    Hashtbl.add env.defs name (Inductive { ind_ty; ctors })
+  let add_inductive name ind_ty ctors =
+    NameMap.add name (Inductive { ind_ty; ctors })
 
-  let add_recursor env name ty info =
-    Hashtbl.add env.defs name (Recursor { ty; info })
+  let add_recursor name ty info = NameMap.add name (Recursor { ty; info })
 
-  let add_constructor env name ty ind_name ctor_idx =
-    Hashtbl.add env.defs name (Constructor { ty; ind_name; ctor_idx })
+  let add_constructor name ty ind_name ctor_idx =
+    NameMap.add name (Constructor { ty; ind_name; ctor_idx })
 
-  let find_ty env name =
-    match Hashtbl.find_opt env.defs name with
-    | Some (Def { ty; _ }) -> Some ty
-    | Some (Opaque { ty }) -> Some ty
+  let find_ty name env =
+    match NameMap.find_opt name env with
+    | Some (Def { ty; _ })
+    | Some (Opaque { ty })
+    | Some (Recursor { ty; _ })
+    | Some (Constructor { ty; _ }) ->
+        Some ty
     | Some (Inductive { ind_ty; _ }) -> Some (eval_ty [] ind_ty)
-    | Some (Recursor { ty; _ }) -> Some ty
-    | Some (Constructor { ty; _ }) -> Some ty
     | None -> None
 
-  let find_tm env name =
-    match Hashtbl.find_opt env.defs name with
+  let find_tm name env =
+    match NameMap.find_opt name env with
     | Some (Def { tm; _ }) -> Some tm
     | _ -> None
 
-  let find_recursor env name =
-    match Hashtbl.find_opt env.defs name with
+  let find_recursor name env =
+    match NameMap.find_opt name env with
     | Some (Recursor { info; _ }) -> Some info
     | _ -> None
 
-  let find_constructor env name =
-    match Hashtbl.find_opt env.defs name with
+  let find_constructor name env =
+    match NameMap.find_opt name env with
     | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
     | _ -> None
 
-  let is_inductive env name =
-    match Hashtbl.find_opt env.defs name with
+  let is_inductive name env =
+    match NameMap.find_opt name env with
     | Some (Inductive _) -> true
     | _ -> false
 
-  let find_inductive env name =
-    match Hashtbl.find_opt env.defs name with
+  let find_inductive name env =
+    match NameMap.find_opt name env with
     | Some (Inductive info) -> Some info
     | _ -> None
 
-  let find_structure env ind_name =
-    match Hashtbl.find_opt env.defs (Format.sprintf "%s.rec" ind_name) with
+  let find_structure ind_name env =
+    match NameMap.find_opt (Name.child ind_name "rec") env with
     | Some (Recursor { info; _ }) ->
         if info.rec_num_indices = 0 && List.length info.rec_rules = 1 then
           let rule = List.hd info.rec_rules in
           if rule.rule_rec_args = [] then
             let field_names =
-              match Hashtbl.find_opt env.defs rule.rule_ctor_name with
+              match NameMap.find_opt rule.rule_ctor_name env with
               | Some (Constructor { ty; _ }) ->
                   let rec extract_field_names n ty =
                     if n = 0 then
@@ -640,7 +652,8 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty (Context.lvl ctx) a_ty in
       let eq_ty =
-        TyEl (TmApp (TmApp (TmApp (TmConst "Eq", a_ty_tm), a_tm), b_tm))
+        TyEl
+          (TmApp (TmApp (TmApp (TmConst (Name.root "Eq"), a_ty_tm), a_tm), b_tm))
       in
       eq_ty
   | t ->
@@ -659,8 +672,9 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       match Context.lookup_name ctx name with
       | Some (k, ty) -> (TmVar (Idx k), ty)
       | None -> (
-          match GlobalEnv.find_ty genv name with
-          | Some ty -> (TmConst name, ty)
+          let fqn = Name.parse name in
+          match GlobalEnv.find_ty fqn genv with
+          | Some ty -> (TmConst fqn, ty)
           | None ->
               raise (Elab_error (Format.sprintf "Unbound variable: %s" name))))
   | Raw.App (f, a) -> (
@@ -766,7 +780,8 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty (Context.lvl ctx) a_ty in
-      (TmApp (TmApp (TmApp (TmConst "Eq", a_ty_tm), a_tm), b_tm), VTyU)
+      ( TmApp (TmApp (TmApp (TmConst (Name.root "Eq"), a_ty_tm), a_tm), b_tm),
+        VTyU )
   | Raw.Let (name, ty_opt, rhs, body) ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -784,7 +799,9 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       (TmLet (name, quote_ty (Context.lvl ctx) rhs_ty, rhs', body'), result_ty)
   | Raw.Sorry ->
       let id = fresh_sorry_id () in
-      let hole_ty = VTyEl (HConst (Format.sprintf "?ty%d†" id), []) in
+      let hole_ty =
+        VTyEl (HConst (Name.root (Format.sprintf "?ty%d†" id)), [])
+      in
       (TmSorry (id, quote_ty (Context.lvl ctx) hole_ty), hole_ty)
 
 and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
@@ -856,7 +873,7 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
 
 (* ========== Positivity Checking ========== *)
 
-let rec has_ind_occ_ty (ind : string) : ty -> bool = function
+let rec has_ind_occ_ty (ind : Name.t) : ty -> bool = function
   | TyU
   | TyInt ->
       false
@@ -865,9 +882,9 @@ let rec has_ind_occ_ty (ind : string) : ty -> bool = function
       has_ind_occ_ty ind a || has_ind_occ_ty ind b
   | TyEl t -> has_ind_occ_tm ind t
 
-and has_ind_occ_tm (ind : string) : tm -> bool = function
+and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
   | TmVar _ -> false
-  | TmConst name -> String.equal name ind
+  | TmConst name -> Name.equal name ind
   | TmLam (_, a, body) -> has_ind_occ_ty ind a || has_ind_occ_tm ind body
   | TmApp (f, a) -> has_ind_occ_tm ind f || has_ind_occ_tm ind a
   | TmPiHat (_, a, b)
@@ -889,15 +906,15 @@ and has_ind_occ_tm (ind : string) : tm -> bool = function
   | TmLet (_, ty, t, body) ->
       has_ind_occ_ty ind ty || has_ind_occ_tm ind t || has_ind_occ_tm ind body
 
-let is_valid_ind_app (ind : string) : tm -> bool =
+let is_valid_ind_app (ind : Name.t) : tm -> bool =
   let rec go = function
-    | TmConst name -> String.equal name ind
+    | TmConst name -> Name.equal name ind
     | TmApp (f, _) -> go f
     | _ -> false
   in
   go
 
-let get_app_head : tm -> string option =
+let get_app_head : tm -> Name.t option =
   let rec go = function
     | TmConst name -> Some name
     | TmApp (f, _) -> go f
@@ -987,9 +1004,9 @@ and var_occurs_negatively_tm (var_idx : int) : tm -> bool = function
       || var_occurs_negatively_tm (var_idx + 1) body
 
 (* Check if inductive F is strictly positive in its first parameter *)
-let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : string) : bool
+let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
     =
-  match GlobalEnv.find_inductive genv f_name with
+  match GlobalEnv.find_inductive f_name genv with
   | None -> false
   | Some info ->
       let rec count_params = function
@@ -1018,7 +1035,7 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : string) : bool
         in
         List.for_all check_ctor_positive info.ctors
 
-let rec check_positivity_ty (genv : GlobalEnv.t) (ind : string) (ty : ty) : unit
+let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
     =
   if not (has_ind_occ_ty ind ty) then
     ()
@@ -1034,14 +1051,14 @@ let rec check_positivity_ty (genv : GlobalEnv.t) (ind : string) (ty : ty) : unit
           raise
             (Elab_error
                (Format.sprintf "%s has a non-positive occurrence (in domain)"
-                  ind));
+                  (Name.to_string ind)));
         check_positivity_ty genv ind b
     | TySigma (_, a, b) ->
         check_positivity_ty genv ind a;
         check_positivity_ty genv ind b
     | TyEl t -> check_positivity_tm genv ind t
 
-and check_positivity_tm (genv : GlobalEnv.t) (ind : string) (tm : tm) : unit =
+and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
   if not (has_ind_occ_tm ind tm) then
     ()
   else if is_valid_ind_app ind tm then
@@ -1057,51 +1074,55 @@ and check_positivity_tm (genv : GlobalEnv.t) (ind : string) (tm : tm) : unit =
           raise
             (Elab_error
                (Format.sprintf "%s has a non-positive occurrence (in domain)"
-                  ind));
+                  (Name.to_string ind)));
         check_positivity_tm genv ind b
     | TmSigmaHat (_, a, b) ->
         check_positivity_tm genv ind a;
         check_positivity_tm genv ind b
     | TmApp (_, _) -> (
         match get_app_head tm with
-        | Some f_name when GlobalEnv.is_inductive genv f_name ->
+        | Some f_name when GlobalEnv.is_inductive f_name genv ->
             if check_inductive_param_positive genv f_name then
               ()
             else
               raise
                 (Elab_error
                    (Format.sprintf
-                      "%s has a non-positive occurrence (nested in %s)" ind
-                      f_name))
+                      "%s has a non-positive occurrence (nested in %s)"
+                      (Name.to_string ind) (Name.to_string f_name)))
         | _ ->
             raise
               (Elab_error
-                 (Format.sprintf "%s has a non-valid occurrence (nested)" ind)))
+                 (Format.sprintf "%s has a non-valid occurrence (nested)"
+                    (Name.to_string ind))))
     | TmLam (_, a, body) ->
         check_positivity_ty genv ind a;
         check_positivity_tm genv ind body
     | _ ->
-        raise (Elab_error (Format.sprintf "%s has a non-valid occurrence" ind))
+        raise
+          (Elab_error
+             (Format.sprintf "%s has a non-valid occurrence"
+                (Name.to_string ind)))
 
-let rec check_strict_positivity (genv : GlobalEnv.t) (ind : string) : ty -> unit
+let rec check_strict_positivity (genv : GlobalEnv.t) (ind : Name.t) : ty -> unit
     = function
   | TyPi (_, a, b) ->
       check_positivity_ty genv ind a;
       check_strict_positivity genv ind b
   | _ -> ()
 
-let rec check_returns_inductive (ind : string) : ty -> bool = function
-  | TyEl (TmConst name) -> String.equal name ind
+let rec check_returns_inductive (ind : Name.t) : ty -> bool = function
+  | TyEl (TmConst name) -> Name.equal name ind
   | TyEl (TmApp (f, _)) -> check_returns_inductive_tm ind f
   | TyPi (_, _, b) -> check_returns_inductive ind b
   | _ -> false
 
-and check_returns_inductive_tm (ind : string) : tm -> bool = function
-  | TmConst name -> String.equal name ind
+and check_returns_inductive_tm (ind : Name.t) : tm -> bool = function
+  | TmConst name -> Name.equal name ind
   | TmApp (f, _) -> check_returns_inductive_tm ind f
   | _ -> false
 
-let check_return_params (ctor_name : string) (ind : string) (num_params : int)
+let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
     (ty : ty) : unit =
   let rec get_return_head = function
     | TyPi (_, _, b) -> get_return_head b
@@ -1122,14 +1143,14 @@ let check_return_params (ctor_name : string) (ind : string) (num_params : int)
         raise
           (Elab_error
              (Format.sprintf "%s: return type must apply %s to all parameters"
-                ctor_name ind))
+                (Name.to_string ctor_name) (Name.to_string ind)))
 
 (* ========== Inductive Types ========== *)
 
-let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
+let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    ((ctor_name, ctor_params, ctor_ty_opt) : Raw.ctor) : string * ty * vl_ty =
-  let full_name = Format.sprintf "%s.%s" ind ctor_name in
+    ((ctor_name, ctor_params, ctor_ty_opt) : Raw.ctor) : Name.t * ty * vl_ty =
+  let full_name = Name.child ind ctor_name in
   let rec build_ctor_body ctx depth = function
     | [] -> (
         match ctor_ty_opt with
@@ -1147,7 +1168,9 @@ let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
             let ret_ty = check_ty genv ctx ret_raw in
             if not (check_returns_inductive ind ret_ty) then
               raise
-                (Elab_error (Format.sprintf "%s must return %s" full_name ind));
+                (Elab_error
+                   (Format.sprintf "%s must return %s"
+                      (Name.to_string full_name) (Name.to_string ind)));
             check_return_params full_name ind num_params ret_ty;
             ret_ty)
     | (name, ty_opt) :: rest ->
@@ -1157,7 +1180,8 @@ let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
           | None ->
               raise
                 (Elab_error
-                   (Format.sprintf "%s: parameter needs type" full_name))
+                   (Format.sprintf "%s: parameter needs type"
+                      (Name.to_string full_name)))
         in
         let param_ty_val = eval_ty (Context.env ctx) param_ty in
         let ctx' = Context.bind name param_ty_val ctx in
@@ -1176,14 +1200,14 @@ let elab_ctor (genv : GlobalEnv.t) (ind : string) (param_ctx : Context.t)
 
 (* ========== Recursor Generation ========== *)
 
-let rec is_recursive_arg_ty (ind : string) : ty -> bool = function
-  | TyEl (TmConst name) -> String.equal name ind
+let rec is_recursive_arg_ty (ind : Name.t) : ty -> bool = function
+  | TyEl (TmConst name) -> Name.equal name ind
   | TyEl (TmApp (f, _)) -> is_recursive_arg_tm ind f
   | TyPi (_, _, b) -> is_recursive_arg_ty ind b
   | _ -> false
 
-and is_recursive_arg_tm (ind : string) : tm -> bool = function
-  | TmConst name -> String.equal name ind
+and is_recursive_arg_tm (ind : Name.t) : tm -> bool = function
+  | TmConst name -> Name.equal name ind
   | TmApp (f, _) -> is_recursive_arg_tm ind f
   | _ -> false
 
@@ -1244,16 +1268,16 @@ let rec extract_indices : ty -> (string option * ty) list = function
   | TyU -> []
   | _ -> []
 
-let rec extract_return_indices_from_ctor (ind : string) (num_params : int) :
+let rec extract_return_indices_from_ctor (ind : Name.t) (num_params : int) :
     ty -> tm list = function
   | TyPi (_, _, b) -> extract_return_indices_from_ctor ind num_params b
   | TyEl tm -> extract_args_after_params ind num_params tm
   | _ -> []
 
-and extract_args_after_params (ind : string) (num_params : int) (tm : tm) :
+and extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
     tm list =
   let rec collect_all_args acc = function
-    | TmConst name when String.equal name ind -> acc
+    | TmConst name when Name.equal name ind -> acc
     | TmApp (f, a) -> collect_all_args (a :: acc) f
     | _ -> []
   in
@@ -1263,7 +1287,7 @@ and extract_args_after_params (ind : string) (num_params : int) (tm : tm) :
   else
     []
 
-let extract_nested_rec_info (ind : string) (num_params : int) (ty : ty) :
+let extract_nested_rec_info (ind : Name.t) (num_params : int) (ty : ty) :
     (string option * ty) list * tm list =
   let rec go acc = function
     | TyPi (name, arg_ty, body) -> go ((name, arg_ty) :: acc) body
@@ -1310,9 +1334,9 @@ let get_ctor_field_types (num_params : int) (ctor_ty : ty) :
   collect (strip num_params ctor_ty)
 
 (* Generate recursor type for an inductive *)
-let gen_recursor_ty (ind : string) (num_params : int)
+let gen_recursor_ty (ind : Name.t) (num_params : int)
     (param_tys : (string option * ty) list)
-    (index_tys : (string option * ty) list) (ctor_tys : (string * ty) list) : ty
+    (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) : ty
     =
   let num_indices = List.length index_tys in
   let num_ctors = List.length ctor_tys in
@@ -1380,7 +1404,7 @@ let gen_recursor_ty (ind : string) (num_params : int)
     go num_params ty
   in
 
-  let gen_method_ty (_ctor_name : string) (ctor_ty : ty) (ctor_idx : int) : ty =
+  let gen_method_ty (_ctor_name : Name.t) (ctor_ty : ty) (ctor_idx : int) : ty =
     let my_depth = method_depth ctor_idx in
     let fields_ty = strip_params ctor_ty in
 
@@ -1665,9 +1689,10 @@ let gen_recursor_ty (ind : string) (num_params : int)
     (fun (name, ty) acc -> TyPi (name, ty, acc))
     param_tys with_motive
 
-let elab_inductive (genv : GlobalEnv.t) (ind : string)
+let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
-    (ctors : Raw.ctor list) : (string * ty) list =
+    (ctors : Raw.ctor list) : GlobalEnv.t * (Name.t * ty) list =
+  let ind = Name.root ind_str in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
     | (names, ty_raw) :: rest ->
@@ -1694,17 +1719,20 @@ let elab_inductive (genv : GlobalEnv.t) (ind : string)
       param_tys result_ty
   in
   let ind_ty_val = eval_ty [] ind_ty in
-  GlobalEnv.add_opaque genv ind ind_ty_val;
+  let genv = GlobalEnv.add_opaque ind ind_ty_val genv in
   let ctor_results =
     List.map (elab_ctor genv ind param_ctx param_tys num_params) ctors
   in
-  List.iteri
-    (fun idx (name, _ty, ty_val) ->
-      GlobalEnv.add_constructor genv name ty_val ind idx)
-    ctor_results;
+  let genv =
+    List.fold_left
+      (fun g (idx, (name, _ty, ty_val)) ->
+        GlobalEnv.add_constructor name ty_val ind idx g)
+      genv
+      (List.mapi (fun i x -> (i, x)) ctor_results)
+  in
   let ctor_name_tys = List.map (fun (name, ty, _) -> (name, ty)) ctor_results in
-  GlobalEnv.add_inductive genv ind ind_ty ctor_name_tys;
-  let rec_name = Format.sprintf "%s.rec" ind in
+  let genv = GlobalEnv.add_inductive ind ind_ty ctor_name_tys genv in
+  let rec_name = Name.child ind "rec" in
   let index_tys = extract_indices result_ty in
   let num_indices = List.length index_tys in
   let rec_ty =
@@ -1804,8 +1832,8 @@ let elab_inductive (genv : GlobalEnv.t) (ind : string)
       rec_rules;
     }
   in
-  GlobalEnv.add_recursor genv rec_name rec_ty_val rec_info;
-  ((ind, ind_ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ]
+  let genv = GlobalEnv.add_recursor rec_name rec_ty_val rec_info genv in
+  (genv, ((ind, ind_ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
 
 (* ========== Program Elaboration ========== *)
 
@@ -1818,22 +1846,27 @@ let module_to_path (root : string) (module_name : string) : string =
   Filename.concat root (Format.sprintf "%s.qdt" path)
 
 type elab_state = {
-  genv : GlobalEnv.t;
+  mutable genv : GlobalEnv.t;
   mutable importing : string list;
       (* stack of modules currently being imported *)
   imported : (string, unit) Hashtbl.t; (* already imported modules *)
 }
 
+let update_genv_refs state =
+  (current_genv := fun name -> GlobalEnv.find_tm name state.genv);
+  (current_recursor_lookup :=
+     fun name -> GlobalEnv.find_recursor name state.genv);
+  (current_ctor_lookup := fun name -> GlobalEnv.find_constructor name state.genv);
+  current_structure_lookup :=
+    fun name -> GlobalEnv.find_structure name state.genv
+
 let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     ~(parse : string -> Raw.program) (prog : Raw.program) :
-    (string * tm * ty) list =
+    (Name.t * tm * ty) list =
   let state =
-    { genv = GlobalEnv.create (); importing = []; imported = Hashtbl.create 16 }
+    { genv = GlobalEnv.empty; importing = []; imported = Hashtbl.create 16 }
   in
-  current_genv := GlobalEnv.find_tm state.genv;
-  current_recursor_lookup := GlobalEnv.find_recursor state.genv;
-  current_ctor_lookup := GlobalEnv.find_constructor state.genv;
-  current_structure_lookup := GlobalEnv.find_structure state.genv;
+  update_genv_refs state;
 
   let rec process_import module_name =
     if List.mem module_name state.importing then
@@ -1857,16 +1890,22 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         process_import module_name;
         go acc ctx rest
     | Raw.Def (name, body) :: rest ->
+        let full_name = Name.root name in
         let term, ty_val = infer_tm state.genv ctx body in
         let term_val = eval_tm (Context.env ctx) term in
-        GlobalEnv.add state.genv name ty_val term_val;
+        state.genv <- GlobalEnv.add_def full_name ty_val term_val state.genv;
+        update_genv_refs state;
         let ty_out = quote_ty 0 ty_val in
-        go ((name, term, ty_out) :: acc) ctx rest
+        go ((full_name, term, ty_out) :: acc) ctx rest
     | Raw.Example body :: rest ->
         let _term, _ty_val = infer_tm state.genv ctx body in
         go acc ctx rest
     | Raw.Inductive (name, params, ty_opt, ctors) :: rest ->
-        let results = elab_inductive state.genv name params ty_opt ctors in
+        let new_genv, results =
+          elab_inductive state.genv name params ty_opt ctors
+        in
+        state.genv <- new_genv;
+        update_genv_refs state;
         let new_acc =
           List.fold_left
             (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)
@@ -1876,7 +1915,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
   in
   go [] Context.empty prog
 
-let elab_program (prog : Raw.program) : (string * tm * ty) list =
+let elab_program (prog : Raw.program) : (Name.t * tm * ty) list =
   elab_program_with_imports ~root:"."
     ~read_file:(fun _ -> "")
     ~parse:(fun _ -> [])
