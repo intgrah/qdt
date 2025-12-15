@@ -80,18 +80,3 @@ def Nat.le_trans (a b c : Nat) (hab : Nat.le a b) (hbc : Nat.le b c) : Nat.le a 
     hab
     (fun m _ ih => Nat.le.step a m ih)
     c hbc
-
--- These require case analysis that computes types, needs Type : Type
-def Nat.le_of_succ_le_succ (m n : Nat) (h : Nat.le (Nat.succ m) (Nat.succ n)) : Nat.le m n := sorry
-def Nat.not_succ_le_self (n : Nat) (h : Nat.le (Nat.succ n) n) : Empty := sorry
-
-def Nat.le_antisymm (m n : Nat) (hmn : Nat.le m n) (hnm : Nat.le n m) : m = n :=
-  Nat.le.rec m
-    (fun k _ => Nat.le k m -> m = k)
-    (fun _ => Eq.refl Nat m)
-    (fun k _ ih hskm =>
-      let hkm : Nat.le k m := Nat.le_trans k (Nat.succ k) m (Nat.le_succ k) hskm;
-      let meqk : m = k := ih hkm;
-      let hskk : Nat.le (Nat.succ k) k := Eq.subst Nat (fun x => Nat.le (Nat.succ k) x) m k meqk hskm;
-      Empty.elim (m = Nat.succ k) (Nat.not_succ_le_self k hskk))
-    n hmn hnm
