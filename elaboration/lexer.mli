@@ -30,6 +30,6 @@ type token =
 val pp_token : Format.formatter -> token -> unit
 
 exception Unterminated_comment
-exception Illegal_character
+exception Illegal_character of char
 
 val scan : token list -> char list -> token list
