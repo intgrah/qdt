@@ -57,7 +57,7 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | IntLit n -> Format.fprintf fmt "%d" n
 
 exception Unterminated_comment
-exception Illegal_character
+exception Illegal_character of char
 
 let is_alpha_num = function
   | '0' .. '9'
@@ -140,4 +140,4 @@ let rec scan front_toks = function
         | tok -> Ident tok
       in
       scan (tok :: front_toks) cs
-  | _ -> raise Illegal_character
+  | c :: _ -> raise (Illegal_character c)
