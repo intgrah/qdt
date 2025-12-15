@@ -4,5 +4,5 @@ structure Sigma (A : Type) (B : A -> Type) where
   (fst : A)
   (snd : B fst)
 
-def Sigma.eta (A : Type) (B : A -> Type) (p : Sigma A B) : Eq (Sigma A B) (Sigma.mk A B (Sigma.fst A B p) (Sigma.snd A B p)) p :=
+def Sigma.eta (A : Type) (B : A -> Type) (p : Sigma A B) : Sigma.mk A B (Sigma.fst A B p) (Sigma.snd A B p) = p :=
   Eq.refl (Sigma A B) p
