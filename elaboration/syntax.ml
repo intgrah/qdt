@@ -119,13 +119,13 @@ and head =
   | HConst of string
   | HSorry of int * vl_ty
 
-and spine = fname list
+and spine = elim list
 
-and fname =
-  | FApp of vl_tm
-  | FProj1
-  | FProj2
-  | FAbsurd of vl_ty
+and elim =
+  | EApp of vl_tm
+  | EProj1
+  | EProj2
+  | EAbsurd of vl_ty
 
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm
