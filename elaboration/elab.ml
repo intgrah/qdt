@@ -67,21 +67,21 @@ and eval_tm (env : env) : tm -> vl_tm = function
 and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
   | VTmLam (_, _, ClosTm (env, body)) -> eval_tm (a :: env) body
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FApp a ])
+  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EApp a ])
   | _ -> raise (Elab_error "do_app: expected lambda or neutral")
 
 and do_proj1 : vl_tm -> vl_tm = function
   | VTmMkSigma (_, _, _, t, _) -> t
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FProj1 ])
+  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EProj1 ])
   | _ -> raise (Elab_error "do_proj1: expected pair or neutral")
 
 and do_proj2 : vl_tm -> vl_tm = function
   | VTmMkSigma (_, _, _, _, u) -> u
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FProj2 ])
+  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EProj2 ])
   | _ -> raise (Elab_error "do_proj2: expected pair or neutral")
 
 and do_absurd (c : vl_ty) : vl_tm -> vl_tm = function
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ FAbsurd c ])
+  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EAbsurd c ])
   | _ -> raise (Elab_error "do_absurd: expected neutral")
 
 (* ========== Quoting ========== *)
@@ -149,10 +149,10 @@ and quote_neutral (l : int) ((h, sp) : neutral) : tm =
 
 and quote_spine (l : int) (tm : tm) : spine -> tm = function
   | [] -> tm
-  | FApp a :: rest -> quote_spine l (TmApp (tm, quote_tm l a)) rest
-  | FProj1 :: rest -> quote_spine l (TmProj1 tm) rest
-  | FProj2 :: rest -> quote_spine l (TmProj2 tm) rest
-  | FAbsurd c :: rest -> quote_spine l (TmAbsurd (quote_ty l c, tm)) rest
+  | EApp a :: rest -> quote_spine l (TmApp (tm, quote_tm l a)) rest
+  | EProj1 :: rest -> quote_spine l (TmProj1 tm) rest
+  | EProj2 :: rest -> quote_spine l (TmProj2 tm) rest
+  | EAbsurd c :: rest -> quote_spine l (TmAbsurd (quote_ty l c, tm)) rest
 
 (* ========== Context Module ========== *)
 
@@ -246,10 +246,10 @@ and force_neutral (genv : GlobalEnv.t) ((h, sp) : neutral) : vl_tm option =
 
 and apply_spine (v : vl_tm) : spine -> vl_tm = function
   | [] -> v
-  | FApp a :: rest -> apply_spine (do_app v a) rest
-  | FProj1 :: rest -> apply_spine (do_proj1 v) rest
-  | FProj2 :: rest -> apply_spine (do_proj2 v) rest
-  | FAbsurd c :: rest -> apply_spine (do_absurd c v) rest
+  | EApp a :: rest -> apply_spine (do_app v a) rest
+  | EProj1 :: rest -> apply_spine (do_proj1 v) rest
+  | EProj2 :: rest -> apply_spine (do_proj2 v) rest
+  | EAbsurd c :: rest -> apply_spine (do_absurd c v) rest
 
 (* Γ ⊢ A ≡ B type *)
 and eq_ty (genv : GlobalEnv.t) (l : int) ((ty1, ty2) : vl_ty * vl_ty) : bool =
@@ -353,14 +353,14 @@ and eq_head : head * head -> bool = function
 and eq_spine (genv : GlobalEnv.t) (l : int) : spine * spine -> bool = function
   | [], [] -> true
   | f1 :: rest1, f2 :: rest2 ->
-      eq_fname genv l (f1, f2) && eq_spine genv l (rest1, rest2)
+      eq_elim genv l (f1, f2) && eq_spine genv l (rest1, rest2)
   | _, _ -> false
 
-and eq_fname (genv : GlobalEnv.t) (l : int) : fname * fname -> bool = function
-  | FApp a1, FApp a2 -> eq_tm genv l (a1, a2)
-  | FProj1, FProj1 -> true
-  | FProj2, FProj2 -> true
-  | FAbsurd c1, FAbsurd c2 -> eq_ty genv l (c1, c2)
+and eq_elim (genv : GlobalEnv.t) (l : int) : elim * elim -> bool = function
+  | EApp a1, EApp a2 -> eq_tm genv l (a1, a2)
+  | EProj1, EProj1 -> true
+  | EProj2, EProj2 -> true
+  | EAbsurd c1, EAbsurd c2 -> eq_ty genv l (c1, c2)
   | _, _ -> false
 
 let conv_ty (genv : GlobalEnv.t) (ctx : Context.t) (a : vl_ty) (b : vl_ty) :
