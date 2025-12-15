@@ -68,7 +68,8 @@ let rec watch_loop file pipeline last_mtime =
 
 let main () =
   let args = Cli.parse_args () in
-  let pipeline = Pipeline.create () in
+  let root_dir = Filename.dirname args.Cli.input_file in
+  let pipeline = Pipeline.create ~root_dir () in
 
   (* Attach debug handlers *)
   Pipeline.on_tokens_update pipeline ~f:(fun update ->

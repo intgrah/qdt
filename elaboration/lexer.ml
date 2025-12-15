@@ -21,6 +21,7 @@ type token =
   | Example
   | Inductive
   | Where
+  | Import
   | Type
   | Int
   | Underscore
@@ -50,6 +51,7 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Example -> Format.fprintf fmt "example"
   | Inductive -> Format.fprintf fmt "inductive"
   | Where -> Format.fprintf fmt "where"
+  | Import -> Format.fprintf fmt "import"
   | Type -> Format.fprintf fmt "Type"
   | Int -> Format.fprintf fmt "Int"
   | Underscore -> Format.fprintf fmt "_"
@@ -137,6 +139,7 @@ let rec scan front_toks = function
         | "example" -> Example
         | "inductive" -> Inductive
         | "where" -> Where
+        | "import" -> Import
         | tok -> Ident tok
       in
       scan (tok :: front_toks) cs

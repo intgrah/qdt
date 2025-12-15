@@ -12,6 +12,12 @@ let fresh_sorry_id =
 (* Global environment reference for evaluation unfolding *)
 let current_genv : (string -> vl_tm option) ref = ref (fun _ -> None)
 
+let current_recursor_lookup : (string -> recursor_info option) ref =
+  ref (fun _ -> None)
+
+let current_ctor_lookup : (string -> (string * int) option) ref =
+  ref (fun _ -> None)
+
 (* ========== Evaluation ========== *)
 
 let rec eval_ty (env : env) : ty -> vl_ty = function
@@ -227,6 +233,15 @@ type inductive_info = {
   ctors : (string * ty) list;
 }
 
+type recursor_info = {
+  rec_ind_name : string;
+  rec_num_params : int;
+  rec_num_indices : int;
+  rec_num_motives : int; (* always 1 for now *)
+  rec_num_methods : int;
+  rec_ctor_names : string list;
+}
+
 module GlobalEnv = struct
   type entry =
     | Def of {
@@ -235,6 +250,15 @@ module GlobalEnv = struct
       }
     | Opaque of { ty : vl_ty }
     | Inductive of inductive_info
+    | Recursor of {
+        ty : vl_ty;
+        info : recursor_info;
+      }
+    | Constructor of {
+        ty : vl_ty;
+        ind_name : string;
+        ctor_idx : int;
+      }
 
   type t = { defs : (string, entry) Hashtbl.t }
 
@@ -245,16 +269,34 @@ module GlobalEnv = struct
   let add_inductive env name ind_ty ctors =
     Hashtbl.add env.defs name (Inductive { ind_ty; ctors })
 
+  let add_recursor env name ty info =
+    Hashtbl.add env.defs name (Recursor { ty; info })
+
+  let add_constructor env name ty ind_name ctor_idx =
+    Hashtbl.add env.defs name (Constructor { ty; ind_name; ctor_idx })
+
   let find_ty env name =
     match Hashtbl.find_opt env.defs name with
     | Some (Def { ty; _ }) -> Some ty
     | Some (Opaque { ty }) -> Some ty
     | Some (Inductive { ind_ty; _ }) -> Some (eval_ty [] ind_ty)
+    | Some (Recursor { ty; _ }) -> Some ty
+    | Some (Constructor { ty; _ }) -> Some ty
     | None -> None
 
   let find_tm env name =
     match Hashtbl.find_opt env.defs name with
     | Some (Def { tm; _ }) -> Some tm
+    | _ -> None
+
+  let find_recursor env name =
+    match Hashtbl.find_opt env.defs name with
+    | Some (Recursor { info; _ }) -> Some info
+    | _ -> None
+
+  let find_constructor env name =
+    match Hashtbl.find_opt env.defs name with
+    | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
     | _ -> None
 
   let is_inductive env name =
@@ -1276,7 +1318,9 @@ let gen_recursor_ty (ind : string) (num_params : int)
               build_ih_type nested_binders rec_indices ih_motive_idx
                 field_var_idx
             in
-            let ih_name = Some (Format.sprintf "%s_ih" (Option.value name ~default:"x")) in
+            let ih_name =
+              Some (Format.sprintf "%s_ih" (Option.value name ~default:"x"))
+            in
             let with_ih = TyPi (ih_name, ih_ty, acc) in
             build_pis rest (ih_count + 1) (TyPi (name, substituted_ty, with_ih))
           else
@@ -1381,22 +1425,61 @@ let elab_inductive (genv : GlobalEnv.t) (ind : string)
 
 (* ========== Program Elaboration ========== *)
 
-let elab_program (prog : Raw.program) : (string * tm * ty) list =
-  let genv = GlobalEnv.create () in
-  current_genv := GlobalEnv.find_tm genv;
-  let rec go acc ctx = function
+exception Circular_import of string
+exception Import_not_found of string
+
+let module_to_path (root : string) (module_name : string) : string =
+  let parts = String.split_on_char '.' module_name in
+  let path = String.concat "/" parts in
+  Filename.concat root (path ^ ".qdt")
+
+type elab_state = {
+  genv : GlobalEnv.t;
+  mutable importing : string list;
+      (* stack of modules currently being imported *)
+  imported : (string, unit) Hashtbl.t; (* already imported modules *)
+}
+
+let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
+    ~(parse : string -> Raw.program) (prog : Raw.program) :
+    (string * tm * ty) list =
+  let state =
+    { genv = GlobalEnv.create (); importing = []; imported = Hashtbl.create 16 }
+  in
+  current_genv := GlobalEnv.find_tm state.genv;
+
+  let rec process_import module_name =
+    if List.mem module_name state.importing then
+      raise (Circular_import module_name);
+    if Hashtbl.mem state.imported module_name then
+      ()
+    else
+      let path = module_to_path root module_name in
+      let content =
+        try read_file path with
+        | _ -> raise (Import_not_found module_name)
+      in
+      let imported_prog = parse content in
+      state.importing <- module_name :: state.importing;
+      ignore (go [] Context.empty imported_prog);
+      state.importing <- List.tl state.importing;
+      Hashtbl.add state.imported module_name ()
+  and go acc ctx = function
     | [] -> List.rev acc
+    | Raw.Import module_name :: rest ->
+        process_import module_name;
+        go acc ctx rest
     | Raw.Def (name, body) :: rest ->
-        let term, ty_val = infer_tm genv ctx body in
+        let term, ty_val = infer_tm state.genv ctx body in
         let term_val = eval_tm (Context.env ctx) term in
-        GlobalEnv.add genv name ty_val term_val;
+        GlobalEnv.add state.genv name ty_val term_val;
         let ty_out = quote_ty 0 ty_val in
         go ((name, term, ty_out) :: acc) ctx rest
     | Raw.Example body :: rest ->
-        let _term, _ty_val = infer_tm genv ctx body in
+        let _term, _ty_val = infer_tm state.genv ctx body in
         go acc ctx rest
     | Raw.Inductive (name, params, ty_opt, ctors) :: rest ->
-        let results = elab_inductive genv name params ty_opt ctors in
+        let results = elab_inductive state.genv name params ty_opt ctors in
         let new_acc =
           List.fold_left
             (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)
@@ -1405,3 +1488,9 @@ let elab_program (prog : Raw.program) : (string * tm * ty) list =
         go new_acc ctx rest
   in
   go [] Context.empty prog
+
+let elab_program (prog : Raw.program) : (string * tm * ty) list =
+  elab_program_with_imports ~root:"."
+    ~read_file:(fun _ -> "")
+    ~parse:(fun _ -> [])
+    prog

@@ -31,9 +31,8 @@ module Raw = struct
   type item =
     | Def of string * t
     | Example of t
-    (* Inductive: name * params * result_type_opt * constructors *)
-    (* params are binder groups like (A B : Type) (n : Nat) *)
     | Inductive of string * binder_group list * t option * ctor list
+    | Import of string (* import Foo.Bar *)
 
   type program = item list
 end

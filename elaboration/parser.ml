@@ -333,6 +333,9 @@ let rec parse_item : Raw.item t =
       (let* () = token Example in
        let* body = parse_def_body in
        return (Raw.Example body));
+      (let* () = token Import in
+       let* name = parse_ident in
+       return (Raw.Import name));
     ]
     input
 
