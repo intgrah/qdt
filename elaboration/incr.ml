@@ -25,6 +25,7 @@ end
 
 type t = {
   mutable source : string;
+  mutable root_dir : string;
   mutable tokens_callback : tokens_result Update.t -> unit;
   mutable program_callback : program_result Update.t -> unit;
   mutable elaborated_callback : elaborated_result Update.t -> unit;
@@ -79,17 +80,33 @@ let try_parse = function
           Error (Parse_error (summarize_tokens remaining))
       | exception exn -> Error (Parse_error (Printexc.to_string exn)))
 
-let try_elaborate = function
+let read_file_for_import path =
+  In_channel.with_open_text path In_channel.input_all
+
+let parse_for_import source =
+  let chars = List.of_seq (String.to_seq source) in
+  let tokens = Lexer.scan [] chars in
+  Parser.parse tokens
+
+let try_elaborate root_dir = function
   | Error e -> Error e
   | Ok program -> (
-      match Elab.elab_program program with
+      match
+        Elab.elab_program_with_imports ~root:root_dir
+          ~read_file:read_file_for_import ~parse:parse_for_import program
+      with
       | defs -> Ok defs
       | exception Elab.Elab_error msg -> Error (Elab_error msg)
+      | exception Elab.Circular_import m ->
+          Error (Elab_error (Format.sprintf "Circular import: %s" m))
+      | exception Elab.Import_not_found m ->
+          Error (Elab_error (Format.sprintf "Import not found: %s" m))
       | exception exn -> Error (Elab_error (Printexc.to_string exn)))
 
-let create () =
+let create ?(root_dir = ".") () =
   {
     source = "";
+    root_dir;
     tokens_callback = (fun _ -> ());
     program_callback = (fun _ -> ());
     elaborated_callback = (fun _ -> ());
@@ -98,13 +115,14 @@ let create () =
     last_elaborated = None;
   }
 
+let set_root_dir t dir = t.root_dir <- dir
 let set_source t text = t.source <- text
 
 let stabilize_t t =
   let chars = List.of_seq (String.to_seq t.source) in
   let tokens = try_lex chars in
   let program = try_parse tokens in
-  let elaborated = try_elaborate program in
+  let elaborated = try_elaborate t.root_dir program in
 
   let make_update last new_val =
     match last with

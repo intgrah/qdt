@@ -21,6 +21,7 @@ type token =
   | Example
   | Inductive
   | Where
+  | Import
   | Type
   | Int
   | Underscore

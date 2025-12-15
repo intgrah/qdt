@@ -98,6 +98,7 @@ let pp_raw_item (fmt : Format.formatter) : Raw.item -> unit = function
   | Example body -> Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body
   | Inductive (name, params, ty, ctors) ->
       pp_inductive fmt (name, params, ty, ctors)
+  | Import name -> Format.fprintf fmt "import %s" name
 
 let pp_raw_program (fmt : Format.formatter) (prog : Raw.program) : unit =
   Format.pp_print_list

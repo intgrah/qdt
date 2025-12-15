@@ -24,7 +24,8 @@ module Update : sig
 end
 
 val pp_stage_error : Format.formatter -> stage_error -> unit
-val create : unit -> t
+val create : ?root_dir:string -> unit -> t
+val set_root_dir : t -> string -> unit
 val set_source : t -> string -> unit
 val stabilize : unit -> unit
 val snapshot : t -> snapshot
