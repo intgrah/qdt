@@ -15,11 +15,10 @@ type token =
   | Def
   | Let
   | Fun
-  | Fst
-  | Snd
   | Sorry
   | Example
   | Inductive
+  | Structure
   | Where
   | Import
   | Type
@@ -45,11 +44,10 @@ let pp_token (fmt : Format.formatter) : token -> unit = function
   | Def -> Format.fprintf fmt "def"
   | Let -> Format.fprintf fmt "let"
   | Fun -> Format.fprintf fmt "fun"
-  | Fst -> Format.fprintf fmt "fst"
-  | Snd -> Format.fprintf fmt "snd"
   | Sorry -> Format.fprintf fmt "sorry"
   | Example -> Format.fprintf fmt "example"
   | Inductive -> Format.fprintf fmt "inductive"
+  | Structure -> Format.fprintf fmt "structure"
   | Where -> Format.fprintf fmt "where"
   | Import -> Format.fprintf fmt "import"
   | Type -> Format.fprintf fmt "Type"
@@ -133,11 +131,10 @@ let rec scan front_toks = function
         | "fun" -> Fun
         | "Type" -> Type
         | "Int" -> Int
-        | "fst" -> Fst
-        | "snd" -> Snd
         | "sorry" -> Sorry
         | "example" -> Example
         | "inductive" -> Inductive
+        | "structure" -> Structure
         | "where" -> Where
         | "import" -> Import
         | tok -> Ident tok

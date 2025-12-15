@@ -139,7 +139,11 @@ let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
 
 and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
   function
-  | TmVar (Idx l) -> Format.fprintf fmt "%s" (List.nth names l)
+  | TmVar (Idx l) ->
+      if l < List.length names then
+        Format.fprintf fmt "%s" (List.nth names l)
+      else
+        Format.fprintf fmt "x%d†" l
   | TmConst name -> Format.fprintf fmt "%s" name
   | TmLam (name_opt, a, body) ->
       let x = get_name name_opt names in
