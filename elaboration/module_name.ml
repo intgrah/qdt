@@ -4,3 +4,7 @@ let compare = List.compare String.compare
 let equal = List.equal String.equal
 let to_string = String.concat "."
 let parse = String.split_on_char '.'
+
+let to_path (root : string) (m : t) : string =
+  let path = String.concat "/" m in
+  Filename.concat root (path ^ ".qdt")
