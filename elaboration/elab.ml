@@ -1006,15 +1006,12 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
 
 let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
     =
-  if not (has_ind_occ_ty ind ty) then
-    ()
-  else
+  if has_ind_occ_ty ind ty then
     match
       ty
     with
-    | TyU
-    | TyInt ->
-        ()
+    | TyU -> ()
+    | TyInt -> ()
     | TyPi (_, a, b) ->
         if has_ind_occ_ty ind a then
           raise
@@ -1028,11 +1025,7 @@ let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
     | TyEl t -> check_positivity_tm genv ind t
 
 and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
-  if not (has_ind_occ_tm ind tm) then
-    ()
-  else if is_valid_ind_app ind tm then
-    ()
-  else
+  if has_ind_occ_tm ind tm && not (is_valid_ind_app ind tm) then
     match
       tm
     with
@@ -1052,9 +1045,7 @@ and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
         match get_app_head tm with
         | Some f_name when Option.is_some (GlobalEnv.find_inductive f_name genv)
           ->
-            if check_inductive_param_positive genv f_name then
-              ()
-            else
+            if not (check_inductive_param_positive genv f_name) then
               raise
                 (Elab_error
                    (Format.sprintf
@@ -1107,9 +1098,7 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
         | t -> (t, acc)
       in
       let head, args = get_app_args [] ret_tm in
-      if head <> TmConst ind then
-        ()
-      else if List.length args < num_params then
+      if head = TmConst ind && List.length args < num_params then
         raise
           (Elab_error
              (Format.sprintf "%s: return type must apply %s to all parameters"
@@ -1189,50 +1178,30 @@ let extract_app_args : tm -> tm list =
   in
   go []
 
-let rec shift_ty (amt : int) (cutoff : int) : ty -> ty = function
-  | TyU -> TyU
-  | TyInt -> TyInt
-  | TyPi (x, a, b) ->
-      TyPi (x, shift_ty amt cutoff a, shift_ty amt (cutoff + 1) b)
-  | TySigma (x, a, b) ->
-      TySigma (x, shift_ty amt cutoff a, shift_ty amt (cutoff + 1) b)
-  | TyEl t -> TyEl (shift_tm amt cutoff t)
+let mk_shift_env ~(ctx_depth : int) ~(amt : int) ~(cutoff : int) : env * int =
+  let new_depth = ctx_depth + amt in
+  let env =
+    List.init ctx_depth (fun i ->
+        let i' =
+          if i < cutoff then
+            i
+          else
+            i + amt
+        in
+        let lvl = new_depth - i' - 1 in
+        VTmNeutral (HVar (Lvl lvl), []))
+  in
+  (env, new_depth)
 
-and shift_tm (amt : int) (cutoff : int) : tm -> tm = function
-  | TmVar (Idx i) ->
-      TmVar
-        (Idx
-           (if i >= cutoff then
-              i + amt
-            else
-              i))
-  | TmConst name -> TmConst name
-  | TmLam (x, a, body) ->
-      TmLam (x, shift_ty amt cutoff a, shift_tm amt (cutoff + 1) body)
-  | TmApp (f, a) -> TmApp (shift_tm amt cutoff f, shift_tm amt cutoff a)
-  | TmPiHat (x, a, b) ->
-      TmPiHat (x, shift_tm amt cutoff a, shift_tm amt (cutoff + 1) b)
-  | TmSigmaHat (x, a, b) ->
-      TmSigmaHat (x, shift_tm amt cutoff a, shift_tm amt (cutoff + 1) b)
-  | TmMkSigma (a, b, t, u) ->
-      TmMkSigma
-        ( shift_ty amt cutoff a,
-          shift_ty amt (cutoff + 1) b,
-          shift_tm amt cutoff t,
-          shift_tm amt cutoff u )
-  | TmProj1 t -> TmProj1 (shift_tm amt cutoff t)
-  | TmProj2 t -> TmProj2 (shift_tm amt cutoff t)
-  | TmIntLit i -> TmIntLit i
-  | TmIntHat -> TmIntHat
-  | TmAdd (a, b) -> TmAdd (shift_tm amt cutoff a, shift_tm amt cutoff b)
-  | TmSub (a, b) -> TmSub (shift_tm amt cutoff a, shift_tm amt cutoff b)
-  | TmSorry (id, ty) -> TmSorry (id, shift_ty amt cutoff ty)
-  | TmLet (x, ty, t, body) ->
-      TmLet
-        ( x,
-          shift_ty amt cutoff ty,
-          shift_tm amt cutoff t,
-          shift_tm amt (cutoff + 1) body )
+let shift_tm_ctx (genv : GlobalEnv.t) ~(ctx_depth : int) ~(amt : int)
+    ~(cutoff : int) (t : tm) : tm =
+  let env, new_depth = mk_shift_env ~ctx_depth ~amt ~cutoff in
+  quote_tm genv new_depth (eval_tm genv env t)
+
+let shift_ty_ctx (genv : GlobalEnv.t) ~(ctx_depth : int) ~(amt : int)
+    ~(cutoff : int) (t : ty) : ty =
+  let env, new_depth = mk_shift_env ~ctx_depth ~amt ~cutoff in
+  quote_ty genv new_depth (eval_ty genv env t)
 
 let rec extract_indices : ty -> (string option * ty) list = function
   | TyPi (name, a, b) -> (name, a) :: extract_indices b
@@ -1269,46 +1238,11 @@ let extract_nested_rec_info (ind : Name.t) (num_params : int) (ty : ty) :
   in
   go [] ty
 
-let count_ctor_fields (num_params : int) (ctor_ty : ty) : int =
-  let rec strip n ty =
-    if n = 0 then
-      ty
-    else
-      match
-        ty
-      with
-      | TyPi (_, _, b) -> strip (n - 1) b
-      | _ -> ty
-  in
-  let rec count = function
-    | TyPi (_, _, b) -> 1 + count b
-    | _ -> 0
-  in
-  count (strip num_params ctor_ty)
-
-let get_ctor_field_types (num_params : int) (ctor_ty : ty) :
-    (string option * ty) list =
-  let rec strip n ty =
-    if n = 0 then
-      ty
-    else
-      match
-        ty
-      with
-      | TyPi (_, _, b) -> strip (n - 1) b
-      | _ -> ty
-  in
-  let rec collect = function
-    | TyPi (name, a, b) -> (name, a) :: collect b
-    | _ -> []
-  in
-  collect (strip num_params ctor_ty)
-
 (* Generate recursor type for an inductive *)
-let gen_recursor_ty (ind : Name.t) (num_params : int)
+let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     (param_tys : (string option * ty) list)
-    (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) : ty
-    =
+    (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) :
+    vl_ty =
   let num_indices = List.length index_tys in
   let num_ctors = List.length ctor_tys in
 
@@ -1539,10 +1473,15 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
       subst_ty_inner 0
     in
 
-    let build_ih_type nested_binders rec_indices motive_idx field_var_idx =
+    let build_ih_type field_depth nested_binders rec_indices motive_idx
+        field_var_idx =
       let num_nested = List.length nested_binders in
       if num_nested = 0 then
-        let shifted_indices = List.map (shift_tm 1 0) rec_indices in
+        let shifted_indices =
+          List.map
+            (shift_tm_ctx genv ~ctx_depth:field_depth ~amt:1 ~cutoff:0)
+            rec_indices
+        in
         let motive_app =
           List.fold_left
             (fun acc t -> TmApp (acc, t))
@@ -1575,7 +1514,10 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
                 | None -> Some (Format.sprintf "a%d†" depth_from_inner)
               in
               let orig_depth = num_nested - 1 - depth_from_inner in
-              let shifted_ty = shift_ty 1 orig_depth ty in
+              let shifted_ty =
+                shift_ty_ctx genv ~ctx_depth:(field_depth + orig_depth) ~amt:1
+                  ~cutoff:orig_depth ty
+              in
               (depth_from_inner + 1, TyPi (name', shifted_ty, acc)))
             (0, ih_body) rev_binders
         in
@@ -1599,7 +1541,7 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
             let ih_motive_idx = idx_of motive_depth ih_depth in
             let field_var_idx = idx_of field_depth ih_depth in
             let ih_ty =
-              build_ih_type nested_binders rec_indices ih_motive_idx
+              build_ih_type field_depth nested_binders rec_indices ih_motive_idx
                 field_var_idx
             in
             let ih_name =
@@ -1646,7 +1588,10 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
           | None -> Some (Format.sprintf "a%d†" i)
         in
         let shift = 1 + num_ctors in
-        let shifted_ty = shift_ty shift i idx_ty in
+        let shifted_ty =
+          shift_ty_ctx genv ~ctx_depth:(num_params + i) ~amt:shift ~cutoff:i
+            idx_ty
+        in
         add_idx_binders (i - 1) (TyPi (name', shifted_ty, acc))
     in
     add_idx_binders (num_indices - 1) with_x
@@ -1656,9 +1601,12 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
     List.fold_right (fun m acc -> TyPi (None, m, acc)) methods target_ty
   in
   let with_motive = TyPi (Some "motive", motive_ty, with_methods) in
-  List.fold_right
-    (fun (name, ty) acc -> TyPi (name, ty, acc))
-    param_tys with_motive
+  let rec_ty =
+    List.fold_right
+      (fun (name, ty) acc -> TyPi (name, ty, acc))
+      param_tys with_motive
+  in
+  eval_ty genv [] rec_ty
 
 let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
@@ -1711,10 +1659,9 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
   let rec_name = Name.child ind "rec" in
   let index_tys = extract_indices result_ty in
   let num_indices = List.length index_tys in
-  let rec_ty =
-    gen_recursor_ty ind num_params param_tys index_tys ctor_name_tys
+  let rec_ty_val =
+    gen_recursor_ty genv ind num_params param_tys index_tys ctor_name_tys
   in
-  let rec_ty_val = eval_ty genv [] rec_ty in
   let rec_rules =
     List.map
       (fun (ctor_name, ctor_ty) ->
@@ -1814,6 +1761,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
       (GlobalEnv.Recursor { ty = rec_ty_val; info = rec_info })
       genv
   in
+  let rec_ty = quote_ty genv 0 rec_ty_val in
   (genv, ((ind, ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
 
 (* ========== Program Elaboration ========== *)
