@@ -15,7 +15,7 @@ and pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
 
-and pp_raw (fmt : Format.formatter) : Raw.t -> unit = function
+and pp_raw fmt : Raw.t -> unit = function
   | Ident name -> Format.fprintf fmt "%s" name
   | App (f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_raw f pp_raw a
   | Lam (binders, body) ->
@@ -70,7 +70,7 @@ let pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
 
-let pp_raw_item (fmt : Format.formatter) : Raw.item -> unit = function
+let pp_raw_item fmt : Raw.item -> unit = function
   | Def { name; body } ->
       Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
   | Example { body } ->
@@ -122,7 +122,7 @@ let pp_raw_item (fmt : Format.formatter) : Raw.item -> unit = function
             fields)
   | Import { module_name } -> Format.fprintf fmt "import %s" module_name
 
-let pp_raw_program (fmt : Format.formatter) (prog : Raw.program) : unit =
+let pp_raw_program fmt (prog : Raw.program) : unit =
   Format.pp_print_list
     ~pp_sep:(fun fmt () -> Format.fprintf fmt "\n\n")
     pp_raw_item fmt prog
@@ -158,8 +158,7 @@ let rec pp_ty_ctx (names : string list) fmt : ty -> unit = function
   | TyInt -> Format.fprintf fmt "Int"
   | TyEl t -> Format.fprintf fmt "@[<hov 2>%a@]" (pp_tm_ctx names) t
 
-and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
-  function
+and pp_tm_ctx (names : string list) fmt : tm -> unit = function
   | TmVar (Idx l) ->
       if l < List.length names then
         Format.fprintf fmt "%s" (List.nth names l)
@@ -221,7 +220,6 @@ let pp_tm fmt t = pp_tm_ctx [] fmt t
 let ty_to_string t = Format.asprintf "%a" pp_ty t
 let tm_to_string t = Format.asprintf "%a" pp_tm t
 
-let pp_def (fmt : Format.formatter) ((name, term, ty) : Name.t * tm * ty) : unit
-    =
+let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
   Format.fprintf fmt "@[<hv 2>@[<hov 4>def %a :@ %a :=@]@ %a@]" Name.pp name
     pp_ty ty pp_tm term

@@ -27,7 +27,7 @@ type token =
   | Ident of string
   | IntLit of int
 
-let pp_token (fmt : Format.formatter) : token -> unit = function
+let pp_token fmt : token -> unit = function
   | LParen -> Format.fprintf fmt "("
   | RParen -> Format.fprintf fmt ")"
   | Colon -> Format.fprintf fmt ":"
