@@ -3,7 +3,7 @@ import Std.Empty
 
 inductive Nat where
   | zero
-  | succ (n : Nat)
+  | succ : Nat -> Nat
 
 def Nat.one   := Nat.succ Nat.zero
 def Nat.two   := Nat.succ Nat.one
