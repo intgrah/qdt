@@ -12,7 +12,6 @@ module Name = struct
   let to_string name = String.concat "." name
   let pp fmt name = Format.fprintf fmt "%s" (to_string name)
   let child parent name = parent @ [ name ]
-  let root name = [ name ]
   let parse s = String.split_on_char '.' s
 end
 
@@ -41,34 +40,87 @@ type recursor_info = {
   rec_rules : rec_rule list;
 }
 
-(* Global environment reference for evaluation unfolding *)
-let current_genv : (Name.t -> vl_tm option) ref = ref (fun _ -> None)
-
-let current_recursor_lookup : (Name.t -> recursor_info option) ref =
-  ref (fun _ -> None)
-
-let current_ctor_lookup : (Name.t -> (Name.t * int) option) ref =
-  ref (fun _ -> None)
-
 type structure_info = {
   struct_ind_name : Name.t;
   struct_ctor_name : Name.t;
   struct_num_params : int;
   struct_num_fields : int;
-  struct_field_names : string list; (* field names are local, not namespaced *)
+  struct_field_names : string list;
 }
 
-let current_structure_lookup : (Name.t -> structure_info option) ref =
-  ref (fun _ -> None)
+(* ========== Global Environment ========== *)
+
+module GlobalEnv = struct
+  type inductive_info = {
+    ind_ty : ty;
+    ctors : (Name.t * ty) list;
+  }
+
+  type entry =
+    | Def of {
+        ty : vl_ty;
+        tm : vl_tm;
+      }
+    | Opaque of { ty : vl_ty }
+    | Inductive of inductive_info
+    | Recursor of {
+        ty : vl_ty;
+        info : recursor_info;
+      }
+    | Constructor of {
+        ty : vl_ty;
+        ind_name : Name.t;
+        ctor_idx : int;
+      }
+
+  type t = entry NameMap.t
+
+  let empty : t = NameMap.empty
+  let add_def name ty tm = NameMap.add name (Def { ty; tm })
+  let add_opaque name ty = NameMap.add name (Opaque { ty })
+
+  let add_inductive name ind_ty ctors =
+    NameMap.add name (Inductive { ind_ty; ctors })
+
+  let add_recursor name ty info = NameMap.add name (Recursor { ty; info })
+
+  let add_constructor name ty ind_name ctor_idx =
+    NameMap.add name (Constructor { ty; ind_name; ctor_idx })
+
+  let find_tm name env =
+    match NameMap.find_opt name env with
+    | Some (Def { tm; _ }) -> Some tm
+    | _ -> None
+
+  let find_recursor name env =
+    match NameMap.find_opt name env with
+    | Some (Recursor { info; _ }) -> Some info
+    | _ -> None
+
+  let find_constructor name env =
+    match NameMap.find_opt name env with
+    | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
+    | _ -> None
+
+  let is_inductive name env =
+    match NameMap.find_opt name env with
+    | Some (Inductive _) -> true
+    | _ -> false
+
+  let find_inductive name env =
+    match NameMap.find_opt name env with
+    | Some (Inductive info) -> Some info
+    | _ -> None
+end
 
 (* ========== Evaluation ========== *)
 
-let rec eval_ty (env : env) : ty -> vl_ty = function
+let rec eval_ty (genv : GlobalEnv.t) (env : env) : ty -> vl_ty = function
   | TyU -> VTyU
-  | TyPi (x, a, b) -> VTyPi (x, eval_ty env a, ClosTy (env, b))
-  | TySigma (x, a, b) -> VTySigma (x, eval_ty env a, ClosTy (env, b))
+  | TyPi (x, a, b) -> VTyPi (x, eval_ty genv env a, ClosTy (env, b))
+  | TySigma (x, a, b) -> VTySigma (x, eval_ty genv env a, ClosTy (env, b))
   | TyInt -> VTyInt
-  | TyEl t -> do_el (eval_tm env t)
+  | TyEl t -> do_el (eval_tm genv env t)
 
 and do_el : vl_tm -> vl_ty = function
   | VTmPiHat (x, a, ClosTm (env', b)) ->
@@ -79,48 +131,53 @@ and do_el : vl_tm -> vl_ty = function
   | VTmNeutral n -> VTyEl n
   | _ -> raise (Elab_error "do_el: expected type code or neutral")
 
-and eval_tm (env : env) : tm -> vl_tm = function
+and eval_tm (genv : GlobalEnv.t) (env : env) : tm -> vl_tm = function
   | TmVar (Idx l) -> List.nth env l
   | TmConst name -> (
-      match !current_genv name with
+      match GlobalEnv.find_tm name genv with
       | Some v -> v
       | None -> VTmNeutral (HConst name, []))
-  | TmLam (x, a, body) -> VTmLam (x, eval_ty env a, ClosTm (env, body))
-  | TmApp (f, a) -> do_app (eval_tm env f) (eval_tm env a)
-  | TmPiHat (x, a, b) -> VTmPiHat (x, eval_tm env a, ClosTm (env, b))
-  | TmSigmaHat (x, a, b) -> VTmSigmaHat (x, eval_tm env a, ClosTm (env, b))
+  | TmLam (x, a, body) -> VTmLam (x, eval_ty genv env a, ClosTm (env, body))
+  | TmApp (f, a) -> do_app genv (eval_tm genv env f) (eval_tm genv env a)
+  | TmPiHat (x, a, b) -> VTmPiHat (x, eval_tm genv env a, ClosTm (env, b))
+  | TmSigmaHat (x, a, b) -> VTmSigmaHat (x, eval_tm genv env a, ClosTm (env, b))
   | TmMkSigma (a, b, t, u) ->
       VTmMkSigma
-        (None, eval_ty env a, ClosTy (env, b), eval_tm env t, eval_tm env u)
-  | TmProj1 p -> do_proj1 (eval_tm env p)
-  | TmProj2 p -> do_proj2 (eval_tm env p)
+        ( None,
+          eval_ty genv env a,
+          ClosTy (env, b),
+          eval_tm genv env t,
+          eval_tm genv env u )
+  | TmProj1 p -> do_proj1 (eval_tm genv env p)
+  | TmProj2 p -> do_proj2 (eval_tm genv env p)
   | TmIntLit n -> VTmIntLit n
   | TmIntHat -> VTmIntHat
   | TmAdd (a, b) -> (
-      match (eval_tm env a, eval_tm env b) with
+      match (eval_tm genv env a, eval_tm genv env b) with
       | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
       | a, b -> VTmAdd (a, b))
   | TmSub (a, b) -> (
-      match (eval_tm env a, eval_tm env b) with
+      match (eval_tm genv env a, eval_tm genv env b) with
       | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
       | a, b -> VTmSub (a, b))
-  | TmSorry (id, ty) -> VTmNeutral (HSorry (id, eval_ty env ty), [])
-  | TmLet (_, _, t, body) -> eval_tm (eval_tm env t :: env) body
+  | TmSorry (id, ty) -> VTmNeutral (HSorry (id, eval_ty genv env ty), [])
+  | TmLet (_, _, t, body) -> eval_tm genv (eval_tm genv env t :: env) body
 
-and do_app (f : vl_tm) (a : vl_tm) : vl_tm =
+and do_app (genv : GlobalEnv.t) (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
-  | VTmLam (_, _, ClosTm (env, body)) -> eval_tm (a :: env) body
+  | VTmLam (_, _, ClosTm (env, body)) -> eval_tm genv (a :: env) body
   | VTmNeutral (h, sp) -> (
       let new_sp = sp @ [ EApp a ] in
-      match try_iota_reduce h new_sp with
+      match try_iota_reduce genv h new_sp with
       | Some v -> v
       | None -> VTmNeutral (h, new_sp))
   | _ -> raise (Elab_error "do_app: expected lambda or neutral")
 
-and try_iota_reduce (h : head) (sp : spine) : vl_tm option =
+and try_iota_reduce (genv : GlobalEnv.t) (h : head) (sp : spine) : vl_tm option
+    =
   match h with
   | HConst rec_name -> (
-      match !current_recursor_lookup rec_name with
+      match GlobalEnv.find_recursor rec_name genv with
       | None -> None
       | Some info -> (
           let args =
@@ -198,20 +255,23 @@ and try_iota_reduce (h : head) (sp : spine) : vl_tm option =
                               (HConst (Name.child info.rec_ind_name "rec"), [])
                           in
                           let with_params =
-                            List.fold_left do_app rec_head params
+                            List.fold_left (do_app genv) rec_head params
                           in
-                          let with_motive = do_app with_params motive in
+                          let with_motive = do_app genv with_params motive in
                           let with_methods =
-                            List.fold_left do_app with_motive methods
+                            List.fold_left (do_app genv) with_motive methods
                           in
                           let with_indices =
-                            List.fold_left do_app with_methods field_indices
+                            List.fold_left (do_app genv) with_methods
+                              field_indices
                           in
-                          do_app with_indices field)
+                          do_app genv with_indices field)
                         rule.rule_rec_args
                     in
-                    let with_fields = List.fold_left do_app method_val fields in
-                    Some (List.fold_left do_app with_fields ihs))
+                    let with_fields =
+                      List.fold_left (do_app genv) method_val fields
+                    in
+                    Some (List.fold_left (do_app genv) with_fields ihs))
             | _ -> None))
   | _ -> None
 
@@ -227,139 +287,156 @@ and do_proj2 : vl_tm -> vl_tm = function
 
 (* ========== Quoting ========== *)
 
-let rec quote_ty (l : int) : vl_ty -> ty = function
+let rec quote_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> ty = function
   | VTyU -> TyU
   | VTyPi (x, a, ClosTy (env, body)) ->
-      let a' = quote_ty l a in
+      let a' = quote_ty genv l a in
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let b' = quote_ty (l + 1) (eval_ty (var :: env) body) in
+      let b' = quote_ty genv (l + 1) (eval_ty genv (var :: env) body) in
       TyPi (x, a', b')
   | VTySigma (x, a, ClosTy (env, body)) ->
-      let a' = quote_ty l a in
+      let a' = quote_ty genv l a in
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let b' = quote_ty (l + 1) (eval_ty (var :: env) body) in
+      let b' = quote_ty genv (l + 1) (eval_ty genv (var :: env) body) in
       TySigma (x, a', b')
   | VTyInt -> TyInt
-  | VTyEl n -> TyEl (quote_neutral l n)
+  | VTyEl n -> TyEl (quote_neutral genv l n)
 
-and quote_tm (l : int) : vl_tm -> tm = function
-  | VTmNeutral n -> quote_neutral l n
+and quote_tm (genv : GlobalEnv.t) (l : int) : vl_tm -> tm = function
+  | VTmNeutral n -> quote_neutral genv l n
   | VTmLam (x, a, ClosTm (env, body)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let a = quote_ty l a in
-      let body' = quote_tm (l + 1) (eval_tm (var :: env) body) in
+      let a = quote_ty genv l a in
+      let body' = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
       TmLam (x, a, body')
   | VTmPiHat (x, a, ClosTm (env, body)) ->
-      let a = quote_tm l a in
+      let a = quote_tm genv l a in
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let b = quote_tm (l + 1) (eval_tm (var :: env) body) in
+      let b = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
       TmPiHat (x, a, b)
   | VTmSigmaHat (x, a, ClosTm (env, body)) ->
-      let a = quote_tm l a in
+      let a = quote_tm genv l a in
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let b = quote_tm (l + 1) (eval_tm (var :: env) body) in
+      let b = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
       TmSigmaHat (x, a, b)
   | VTmMkSigma (x, a, ClosTy (env, b), t, u) ->
-      let a = quote_ty l a in
+      let a = quote_ty genv l a in
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let b = quote_ty (l + 1) (eval_ty (var :: env) b) in
+      let b = quote_ty genv (l + 1) (eval_ty genv (var :: env) b) in
       ignore x;
-      TmMkSigma (a, b, quote_tm l t, quote_tm l u)
+      TmMkSigma (a, b, quote_tm genv l t, quote_tm genv l u)
   | VTmIntLit n -> TmIntLit n
   | VTmIntHat -> TmIntHat
-  | VTmAdd (a, b) -> TmAdd (quote_tm l a, quote_tm l b)
-  | VTmSub (a, b) -> TmSub (quote_tm l a, quote_tm l b)
+  | VTmAdd (a, b) -> TmAdd (quote_tm genv l a, quote_tm genv l b)
+  | VTmSub (a, b) -> TmSub (quote_tm genv l a, quote_tm genv l b)
 
-and quote_neutral (l : int) ((h, sp) : neutral) : tm =
+and quote_neutral (genv : GlobalEnv.t) (l : int) ((h, sp) : neutral) : tm =
   let head =
     match h with
     | HVar (Lvl k) -> TmVar (Idx (l - k - 1))
     | HConst name -> TmConst name
-    | HSorry (id, ty) -> TmSorry (id, quote_ty l ty)
+    | HSorry (id, ty) -> TmSorry (id, quote_ty genv l ty)
   in
-  quote_spine l head sp
+  quote_spine genv l head sp
 
-and quote_spine (l : int) (head : tm) : spine -> tm = function
+and quote_spine (genv : GlobalEnv.t) (l : int) (head : tm) : spine -> tm =
+  function
   | [] -> head
-  | EApp arg :: sp -> quote_spine l (TmApp (head, quote_tm l arg)) sp
-  | EProj1 :: sp -> quote_spine l (TmProj1 head) sp
-  | EProj2 :: sp -> quote_spine l (TmProj2 head) sp
+  | EApp arg :: sp -> quote_spine genv l (TmApp (head, quote_tm genv l arg)) sp
+  | EProj1 :: sp -> quote_spine genv l (TmProj1 head) sp
+  | EProj2 :: sp -> quote_spine genv l (TmProj2 head) sp
 
 (* Convert a value type to a term representing its code *)
-and reify_ty (l : int) : vl_ty -> tm = function
+and reify_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> tm = function
   | VTyU -> raise (Elab_error "Cannot reify Type as a term")
   | VTyInt -> TmIntHat
   | VTyPi (x, a, ClosTy (env, b)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let a' = reify_ty l a in
-      let b_ty = eval_ty (var :: env) b in
-      let b' = reify_ty (l + 1) b_ty in
+      let a' = reify_ty genv l a in
+      let b_ty = eval_ty genv (var :: env) b in
+      let b' = reify_ty genv (l + 1) b_ty in
       TmPiHat (x, a', b')
   | VTySigma (x, a, ClosTy (env, b)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
-      let a' = reify_ty l a in
-      let b_ty = eval_ty (var :: env) b in
-      let b' = reify_ty (l + 1) b_ty in
+      let a' = reify_ty genv l a in
+      let b_ty = eval_ty genv (var :: env) b in
+      let b' = reify_ty genv (l + 1) b_ty in
       TmSigmaHat (x, a', b')
-  | VTyEl n -> quote_neutral l n
+  | VTyEl n -> quote_neutral genv l n
 
 (* ========== Conversion ========== *)
 
-let rec conv_ty (l : int) (t1 : vl_ty) (t2 : vl_ty) : bool =
+let rec conv_ty (genv : GlobalEnv.t) (l : int) (t1 : vl_ty) (t2 : vl_ty) : bool
+    =
   match (t1, t2) with
   | VTyU, VTyU -> true
   | VTyPi (_, a1, ClosTy (env1, b1)), VTyPi (_, a2, ClosTy (env2, b2)) ->
-      conv_ty l a1 a2
+      conv_ty genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_ty (l + 1) (eval_ty (var :: env1) b1) (eval_ty (var :: env2) b2)
+      conv_ty genv (l + 1)
+        (eval_ty genv (var :: env1) b1)
+        (eval_ty genv (var :: env2) b2)
   | VTySigma (_, a1, ClosTy (env1, b1)), VTySigma (_, a2, ClosTy (env2, b2)) ->
-      conv_ty l a1 a2
+      conv_ty genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_ty (l + 1) (eval_ty (var :: env1) b1) (eval_ty (var :: env2) b2)
+      conv_ty genv (l + 1)
+        (eval_ty genv (var :: env1) b1)
+        (eval_ty genv (var :: env2) b2)
   | VTyInt, VTyInt -> true
-  | VTyEl n1, VTyEl n2 -> conv_neutral l n1 n2
+  | VTyEl n1, VTyEl n2 -> conv_neutral genv l n1 n2
   | _ -> false
 
-and conv_tm (l : int) (t1 : vl_tm) (t2 : vl_tm) : bool =
+and conv_tm (genv : GlobalEnv.t) (l : int) (t1 : vl_tm) (t2 : vl_tm) : bool =
   match (t1, t2) with
   | VTmNeutral n1, VTmNeutral n2 ->
-      conv_neutral l n1 n2 || try_eta_struct l t1 t2 || try_eta_struct l t2 t1
+      conv_neutral genv l n1 n2
+      || try_eta_struct genv l t1 t2
+      || try_eta_struct genv l t2 t1
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_tm (l + 1)
-        (eval_tm (var :: env1) body1)
-        (eval_tm (var :: env2) body2)
+      conv_tm genv (l + 1)
+        (eval_tm genv (var :: env1) body1)
+        (eval_tm genv (var :: env2) body2)
   | VTmPiHat (_, a1, ClosTm (env1, b1)), VTmPiHat (_, a2, ClosTm (env2, b2)) ->
-      conv_tm l a1 a2
+      conv_tm genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_tm (l + 1) (eval_tm (var :: env1) b1) (eval_tm (var :: env2) b2)
+      conv_tm genv (l + 1)
+        (eval_tm genv (var :: env1) b1)
+        (eval_tm genv (var :: env2) b2)
   | ( VTmSigmaHat (_, a1, ClosTm (env1, b1)),
       VTmSigmaHat (_, a2, ClosTm (env2, b2)) ) ->
-      conv_tm l a1 a2
+      conv_tm genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_tm (l + 1) (eval_tm (var :: env1) b1) (eval_tm (var :: env2) b2)
+      conv_tm genv (l + 1)
+        (eval_tm genv (var :: env1) b1)
+        (eval_tm genv (var :: env2) b2)
   | ( VTmMkSigma (_, _, ClosTy (env1, b1), t1, u1),
       VTmMkSigma (_, _, ClosTy (env2, b2), t2, u2) ) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_ty (l + 1) (eval_ty (var :: env1) b1) (eval_ty (var :: env2) b2)
-      && conv_tm l t1 t2 && conv_tm l u1 u2
+      conv_ty genv (l + 1)
+        (eval_ty genv (var :: env1) b1)
+        (eval_ty genv (var :: env2) b2)
+      && conv_tm genv l t1 t2 && conv_tm genv l u1 u2
   | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
   | VTmIntHat, VTmIntHat -> true
-  | VTmAdd (a1, b1), VTmAdd (a2, b2) -> conv_tm l a1 a2 && conv_tm l b1 b2
-  | VTmSub (a1, b1), VTmSub (a2, b2) -> conv_tm l a1 a2 && conv_tm l b1 b2
+  | VTmAdd (a1, b1), VTmAdd (a2, b2) ->
+      conv_tm genv l a1 a2 && conv_tm genv l b1 b2
+  | VTmSub (a1, b1), VTmSub (a2, b2) ->
+      conv_tm genv l a1 a2 && conv_tm genv l b1 b2
   | _ -> false
 
-and try_eta_struct (l : int) (ctor_app : vl_tm) (other : vl_tm) : bool =
+and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : vl_tm)
+    (other : vl_tm) : bool =
   match ctor_app with
   | VTmNeutral (HConst ctor_name, sp) -> (
-      match !current_ctor_lookup ctor_name with
+      match GlobalEnv.find_constructor ctor_name genv with
       | None -> false
       | Some (ind_name, _ctor_idx) -> (
-          match !current_structure_lookup ind_name with
+          match find_structure genv ind_name with
           | None -> false
           | Some info ->
               let args =
@@ -387,123 +464,65 @@ and try_eta_struct (l : int) (ctor_app : vl_tm) (other : vl_tm) : bool =
                   | fname :: fname_rest, field :: field_rest ->
                       let proj_name = Name.child info.struct_ind_name fname in
                       let proj_result =
-                        match !current_genv proj_name with
+                        match GlobalEnv.find_tm proj_name genv with
                         | Some proj_fn ->
                             let with_params =
-                              List.fold_left do_app proj_fn params
+                              List.fold_left (do_app genv) proj_fn params
                             in
-                            do_app with_params other
+                            do_app genv with_params other
                         | None -> VTmNeutral (HConst proj_name, [])
                       in
-                      conv_tm l field proj_result
+                      conv_tm genv l field proj_result
                       && check_fields fname_rest field_rest
                   | _ -> false
                 in
                 check_fields info.struct_field_names fields))
   | _ -> false
 
-and conv_neutral (l : int) ((h1, sp1) : neutral) ((h2, sp2) : neutral) : bool =
-  conv_head l h1 h2 && conv_spine l sp1 sp2
+and conv_neutral (genv : GlobalEnv.t) (l : int) ((h1, sp1) : neutral)
+    ((h2, sp2) : neutral) : bool =
+  conv_head h1 h2 && conv_spine genv l sp1 sp2
 
-and conv_head (_l : int) (h1 : head) (h2 : head) : bool =
+and conv_head (h1 : head) (h2 : head) : bool =
   match (h1, h2) with
   | HVar l1, HVar l2 -> l1 = l2
   | HConst n1, HConst n2 -> Name.equal n1 n2
   | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
   | _ -> false
 
-and conv_spine (l : int) (sp1 : spine) (sp2 : spine) : bool =
+and conv_spine (genv : GlobalEnv.t) (l : int) (sp1 : spine) (sp2 : spine) : bool
+    =
   match (sp1, sp2) with
   | [], [] -> true
   | EApp a1 :: sp1', EApp a2 :: sp2' ->
-      conv_tm l a1 a2 && conv_spine l sp1' sp2'
-  | EProj1 :: sp1', EProj1 :: sp2' -> conv_spine l sp1' sp2'
-  | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine l sp1' sp2'
+      conv_tm genv l a1 a2 && conv_spine genv l sp1' sp2'
+  | EProj1 :: sp1', EProj1 :: sp2' -> conv_spine genv l sp1' sp2'
+  | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine genv l sp1' sp2'
   | _ -> false
 
-(* ========== Global Environment ========== *)
-
-type inductive_info = {
-  ind_ty : ty;
-  ctors : (Name.t * ty) list;
-}
-
-module GlobalEnv = struct
-  type entry =
-    | Def of {
-        ty : vl_ty;
-        tm : vl_tm;
-      }
-    | Opaque of { ty : vl_ty }
-    | Inductive of inductive_info
-    | Recursor of {
-        ty : vl_ty;
-        info : recursor_info;
-      }
-    | Constructor of {
-        ty : vl_ty;
-        ind_name : Name.t;
-        ctor_idx : int;
-      }
-
-  type t = entry NameMap.t
-
-  let empty : t = NameMap.empty
-  let add_def name ty tm = NameMap.add name (Def { ty; tm })
-  let add_opaque name ty = NameMap.add name (Opaque { ty })
-
-  let add_inductive name ind_ty ctors =
-    NameMap.add name (Inductive { ind_ty; ctors })
-
-  let add_recursor name ty info = NameMap.add name (Recursor { ty; info })
-
-  let add_constructor name ty ind_name ctor_idx =
-    NameMap.add name (Constructor { ty; ind_name; ctor_idx })
-
-  let find_ty name env =
-    match NameMap.find_opt name env with
-    | Some (Def { ty; _ })
-    | Some (Opaque { ty })
-    | Some (Recursor { ty; _ })
-    | Some (Constructor { ty; _ }) ->
-        Some ty
-    | Some (Inductive { ind_ty; _ }) -> Some (eval_ty [] ind_ty)
-    | None -> None
-
-  let find_tm name env =
-    match NameMap.find_opt name env with
-    | Some (Def { tm; _ }) -> Some tm
-    | _ -> None
-
-  let find_recursor name env =
-    match NameMap.find_opt name env with
-    | Some (Recursor { info; _ }) -> Some info
-    | _ -> None
-
-  let find_constructor name env =
-    match NameMap.find_opt name env with
-    | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
-    | _ -> None
-
-  let is_inductive name env =
-    match NameMap.find_opt name env with
-    | Some (Inductive _) -> true
-    | _ -> false
-
-  let find_inductive name env =
-    match NameMap.find_opt name env with
-    | Some (Inductive info) -> Some info
-    | _ -> None
-
-  let find_structure ind_name env =
-    match NameMap.find_opt (Name.child ind_name "rec") env with
-    | Some (Recursor { info; _ }) ->
-        if info.rec_num_indices = 0 && List.length info.rec_rules = 1 then
-          let rule = List.hd info.rec_rules in
-          if rule.rule_rec_args = [] then
-            let field_names =
-              match NameMap.find_opt rule.rule_ctor_name env with
-              | Some (Constructor { ty; _ }) ->
+and find_structure (genv : GlobalEnv.t) (ind_name : Name.t) :
+    structure_info option =
+  match GlobalEnv.find_recursor (Name.child ind_name "rec") genv with
+  | Some info when info.rec_num_indices = 0 && List.length info.rec_rules = 1 ->
+      let rule = List.hd info.rec_rules in
+      if rule.rule_rec_args = [] then
+        let field_names =
+          match GlobalEnv.find_constructor rule.rule_ctor_name genv with
+          | Some (_, _) -> (
+              match NameMap.find_opt rule.rule_ctor_name genv with
+              | Some (GlobalEnv.Constructor { ty; _ }) ->
+                  let rec skip_params n ty =
+                    if n = 0 then
+                      ty
+                    else
+                      match
+                        ty
+                      with
+                      | VTyPi (_, _, ClosTy (env, body)) ->
+                          let var = VTmNeutral (HVar (Lvl 0), []) in
+                          skip_params (n - 1) (eval_ty genv (var :: env) body)
+                      | _ -> ty
+                  in
                   let rec extract_field_names n ty =
                     if n = 0 then
                       []
@@ -515,7 +534,7 @@ module GlobalEnv = struct
                           let var = VTmNeutral (HVar (Lvl 0), []) in
                           let rest =
                             extract_field_names (n - 1)
-                              (eval_ty (var :: env) body)
+                              (eval_ty genv (var :: env) body)
                           in
                           (match name with
                           | Some s -> s
@@ -523,36 +542,22 @@ module GlobalEnv = struct
                           :: rest
                       | _ -> []
                   in
-                  let rec skip_params n ty =
-                    if n = 0 then
-                      ty
-                    else
-                      match
-                        ty
-                      with
-                      | VTyPi (_, _, ClosTy (env, body)) ->
-                          let var = VTmNeutral (HVar (Lvl 0), []) in
-                          skip_params (n - 1) (eval_ty (var :: env) body)
-                      | _ -> ty
-                  in
                   extract_field_names rule.rule_nfields
                     (skip_params info.rec_num_params ty)
-              | _ -> List.init rule.rule_nfields (Format.sprintf "proj%d")
-            in
-            Some
-              {
-                struct_ind_name = ind_name;
-                struct_ctor_name = rule.rule_ctor_name;
-                struct_num_params = info.rec_num_params;
-                struct_num_fields = rule.rule_nfields;
-                struct_field_names = field_names;
-              }
-          else
-            None
-        else
-          None
-    | _ -> None
-end
+              | _ -> List.init rule.rule_nfields (Format.sprintf "proj%d"))
+          | None -> List.init rule.rule_nfields (Format.sprintf "proj%d")
+        in
+        Some
+          {
+            struct_ind_name = ind_name;
+            struct_ctor_name = rule.rule_ctor_name;
+            struct_num_params = info.rec_num_params;
+            struct_num_fields = rule.rule_nfields;
+            struct_field_names = field_names;
+          }
+      else
+        None
+  | _ -> None
 
 (* ========== Context ========== *)
 
@@ -608,13 +613,23 @@ module Context = struct
       ctx.entries
 end
 
+let find_ty (genv : GlobalEnv.t) (name : Name.t) : vl_ty option =
+  match NameMap.find_opt name genv with
+  | Some (GlobalEnv.Def { ty; _ })
+  | Some (GlobalEnv.Opaque { ty })
+  | Some (GlobalEnv.Recursor { ty; _ })
+  | Some (GlobalEnv.Constructor { ty; _ }) ->
+      Some ty
+  | Some (GlobalEnv.Inductive { ind_ty; _ }) -> Some (eval_ty genv [] ind_ty)
+  | None -> None
+
 (* ========== Elaboration ========== *)
 
 let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
   | Raw.U -> TyU
   | Raw.Pi ((names, dom), cod) ->
       let dom' = check_ty genv ctx dom in
-      let dom_val = eval_ty (Context.env ctx) dom' in
+      let dom_val = eval_ty genv (Context.env ctx) dom' in
       let rec bind_all ctx = function
         | [] -> check_ty genv ctx cod
         | name :: rest ->
@@ -625,13 +640,13 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
       bind_all ctx names
   | Raw.Arrow (dom, cod) ->
       let dom' = check_ty genv ctx dom in
-      let dom_val = eval_ty (Context.env ctx) dom' in
+      let dom_val = eval_ty genv (Context.env ctx) dom' in
       let ctx' = Context.bind None dom_val ctx in
       let cod' = check_ty genv ctx' cod in
       TyPi (None, dom', cod')
   | Raw.Sigma ((names, fst_ty), snd_ty) ->
       let fst' = check_ty genv ctx fst_ty in
-      let fst_val = eval_ty (Context.env ctx) fst' in
+      let fst_val = eval_ty genv (Context.env ctx) fst' in
       let rec bind_all ctx = function
         | [] -> check_ty genv ctx snd_ty
         | name :: rest ->
@@ -642,7 +657,7 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
       bind_all ctx names
   | Raw.Prod (fst_ty, snd_ty) ->
       let fst' = check_ty genv ctx fst_ty in
-      let fst_val = eval_ty (Context.env ctx) fst' in
+      let fst_val = eval_ty genv (Context.env ctx) fst' in
       let ctx' = Context.bind None fst_val ctx in
       let snd' = check_ty genv ctx' snd_ty in
       TySigma (None, fst', snd')
@@ -650,20 +665,20 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
   | Raw.Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
-      let a_ty_tm = reify_ty (Context.lvl ctx) a_ty in
+      let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
       let eq_ty =
         TyEl
-          (TmApp (TmApp (TmApp (TmConst (Name.root "Eq"), a_ty_tm), a_tm), b_tm))
+          (TmApp (TmApp (TmApp (TmConst (Name.parse "Eq"), a_ty_tm), a_tm), b_tm))
       in
       eq_ty
   | t ->
       let tm, ty_val = infer_tm genv ctx t in
-      if not (conv_ty (Context.lvl ctx) ty_val VTyU) then
+      if not (conv_ty genv (Context.lvl ctx) ty_val VTyU) then
         raise
           (Elab_error
              (Format.asprintf "Expected Type, got %a"
                 (Pretty.pp_ty_ctx (Context.names ctx))
-                (quote_ty (Context.lvl ctx) ty_val)));
+                (quote_ty genv (Context.lvl ctx) ty_val)));
       TyEl tm
 
 and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
@@ -673,7 +688,7 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       | Some (k, ty) -> (TmVar (Idx k), ty)
       | None -> (
           let fqn = Name.parse name in
-          match GlobalEnv.find_ty fqn genv with
+          match find_ty genv fqn with
           | Some ty -> (TmConst fqn, ty)
           | None ->
               raise (Elab_error (Format.sprintf "Unbound variable: %s" name))))
@@ -682,13 +697,13 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       match f_ty with
       | VTyPi (_, a_ty, ClosTy (env, b_ty)) ->
           let a' = check_tm genv ctx a a_ty in
-          let a_val = eval_tm (Context.env ctx) a' in
-          (TmApp (f', a'), eval_ty (a_val :: env) b_ty)
+          let a_val = eval_tm genv (Context.env ctx) a' in
+          (TmApp (f', a'), eval_ty genv (a_val :: env) b_ty)
       | _ -> raise (Elab_error "Expected function type in application"))
   | Raw.U -> raise (Elab_error "Cannot infer type of Type")
   | Raw.Ann (e, ty) ->
       let ty' = check_ty genv ctx ty in
-      let ty_val = eval_ty (Context.env ctx) ty' in
+      let ty_val = eval_ty genv (Context.env ctx) ty' in
       let e' = check_tm genv ctx e ty_val in
       (e', ty_val)
   | Raw.Lam (binders, body) ->
@@ -696,21 +711,21 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
         | [] -> infer_tm genv ctx body
         | (name, Some ty) :: rest ->
             let ty' = check_ty genv ctx ty in
-            let ty_val = eval_ty (Context.env ctx) ty' in
+            let ty_val = eval_ty genv (Context.env ctx) ty' in
             let ctx' = Context.bind name ty_val ctx in
             let body', body_ty = go ctx' rest in
             let clos =
-              ClosTy (Context.env ctx, quote_ty (Context.lvl ctx') body_ty)
+              ClosTy (Context.env ctx, quote_ty genv (Context.lvl ctx') body_ty)
             in
             (TmLam (name, ty', body'), VTyPi (name, ty_val, clos))
         | (_, None) :: _ ->
-            raise (Elab_error "Cannot infer type of lambda without annotation")
+            raise (Elab_error "Cannot infer type of unannotated lambda :(")
       in
       go ctx binders
   | Raw.Pi ((names, dom), cod) ->
       let dom' = infer_tm genv ctx dom in
       let dom_tm, _ = dom' in
-      let dom_val = do_el (eval_tm (Context.env ctx) dom_tm) in
+      let dom_val = do_el (eval_tm genv (Context.env ctx) dom_tm) in
       let rec bind_all ctx = function
         | [] ->
             let cod_tm, _ = infer_tm genv ctx cod in
@@ -723,13 +738,13 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       (bind_all ctx names, VTyU)
   | Raw.Arrow (dom, cod) ->
       let dom_tm, _ = infer_tm genv ctx dom in
-      let dom_val = do_el (eval_tm (Context.env ctx) dom_tm) in
+      let dom_val = do_el (eval_tm genv (Context.env ctx) dom_tm) in
       let ctx' = Context.bind None dom_val ctx in
       let cod_tm, _ = infer_tm genv ctx' cod in
       (TmPiHat (None, dom_tm, cod_tm), VTyU)
   | Raw.Sigma ((names, fst_ty), snd_ty) ->
       let fst_tm, _ = infer_tm genv ctx fst_ty in
-      let fst_val = do_el (eval_tm (Context.env ctx) fst_tm) in
+      let fst_val = do_el (eval_tm genv (Context.env ctx) fst_tm) in
       let rec bind_all ctx = function
         | [] ->
             let snd_tm, _ = infer_tm genv ctx snd_ty in
@@ -742,16 +757,16 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       (bind_all ctx names, VTyU)
   | Raw.Prod (fst_ty, snd_ty) ->
       let fst_tm, _ = infer_tm genv ctx fst_ty in
-      let fst_val = do_el (eval_tm (Context.env ctx) fst_tm) in
+      let fst_val = do_el (eval_tm genv (Context.env ctx) fst_tm) in
       let ctx' = Context.bind None fst_val ctx in
       let snd_tm, _ = infer_tm genv ctx' snd_ty in
       (TmSigmaHat (None, fst_tm, snd_tm), VTyU)
   | Raw.Pair (a, b) ->
       let a', a_ty = infer_tm genv ctx a in
-      let a_val = eval_tm (Context.env ctx) a' in
+      let a_val = eval_tm genv (Context.env ctx) a' in
       let b', b_ty = infer_tm genv ctx b in
-      let a_ty_quoted = quote_ty (Context.lvl ctx) a_ty in
-      let b_ty_quoted = quote_ty (Context.lvl ctx) b_ty in
+      let a_ty_quoted = quote_ty genv (Context.lvl ctx) a_ty in
+      let b_ty_quoted = quote_ty genv (Context.lvl ctx) b_ty in
       let clos = ClosTy (a_val :: Context.env ctx, b_ty_quoted) in
       (TmMkSigma (a_ty_quoted, b_ty_quoted, a', b'), VTySigma (None, a_ty, clos))
   | Raw.Proj1 t -> (
@@ -763,8 +778,8 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let t', t_ty = infer_tm genv ctx t in
       match t_ty with
       | VTySigma (_, _, ClosTy (env, snd_ty)) ->
-          let fst_val = do_proj1 (eval_tm (Context.env ctx) t') in
-          (TmProj2 t', eval_ty (fst_val :: env) snd_ty)
+          let fst_val = do_proj1 (eval_tm genv (Context.env ctx) t') in
+          (TmProj2 t', eval_ty genv (fst_val :: env) snd_ty)
       | _ -> raise (Elab_error "Expected sigma type in projection"))
   | Raw.Int -> (TmIntHat, VTyU)
   | Raw.IntLit n -> (TmIntLit n, VTyInt)
@@ -779,30 +794,31 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
   | Raw.Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
-      let a_ty_tm = reify_ty (Context.lvl ctx) a_ty in
-      ( TmApp (TmApp (TmApp (TmConst (Name.root "Eq"), a_ty_tm), a_tm), b_tm),
+      let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
+      ( TmApp (TmApp (TmApp (TmConst (Name.parse "Eq"), a_ty_tm), a_tm), b_tm),
         VTyU )
   | Raw.Let (name, ty_opt, rhs, body) ->
       let rhs', rhs_ty =
         match ty_opt with
         | Some ty ->
             let ty' = check_ty genv ctx ty in
-            let ty_val = eval_ty (Context.env ctx) ty' in
+            let ty_val = eval_ty genv (Context.env ctx) ty' in
             (check_tm genv ctx rhs ty_val, ty_val)
         | None -> infer_tm genv ctx rhs
       in
-      let rhs_val = eval_tm (Context.env ctx) rhs' in
+      let rhs_val = eval_tm genv (Context.env ctx) rhs' in
       let ctx' = Context.bind_def (Some name) rhs_ty rhs_val ctx in
       let body', body_ty = infer_tm genv ctx' body in
-      let body_ty_quoted = quote_ty (Context.lvl ctx') body_ty in
-      let result_ty = eval_ty (Context.env ctx') body_ty_quoted in
-      (TmLet (name, quote_ty (Context.lvl ctx) rhs_ty, rhs', body'), result_ty)
+      let body_ty_quoted = quote_ty genv (Context.lvl ctx') body_ty in
+      let result_ty = eval_ty genv (Context.env ctx') body_ty_quoted in
+      ( TmLet (name, quote_ty genv (Context.lvl ctx) rhs_ty, rhs', body'),
+        result_ty )
   | Raw.Sorry ->
       let id = fresh_sorry_id () in
       let hole_ty =
-        VTyEl (HConst (Name.root (Format.sprintf "?ty%d†" id)), [])
+        VTyEl (HConst (Name.parse (Format.sprintf "?ty%d†" id)), [])
       in
-      (TmSorry (id, quote_ty (Context.lvl ctx) hole_ty), hole_ty)
+      (TmSorry (id, quote_ty genv (Context.lvl ctx) hole_ty), hole_ty)
 
 and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
     (expected : vl_ty) : tm =
@@ -816,59 +832,59 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
                 (match ty_opt with
                 | Some ann ->
                     let ann' = check_ty genv ctx ann in
-                    let ann_val = eval_ty (Context.env ctx) ann' in
-                    if not (conv_ty (Context.lvl ctx) ann_val a_ty) then
+                    let ann_val = eval_ty genv (Context.env ctx) ann' in
+                    if not (conv_ty genv (Context.lvl ctx) ann_val a_ty) then
                       raise
                         (Elab_error
                            (Format.asprintf
                               "Lambda annotation mismatch: expected %a, got %a"
                               (Pretty.pp_ty_ctx (Context.names ctx))
-                              (quote_ty (Context.lvl ctx) a_ty)
+                              (quote_ty genv (Context.lvl ctx) a_ty)
                               (Pretty.pp_ty_ctx (Context.names ctx))
-                              (quote_ty (Context.lvl ctx) ann_val)))
+                              (quote_ty genv (Context.lvl ctx) ann_val)))
                 | None -> ());
                 let ctx' = Context.bind name a_ty ctx in
                 let var = VTmNeutral (HVar (Lvl (Context.lvl ctx)), []) in
-                let b_ty_val = eval_ty (var :: env) b_ty in
+                let b_ty_val = eval_ty genv (var :: env) b_ty in
                 let body' = go ctx' b_ty_val rest in
-                TmLam (name, quote_ty (Context.lvl ctx) a_ty, body')
+                TmLam (name, quote_ty genv (Context.lvl ctx) a_ty, body')
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
       go ctx expected binders
   | Raw.Pair (a, b), VTySigma (_, fst_ty, ClosTy (env, snd_ty)) ->
       let a' = check_tm genv ctx a fst_ty in
-      let a_val = eval_tm (Context.env ctx) a' in
-      let snd_ty_val = eval_ty (a_val :: env) snd_ty in
+      let a_val = eval_tm genv (Context.env ctx) a' in
+      let snd_ty_val = eval_ty genv (a_val :: env) snd_ty in
       let b' = check_tm genv ctx b snd_ty_val in
-      let fst_ty_quoted = quote_ty (Context.lvl ctx) fst_ty in
+      let fst_ty_quoted = quote_ty genv (Context.lvl ctx) fst_ty in
       TmMkSigma (fst_ty_quoted, snd_ty, a', b')
   | Raw.Let (name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
         | Some ty ->
             let ty' = check_ty genv ctx ty in
-            let ty_val = eval_ty (Context.env ctx) ty' in
+            let ty_val = eval_ty genv (Context.env ctx) ty' in
             (check_tm genv ctx rhs ty_val, ty_val)
         | None -> infer_tm genv ctx rhs
       in
-      let rhs_val = eval_tm (Context.env ctx) rhs' in
+      let rhs_val = eval_tm genv (Context.env ctx) rhs' in
       let ctx' = Context.bind_def (Some name) rhs_ty rhs_val ctx in
       let body' = check_tm genv ctx' body expected in
-      TmLet (name, quote_ty (Context.lvl ctx) rhs_ty, rhs', body')
+      TmLet (name, quote_ty genv (Context.lvl ctx) rhs_ty, rhs', body')
   | Raw.Sorry, expected ->
       let id = fresh_sorry_id () in
-      TmSorry (id, quote_ty (Context.lvl ctx) expected)
+      TmSorry (id, quote_ty genv (Context.lvl ctx) expected)
   | _ ->
       let tm, inferred = infer_tm genv ctx raw in
-      (if not (conv_ty (Context.lvl ctx) inferred expected) then
+      (if not (conv_ty genv (Context.lvl ctx) inferred expected) then
          let names = Context.names ctx in
          raise
            (Elab_error
               (Format.asprintf "Type mismatch: expected %a, got %a"
                  (Pretty.pp_ty_ctx names)
-                 (quote_ty (Context.lvl ctx) expected)
+                 (quote_ty genv (Context.lvl ctx) expected)
                  (Pretty.pp_ty_ctx names)
-                 (quote_ty (Context.lvl ctx) inferred))));
+                 (quote_ty genv (Context.lvl ctx) inferred))));
       tm
 
 (* ========== Positivity Checking ========== *)
@@ -1183,7 +1199,7 @@ let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
                    (Format.sprintf "%s: parameter needs type"
                       (Name.to_string full_name)))
         in
-        let param_ty_val = eval_ty (Context.env ctx) param_ty in
+        let param_ty_val = eval_ty genv (Context.env ctx) param_ty in
         let ctx' = Context.bind name param_ty_val ctx in
         let body_ty = build_ctor_body ctx' (depth + 1) rest in
         TyPi (name, param_ty, body_ty)
@@ -1195,7 +1211,7 @@ let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
       param_tys ctor_body
   in
   check_strict_positivity genv ind ctor_ty;
-  let ctor_ty_val = eval_ty [] ctor_ty in
+  let ctor_ty_val = eval_ty genv [] ctor_ty in
   (full_name, ctor_ty, ctor_ty_val)
 
 (* ========== Recursor Generation ========== *)
@@ -1692,12 +1708,12 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
 let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
     (ctors : Raw.ctor list) : GlobalEnv.t * (Name.t * ty) list =
-  let ind = Name.root ind_str in
+  let ind = Name.parse ind_str in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
     | (names, ty_raw) :: rest ->
         let param_ty = check_ty genv ctx ty_raw in
-        let param_ty_val = eval_ty (Context.env ctx) param_ty in
+        let param_ty_val = eval_ty genv (Context.env ctx) param_ty in
         let ctx', tys =
           List.fold_left
             (fun (c, ts) name ->
@@ -1718,7 +1734,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
       (fun (name, ty) body -> TyPi (name, ty, body))
       param_tys result_ty
   in
-  let ind_ty_val = eval_ty [] ind_ty in
+  let ind_ty_val = eval_ty genv [] ind_ty in
   let genv = GlobalEnv.add_opaque ind ind_ty_val genv in
   let ctor_results =
     List.map (elab_ctor genv ind param_ctx param_tys num_params) ctors
@@ -1738,7 +1754,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
   let rec_ty =
     gen_recursor_ty ind num_params param_tys index_tys ctor_name_tys
   in
-  let rec_ty_val = eval_ty [] rec_ty in
+  let rec_ty_val = eval_ty genv [] rec_ty in
   let rec_rules =
     List.map
       (fun (ctor_name, ctor_ty) ->
@@ -1848,17 +1864,8 @@ let module_to_path (root : string) (module_name : string) : string =
 type elab_state = {
   mutable genv : GlobalEnv.t;
   mutable importing : string list;
-      (* stack of modules currently being imported *)
-  imported : (string, unit) Hashtbl.t; (* already imported modules *)
+  imported : (string, unit) Hashtbl.t;
 }
-
-let update_genv_refs state =
-  (current_genv := fun name -> GlobalEnv.find_tm name state.genv);
-  (current_recursor_lookup :=
-     fun name -> GlobalEnv.find_recursor name state.genv);
-  (current_ctor_lookup := fun name -> GlobalEnv.find_constructor name state.genv);
-  current_structure_lookup :=
-    fun name -> GlobalEnv.find_structure name state.genv
 
 let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     ~(parse : string -> Raw.program) (prog : Raw.program) :
@@ -1866,8 +1873,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
   let state =
     { genv = GlobalEnv.empty; importing = []; imported = Hashtbl.create 16 }
   in
-  update_genv_refs state;
-
   let rec process_import module_name =
     if List.mem module_name state.importing then
       raise (Circular_import module_name);
@@ -1890,12 +1895,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         process_import module_name;
         go acc ctx rest
     | Raw.Def (name, body) :: rest ->
-        let full_name = Name.root name in
+        let full_name = Name.parse name in
         let term, ty_val = infer_tm state.genv ctx body in
-        let term_val = eval_tm (Context.env ctx) term in
+        let term_val = eval_tm state.genv (Context.env ctx) term in
         state.genv <- GlobalEnv.add_def full_name ty_val term_val state.genv;
-        update_genv_refs state;
-        let ty_out = quote_ty 0 ty_val in
+        let ty_out = quote_ty state.genv 0 ty_val in
         go ((full_name, term, ty_out) :: acc) ctx rest
     | Raw.Example body :: rest ->
         let _term, _ty_val = infer_tm state.genv ctx body in
@@ -1905,7 +1909,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           elab_inductive state.genv name params ty_opt ctors
         in
         state.genv <- new_genv;
-        update_genv_refs state;
         let new_acc =
           List.fold_left
             (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)

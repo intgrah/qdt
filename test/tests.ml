@@ -3,25 +3,26 @@ open Elaboration.Elab
 open Elaboration.Pretty
 
 let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
+let genv = GlobalEnv.empty
 
 module Test_eval = struct
   let identity () =
     let term = TmLam (None, TyU, TmVar (Idx 0)) in
-    let result = eval_tm [] term in
+    let result = eval_tm genv [] term in
     match result with
     | VTmLam (None, VTyU, ClosTm ([], TmVar (Idx 0))) -> ()
     | _ -> Alcotest.fail "identity evaluation failed"
 
   let beta () =
     let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmIntHat) in
-    let result = eval_tm [] term in
+    let result = eval_tm genv [] term in
     match result with
     | VTmIntHat -> ()
     | _ -> Alcotest.fail "beta reduction failed"
 
   let pi_eval () =
     let ty = TyPi (None, TyU, TyU) in
-    let result = eval_ty [] ty in
+    let result = eval_ty genv [] ty in
     match result with
     | VTyPi (None, VTyU, ClosTy ([], TyU)) -> ()
     | _ -> Alcotest.fail "pi evaluation failed"
@@ -37,15 +38,14 @@ end
 module Test_quote = struct
   let variable () =
     let v = VTmNeutral (HVar (Lvl 0), []) in
-    let tm = quote_tm 1 v in
-    (* Variable at level 0 with quote level 1 -> index = 1-1-0 = 0 *)
+    let tm = quote_tm genv 1 v in
     match tm with
     | TmVar (Idx 0) -> ()
     | _ -> Alcotest.fail "variable quoting failed"
 
   let lambda () =
     let v = VTmLam (None, VTyU, ClosTm ([], TmVar (Idx 0))) in
-    let tm = quote_tm 0 v in
+    let tm = quote_tm genv 0 v in
     match tm with
     | TmLam (_, _, TmVar (Idx 0)) -> ()
     | _ -> Alcotest.fail "lambda quoting failed"
@@ -58,7 +58,7 @@ module Test_quote = struct
 end
 
 module Test_nbe = struct
-  let whnf t = quote_tm 0 (eval_tm [] t)
+  let whnf t = quote_tm genv 0 (eval_tm genv [] t)
 
   let beta () =
     let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmIntHat) in
@@ -93,7 +93,6 @@ end
 
 module Test_elab = struct
   let check_identity () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x") in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
@@ -103,21 +102,18 @@ module Test_elab = struct
     | _ -> Alcotest.fail "check failed"
 
   let pi_type () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Pi (([ Some "x" ], Raw.U), Raw.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Arrow (Raw.U, Raw.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Ident "x" in
     Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
@@ -126,14 +122,12 @@ module Test_elab = struct
         ())
 
   let int_type () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.Int in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" TyInt ty
 
   let int_lit_infer () =
-    let genv = GlobalEnv.empty in
     let ctx = Context.empty in
     let raw = Raw.IntLit 42 in
     let tm, ty = infer_tm genv ctx raw in
