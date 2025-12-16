@@ -1,6 +1,7 @@
 open Elaboration.Syntax
 open Elaboration.Elab
 open Elaboration.Pretty
+module Name = Elaboration.Name
 
 let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
 let genv = GlobalEnv.empty
@@ -159,7 +160,8 @@ module Programs = struct
     in
     let result = elab_program prog in
     match result with
-    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), ty) ] -> (
+    | [ (name, TmLam (_, _, TmVar (Idx 0)), ty) ]
+      when Name.equal name (Name.parse "id") -> (
         match ty with
         | TyPi (None, TyU, TyU) -> ()
         | _ -> Alcotest.fail "wrong type")

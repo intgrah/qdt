@@ -11,4 +11,4 @@ val pp_ty : Format.formatter -> ty -> unit
 val pp_tm : Format.formatter -> tm -> unit
 val ty_to_string : ty -> string
 val tm_to_string : tm -> string
-val pp_def : Format.formatter -> string list * tm * ty -> unit
+val pp_def : Format.formatter -> Name.t * tm * ty -> unit
