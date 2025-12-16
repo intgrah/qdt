@@ -152,10 +152,13 @@ module Programs = struct
     let prog =
       [
         Raw.Def
-          ( "id",
-            Raw.Ann
-              ( Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x"),
-                Raw.Arrow (Raw.U, Raw.U) ) );
+          {
+            name = "id";
+            body =
+              Raw.Ann
+                ( Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x"),
+                  Raw.Arrow (Raw.U, Raw.U) );
+          };
       ]
     in
     let result = elab_program prog in

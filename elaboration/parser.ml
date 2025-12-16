@@ -292,7 +292,7 @@ and parse_preterm : Raw.t t =
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-and parse_constructor : Raw.ctor t =
+and parse_constructor : (string * Raw.binder list * Raw.t option) t =
  fun input ->
   (let* () = token Pipe in
    let* name = parse_ident in
@@ -318,183 +318,53 @@ and parse_inductive : Raw.item t =
    in
    let* () = token Where in
    let* ctors = many parse_constructor in
-   return (Raw.Inductive (name, params, ty_opt, ctors)))
+   return (Raw.Inductive { name; params; ty = ty_opt; ctors }))
     input
 
-and parse_field : (string * Raw.t) t =
+and parse_field : (string * Raw.binder_group list * Raw.t) t =
  fun input ->
   (let* () = token LParen in
    let* name = parse_ident in
+   if String.contains name '.' then
+     raise (Parse_error "Structure field names must be atomic");
+   let* args = many parse_typed_binder_group in
    let* () = token Colon in
    let* ty = parse_preterm in
    let* () = token RParen in
-   return (name, ty))
+   return (name, args, ty))
     input
 
-and parse_structure : Raw.item list t =
+and parse_structure : Raw.item t =
  fun input ->
   (let* () = token Structure in
    let* name = parse_ident in
    let* params = many parse_typed_binder_group in
+   let* ty_opt =
+     optional
+       (let* () = token Colon in
+        parse_preterm)
+   in
    let* () = token Where in
    let* fields = many parse_field in
-   let mk_ctor_binders =
-     List.map (fun (fname, fty) -> (Some fname, Some fty)) fields
-   in
-   let mk_ctor = ("mk", mk_ctor_binders, None) in
-   let ind = Raw.Inductive (name, params, None, [ mk_ctor ]) in
-   let param_names = List.concat_map (fun (names, _) -> names) params in
-   let struct_app =
-     List.fold_left
-       (fun acc nm ->
-         match nm with
-         | Some n -> Raw.App (acc, Raw.Ident n)
-         | None -> acc)
-       (Raw.Ident name) param_names
-   in
-   (* Substitute field name with its projection application *)
-   let make_proj_app fname =
-     let base =
-       List.fold_left
-         (fun acc nm ->
-           match nm with
-           | Some n -> Raw.App (acc, Raw.Ident n)
-           | None -> acc)
-         (Raw.Ident (name ^ "." ^ fname))
-         param_names
-     in
-     Raw.App (base, Raw.Ident "s")
-   in
-   (* Substitute all occurrences of field names in earlier_fields with projections *)
-   let rec subst_fields earlier_fields tm =
-     match tm with
-     | Raw.Ident x -> (
-         match List.assoc_opt x earlier_fields with
-         | Some proj -> proj
-         | None -> tm)
-     | Raw.App (f, a) ->
-         Raw.App (subst_fields earlier_fields f, subst_fields earlier_fields a)
-     | Raw.Lam (bs, body) ->
-         let bound = List.filter_map fst bs in
-         let earlier_fields' =
-           List.filter (fun (n, _) -> not (List.mem n bound)) earlier_fields
-         in
-         Raw.Lam
-           ( List.map
-               (fun (n, ty) -> (n, Option.map (subst_fields earlier_fields) ty))
-               bs,
-             subst_fields earlier_fields' body )
-     | Raw.Pi ((ns, ty), body) ->
-         let bound = List.filter_map Fun.id ns in
-         let earlier_fields' =
-           List.filter (fun (n, _) -> not (List.mem n bound)) earlier_fields
-         in
-         Raw.Pi
-           ( (ns, subst_fields earlier_fields ty),
-             subst_fields earlier_fields' body )
-     | Raw.Arrow (a, b) ->
-         Raw.Arrow (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Prod (a, b) ->
-         Raw.Prod (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Pair (a, b) ->
-         Raw.Pair (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Proj1 t -> Raw.Proj1 (subst_fields earlier_fields t)
-     | Raw.Proj2 t -> Raw.Proj2 (subst_fields earlier_fields t)
-     | Raw.Eq (a, b) ->
-         Raw.Eq (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Add (a, b) ->
-         Raw.Add (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Sub (a, b) ->
-         Raw.Sub (subst_fields earlier_fields a, subst_fields earlier_fields b)
-     | Raw.Sigma ((ns, a), b) ->
-         let bound = List.filter_map Fun.id ns in
-         let earlier_fields' =
-           List.filter (fun (n, _) -> not (List.mem n bound)) earlier_fields
-         in
-         Raw.Sigma
-           ((ns, subst_fields earlier_fields a), subst_fields earlier_fields' b)
-     | Raw.Ann (t, ty) ->
-         Raw.Ann (subst_fields earlier_fields t, subst_fields earlier_fields ty)
-     | Raw.Let (n, ty_opt, t, b) ->
-         let earlier_fields' =
-           List.filter (fun (x, _) -> x <> n) earlier_fields
-         in
-         Raw.Let
-           ( n,
-             Option.map (subst_fields earlier_fields) ty_opt,
-             subst_fields earlier_fields t,
-             subst_fields earlier_fields' b )
-     | _ -> tm
-   in
-   let _, projections =
-     List.fold_left
-       (fun (earlier_fields, projs) (fname, fty) ->
-         let proj_name = name ^ "." ^ fname in
-         let s_binder = (Some "s", Some struct_app) in
-         let subst_fty = subst_fields earlier_fields fty in
-         let motive = Raw.Lam ([ (Some "s", None) ], subst_fty) in
-         let field_names = List.map (fun (fn, _) -> Some fn) fields in
-         let proj_fn =
-           Raw.Lam (List.map (fun fn -> (fn, None)) field_names, Raw.Ident fname)
-         in
-         let rec_app =
-           List.fold_left
-             (fun acc nm ->
-               match nm with
-               | Some n -> Raw.App (acc, Raw.Ident n)
-               | None -> acc)
-             (Raw.Ident (name ^ ".rec"))
-             param_names
-         in
-         let rec_with_motive = Raw.App (rec_app, motive) in
-         let rec_with_proj = Raw.App (rec_with_motive, proj_fn) in
-         let rec_with_s = Raw.App (rec_with_proj, Raw.Ident "s") in
-         let full_body = Raw.Ann (rec_with_s, subst_fty) in
-         let body_with_s = Raw.Lam ([ s_binder ], full_body) in
-         let param_binders =
-           List.concat_map
-             (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
-             params
-         in
-         let full_def =
-           if param_binders = [] then
-             body_with_s
-           else
-             Raw.Lam (param_binders, body_with_s)
-         in
-         let proj = Raw.Def (proj_name, full_def) in
-         let earlier_fields' = (fname, make_proj_app fname) :: earlier_fields in
-         (earlier_fields', projs @ [ proj ]))
-       ([], []) fields
-   in
-   return (ind :: projections))
+   return (Raw.Structure { name; params; ty = ty_opt; fields }))
     input
 
 let rec parse_single_item : Raw.item t =
  fun input ->
   choice
     [
+      parse_structure;
       parse_inductive;
       (let* () = token Def in
        let* name = parse_ident in
        let* body = parse_def_body in
-       return (Raw.Def (name, body)));
+       return (Raw.Def { name; body }));
       (let* () = token Example in
        let* body = parse_def_body in
-       return (Raw.Example body));
+       return (Raw.Example { body }));
       (let* () = token Import in
        let* name = parse_ident in
-       return (Raw.Import name));
-    ]
-    input
-
-and parse_item : Raw.item list t =
- fun input ->
-  choice
-    [
-      parse_structure;
-      (let* item = parse_single_item in
-       return [ item ]);
+       return (Raw.Import { module_name = name }));
     ]
     input
 
@@ -527,11 +397,7 @@ and parse_def_body : Raw.t t =
    return full_body)
     input
 
-let parse_program : Raw.program t =
- fun input ->
-  (let* item_lists = many parse_item in
-   return (List.concat item_lists))
-    input
+let parse_program : Raw.program t = fun input -> many parse_single_item input
 
 let parse (input : token list) : Raw.program =
   match parse_program input with

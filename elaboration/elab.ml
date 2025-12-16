@@ -51,6 +51,10 @@ module GlobalEnv = struct
       }
     | Opaque of { ty : vl_ty }
     | Inductive of inductive_info
+    | Structure of {
+        ind : inductive_info;
+        info : structure_info;
+      }
     | Recursor of {
         ty : vl_ty;
         info : recursor_info;
@@ -83,6 +87,12 @@ module GlobalEnv = struct
   let find_inductive name env =
     match NameMap.find_opt name env with
     | Some (Inductive info) -> Some info
+    | Some (Structure { ind; _ }) -> Some ind
+    | _ -> None
+
+  let find_structure name env =
+    match NameMap.find_opt name env with
+    | Some (Structure { info; _ }) -> Some info
     | _ -> None
 end
 
@@ -409,7 +419,35 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : vl_tm)
       match GlobalEnv.find_constructor ctor_name genv with
       | None -> false
       | Some (ind_name, _ctor_idx) -> (
-          match find_structure genv ind_name with
+          let info_opt : GlobalEnv.structure_info option =
+            match GlobalEnv.find_structure ind_name genv with
+            | Some info -> Some info
+            | None -> (
+                (* Also allow eta for unit-like inductives: one constructor, no fields. *)
+                match
+                  GlobalEnv.find_recursor (Name.child ind_name "rec") genv
+                with
+                | Some rec_info
+                  when rec_info.rec_num_indices = 0
+                       && List.length rec_info.rec_rules = 1 ->
+                    let rule = List.hd rec_info.rec_rules in
+                    if
+                      rule.rule_rec_args = [] && rule.rule_nfields = 0
+                      && Name.equal rule.rule_ctor_name ctor_name
+                    then
+                      Some
+                        {
+                          struct_ind_name = ind_name;
+                          struct_ctor_name = ctor_name;
+                          struct_num_params = rec_info.rec_num_params;
+                          struct_num_fields = 0;
+                          struct_field_names = [];
+                        }
+                    else
+                      None
+                | _ -> None)
+          in
+          match info_opt with
           | None -> false
           | Some info ->
               let args =
@@ -473,65 +511,6 @@ and conv_spine (genv : GlobalEnv.t) (l : int) (sp1 : spine) (sp2 : spine) : bool
   | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine genv l sp1' sp2'
   | _ -> false
 
-and find_structure (genv : GlobalEnv.t) (ind_name : Name.t) :
-    GlobalEnv.structure_info option =
-  match GlobalEnv.find_recursor (Name.child ind_name "rec") genv with
-  | Some info when info.rec_num_indices = 0 && List.length info.rec_rules = 1 ->
-      let rule = List.hd info.rec_rules in
-      if rule.rule_rec_args = [] then
-        let field_names =
-          match GlobalEnv.find_constructor rule.rule_ctor_name genv with
-          | Some (_, _) -> (
-              match NameMap.find_opt rule.rule_ctor_name genv with
-              | Some (GlobalEnv.Constructor { ty; _ }) ->
-                  let rec skip_params n ty =
-                    if n = 0 then
-                      ty
-                    else
-                      match
-                        ty
-                      with
-                      | VTyPi (_, _, ClosTy (env, body)) ->
-                          let var = VTmNeutral (HVar (Lvl 0), []) in
-                          skip_params (n - 1) (eval_ty genv (var :: env) body)
-                      | _ -> ty
-                  in
-                  let rec extract_field_names n ty =
-                    if n = 0 then
-                      []
-                    else
-                      match
-                        ty
-                      with
-                      | VTyPi (name, _, ClosTy (env, body)) ->
-                          let var = VTmNeutral (HVar (Lvl 0), []) in
-                          let rest =
-                            extract_field_names (n - 1)
-                              (eval_ty genv (var :: env) body)
-                          in
-                          (match name with
-                          | Some s -> s
-                          | None -> "_")
-                          :: rest
-                      | _ -> []
-                  in
-                  extract_field_names rule.rule_nfields
-                    (skip_params info.rec_num_params ty)
-              | _ -> List.init rule.rule_nfields (Format.sprintf "proj%d"))
-          | None -> List.init rule.rule_nfields (Format.sprintf "proj%d")
-        in
-        Some
-          {
-            struct_ind_name = ind_name;
-            struct_ctor_name = rule.rule_ctor_name;
-            struct_num_params = info.rec_num_params;
-            struct_num_fields = rule.rule_nfields;
-            struct_field_names = field_names;
-          }
-      else
-        None
-  | _ -> None
-
 (* ========== Context ========== *)
 
 module Context = struct
@@ -594,6 +573,8 @@ let find_ty (genv : GlobalEnv.t) (name : Name.t) : vl_ty option =
   | Some (GlobalEnv.Constructor { ty; _ }) ->
       Some ty
   | Some (GlobalEnv.Inductive { ind_ty; _ }) -> Some (eval_ty genv [] ind_ty)
+  | Some (GlobalEnv.Structure { ind = { ind_ty; _ }; _ }) ->
+      Some (eval_ty genv [] ind_ty)
   | None -> None
 
 (* ========== Elaboration ========== *)
@@ -1139,7 +1120,8 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
 
 let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    ((ctor_name, ctor_params, ctor_ty_opt) : Raw.ctor) : Name.t * ty * vl_ty =
+    ((ctor_name, ctor_params, ctor_ty_opt) :
+      string * Raw.binder list * Raw.t option) : Name.t * ty * vl_ty =
   let full_name = Name.child ind ctor_name in
   let rec build_ctor_body ctx depth = function
     | [] -> (
@@ -1681,7 +1663,8 @@ let gen_recursor_ty (ind : Name.t) (num_params : int)
 
 let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
-    (ctors : Raw.ctor list) : GlobalEnv.t * (Name.t * ty) list =
+    (ctors : (string * Raw.binder list * Raw.t option) list) :
+    GlobalEnv.t * (Name.t * ty) list =
   let ind = Name.parse ind_str in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
@@ -1870,11 +1853,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
       (genv, ModuleSet.add m imported)
   and go genv imported importing acc = function
     | [] -> (genv, imported, List.rev acc)
-    | Raw.Import module_name :: rest ->
+    | Raw.Import { module_name } :: rest ->
         let m = Module_name.parse module_name in
         let genv, imported = process_import genv imported importing m in
         go genv imported importing acc rest
-    | Raw.Def (name, body) :: rest ->
+    | Raw.Def { name; body } :: rest ->
         let full_name = Name.parse name in
         let term, ty_val = infer_tm genv Context.empty body in
         let term_val = eval_tm genv [] term in
@@ -1885,15 +1868,230 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         let ty_out = quote_ty genv 0 ty_val in
         go genv imported importing ((full_name, term, ty_out) :: acc) rest
-    | Raw.Example body :: rest ->
+    | Raw.Example { body } :: rest ->
         let _ = infer_tm genv Context.empty body in
         go genv imported importing acc rest
-    | Raw.Inductive (name, params, ty_opt, ctors) :: rest ->
-        let genv, results = elab_inductive genv name params ty_opt ctors in
+    | Raw.Inductive { name; params; ty; ctors } :: rest ->
+        let genv, results = elab_inductive genv name params ty ctors in
         let acc =
           List.fold_left
             (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)
             acc results
+        in
+        go genv imported importing acc rest
+    | Raw.Structure { name; params; ty; fields } :: rest ->
+        let () =
+          match ty with
+          | None -> ()
+          | Some Raw.U -> ()
+          | Some _ ->
+              raise
+                (Elab_error
+                   "Structure result type annotation must be Type (structures \
+                    have no indices)")
+        in
+        let mk_field_ty
+            ((_fname, args, ty) : string * Raw.binder_group list * Raw.t) :
+            Raw.t =
+          List.fold_right (fun bg body -> Raw.Pi (bg, body)) args ty
+        in
+        let ctor_binders =
+          List.map
+            (fun ((fname, _args, _ty) as f :
+                   string * Raw.binder_group list * Raw.t) ->
+              (Some fname, Some (mk_field_ty f)))
+            fields
+        in
+        let ctors : (string * Raw.binder list * Raw.t option) list =
+          [ ("mk", ctor_binders, None) ]
+        in
+        let genv, results = elab_inductive genv name params ty ctors in
+        let ind_name = Name.parse name in
+        let struct_info : GlobalEnv.structure_info =
+          {
+            struct_ind_name = ind_name;
+            struct_ctor_name = Name.child ind_name "mk";
+            struct_num_params =
+              List.fold_left
+                (fun n ((ns, _) : Raw.binder_group) -> n + List.length ns)
+                0 params;
+            struct_num_fields = List.length fields;
+            struct_field_names = List.map (fun (fname, _, _) -> fname) fields;
+          }
+        in
+        let genv =
+          match NameMap.find_opt ind_name genv with
+          | Some (GlobalEnv.Inductive ind) ->
+              NameMap.add ind_name
+                (GlobalEnv.Structure { ind; info = struct_info })
+                genv
+          | _ -> genv
+        in
+        let acc =
+          List.fold_left
+            (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)
+            acc results
+        in
+        let param_names =
+          List.concat_map (fun ((ns, _) : Raw.binder_group) -> ns) params
+        in
+        let struct_app =
+          List.fold_left
+            (fun acc nm ->
+              match nm with
+              | Some n -> Raw.App (acc, Raw.Ident n)
+              | None -> acc)
+            (Raw.Ident name) param_names
+        in
+        let make_proj_app fname =
+          let base =
+            List.fold_left
+              (fun acc nm ->
+                match nm with
+                | Some n -> Raw.App (acc, Raw.Ident n)
+                | None -> acc)
+              (Raw.Ident (name ^ "." ^ fname))
+              param_names
+          in
+          Raw.App (base, Raw.Ident "s")
+        in
+        let rec subst_fields earlier_fields tm =
+          match tm with
+          | Raw.Ident x -> (
+              match List.assoc_opt x earlier_fields with
+              | Some proj -> proj
+              | None -> tm)
+          | Raw.App (f, a) ->
+              Raw.App
+                (subst_fields earlier_fields f, subst_fields earlier_fields a)
+          | Raw.Lam (bs, body) ->
+              let bound = List.filter_map fst bs in
+              let earlier_fields' =
+                List.filter
+                  (fun (n, _) -> not (List.mem n bound))
+                  earlier_fields
+              in
+              Raw.Lam
+                ( List.map
+                    (fun (n, ty) ->
+                      (n, Option.map (subst_fields earlier_fields) ty))
+                    bs,
+                  subst_fields earlier_fields' body )
+          | Raw.Pi ((ns, ty), body) ->
+              let bound = List.filter_map Fun.id ns in
+              let earlier_fields' =
+                List.filter
+                  (fun (n, _) -> not (List.mem n bound))
+                  earlier_fields
+              in
+              Raw.Pi
+                ( (ns, subst_fields earlier_fields ty),
+                  subst_fields earlier_fields' body )
+          | Raw.Arrow (a, b) ->
+              Raw.Arrow
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Prod (a, b) ->
+              Raw.Prod
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Pair (a, b) ->
+              Raw.Pair
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Proj1 t -> Raw.Proj1 (subst_fields earlier_fields t)
+          | Raw.Proj2 t -> Raw.Proj2 (subst_fields earlier_fields t)
+          | Raw.Eq (a, b) ->
+              Raw.Eq
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Add (a, b) ->
+              Raw.Add
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Sub (a, b) ->
+              Raw.Sub
+                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+          | Raw.Sigma ((ns, a), b) ->
+              let bound = List.filter_map Fun.id ns in
+              let earlier_fields' =
+                List.filter
+                  (fun (n, _) -> not (List.mem n bound))
+                  earlier_fields
+              in
+              Raw.Sigma
+                ( (ns, subst_fields earlier_fields a),
+                  subst_fields earlier_fields' b )
+          | Raw.Ann (t, ty) ->
+              Raw.Ann
+                (subst_fields earlier_fields t, subst_fields earlier_fields ty)
+          | Raw.Let (n, ty_opt, t, b) ->
+              let earlier_fields' =
+                List.filter (fun (x, _) -> x <> n) earlier_fields
+              in
+              Raw.Let
+                ( n,
+                  Option.map (subst_fields earlier_fields) ty_opt,
+                  subst_fields earlier_fields t,
+                  subst_fields earlier_fields' b )
+          | _ -> tm
+        in
+        let rec_app =
+          List.fold_left
+            (fun acc nm ->
+              match nm with
+              | Some n -> Raw.App (acc, Raw.Ident n)
+              | None -> acc)
+            (Raw.Ident (name ^ ".rec"))
+            param_names
+        in
+        let field_binders =
+          List.map (fun (fname, _, _) -> (Some fname, None)) fields
+        in
+        let param_binders =
+          List.concat_map
+            (fun ((names, ty) : Raw.binder_group) ->
+              List.map (fun n -> (n, Some ty)) names)
+            params
+        in
+        let genv, acc =
+          List.fold_left
+            (fun (genv, acc)
+                 ((fname, args, fty) : string * Raw.binder_group list * Raw.t)
+               ->
+              let proj_name = name ^ "." ^ fname in
+              let s_binder = (Some "s", Some struct_app) in
+              let field_ty = mk_field_ty (fname, args, fty) in
+              let subst_fty =
+                subst_fields
+                  (List.filter_map
+                     (fun (other_fname : string) ->
+                       if String.equal other_fname fname then
+                         None
+                       else
+                         Some (other_fname, make_proj_app other_fname))
+                     (List.map (fun (n, _, _) -> n) fields))
+                  field_ty
+              in
+              let motive = Raw.Lam ([ (Some "s", None) ], subst_fty) in
+              let proj_fn = Raw.Lam (field_binders, Raw.Ident fname) in
+              let rec_with_motive = Raw.App (rec_app, motive) in
+              let rec_with_proj = Raw.App (rec_with_motive, proj_fn) in
+              let rec_with_s = Raw.App (rec_with_proj, Raw.Ident "s") in
+              let full_body = Raw.Ann (rec_with_s, subst_fty) in
+              let body_with_s = Raw.Lam ([ s_binder ], full_body) in
+              let full_def =
+                if param_binders = [] then
+                  body_with_s
+                else
+                  Raw.Lam (param_binders, body_with_s)
+              in
+              let term, ty_val = infer_tm genv Context.empty full_def in
+              let term_val = eval_tm genv [] term in
+              let full_fqn = Name.parse proj_name in
+              let genv =
+                NameMap.add full_fqn
+                  (GlobalEnv.Def { ty = ty_val; tm = term_val })
+                  genv
+              in
+              let ty_out = quote_ty genv 0 ty_val in
+              (genv, (full_fqn, term, ty_out) :: acc))
+            (genv, acc) fields
         in
         go genv imported importing acc rest
   in
