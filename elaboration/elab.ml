@@ -1119,7 +1119,7 @@ let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
                 (fun acc i ->
                   TmApp (acc, TmVar (Idx (depth + num_params - 1 - i))))
                 base
-                (List.init num_params (fun i -> i))
+                (List.init num_params Fun.id)
             in
             TyEl applied
         | Some ret_raw ->
@@ -1251,7 +1251,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
   let major_depth = num_params + 1 + num_ctors + num_indices in
   let result_depth = major_depth + 1 in
 
-  let idx_of d v = v - d - 1 in
+  let idx_of v d = v - d - 1 in
 
   let build_ind_app ~view_depth ~index_terms =
     let base = TmConst ind in
@@ -1260,7 +1260,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
         if i >= num_params then
           acc
         else
-          apply (i + 1) (TmApp (acc, TmVar (Idx (idx_of i view_depth))))
+          apply (i + 1) (TmApp (acc, TmVar (Idx (idx_of view_depth i))))
       in
       apply 0 base
     in
@@ -1273,7 +1273,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     let x_view_depth = motive_depth + num_indices in
     let index_terms =
       List.init num_indices (fun i ->
-          TmVar (Idx (idx_of (motive_depth + i) x_view_depth)))
+          TmVar (Idx (idx_of x_view_depth (motive_depth + i))))
     in
     let x_type = TyEl (build_ind_app ~view_depth:x_view_depth ~index_terms) in
     let with_x = TyPi (Some "x", x_type, body) in
@@ -1302,7 +1302,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
           t
         with
         | TyPi (_, _, b) -> go (n - 1) b
-        | _ -> t
+        | t -> t
     in
     go num_params ty
   in
@@ -1346,7 +1346,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     in
 
     let subst_tm tm =
-      let param_idxs = List.init num_params (fun i -> idx_of i inner_depth) in
+      let param_idxs = List.init num_params (idx_of inner_depth) in
       let rec go = function
         | TmVar (Idx i) ->
             if i < num_fields then
@@ -1354,7 +1354,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
               let _, d =
                 List.find (fun (j, _) -> j = field_num) field_bind_depths
               in
-              TmVar (Idx (idx_of d inner_depth))
+              TmVar (Idx (idx_of inner_depth d))
             else
               let param_num = num_params - 1 - (i - num_fields) in
               if param_num >= 0 && param_num < num_params then
@@ -1372,7 +1372,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
 
     let ctor_app =
       let base = TmConst ctor_name in
-      let param_idxs = List.init num_params (fun i -> idx_of i inner_depth) in
+      let param_idxs = List.init num_params (idx_of inner_depth) in
       let with_params =
         List.fold_left (fun acc i -> TmApp (acc, TmVar (Idx i))) base param_idxs
       in
@@ -1381,11 +1381,11 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
           let _, d =
             List.find (fun (j, _) -> j = field_num) field_bind_depths
           in
-          TmApp (acc, TmVar (Idx (idx_of d inner_depth))))
+          TmApp (acc, TmVar (Idx (idx_of inner_depth d))))
         with_params all_fields
     in
 
-    let motive_idx = idx_of motive_depth inner_depth in
+    let motive_idx = idx_of inner_depth motive_depth in
     let motive_applied =
       List.fold_left
         (fun acc t -> TmApp (acc, t))
@@ -1405,11 +1405,11 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
                 let _, bind_d =
                   List.find (fun (k, _) -> k = j) field_bind_depths
                 in
-                TmVar (Idx (idx_of bind_d (view_depth + extra_binders)))
+                TmVar (Idx (idx_of (view_depth + extra_binders) bind_d))
               else
                 let ctor_param_offset = orig_i - field_num in
                 let actual_param = num_params - 1 - ctor_param_offset in
-                TmVar (Idx (idx_of actual_param (view_depth + extra_binders)))
+                TmVar (Idx (idx_of (view_depth + extra_binders) actual_param))
         | TmApp (f, a) ->
             TmApp
               (subst_tm_inner extra_binders f, subst_tm_inner extra_binders a)
@@ -1493,7 +1493,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
           List.fold_left
             (fun acc i -> TmApp (acc, TmVar (Idx (num_nested - 1 - i))))
             field_tm
-            (List.init num_nested (fun i -> i))
+            (List.init num_nested Fun.id)
         in
         let motive_app =
           List.fold_left
@@ -1535,8 +1535,8 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
               extract_nested_rec_info ind num_params substituted_ty
             in
             let ih_depth = field_depth + 1 in
-            let ih_motive_idx = idx_of motive_depth ih_depth in
-            let field_var_idx = idx_of field_depth ih_depth in
+            let ih_motive_idx = idx_of ih_depth motive_depth in
+            let field_var_idx = idx_of ih_depth field_depth in
             let ih_ty =
               build_ih_type field_depth nested_binders rec_indices ih_motive_idx
                 field_var_idx
@@ -1557,9 +1557,9 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
   (* Target: (indices...) -> (x : Ind params indices) -> motive indices x *)
   let target_ty =
     let index_idxs =
-      List.init num_indices (fun i -> idx_of (target_idx_depth i) result_depth)
+      List.init num_indices (fun i -> idx_of result_depth (target_idx_depth i))
     in
-    let motive_idx = idx_of motive_depth result_depth in
+    let motive_idx = idx_of result_depth motive_depth in
     let motive_app =
       List.fold_left
         (fun acc i -> TmApp (acc, TmVar (Idx i)))
@@ -1568,7 +1568,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     let result = TyEl (TmApp (motive_app, TmVar (Idx 0))) in
     let x_index_terms =
       List.init num_indices (fun i ->
-          TmVar (Idx (idx_of (target_idx_depth i) major_depth)))
+          TmVar (Idx (idx_of major_depth (target_idx_depth i))))
     in
     let x_type =
       TyEl (build_ind_app ~view_depth:major_depth ~index_terms:x_index_terms)
