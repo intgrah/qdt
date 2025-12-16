@@ -25,6 +25,18 @@ module Raw = struct
   and binder = string option * t option
   and binder_group = string option list * t
 
+  type field = {
+    name : string;
+    binders : binder_group list;
+    ty : t;
+  }
+
+  type constructor = {
+    name : string;
+    params : binder list;
+    ty : t option;
+  }
+
   type item =
     | Import of { module_name : string } (* import Foo.Bar *)
     | Def of {
@@ -36,13 +48,13 @@ module Raw = struct
         name : string;
         params : binder_group list;
         ty : t option;
-        ctors : (string * binder list * t option) list;
+        ctors : constructor list;
       }
     | Structure of {
         name : string;
         params : binder_group list;
         ty : t option; (* optional result type annotation, always Type *)
-        fields : (string * binder_group list * t) list;
+        fields : field list;
       }
 
   type program = item list

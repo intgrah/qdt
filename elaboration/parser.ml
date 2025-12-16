@@ -292,7 +292,7 @@ and parse_preterm : Raw.t t =
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-and parse_constructor : (string * Raw.binder list * Raw.t option) t =
+and parse_constructor : Raw.constructor t =
  fun input ->
   (let* () = token Pipe in
    let* name = parse_ident in
@@ -303,7 +303,7 @@ and parse_constructor : (string * Raw.binder list * Raw.t option) t =
        (let* () = token Colon in
         parse_preterm)
    in
-   return (name, params, ty_opt))
+   return { Raw.name; params; ty = ty_opt })
     input
 
 and parse_inductive : Raw.item t =
@@ -321,7 +321,7 @@ and parse_inductive : Raw.item t =
    return (Raw.Inductive { name; params; ty = ty_opt; ctors }))
     input
 
-and parse_field : (string * Raw.binder_group list * Raw.t) t =
+and parse_field : Raw.field t =
  fun input ->
   (let* () = token LParen in
    let* name = parse_ident in
@@ -331,7 +331,7 @@ and parse_field : (string * Raw.binder_group list * Raw.t) t =
    let* () = token Colon in
    let* ty = parse_preterm in
    let* () = token RParen in
-   return (name, args, ty))
+   return { Raw.name; binders = args; ty })
     input
 
 and parse_structure : Raw.item t =
