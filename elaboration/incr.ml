@@ -8,7 +8,7 @@ type stage_error =
 type 'a stage_result = ('a, stage_error) result
 type tokens_result = Lexer.token list stage_result
 type program_result = Syntax.Raw.program stage_result
-type elaborated_result = (Elab.Name.t * Syntax.tm * Syntax.ty) list stage_result
+type elaborated_result = (Name.t * Syntax.tm * Syntax.ty) list stage_result
 
 type snapshot = {
   tokens : tokens_result;
@@ -98,9 +98,13 @@ let try_elaborate root_dir = function
       | defs -> Ok defs
       | exception Elab.Elab_error msg -> Error (Elab_error msg)
       | exception Elab.Circular_import m ->
-          Error (Elab_error (Format.sprintf "Circular import: %s" m))
+          Error
+            (Elab_error
+               (Format.sprintf "Circular import: %s" (Module_name.to_string m)))
       | exception Elab.Import_not_found m ->
-          Error (Elab_error (Format.sprintf "Import not found: %s" m))
+          Error
+            (Elab_error
+               (Format.sprintf "Import not found: %s" (Module_name.to_string m)))
       | exception exn -> Error (Elab_error (Printexc.to_string exn)))
 
 let create ?(root_dir = ".") () =
