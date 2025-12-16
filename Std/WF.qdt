@@ -1,0 +1,15 @@
+inductive Acc (A : Type) (r : A -> A -> Type) : A -> Type where
+  | intro (x : A) (h : (y : A) -> r y x -> Acc A r y) : Acc A r x
+
+def Acc.inv (A : Type) (r : A -> A -> Type) (x y : A) (hx : Acc A r x) (hyx : r y x) : Acc A r y :=
+  (Acc.rec A r
+     (fun x _ => (y : A) -> r y x -> Acc A r y)
+     (fun x h _ => h)
+     x hx)
+    y hyx
+
+inductive WellFounded (A : Type) (r : A -> A -> Type) : Type where
+  | intro (h : (a : A) -> Acc A r a) : WellFounded A r
+
+def WellFounded.apply (A : Type) (r : A -> A -> Type) (wf : WellFounded A r) (a : A) : Acc A r a :=
+  (WellFounded.rec A r (fun _ => (a : A) -> Acc A r a) (fun h => h) wf) a
