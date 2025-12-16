@@ -150,16 +150,15 @@ and do_app (genv : GlobalEnv.t) (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
   | VTmLam (_, _, ClosTm (env, body)) -> eval_tm genv (a :: env) body
   | VTmNeutral (h, sp) -> (
-      let new_sp = sp @ [ EApp a ] in
-      match try_iota_reduce genv h new_sp with
+      let ne : neutral = (h, sp @ [ EApp a ]) in
+      match try_iota_reduce genv ne with
       | Some v -> v
-      | None -> VTmNeutral (h, new_sp))
+      | None -> VTmNeutral ne)
   | _ -> raise (Elab_error "do_app: expected lambda or neutral")
 
-and try_iota_reduce (genv : GlobalEnv.t) (h : head) (sp : spine) : vl_tm option
-    =
-  match h with
-  | HConst rec_name -> (
+and try_iota_reduce (genv : GlobalEnv.t) (ne : neutral) : vl_tm option =
+  match ne with
+  | HConst rec_name, sp -> (
       match GlobalEnv.find_recursor rec_name genv with
       | None -> None
       | Some info -> (
@@ -983,7 +982,7 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
         | TyPi (_, _, b) -> 1 + count_params b
         | _ -> 0
       in
-      let n_params = count_params info.ind_ty in
+      let n_params = count_params info.ty in
       if n_params = 0 then
         true
       else
@@ -1686,12 +1685,12 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     | None -> TyU
     | Some ty_raw -> check_ty genv param_ctx ty_raw
   in
-  let ind_ty =
+  let ty =
     List.fold_right
       (fun (name, ty) body -> TyPi (name, ty, body))
       param_tys result_ty
   in
-  let ind_ty_val = eval_ty genv [] ind_ty in
+  let ind_ty_val = eval_ty genv [] ty in
   let genv = NameMap.add ind (GlobalEnv.Opaque { ty = ind_ty_val }) genv in
   let ctor_results =
     List.map (elab_ctor genv ind param_ctx param_tys num_params) ctors
@@ -1707,7 +1706,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
   in
   let ctor_name_tys = List.map (fun (name, ty, _) -> (name, ty)) ctor_results in
   let genv =
-    NameMap.add ind (GlobalEnv.Inductive { ind_ty; ctors = ctor_name_tys }) genv
+    NameMap.add ind (GlobalEnv.Inductive { ty; ctors = ctor_name_tys }) genv
   in
   let rec_name = Name.child ind "rec" in
   let index_tys = extract_indices result_ty in
@@ -1815,7 +1814,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
       (GlobalEnv.Recursor { ty = rec_ty_val; info = rec_info })
       genv
   in
-  (genv, ((ind, ind_ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
+  (genv, ((ind, ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
 
 (* ========== Program Elaboration ========== *)
 
