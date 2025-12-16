@@ -16,7 +16,7 @@ let fresh_sorry_id =
 
 module GlobalEnv = struct
   type inductive_info = {
-    ind_ty : ty;
+    ty : ty;
     ctors : (Name.t * ty) list;
   }
 
@@ -572,9 +572,9 @@ let find_ty (genv : GlobalEnv.t) (name : Name.t) : vl_ty option =
   | Some (GlobalEnv.Recursor { ty; _ })
   | Some (GlobalEnv.Constructor { ty; _ }) ->
       Some ty
-  | Some (GlobalEnv.Inductive { ind_ty; _ }) -> Some (eval_ty genv [] ind_ty)
-  | Some (GlobalEnv.Structure { ind = { ind_ty; _ }; _ }) ->
-      Some (eval_ty genv [] ind_ty)
+  | Some (GlobalEnv.Inductive { ty; _ }) -> Some (eval_ty genv [] ty)
+  | Some (GlobalEnv.Structure { ind = { ty; _ }; _ }) ->
+      Some (eval_ty genv [] ty)
   | None -> None
 
 (* ========== Elaboration ========== *)
