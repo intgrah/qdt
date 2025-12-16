@@ -1769,16 +1769,6 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
 exception Circular_import of Module_name.t
 exception Import_not_found of Module_name.t
 
-let module_to_path (root : string) (m : Module_name.t) : string =
-  let path =
-    String.map
-      (function
-        | '.' -> '/'
-        | c -> c)
-      (Module_name.to_string m)
-  in
-  Filename.concat root (path ^ ".qdt")
-
 let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     ~(parse : string -> Raw.program) (prog : Raw.program) :
     (Name.t * tm * ty) list =
@@ -1788,7 +1778,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     if ModuleSet.mem m imported then
       (genv, imported)
     else
-      let path = module_to_path root m in
+      let path = Module_name.to_path root m in
       let content =
         try read_file path with
         | _ -> raise (Import_not_found m)
