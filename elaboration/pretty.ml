@@ -46,18 +46,16 @@ and pp_raw fmt : Raw.t -> unit = function
   | Ann (e, ty) -> Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
   | Sorry -> Format.fprintf fmt "sorry"
 
-let pp_ctor fmt
-    ((ctor_name, ctor_params, ctor_ty) :
-      string * Raw.binder list * Raw.t option) : unit =
-  match (ctor_params, ctor_ty) with
-  | [], None -> Format.fprintf fmt "| %s" ctor_name
-  | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor_name pp_raw ty
+let pp_ctor fmt (ctor : Raw.constructor) : unit =
+  match (ctor.params, ctor.ty) with
+  | [], None -> Format.fprintf fmt "| %s" ctor.name
+  | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor.name pp_raw ty
   | params, None ->
-      Format.fprintf fmt "| %s %a" ctor_name
+      Format.fprintf fmt "| %s %a" ctor.name
         (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
         params
   | params, Some ty ->
-      Format.fprintf fmt "| %s %a : %a" ctor_name
+      Format.fprintf fmt "| %s %a : %a" ctor.name
         (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
         params pp_raw ty
 
@@ -100,14 +98,14 @@ let pp_raw_item fmt : Raw.item -> unit = function
             (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
             params
       in
-      let pp_field fmt (fname, args, fty) =
-        match args with
-        | [] -> Format.fprintf fmt "(%s : %a)" fname pp_raw fty
+      let pp_field fmt (field : Raw.field) =
+        match field.binders with
+        | [] -> Format.fprintf fmt "(%s : %a)" field.name pp_raw field.ty
         | args ->
-            Format.fprintf fmt "(%s %a : %a)" fname
+            Format.fprintf fmt "(%s %a : %a)" field.name
               (Format.pp_print_list ~pp_sep:Format.pp_print_space
                  pp_binder_group)
-              args pp_raw fty
+              args pp_raw field.ty
       in
       match ty with
       | None ->
