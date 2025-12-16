@@ -156,8 +156,7 @@ and do_app (genv : GlobalEnv.t) (f : vl_tm) (a : vl_tm) : vl_tm =
       | None -> VTmNeutral ne)
   | _ -> raise (Elab_error "do_app: expected lambda or neutral")
 
-and try_iota_reduce (genv : GlobalEnv.t) (ne : neutral) : vl_tm option =
-  match ne with
+and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
   | HConst rec_name, sp -> (
       match GlobalEnv.find_recursor rec_name genv with
       | None -> None
@@ -1869,8 +1868,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         let struct_app =
           List.fold_left
-            (fun acc nm ->
-              match nm with
+            (fun acc -> function
               | Some n -> Raw.App (acc, Raw.Ident n)
               | None -> acc)
             (Raw.Ident name) param_names
@@ -1878,8 +1876,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let make_proj_app fname =
           let base =
             List.fold_left
-              (fun acc nm ->
-                match nm with
+              (fun acc -> function
                 | Some n -> Raw.App (acc, Raw.Ident n)
                 | None -> acc)
               (Raw.Ident (name ^ "." ^ fname))
@@ -1887,12 +1884,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           in
           Raw.App (base, Raw.Ident "s")
         in
-        let rec subst_fields earlier_fields tm =
-          match tm with
+        let rec subst_fields earlier_fields = function
           | Raw.Ident x -> (
               match List.assoc_opt x earlier_fields with
               | Some proj -> proj
-              | None -> tm)
+              | None -> Raw.Ident x)
           | Raw.App (f, a) ->
               Raw.App
                 (subst_fields earlier_fields f, subst_fields earlier_fields a)
@@ -1961,12 +1957,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
                   Option.map (subst_fields earlier_fields) ty_opt,
                   subst_fields earlier_fields t,
                   subst_fields earlier_fields' b )
-          | _ -> tm
+          | tm -> tm
         in
         let rec_app =
           List.fold_left
-            (fun acc nm ->
-              match nm with
+            (fun acc -> function
               | Some n -> Raw.App (acc, Raw.Ident n)
               | None -> acc)
             (Raw.Ident (name ^ ".rec"))
