@@ -144,7 +144,7 @@ and pp_tm_ctx (names : string list) (fmt : Format.formatter) : tm -> unit =
         Format.fprintf fmt "%s" (List.nth names l)
       else
         Format.fprintf fmt "x%d†" l
-  | TmConst name -> Format.fprintf fmt "%s" (String.concat "." name)
+  | TmConst name -> Format.fprintf fmt "%a" Name.pp name
   | TmLam (name_opt, a, body) ->
       let x = get_name name_opt names in
       Format.fprintf fmt "@[<hov 2>(fun %s : %a =>@ %a)@]" x (pp_ty_ctx names) a
@@ -200,7 +200,7 @@ let pp_tm fmt t = pp_tm_ctx [] fmt t
 let ty_to_string t = Format.asprintf "%a" pp_ty t
 let tm_to_string t = Format.asprintf "%a" pp_tm t
 
-let pp_def (fmt : Format.formatter) ((name, term, ty) : string list * tm * ty) :
-    unit =
-  Format.fprintf fmt "@[<hv 2>@[<hov 4>def %s :@ %a :=@]@ %a@]"
-    (String.concat "." name) pp_ty ty pp_tm term
+let pp_def (fmt : Format.formatter) ((name, term, ty) : Name.t * tm * ty) : unit
+    =
+  Format.fprintf fmt "@[<hv 2>@[<hov 4>def %a :@ %a :=@]@ %a@]" Name.pp name
+    pp_ty ty pp_tm term
