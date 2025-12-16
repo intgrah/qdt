@@ -1808,15 +1808,16 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
                   index_args)
               rec_args
         in
-        {
-          rule_ctor_name = ctor_name;
-          rule_nfields = nfields;
-          rule_rec_args = rec_args;
-          rule_rec_indices = rec_indices;
-        })
+        GlobalEnv.
+          {
+            rule_ctor_name = ctor_name;
+            rule_nfields = nfields;
+            rule_rec_args = rec_args;
+            rule_rec_indices = rec_indices;
+          })
       ctor_name_tys
   in
-  let rec_info =
+  let rec_info : GlobalEnv.recursor_info =
     {
       rec_ind_name = ind;
       rec_num_params = num_params;
