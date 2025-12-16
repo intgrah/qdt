@@ -2,16 +2,15 @@ open Syntax
 
 (* ========== Raw Syntax ========== *)
 
-let pp_name (fmt : Format.formatter) : string option -> unit = function
+let pp_name fmt : string option -> unit = function
   | None -> Format.fprintf fmt "_"
   | Some name -> Format.fprintf fmt "%s" name
 
-let rec pp_binder (fmt : Format.formatter) : Raw.binder -> unit = function
+let rec pp_binder fmt : Raw.binder -> unit = function
   | name, None -> pp_name fmt name
   | name, Some ty -> Format.fprintf fmt "(%a : %a)" pp_name name pp_raw ty
 
-and pp_binder_group (fmt : Format.formatter) ((names, ty) : Raw.binder_group) :
-    unit =
+and pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
   Format.fprintf fmt "(%a : %a)"
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
@@ -47,8 +46,9 @@ and pp_raw (fmt : Format.formatter) : Raw.t -> unit = function
   | Ann (e, ty) -> Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
   | Sorry -> Format.fprintf fmt "sorry"
 
-let pp_ctor (fmt : Format.formatter)
-    ((ctor_name, ctor_params, ctor_ty) : Raw.ctor) : unit =
+let pp_ctor fmt
+    ((ctor_name, ctor_params, ctor_ty) :
+      string * Raw.binder list * Raw.t option) : unit =
   match (ctor_params, ctor_ty) with
   | [], None -> Format.fprintf fmt "| %s" ctor_name
   | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor_name pp_raw ty
@@ -61,8 +61,7 @@ let pp_ctor (fmt : Format.formatter)
         (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
         params pp_raw ty
 
-let pp_binder_group (fmt : Format.formatter) ((names, ty) : Raw.binder_group) :
-    unit =
+let pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
   let pp_name fmt = function
     | Some n -> Format.fprintf fmt "%s" n
     | None -> Format.fprintf fmt "_"
@@ -71,34 +70,57 @@ let pp_binder_group (fmt : Format.formatter) ((names, ty) : Raw.binder_group) :
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
 
-let pp_inductive (fmt : Format.formatter)
-    ((ind_name, ind_params, ind_ty, ind_ctors) :
-      string * Raw.binder_group list * Raw.t option * Raw.ctor list) : unit =
-  let pp_params fmt params =
-    if params <> [] then
-      Format.fprintf fmt " %a"
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
-        params
-  in
-  match ind_ty with
-  | None ->
-      Format.fprintf fmt "@[<v 0>inductive %s%a where@,%a@]" ind_name pp_params
-        ind_params
-        (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
-        ind_ctors
-  | Some ty ->
-      Format.fprintf fmt "@[<v 0>inductive %s%a : %a where@,%a@]" ind_name
-        pp_params ind_params pp_raw ty
-        (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
-        ind_ctors
-
 let pp_raw_item (fmt : Format.formatter) : Raw.item -> unit = function
-  | Def (name, body) ->
+  | Def { name; body } ->
       Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
-  | Example body -> Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body
-  | Inductive (name, params, ty, ctors) ->
-      pp_inductive fmt (name, params, ty, ctors)
-  | Import name -> Format.fprintf fmt "import %s" name
+  | Example { body } ->
+      Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body
+  | Inductive { name; params; ty; ctors } -> (
+      let pp_params fmt params =
+        if params <> [] then
+          Format.fprintf fmt " %a"
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
+            params
+      in
+      match ty with
+      | None ->
+          Format.fprintf fmt "@[<v 0>inductive %s%a where@,%a@]" name pp_params
+            params
+            (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
+            ctors
+      | Some ty ->
+          Format.fprintf fmt "@[<v 0>inductive %s%a : %a where@,%a@]" name
+            pp_params params pp_raw ty
+            (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
+            ctors)
+  | Structure { name; params; ty; fields } -> (
+      let pp_params fmt params =
+        if params <> [] then
+          Format.fprintf fmt " %a"
+            (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
+            params
+      in
+      let pp_field fmt (fname, args, fty) =
+        match args with
+        | [] -> Format.fprintf fmt "(%s : %a)" fname pp_raw fty
+        | args ->
+            Format.fprintf fmt "(%s %a : %a)" fname
+              (Format.pp_print_list ~pp_sep:Format.pp_print_space
+                 pp_binder_group)
+              args pp_raw fty
+      in
+      match ty with
+      | None ->
+          Format.fprintf fmt "@[<v 0>structure %s%a where@,%a@]" name pp_params
+            params
+            (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_field)
+            fields
+      | Some ty ->
+          Format.fprintf fmt "@[<v 0>structure %s%a : %a where@,%a@]" name
+            pp_params params pp_raw ty
+            (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_field)
+            fields)
+  | Import { module_name } -> Format.fprintf fmt "import %s" module_name
 
 let pp_raw_program (fmt : Format.formatter) (prog : Raw.program) : unit =
   Format.pp_print_list
@@ -115,8 +137,7 @@ let get_name (name_opt : string option) (names : string list) : string =
   | Some name -> name
   | None -> fresh_name names
 
-let rec pp_ty_ctx (names : string list) (fmt : Format.formatter) : ty -> unit =
-  function
+let rec pp_ty_ctx (names : string list) fmt : ty -> unit = function
   | TyU -> Format.fprintf fmt "Type"
   | TyPi (None, a, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_ty_ctx names) a

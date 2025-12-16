@@ -25,14 +25,25 @@ module Raw = struct
   and binder = string option * t option
   and binder_group = string option list * t
 
-  (* Constructor: name * params * return_type_opt *)
-  type ctor = string * binder list * t option
-
   type item =
-    | Def of string * t
-    | Example of t
-    | Inductive of string * binder_group list * t option * ctor list
-    | Import of string (* import Foo.Bar *)
+    | Import of { module_name : string } (* import Foo.Bar *)
+    | Def of {
+        name : string;
+        body : t;
+      }
+    | Example of { body : t }
+    | Inductive of {
+        name : string;
+        params : binder_group list;
+        ty : t option;
+        ctors : (string * binder list * t option) list;
+      }
+    | Structure of {
+        name : string;
+        params : binder_group list;
+        ty : t option; (* optional result type annotation, always Type *)
+        fields : (string * binder_group list * t) list;
+      }
 
   type program = item list
 end
