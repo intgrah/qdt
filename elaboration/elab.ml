@@ -1307,19 +1307,18 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     go num_params ty
   in
 
-  let gen_method_ty (_ctor_name : Name.t) (ctor_ty : ty) (ctor_idx : int) : ty =
+  let gen_method_ty (ctor_name : Name.t) (ctor_ty : ty) (ctor_idx : int) : ty =
     let my_depth = method_depth ctor_idx in
     let fields_ty = strip_params ctor_ty in
 
-    let rec collect_fields ty field_num =
-      match ty with
+    let rec collect_fields field_num = function
       | TyPi (name, arg_ty, rest) ->
           let is_rec = is_recursive_arg_ty ind arg_ty in
           (name, arg_ty, is_rec, field_num)
-          :: collect_fields rest (field_num + 1)
+          :: collect_fields (field_num + 1) rest
       | _ -> []
     in
-    let all_fields = collect_fields fields_ty 0 in
+    let all_fields = collect_fields 0 fields_ty in
     let num_fields = List.length all_fields in
     let num_ihs =
       List.length (List.filter (fun (_, _, is_rec, _) -> is_rec) all_fields)
@@ -1372,7 +1371,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     let mapped_indices = List.map subst_tm return_indices in
 
     let ctor_app =
-      let base = TmConst _ctor_name in
+      let base = TmConst ctor_name in
       let param_idxs = List.init num_params (fun i -> idx_of i inner_depth) in
       let with_params =
         List.fold_left (fun acc i -> TmApp (acc, TmVar (Idx i))) base param_idxs
