@@ -1108,12 +1108,11 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
 
 let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    ((ctor_name, ctor_params, ctor_ty_opt) :
-      string * Raw.binder list * Raw.t option) : Name.t * ty * vl_ty =
-  let full_name = Name.child ind ctor_name in
+    (ctor : Syntax.Raw.constructor) : Name.t * ty * vl_ty =
+  let full_name = Name.child ind ctor.name in
   let rec build_ctor_body ctx depth = function
     | [] -> (
-        match ctor_ty_opt with
+        match ctor.ty with
         | None ->
             let base = TmConst ind in
             let applied =
@@ -1148,7 +1147,7 @@ let elab_ctor (genv : GlobalEnv.t) (ind : Name.t) (param_ctx : Context.t)
         let body_ty = build_ctor_body ctx' (depth + 1) rest in
         TyPi (name, param_ty, body_ty)
   in
-  let ctor_body = build_ctor_body param_ctx 0 ctor_params in
+  let ctor_body = build_ctor_body param_ctx 0 ctor.params in
   let ctor_ty =
     List.fold_right
       (fun (name, ty) body -> TyPi (name, ty, body))
@@ -1610,8 +1609,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
 
 let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
     (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
-    (ctors : (string * Raw.binder list * Raw.t option) list) :
-    GlobalEnv.t * (Name.t * ty) list =
+    (ctors : Syntax.Raw.constructor list) : GlobalEnv.t * (Name.t * ty) list =
   let ind = Name.parse ind_str in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
@@ -1817,30 +1815,26 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         go genv imported importing acc rest
     | Raw.Structure { name; params; ty; fields } :: rest ->
+        let fields : Syntax.Raw.field list = fields in
         let () =
           match ty with
           | None -> ()
           | Some Raw.U -> ()
-          | Some _ ->
-              raise
-                (Elab_error
-                   "Structure result type annotation must be Type (structures \
-                    have no indices)")
+          | Some _ -> raise (Elab_error "Structure result type must be Type")
         in
-        let mk_field_ty
-            ((_fname, args, ty) : string * Raw.binder_group list * Raw.t) :
-            Raw.t =
-          List.fold_right (fun bg body -> Raw.Pi (bg, body)) args ty
+        let mk_field_ty (field : Syntax.Raw.field) : Raw.t =
+          List.fold_right
+            (fun bg body -> Raw.Pi (bg, body))
+            field.binders field.ty
         in
         let ctor_binders =
           List.map
-            (fun ((fname, _args, _ty) as f :
-                   string * Raw.binder_group list * Raw.t) ->
-              (Some fname, Some (mk_field_ty f)))
+            (fun (field : Syntax.Raw.field) ->
+              (Some field.name, Some (mk_field_ty field)))
             fields
         in
-        let ctors : (string * Raw.binder list * Raw.t option) list =
-          [ ("mk", ctor_binders, None) ]
+        let ctors : Syntax.Raw.constructor list =
+          [ { name = "mk"; params = ctor_binders; ty = None } ]
         in
         let genv, results = elab_inductive genv name params ty ctors in
         let ind_name = Name.parse name in
@@ -1853,7 +1847,8 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
                 (fun n ((ns, _) : Raw.binder_group) -> n + List.length ns)
                 0 params;
             struct_num_fields = List.length fields;
-            struct_field_names = List.map (fun (fname, _, _) -> fname) fields;
+            struct_field_names =
+              List.map (fun (field : Syntax.Raw.field) -> field.name) fields;
           }
         in
         let genv =
@@ -1978,7 +1973,9 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
             param_names
         in
         let field_binders =
-          List.map (fun (fname, _, _) -> (Some fname, None)) fields
+          List.map
+            (fun (field : Syntax.Raw.field) -> (Some field.name, None))
+            fields
         in
         let param_binders =
           List.concat_map
@@ -1988,25 +1985,25 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         let genv, acc =
           List.fold_left
-            (fun (genv, acc)
-                 ((fname, args, fty) : string * Raw.binder_group list * Raw.t)
-               ->
-              let proj_name = name ^ "." ^ fname in
+            (fun (genv, acc) (field : Syntax.Raw.field) ->
+              let proj_name = name ^ "." ^ field.name in
               let s_binder = (Some "s", Some struct_app) in
-              let field_ty = mk_field_ty (fname, args, fty) in
+              let field_ty = mk_field_ty field in
               let subst_fty =
                 subst_fields
                   (List.filter_map
                      (fun (other_fname : string) ->
-                       if String.equal other_fname fname then
+                       if String.equal other_fname field.name then
                          None
                        else
                          Some (other_fname, make_proj_app other_fname))
-                     (List.map (fun (n, _, _) -> n) fields))
+                     (List.map
+                        (fun (field : Syntax.Raw.field) -> field.name)
+                        fields))
                   field_ty
               in
               let motive = Raw.Lam ([ (Some "s", None) ], subst_fty) in
-              let proj_fn = Raw.Lam (field_binders, Raw.Ident fname) in
+              let proj_fn = Raw.Lam (field_binders, Raw.Ident field.name) in
               let rec_with_motive = Raw.App (rec_app, motive) in
               let rec_with_proj = Raw.App (rec_with_motive, proj_fn) in
               let rec_with_s = Raw.App (rec_with_proj, Raw.Ident "s") in
