@@ -68,30 +68,31 @@ module GlobalEnv = struct
   type t = entry NameMap.t
 
   let empty : t = NameMap.empty
+  let find_opt = NameMap.find_opt
 
   let find_tm name env =
-    match NameMap.find_opt name env with
+    match find_opt name env with
     | Some (Def { tm; _ }) -> Some tm
     | _ -> None
 
   let find_recursor name env =
-    match NameMap.find_opt name env with
+    match find_opt name env with
     | Some (Recursor { info; _ }) -> Some info
     | _ -> None
 
   let find_constructor name env =
-    match NameMap.find_opt name env with
+    match find_opt name env with
     | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
     | _ -> None
 
   let find_inductive name env =
-    match NameMap.find_opt name env with
+    match find_opt name env with
     | Some (Inductive info) -> Some info
     | Some (Structure { ind; _ }) -> Some ind
     | _ -> None
 
   let find_structure name env =
-    match NameMap.find_opt name env with
+    match find_opt name env with
     | Some (Structure { info; _ }) -> Some info
     | _ -> None
 end
@@ -480,7 +481,7 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
                   | _ -> false
                 in
                 check_fields (info.struct_field_names, fields)))
-  | _ -> false
+  | _, _ -> false
 
 and conv_neutral (genv : GlobalEnv.t) (l : int)
     (((h1, sp1), (h2, sp2)) : neutral * neutral) : bool =
@@ -555,7 +556,7 @@ module Context = struct
 end
 
 let find_ty (genv : GlobalEnv.t) (name : Name.t) : vl_ty option =
-  match NameMap.find_opt name genv with
+  match GlobalEnv.find_opt name genv with
   | Some (GlobalEnv.Def { ty; _ })
   | Some (GlobalEnv.Opaque { ty })
   | Some (GlobalEnv.Recursor { ty; _ })
@@ -1650,7 +1651,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           }
         in
         let genv =
-          match NameMap.find_opt ind_name genv with
+          match GlobalEnv.find_opt ind_name genv with
           | Some (GlobalEnv.Inductive ind) ->
               NameMap.add ind_name
                 (GlobalEnv.Structure { ind; info = struct_info })
