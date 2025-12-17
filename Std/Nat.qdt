@@ -68,6 +68,9 @@ def Nat.add_assoc (a b c : Nat) : Nat.add (Nat.add a b) c = Nat.add a (Nat.add b
 def Nat.pred (n : Nat) : Nat :=
   Nat.rec (fun _ => Nat) Nat.zero (fun k _ => k) n
 
+def Nat.sub (m n : Nat) : Nat :=
+  Nat.rec (fun _ => Nat) m (fun _ ih => Nat.pred ih) n
+
 def Nat.succ_inj (m n : Nat) (h : Nat.succ m = Nat.succ n) : m = n :=
   congr_arg Nat Nat Nat.pred (Nat.succ m) (Nat.succ n) h
 
