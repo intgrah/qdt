@@ -1295,20 +1295,18 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     in
 
     let rec bind_fields (lvl : int) (env : env) (fields_rev : env)
-        (fields_order : vl_tm list)
-        (fields_info : (string option * ty * bool) list) : vl_ty =
-      match fields_info with
+        (fields_order : vl_tm list) : (string option * ty * bool) list -> vl_ty
+        = function
       | [] ->
           let env_for_return = fields_rev @ params_rev in
           let idx_vals =
-            List.map (fun tm -> eval_tm genv env_for_return tm) return_indices
+            List.map (eval_tm genv env_for_return) return_indices
           in
           let motive_app = apply_list motive idx_vals in
           let ctor_app =
             apply_list (ctor_code ctor_name) (params_order @ fields_order)
           in
           let result_ty = do_el (do_app genv motive_app ctor_app) in
-
           let rec_field_infos =
             let rec go i acc = function
               | [] -> List.rev acc
@@ -1331,17 +1329,14 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
                 in
 
                 let rec mk_ih_ty (lvl : int) (env : env) (nested_rev : env)
-                    (nested_order : vl_tm list)
-                    (nested : (string option * ty) list) : vl_ty =
-                  match nested with
+                    (nested_order : vl_tm list) :
+                    (string option * ty) list -> vl_ty = function
                   | [] ->
                       let env_for_indices =
                         nested_rev @ prefix_rev @ params_rev
                       in
                       let idx_vals =
-                        List.map
-                          (fun tm -> eval_tm genv env_for_indices tm)
-                          rec_indices
+                        List.map (eval_tm genv env_for_indices) rec_indices
                       in
                       let motive_app = apply_list motive idx_vals in
                       let field_app =
@@ -1365,13 +1360,12 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
               rec_field_infos
           in
 
-          let rec bind_ihs (lvl : int) (env : env)
-              (ihs : (string option * vl_ty) list) : vl_ty =
-            match ihs with
+          let rec bind_ihs (lvl : int) (env : env) :
+              (string option * vl_ty) list -> vl_ty = function
             | [] -> result_ty
             | (ih_name, ih_ty) :: rest ->
-                mk_pi lvl env ih_name ih_ty (fun _ih ->
-                    bind_ihs (lvl + 1) (_ih :: env) rest)
+                mk_pi lvl env ih_name ih_ty (fun ih ->
+                    bind_ihs (lvl + 1) (ih :: env) rest)
           in
           bind_ihs lvl env ih_infos
       | (name, field_ty, _is_rec) :: rest ->
@@ -1384,14 +1378,13 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
   in
 
   let rec build_params (lvl : int) (env : env) (params_rev : env)
-      (params_order : vl_tm list) (params : (string option * ty) list) : vl_ty =
-    match params with
+      (params_order : vl_tm list) : (string option * ty) list -> vl_ty =
+    function
     | [] ->
         let motive_dom = build_motive_ty params_rev params_order in
         mk_pi lvl env (Some "motive") motive_dom (fun motive ->
-            let rec build_methods (lvl : int) (env : env)
-                (ctors : (Name.t * ty) list) : vl_ty =
-              match ctors with
+            let rec build_methods (lvl : int) (env : env) :
+                (Name.t * ty) list -> vl_ty = function
               | [] -> build_indices lvl env motive [] []
               | (ctor_name, ctor_ty) :: rest ->
                   let method_ty =
@@ -1493,14 +1486,13 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
           in
           strip num_params ctor_ty
         in
-        let rec collect_fields ty idx =
-          match ty with
+        let rec collect_fields idx = function
           | TyPi (_, arg_ty, rest) ->
               let is_rec = is_recursive_arg_ty ind arg_ty in
-              (idx, is_rec) :: collect_fields rest (idx + 1)
+              (idx, is_rec) :: collect_fields (idx + 1) rest
           | _ -> []
         in
-        let all_fields = collect_fields fields_ty 0 in
+        let all_fields = collect_fields 0 fields_ty in
         let nfields = List.length all_fields in
         let rec_args =
           List.filter_map
@@ -1517,8 +1509,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
           else
             List.map
               (fun rec_idx ->
-                let rec get_field_ty n ty =
-                  match ty with
+                let rec get_field_ty n = function
                   | TyPi (_, arg_ty, rest) ->
                       if n = 0 then
                         arg_ty
@@ -1527,8 +1518,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
                   | _ -> TyU
                 in
                 let field_ty = get_field_ty rec_idx fields_ty in
-                let rec extract_indices_from_ty ty =
-                  match ty with
+                let rec extract_indices_from_ty = function
                   | TyEl tm -> extract_app_args tm
                   | TyPi (_, _, b) -> extract_indices_from_ty b
                   | _ -> []
