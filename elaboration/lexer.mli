@@ -22,7 +22,6 @@ type token =
   | Where
   | Import
   | Type
-  | Int
   | Underscore
   | Ident of string
   | IntLit of int

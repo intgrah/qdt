@@ -22,7 +22,6 @@ type token =
   | Where
   | Import
   | Type
-  | Int
   | Underscore
   | Ident of string
   | IntLit of int
@@ -51,7 +50,6 @@ let pp_token fmt : token -> unit = function
   | Where -> Format.fprintf fmt "where"
   | Import -> Format.fprintf fmt "import"
   | Type -> Format.fprintf fmt "Type"
-  | Int -> Format.fprintf fmt "Int"
   | Underscore -> Format.fprintf fmt "_"
   | Ident s -> Format.fprintf fmt "%s" s
   | IntLit n -> Format.fprintf fmt "%d" n
@@ -130,7 +128,6 @@ let rec scan front_toks = function
         | "let" -> Let
         | "fun" -> Fun
         | "Type" -> Type
-        | "Int" -> Int
         | "sorry" -> Sorry
         | "example" -> Example
         | "inductive" -> Inductive

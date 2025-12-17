@@ -39,7 +39,6 @@ and pp_raw fmt : Raw.t -> unit = function
   | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
   | Proj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" pp_raw t
   | Proj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" pp_raw t
-  | Int -> Format.fprintf fmt "Int"
   | IntLit n -> Format.fprintf fmt "%d" n
   | Add (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ + %a@]" pp_raw a pp_raw b
   | Sub (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_raw a pp_raw b
@@ -145,15 +144,16 @@ let rec pp_ty_ctx (names : string list) fmt : ty -> unit = function
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
-  | TySigma (None, a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) a
-        (pp_ty_ctx (fresh_name names :: names))
-        b
-  | TySigma (Some x, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) a
+  | TyEl (TmApp (TmApp (TmConst prod, a_code), b_code))
+    when Name.equal prod (Name.parse "Prod") ->
+      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) (TyEl a_code)
+        (pp_ty_ctx names) (TyEl b_code)
+  | TyEl (TmApp (TmApp (TmConst sigma, _a_code), TmLam (x_opt, x_ty, b_code)))
+    when Name.equal sigma (Name.parse "Sigma") ->
+      let x = get_name x_opt names in
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) x_ty
         (pp_ty_ctx (x :: names))
-        b
-  | TyInt -> Format.fprintf fmt "Int"
+        (TyEl b_code)
   | TyEl t -> Format.fprintf fmt "@[<hov 2>%a@]" (pp_tm_ctx names) t
 
 and pp_tm_ctx (names : string list) fmt : tm -> unit = function
@@ -171,7 +171,7 @@ and pp_tm_ctx (names : string list) fmt : tm -> unit = function
   | TmApp ((TmLam _ as f), a) ->
       Format.fprintf fmt "@[<hov 2>(%a)@ (%a)@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
-  | TmApp (f, ((TmVar _ | TmConst _ | TmIntHat) as a)) ->
+  | TmApp (f, ((TmVar _ | TmConst _) as a)) ->
       Format.fprintf fmt "@[<hov 2>%a@ %a@]" (pp_tm_ctx names) f
         (pp_tm_ctx names) a
   | TmApp (f, a) ->
@@ -185,27 +185,6 @@ and pp_tm_ctx (names : string list) fmt : tm -> unit = function
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_tm_ctx names) a
         (pp_tm_ctx (x :: names))
         b
-  | TmSigmaHat (None, a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx (fresh_name names :: names))
-        b
-  | TmSigmaHat (Some x, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_tm_ctx names) a
-        (pp_tm_ctx (x :: names))
-        b
-  | TmMkSigma (_a, _b, t, u) ->
-      Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" (pp_tm_ctx names) t
-        (pp_tm_ctx names) u
-  | TmProj1 t -> Format.fprintf fmt "@[<hov 2>fst (%a)@]" (pp_tm_ctx names) t
-  | TmProj2 t -> Format.fprintf fmt "@[<hov 2>snd (%a)@]" (pp_tm_ctx names) t
-  | TmIntLit n -> Format.fprintf fmt "%d" n
-  | TmIntHat -> Format.fprintf fmt "Int"
-  | TmAdd (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ + %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx names) b
-  | TmSub (a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ - %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx names) b
   | TmSorry _ -> Format.fprintf fmt "sorry"
   | TmLet (x, ty, t, body) ->
       Format.fprintf fmt "@[<v 0>@[<hov 2>let %s : %a :=@ %a;@]@ %a@]" x
