@@ -102,16 +102,11 @@ end
 let rec eval_ty (genv : GlobalEnv.t) (env : env) : ty -> vl_ty = function
   | TyU -> VTyU
   | TyPi (x, a, b) -> VTyPi (x, eval_ty genv env a, ClosTy (env, b))
-  | TySigma (x, a, b) -> VTySigma (x, eval_ty genv env a, ClosTy (env, b))
-  | TyInt -> VTyInt
   | TyEl t -> do_el (eval_tm genv env t)
 
 and do_el : vl_tm -> vl_ty = function
   | VTmPiHat (x, a, ClosTm (env', b)) ->
       VTyPi (x, do_el a, ClosTy (env', TyEl b))
-  | VTmSigmaHat (x, a, ClosTm (env', b)) ->
-      VTySigma (x, do_el a, ClosTy (env', TyEl b))
-  | VTmIntHat -> VTyInt
   | VTmNeutral n -> VTyEl n
   | _ -> raise (Elab_error "do_el: expected type code or neutral")
 
@@ -124,26 +119,6 @@ and eval_tm (genv : GlobalEnv.t) (env : env) : tm -> vl_tm = function
   | TmLam (x, a, body) -> VTmLam (x, eval_ty genv env a, ClosTm (env, body))
   | TmApp (f, a) -> do_app genv (eval_tm genv env f) (eval_tm genv env a)
   | TmPiHat (x, a, b) -> VTmPiHat (x, eval_tm genv env a, ClosTm (env, b))
-  | TmSigmaHat (x, a, b) -> VTmSigmaHat (x, eval_tm genv env a, ClosTm (env, b))
-  | TmMkSigma (a, b, t, u) ->
-      VTmMkSigma
-        ( None,
-          eval_ty genv env a,
-          ClosTy (env, b),
-          eval_tm genv env t,
-          eval_tm genv env u )
-  | TmProj1 p -> do_proj1 (eval_tm genv env p)
-  | TmProj2 p -> do_proj2 (eval_tm genv env p)
-  | TmIntLit n -> VTmIntLit n
-  | TmIntHat -> VTmIntHat
-  | TmAdd (a, b) -> (
-      match (eval_tm genv env a, eval_tm genv env b) with
-      | VTmIntLit n, VTmIntLit m -> VTmIntLit (n + m)
-      | a, b -> VTmAdd (a, b))
-  | TmSub (a, b) -> (
-      match (eval_tm genv env a, eval_tm genv env b) with
-      | VTmIntLit n, VTmIntLit m -> VTmIntLit (n - m)
-      | a, b -> VTmSub (a, b))
   | TmSorry (id, ty) -> VTmNeutral (HSorry (id, eval_ty genv env ty), [])
   | TmLet (_, _, t, body) -> eval_tm genv (eval_tm genv env t :: env) body
 
@@ -165,8 +140,7 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
           let args =
             List.filter_map
               (function
-                | EApp v -> Some v
-                | _ -> None)
+                | EApp v -> Some v)
               sp
           in
           let major_idx =
@@ -201,8 +175,7 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
                     let ctor_apps =
                       List.filter_map
                         (function
-                          | EApp v -> Some v
-                          | _ -> None)
+                          | EApp v -> Some v)
                         ctor_sp
                     in
                     let fields =
@@ -254,16 +227,6 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
             | _ -> None))
   | _ -> None
 
-and do_proj1 : vl_tm -> vl_tm = function
-  | VTmMkSigma (_, _, _, t, _) -> t
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EProj1 ])
-  | _ -> raise (Elab_error "do_proj1: expected pair or neutral")
-
-and do_proj2 : vl_tm -> vl_tm = function
-  | VTmMkSigma (_, _, _, _, u) -> u
-  | VTmNeutral (h, sp) -> VTmNeutral (h, sp @ [ EProj2 ])
-  | _ -> raise (Elab_error "do_proj2: expected pair or neutral")
-
 (* ========== Quoting ========== *)
 
 let rec quote_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> ty = function
@@ -273,12 +236,6 @@ let rec quote_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> ty = function
       let var = VTmNeutral (HVar (Lvl l), []) in
       let b' = quote_ty genv (l + 1) (eval_ty genv (var :: env) body) in
       TyPi (x, a', b')
-  | VTySigma (x, a, ClosTy (env, body)) ->
-      let a' = quote_ty genv l a in
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      let b' = quote_ty genv (l + 1) (eval_ty genv (var :: env) body) in
-      TySigma (x, a', b')
-  | VTyInt -> TyInt
   | VTyEl n -> TyEl (quote_neutral genv l n)
 
 and quote_tm (genv : GlobalEnv.t) (l : int) : vl_tm -> tm = function
@@ -293,21 +250,6 @@ and quote_tm (genv : GlobalEnv.t) (l : int) : vl_tm -> tm = function
       let var = VTmNeutral (HVar (Lvl l), []) in
       let b = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
       TmPiHat (x, a, b)
-  | VTmSigmaHat (x, a, ClosTm (env, body)) ->
-      let a = quote_tm genv l a in
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      let b = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
-      TmSigmaHat (x, a, b)
-  | VTmMkSigma (x, a, ClosTy (env, b), t, u) ->
-      let a = quote_ty genv l a in
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      let b = quote_ty genv (l + 1) (eval_ty genv (var :: env) b) in
-      ignore x;
-      TmMkSigma (a, b, quote_tm genv l t, quote_tm genv l u)
-  | VTmIntLit n -> TmIntLit n
-  | VTmIntHat -> TmIntHat
-  | VTmAdd (a, b) -> TmAdd (quote_tm genv l a, quote_tm genv l b)
-  | VTmSub (a, b) -> TmSub (quote_tm genv l a, quote_tm genv l b)
 
 and quote_neutral (genv : GlobalEnv.t) (l : int) ((h, sp) : neutral) : tm =
   let head =
@@ -322,25 +264,16 @@ and quote_spine (genv : GlobalEnv.t) (l : int) (head : tm) : spine -> tm =
   function
   | [] -> head
   | EApp arg :: sp -> quote_spine genv l (TmApp (head, quote_tm genv l arg)) sp
-  | EProj1 :: sp -> quote_spine genv l (TmProj1 head) sp
-  | EProj2 :: sp -> quote_spine genv l (TmProj2 head) sp
 
 (* Convert a value type to a term representing its code *)
 and reify_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> tm = function
   | VTyU -> raise (Elab_error "Cannot reify Type as a term")
-  | VTyInt -> TmIntHat
   | VTyPi (x, a, ClosTy (env, b)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       let a' = reify_ty genv l a in
       let b_ty = eval_ty genv (var :: env) b in
       let b' = reify_ty genv (l + 1) b_ty in
       TmPiHat (x, a', b')
-  | VTySigma (x, a, ClosTy (env, b)) ->
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      let a' = reify_ty genv l a in
-      let b_ty = eval_ty genv (var :: env) b in
-      let b' = reify_ty genv (l + 1) b_ty in
-      TmSigmaHat (x, a', b')
   | VTyEl n -> quote_neutral genv l n
 
 (* ========== Conversion ========== *)
@@ -356,14 +289,6 @@ let rec conv_ty (genv : GlobalEnv.t) (l : int) (t1 : vl_ty) (t2 : vl_ty) : bool
       conv_ty genv (l + 1)
         (eval_ty genv (var :: env1) b1)
         (eval_ty genv (var :: env2) b2)
-  | VTySigma (_, a1, ClosTy (env1, b1)), VTySigma (_, a2, ClosTy (env2, b2)) ->
-      conv_ty genv l a1 a2
-      &&
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_ty genv (l + 1)
-        (eval_ty genv (var :: env1) b1)
-        (eval_ty genv (var :: env2) b2)
-  | VTyInt, VTyInt -> true
   | VTyEl n1, VTyEl n2 -> conv_neutral genv l (n1, n2)
   | _ -> false
 
@@ -382,27 +307,6 @@ and conv_tm (genv : GlobalEnv.t) (l : int) : vl_tm * vl_tm -> bool = function
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
         (eval_tm genv (var :: env1) b1, eval_tm genv (var :: env2) b2)
-  | ( VTmSigmaHat (_, a1, ClosTm (env1, b1)),
-      VTmSigmaHat (_, a2, ClosTm (env2, b2)) ) ->
-      conv_tm genv l (a1, a2)
-      &&
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) b1, eval_tm genv (var :: env2) b2)
-  | ( VTmMkSigma (_, _, ClosTy (env1, b1), t1, u1),
-      VTmMkSigma (_, _, ClosTy (env2, b2), t2, u2) ) ->
-      let var = VTmNeutral (HVar (Lvl l), []) in
-      conv_ty genv (l + 1)
-        (eval_ty genv (var :: env1) b1)
-        (eval_ty genv (var :: env2) b2)
-      && conv_tm genv l (t1, t2)
-      && conv_tm genv l (u1, u2)
-  | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
-  | VTmIntHat, VTmIntHat -> true
-  | VTmAdd (a1, b1), VTmAdd (a2, b2) ->
-      conv_tm genv l (a1, a2) && conv_tm genv l (b1, b2)
-  | VTmSub (a1, b1), VTmSub (a2, b2) ->
-      conv_tm genv l (a1, a2) && conv_tm genv l (b1, b2)
   | _ -> false
 
 and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
@@ -446,8 +350,7 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
               let args =
                 List.filter_map
                   (function
-                    | EApp v -> Some v
-                    | _ -> None)
+                    | EApp v -> Some v)
                   sp
               in
               if
@@ -497,8 +400,6 @@ and conv_spine (genv : GlobalEnv.t) (l : int) : spine * spine -> bool = function
   | [], [] -> true
   | EApp a1 :: sp1', EApp a2 :: sp2' ->
       conv_tm genv l (a1, a2) && conv_spine genv l (sp1', sp2')
-  | EProj1 :: sp1', EProj1 :: sp2' -> conv_spine genv l (sp1', sp2')
-  | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine genv l (sp1', sp2')
   | _, _ -> false
 
 (* ========== Context ========== *)
@@ -594,18 +495,24 @@ let rec check_ty (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> ty = function
       let rec bind_all ctx = function
         | [] -> check_ty genv ctx snd_ty
         | name :: rest ->
+            let fst_code = reify_ty genv (Context.lvl ctx) fst_val in
             let ctx' = Context.bind name fst_val ctx in
             let snd' = bind_all ctx' rest in
-            TySigma (name, fst', snd')
+            let snd_val = eval_ty genv (Context.env ctx') snd' in
+            let snd_code = reify_ty genv (Context.lvl ctx') snd_val in
+            let snd_fn = TmLam (name, TyEl fst_code, snd_code) in
+            TyEl
+              (TmApp (TmApp (TmConst (Name.parse "Sigma"), fst_code), snd_fn))
       in
       bind_all ctx names
   | Raw.Prod (fst_ty, snd_ty) ->
       let fst' = check_ty genv ctx fst_ty in
       let fst_val = eval_ty genv (Context.env ctx) fst' in
-      let ctx' = Context.bind None fst_val ctx in
-      let snd' = check_ty genv ctx' snd_ty in
-      TySigma (None, fst', snd')
-  | Raw.Int -> TyInt
+      let fst_code = reify_ty genv (Context.lvl ctx) fst_val in
+      let snd' = check_ty genv ctx snd_ty in
+      let snd_val = eval_ty genv (Context.env ctx) snd' in
+      let snd_code = reify_ty genv (Context.lvl ctx) snd_val in
+      TyEl (TmApp (TmApp (TmConst (Name.parse "Prod"), fst_code), snd_code))
   | Raw.Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
@@ -687,54 +594,141 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let cod_tm, _ = infer_tm genv ctx' cod in
       (TmPiHat (None, dom_tm, cod_tm), VTyU)
   | Raw.Sigma ((names, fst_ty), snd_ty) ->
-      let fst_tm, _ = infer_tm genv ctx fst_ty in
-      let fst_val = do_el (eval_tm genv (Context.env ctx) fst_tm) in
+      let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
+      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
+        raise (Elab_error "Expected Type in sigma domain");
+      let fst_code_val = eval_tm genv (Context.env ctx) fst_tm in
+      let fst_val = do_el fst_code_val in
       let rec bind_all ctx = function
         | [] ->
-            let snd_tm, _ = infer_tm genv ctx snd_ty in
+            let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
+            if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
+              raise (Elab_error "Expected Type in sigma codomain");
             snd_tm
         | name :: rest ->
             let ctx' = Context.bind name fst_val ctx in
             let snd' = bind_all ctx' rest in
-            TmSigmaHat (name, fst_tm, snd')
+            let fst_tm' = quote_tm genv (Context.lvl ctx) fst_code_val in
+            let snd_fn = TmLam (name, TyEl fst_tm', snd') in
+            TmApp (TmApp (TmConst (Name.parse "Sigma"), fst_tm'), snd_fn)
       in
       (bind_all ctx names, VTyU)
   | Raw.Prod (fst_ty, snd_ty) ->
-      let fst_tm, _ = infer_tm genv ctx fst_ty in
-      let fst_val = do_el (eval_tm genv (Context.env ctx) fst_tm) in
-      let ctx' = Context.bind None fst_val ctx in
-      let snd_tm, _ = infer_tm genv ctx' snd_ty in
-      (TmSigmaHat (None, fst_tm, snd_tm), VTyU)
+      let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
+      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
+        raise (Elab_error "Expected Type in product domain");
+      let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
+      if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
+        raise (Elab_error "Expected Type in product codomain");
+      (TmApp (TmApp (TmConst (Name.parse "Prod"), fst_tm), snd_tm), VTyU)
   | Raw.Pair (a, b) ->
       let a', a_ty = infer_tm genv ctx a in
-      let a_val = eval_tm genv (Context.env ctx) a' in
       let b', b_ty = infer_tm genv ctx b in
-      let a_ty_quoted = quote_ty genv (Context.lvl ctx) a_ty in
-      let b_ty_quoted = quote_ty genv (Context.lvl ctx) b_ty in
-      let clos = ClosTy (a_val :: Context.env ctx, b_ty_quoted) in
-      (TmMkSigma (a_ty_quoted, b_ty_quoted, a', b'), VTySigma (None, a_ty, clos))
+      let a_code = reify_ty genv (Context.lvl ctx) a_ty in
+      let b_code = reify_ty genv (Context.lvl ctx) b_ty in
+      let prod_code =
+        TmApp (TmApp (TmConst (Name.parse "Prod"), a_code), b_code)
+      in
+      let pair_tm =
+        TmApp
+          ( TmApp
+              ( TmApp
+                  ( TmApp (TmConst (Name.child (Name.parse "Prod") "mk"), a_code),
+                    b_code ),
+                a' ),
+            b' )
+      in
+      let pair_ty = eval_ty genv (Context.env ctx) (TyEl prod_code) in
+      (pair_tm, pair_ty)
   | Raw.Proj1 t -> (
       let t', t_ty = infer_tm genv ctx t in
       match t_ty with
-      | VTySigma (_, fst_ty, _) -> (TmProj1 t', fst_ty)
-      | _ -> raise (Elab_error "Expected sigma type in projection"))
+      | VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+          let a_ty = do_el a_code_val in
+          let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+          if Name.equal name (Name.parse "Sigma") then
+            let b_tm = quote_tm genv (Context.lvl ctx) b_val in
+            ( TmApp
+                ( TmApp
+                    ( TmApp
+                        ( TmConst (Name.child (Name.parse "Sigma") "fst"),
+                          a_code_tm ),
+                      b_tm ),
+                  t' ),
+              a_ty )
+          else if Name.equal name (Name.parse "Prod") then
+            let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
+            ( TmApp
+                ( TmApp
+                    ( TmApp
+                        ( TmConst (Name.child (Name.parse "Prod") "fst"),
+                          a_code_tm ),
+                      b_code_tm ),
+                  t' ),
+              a_ty )
+          else
+            raise (Elab_error "Expected sigma/product type in projection")
+      | _ -> raise (Elab_error "Expected sigma/product type in projection"))
   | Raw.Proj2 t -> (
       let t', t_ty = infer_tm genv ctx t in
       match t_ty with
-      | VTySigma (_, _, ClosTy (env, snd_ty)) ->
-          let fst_val = do_proj1 (eval_tm genv (Context.env ctx) t') in
-          (TmProj2 t', eval_ty genv (fst_val :: env) snd_ty)
-      | _ -> raise (Elab_error "Expected sigma type in projection"))
-  | Raw.Int -> (TmIntHat, VTyU)
-  | Raw.IntLit n -> (TmIntLit n, VTyInt)
+      | VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+          let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+          if Name.equal name (Name.parse "Sigma") then
+            let b_tm = quote_tm genv (Context.lvl ctx) b_val in
+            let fst_tm =
+              TmApp
+                ( TmApp
+                    ( TmApp
+                        ( TmConst (Name.child (Name.parse "Sigma") "fst"),
+                          a_code_tm ),
+                      b_tm ),
+                  t' )
+            in
+            let fst_val = eval_tm genv (Context.env ctx) fst_tm in
+            let b_code_val = do_app genv b_val fst_val in
+            let snd_ty = do_el b_code_val in
+            let snd_tm =
+              TmApp
+                ( TmApp
+                    ( TmApp
+                        ( TmConst (Name.child (Name.parse "Sigma") "snd"),
+                          a_code_tm ),
+                      b_tm ),
+                  t' )
+            in
+            (snd_tm, snd_ty)
+          else if Name.equal name (Name.parse "Prod") then
+            let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
+            let snd_ty = do_el b_val in
+            let snd_tm =
+              TmApp
+                ( TmApp
+                    ( TmApp
+                        ( TmConst (Name.child (Name.parse "Prod") "snd"),
+                          a_code_tm ),
+                      b_code_tm ),
+                  t' )
+            in
+            (snd_tm, snd_ty)
+          else
+            raise (Elab_error "Expected sigma/product type in projection")
+      | _ -> raise (Elab_error "Expected sigma/product type in projection"))
+  | Raw.IntLit n ->
+      if n < 0 then
+        raise (Elab_error "Negative numeric literal")
+      else
+        let rec nat_raw (n : int) : Raw.t =
+          if n = 0 then
+            Raw.Ident "Nat.zero"
+          else
+            Raw.App (Raw.Ident "Nat.succ", nat_raw (n - 1))
+        in
+        infer_tm genv ctx (nat_raw n)
   | Raw.Add (a, b) ->
-      let a' = check_tm genv ctx a VTyInt in
-      let b' = check_tm genv ctx b VTyInt in
-      (TmAdd (a', b'), VTyInt)
+      infer_tm genv ctx (Raw.App (Raw.App (Raw.Ident "Nat.add", a), b))
   | Raw.Sub (a, b) ->
-      let a' = check_tm genv ctx a VTyInt in
-      let b' = check_tm genv ctx b VTyInt in
-      (TmSub (a', b'), VTyInt)
+      infer_tm genv ctx (Raw.App (Raw.App (Raw.Ident "Nat.sub", a), b))
   | Raw.Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
@@ -795,13 +789,41 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
       go ctx expected binders
-  | Raw.Pair (a, b), VTySigma (_, fst_ty, ClosTy (env, snd_ty)) ->
-      let a' = check_tm genv ctx a fst_ty in
-      let a_val = eval_tm genv (Context.env ctx) a' in
-      let snd_ty_val = eval_ty genv (a_val :: env) snd_ty in
-      let b' = check_tm genv ctx b snd_ty_val in
-      let fst_ty_quoted = quote_ty genv (Context.lvl ctx) fst_ty in
-      TmMkSigma (fst_ty_quoted, snd_ty, a', b')
+  | Raw.Pair (a, b), VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+      if Name.equal name (Name.parse "Sigma") then
+        let fst_ty = do_el a_code_val in
+        let a' = check_tm genv ctx a fst_ty in
+        let a_val = eval_tm genv (Context.env ctx) a' in
+        let b_code_val = do_app genv b_val a_val in
+        let snd_ty = do_el b_code_val in
+        let b' = check_tm genv ctx b snd_ty in
+        let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+        let b_tm = quote_tm genv (Context.lvl ctx) b_val in
+        TmApp
+          ( TmApp
+              ( TmApp
+                  ( TmApp
+                      (TmConst (Name.child (Name.parse "Sigma") "mk"), a_code_tm),
+                    b_tm ),
+                a' ),
+            b' )
+      else if Name.equal name (Name.parse "Prod") then
+        let fst_ty = do_el a_code_val in
+        let snd_ty = do_el b_val in
+        let a' = check_tm genv ctx a fst_ty in
+        let b' = check_tm genv ctx b snd_ty in
+        let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+        let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
+        TmApp
+          ( TmApp
+              ( TmApp
+                  ( TmApp
+                      (TmConst (Name.child (Name.parse "Prod") "mk"), a_code_tm),
+                    b_code_tm ),
+                a' ),
+            b' )
+      else
+        raise (Elab_error "Expected sigma/product type in pair")
   | Raw.Let (name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -834,12 +856,8 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
 (* ========== Positivity Checking ========== *)
 
 let rec has_ind_occ_ty (ind : Name.t) : ty -> bool = function
-  | TyU
-  | TyInt ->
-      false
-  | TyPi (_, a, b)
-  | TySigma (_, a, b) ->
-      has_ind_occ_ty ind a || has_ind_occ_ty ind b
+  | TyU -> false
+  | TyPi (_, a, b) -> has_ind_occ_ty ind a || has_ind_occ_ty ind b
   | TyEl t -> has_ind_occ_tm ind t
 
 and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
@@ -847,21 +865,7 @@ and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
   | TmConst name -> Name.equal name ind
   | TmLam (_, a, body) -> has_ind_occ_ty ind a || has_ind_occ_tm ind body
   | TmApp (f, a) -> has_ind_occ_tm ind f || has_ind_occ_tm ind a
-  | TmPiHat (_, a, b)
-  | TmSigmaHat (_, a, b) ->
-      has_ind_occ_tm ind a || has_ind_occ_tm ind b
-  | TmMkSigma (a, b, t, u) ->
-      has_ind_occ_ty ind a || has_ind_occ_ty ind b || has_ind_occ_tm ind t
-      || has_ind_occ_tm ind u
-  | TmProj1 t
-  | TmProj2 t ->
-      has_ind_occ_tm ind t
-  | TmIntLit _
-  | TmIntHat ->
-      false
-  | TmAdd (a, b)
-  | TmSub (a, b) ->
-      has_ind_occ_tm ind a || has_ind_occ_tm ind b
+  | TmPiHat (_, a, b) -> has_ind_occ_tm ind a || has_ind_occ_tm ind b
   | TmSorry (_, ty) -> has_ind_occ_ty ind ty
   | TmLet (_, ty, t, body) ->
       has_ind_occ_ty ind ty || has_ind_occ_tm ind t || has_ind_occ_tm ind body
@@ -883,12 +887,8 @@ let get_app_head : tm -> Name.t option =
   go
 
 let rec has_var_ty (var_idx : int) : ty -> bool = function
-  | TyU
-  | TyInt ->
-      false
-  | TyPi (_, a, b)
-  | TySigma (_, a, b) ->
-      has_var_ty var_idx a || has_var_ty (var_idx + 1) b
+  | TyU -> false
+  | TyPi (_, a, b) -> has_var_ty var_idx a || has_var_ty (var_idx + 1) b
   | TyEl t -> has_var_tm var_idx t
 
 and has_var_tm (var_idx : int) : tm -> bool = function
@@ -896,22 +896,7 @@ and has_var_tm (var_idx : int) : tm -> bool = function
   | TmConst _ -> false
   | TmLam (_, a, body) -> has_var_ty var_idx a || has_var_tm (var_idx + 1) body
   | TmApp (f, a) -> has_var_tm var_idx f || has_var_tm var_idx a
-  | TmPiHat (_, a, b)
-  | TmSigmaHat (_, a, b) ->
-      has_var_tm var_idx a || has_var_tm (var_idx + 1) b
-  | TmMkSigma (a, b, t, u) ->
-      has_var_ty var_idx a
-      || has_var_ty (var_idx + 1) b
-      || has_var_tm var_idx t || has_var_tm var_idx u
-  | TmProj1 t
-  | TmProj2 t ->
-      has_var_tm var_idx t
-  | TmIntLit _
-  | TmIntHat ->
-      false
-  | TmAdd (a, b)
-  | TmSub (a, b) ->
-      has_var_tm var_idx a || has_var_tm var_idx b
+  | TmPiHat (_, a, b) -> has_var_tm var_idx a || has_var_tm (var_idx + 1) b
   | TmSorry (_, ty) -> has_var_ty var_idx ty
   | TmLet (_, ty, t, body) ->
       has_var_ty var_idx ty || has_var_tm var_idx t
@@ -919,14 +904,9 @@ and has_var_tm (var_idx : int) : tm -> bool = function
 
 (* Check if var appears negatively (on the left of an arrow) *)
 let rec var_occurs_negatively_ty (var_idx : int) : ty -> bool = function
-  | TyU
-  | TyInt ->
-      false
+  | TyU -> false
   | TyPi (_, a, b) ->
       has_var_ty var_idx a || var_occurs_negatively_ty (var_idx + 1) b
-  | TySigma (_, a, b) ->
-      var_occurs_negatively_ty var_idx a
-      || var_occurs_negatively_ty (var_idx + 1) b
   | TyEl t -> var_occurs_negatively_tm var_idx t
 
 and var_occurs_negatively_tm (var_idx : int) : tm -> bool = function
@@ -940,23 +920,6 @@ and var_occurs_negatively_tm (var_idx : int) : tm -> bool = function
       var_occurs_negatively_tm var_idx f || var_occurs_negatively_tm var_idx a
   | TmPiHat (_, a, b) ->
       has_var_tm var_idx a || var_occurs_negatively_tm (var_idx + 1) b
-  | TmSigmaHat (_, a, b) ->
-      var_occurs_negatively_tm var_idx a
-      || var_occurs_negatively_tm (var_idx + 1) b
-  | TmMkSigma (a, b, t, u) ->
-      var_occurs_negatively_ty var_idx a
-      || var_occurs_negatively_ty (var_idx + 1) b
-      || var_occurs_negatively_tm var_idx t
-      || var_occurs_negatively_tm var_idx u
-  | TmProj1 t
-  | TmProj2 t ->
-      var_occurs_negatively_tm var_idx t
-  | TmIntLit _
-  | TmIntHat ->
-      false
-  | TmAdd (a, b)
-  | TmSub (a, b) ->
-      var_occurs_negatively_tm var_idx a || var_occurs_negatively_tm var_idx b
   | TmSorry (_, ty) -> var_occurs_negatively_ty var_idx ty
   | TmLet (_, ty, t, body) ->
       var_occurs_negatively_ty var_idx ty
@@ -1002,16 +965,12 @@ let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
       ty
     with
     | TyU -> ()
-    | TyInt -> ()
     | TyPi (_, a, b) ->
         if has_ind_occ_ty ind a then
           raise
             (Elab_error
                (Format.sprintf "%s has a non-positive occurrence (in domain)"
                   (Name.to_string ind)));
-        check_positivity_ty genv ind b
-    | TySigma (_, a, b) ->
-        check_positivity_ty genv ind a;
         check_positivity_ty genv ind b
     | TyEl t -> check_positivity_tm genv ind t
 
@@ -1028,9 +987,6 @@ and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
             (Elab_error
                (Format.sprintf "%s has a non-positive occurrence (in domain)"
                   (Name.to_string ind)));
-        check_positivity_tm genv ind b
-    | TmSigmaHat (_, a, b) ->
-        check_positivity_tm genv ind a;
         check_positivity_tm genv ind b
     | TmApp (_, _) -> (
         match get_app_head tm with
