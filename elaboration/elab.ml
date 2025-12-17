@@ -210,13 +210,10 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
                         ctor_apps
                     in
                     let method_idx =
-                      match
-                        List.find_index
-                          (fun r -> r.GlobalEnv.rule_ctor_name = ctor_name)
-                          info.rec_rules
-                      with
-                      | Some i -> i
-                      | None -> 0
+                      List.find_index
+                        (fun r -> r.GlobalEnv.rule_ctor_name = ctor_name)
+                        info.rec_rules
+                      |> Option.value ~default:0
                     in
                     let method_val = List.nth methods method_idx in
                     let ihs =
@@ -366,54 +363,51 @@ let rec conv_ty (genv : GlobalEnv.t) (l : int) (t1 : vl_ty) (t2 : vl_ty) : bool
         (eval_ty genv (var :: env1) b1)
         (eval_ty genv (var :: env2) b2)
   | VTyInt, VTyInt -> true
-  | VTyEl n1, VTyEl n2 -> conv_neutral genv l n1 n2
+  | VTyEl n1, VTyEl n2 -> conv_neutral genv l (n1, n2)
   | _ -> false
 
-and conv_tm (genv : GlobalEnv.t) (l : int) (t1 : vl_tm) (t2 : vl_tm) : bool =
-  match (t1, t2) with
+and conv_tm (genv : GlobalEnv.t) (l : int) : vl_tm * vl_tm -> bool = function
   | VTmNeutral n1, VTmNeutral n2 ->
-      conv_neutral genv l n1 n2
-      || try_eta_struct genv l t1 t2
-      || try_eta_struct genv l t2 t1
+      conv_neutral genv l (n1, n2)
+      || try_eta_struct genv l n1 (VTmNeutral n1)
+      || try_eta_struct genv l n2 (VTmNeutral n2)
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) body1)
-        (eval_tm genv (var :: env2) body2)
+        (eval_tm genv (var :: env1) body1, eval_tm genv (var :: env2) body2)
   | VTmPiHat (_, a1, ClosTm (env1, b1)), VTmPiHat (_, a2, ClosTm (env2, b2)) ->
-      conv_tm genv l a1 a2
+      conv_tm genv l (a1, a2)
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) b1)
-        (eval_tm genv (var :: env2) b2)
+        (eval_tm genv (var :: env1) b1, eval_tm genv (var :: env2) b2)
   | ( VTmSigmaHat (_, a1, ClosTm (env1, b1)),
       VTmSigmaHat (_, a2, ClosTm (env2, b2)) ) ->
-      conv_tm genv l a1 a2
+      conv_tm genv l (a1, a2)
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) b1)
-        (eval_tm genv (var :: env2) b2)
+        (eval_tm genv (var :: env1) b1, eval_tm genv (var :: env2) b2)
   | ( VTmMkSigma (_, _, ClosTy (env1, b1), t1, u1),
       VTmMkSigma (_, _, ClosTy (env2, b2), t2, u2) ) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_ty genv (l + 1)
         (eval_ty genv (var :: env1) b1)
         (eval_ty genv (var :: env2) b2)
-      && conv_tm genv l t1 t2 && conv_tm genv l u1 u2
+      && conv_tm genv l (t1, t2)
+      && conv_tm genv l (u1, u2)
   | VTmIntLit n1, VTmIntLit n2 -> n1 = n2
   | VTmIntHat, VTmIntHat -> true
   | VTmAdd (a1, b1), VTmAdd (a2, b2) ->
-      conv_tm genv l a1 a2 && conv_tm genv l b1 b2
+      conv_tm genv l (a1, a2) && conv_tm genv l (b1, b2)
   | VTmSub (a1, b1), VTmSub (a2, b2) ->
-      conv_tm genv l a1 a2 && conv_tm genv l b1 b2
+      conv_tm genv l (a1, a2) && conv_tm genv l (b1, b2)
   | _ -> false
 
-and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : vl_tm)
+and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
     (other : vl_tm) : bool =
   match ctor_app with
-  | VTmNeutral (HConst ctor_name, sp) -> (
+  | HConst ctor_name, sp -> (
       match GlobalEnv.find_constructor ctor_name genv with
       | None -> false
       | Some (ind_name, _ctor_idx) -> (
@@ -467,8 +461,8 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : vl_tm)
                 let fields =
                   List.filteri (fun i _ -> i >= info.struct_num_params) args
                 in
-                let rec check_fields field_names fields_left =
-                  match (field_names, fields_left) with
+                let rec check_fields : string list * vl_tm list -> bool =
+                  function
                   | [], [] -> true
                   | fname :: fname_rest, field :: field_rest ->
                       let proj_name = Name.child info.struct_ind_name fname in
@@ -481,33 +475,30 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : vl_tm)
                             do_app genv with_params other
                         | None -> VTmNeutral (HConst proj_name, [])
                       in
-                      conv_tm genv l field proj_result
-                      && check_fields fname_rest field_rest
+                      conv_tm genv l (field, proj_result)
+                      && check_fields (fname_rest, field_rest)
                   | _ -> false
                 in
-                check_fields info.struct_field_names fields))
+                check_fields (info.struct_field_names, fields)))
   | _ -> false
 
-and conv_neutral (genv : GlobalEnv.t) (l : int) ((h1, sp1) : neutral)
-    ((h2, sp2) : neutral) : bool =
-  conv_head h1 h2 && conv_spine genv l sp1 sp2
+and conv_neutral (genv : GlobalEnv.t) (l : int)
+    (((h1, sp1), (h2, sp2)) : neutral * neutral) : bool =
+  conv_head (h1, h2) && conv_spine genv l (sp1, sp2)
 
-and conv_head (h1 : head) (h2 : head) : bool =
-  match (h1, h2) with
+and conv_head : head * head -> bool = function
   | HVar l1, HVar l2 -> l1 = l2
   | HConst n1, HConst n2 -> Name.equal n1 n2
   | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
-  | _ -> false
+  | _, _ -> false
 
-and conv_spine (genv : GlobalEnv.t) (l : int) (sp1 : spine) (sp2 : spine) : bool
-    =
-  match (sp1, sp2) with
+and conv_spine (genv : GlobalEnv.t) (l : int) : spine * spine -> bool = function
   | [], [] -> true
   | EApp a1 :: sp1', EApp a2 :: sp2' ->
-      conv_tm genv l a1 a2 && conv_spine genv l sp1' sp2'
-  | EProj1 :: sp1', EProj1 :: sp2' -> conv_spine genv l sp1' sp2'
-  | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine genv l sp1' sp2'
-  | _ -> false
+      conv_tm genv l (a1, a2) && conv_spine genv l (sp1', sp2')
+  | EProj1 :: sp1', EProj1 :: sp2' -> conv_spine genv l (sp1', sp2')
+  | EProj2 :: sp1', EProj2 :: sp2' -> conv_spine genv l (sp1', sp2')
+  | _, _ -> false
 
 (* ========== Context ========== *)
 
