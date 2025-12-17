@@ -81,7 +81,6 @@ let rec parse_atom : Raw.t t =
       parse_sorry;
       parse_var;
       parse_type;
-      parse_int;
       parse_int_lit;
       parse_pair;
       parse_unit_term;
@@ -97,10 +96,6 @@ and parse_var : Raw.t t =
 
 and parse_type : Raw.t t = function
   | Type :: rest -> Some (Raw.U, rest)
-  | _ -> None
-
-and parse_int : Raw.t t = function
-  | Int :: rest -> Some (Raw.Int, rest)
   | _ -> None
 
 and parse_int_lit : Raw.t t = function

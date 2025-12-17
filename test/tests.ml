@@ -15,10 +15,11 @@ module Test_eval = struct
     | _ -> Alcotest.fail "identity evaluation failed"
 
   let beta () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmIntHat) in
+    let c = Name.parse "c" in
+    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst c) in
     let result = eval_tm genv [] term in
     match result with
-    | VTmIntHat -> ()
+    | VTmNeutral (HConst c', []) when Name.equal c' c -> ()
     | _ -> Alcotest.fail "beta reduction failed"
 
   let pi_eval () =
@@ -62,24 +63,32 @@ module Test_nbe = struct
   let whnf t = quote_tm genv 0 (eval_tm genv [] t)
 
   let beta () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmIntHat) in
-    let normalized = whnf term in
-    match normalized with
-    | TmIntHat -> ()
-    | _ -> Alcotest.failf "expected Int, got %s" (tm_to_string normalized)
-
-  let nested () =
     let term =
-      TmApp (TmLam (None, TyU, TmLam (None, TyU, TmVar (Idx 1))), TmIntHat)
+      TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst (Name.parse "c"))
     in
     let normalized = whnf term in
     match normalized with
-    | TmLam (_, _, TmIntHat) -> ()
+    | TmConst _ -> ()
     | _ ->
-        Alcotest.failf "expected Lam(_, Int), got %s" (tm_to_string normalized)
+        Alcotest.failf "expected a constant, got %s" (tm_to_string normalized)
+
+  let nested () =
+    let term =
+      TmApp
+        ( TmLam (None, TyU, TmLam (None, TyU, TmVar (Idx 1))),
+          TmConst (Name.parse "c") )
+    in
+    let normalized = whnf term in
+    match normalized with
+    | TmLam (_, _, TmConst _) -> ()
+    | _ ->
+        Alcotest.failf "expected Lam(_, Const _), got %s"
+          (tm_to_string normalized)
 
   let idempotent () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmIntHat) in
+    let term =
+      TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst (Name.parse "c"))
+    in
     let norm1 = whnf term in
     let norm2 = whnf norm1 in
     Alcotest.(check string) "same" (tm_to_string norm1) (tm_to_string norm2)
@@ -122,28 +131,12 @@ module Test_elab = struct
         let _, _ = infer_tm genv ctx raw in
         ())
 
-  let int_type () =
-    let ctx = Context.empty in
-    let raw = Raw.Int in
-    let ty = check_ty genv ctx raw in
-    Alcotest.(check ty_testable) "same" TyInt ty
-
-  let int_lit_infer () =
-    let ctx = Context.empty in
-    let raw = Raw.IntLit 42 in
-    let tm, ty = infer_tm genv ctx raw in
-    match (tm, ty) with
-    | TmIntLit 42, VTyInt -> ()
-    | _ -> Alcotest.fail "int lit infer failed"
-
   let tests =
     [
       Alcotest.test_case "check identity" `Quick check_identity;
       Alcotest.test_case "pi type" `Quick pi_type;
       Alcotest.test_case "arrow type" `Quick arrow_type;
       Alcotest.test_case "error: var not in scope" `Quick error_var_not_in_scope;
-      Alcotest.test_case "int type" `Quick int_type;
-      Alcotest.test_case "int lit infer" `Quick int_lit_infer;
     ]
 end
 

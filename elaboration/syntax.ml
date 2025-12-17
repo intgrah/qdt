@@ -15,7 +15,6 @@ module Raw = struct
     | Proj1 of t (* fst e *)
     | Proj2 of t (* fst e *)
     | Eq of t * t (* a = b, desugars to Eq _ a b *)
-    | Int (* Int *)
     | IntLit of int (* 0 *)
     | Add of t * t (* a + b *)
     | Sub of t * t (* a - b *)
@@ -77,8 +76,6 @@ end
 type ty =
   | TyU
   | TyPi of string option * ty * ty
-  | TySigma of string option * ty * ty
-  | TyInt
   | TyEl of tm
 
 and tm =
@@ -87,14 +84,6 @@ and tm =
   | TmLam of string option * ty * tm
   | TmApp of tm * tm
   | TmPiHat of string option * tm * tm
-  | TmSigmaHat of string option * tm * tm
-  | TmMkSigma of ty * ty * tm * tm
-  | TmProj1 of tm
-  | TmProj2 of tm
-  | TmIntLit of int
-  | TmIntHat
-  | TmAdd of tm * tm
-  | TmSub of tm * tm
   | TmSorry of int * ty
   | TmLet of string * ty * tm * tm
 
@@ -102,8 +91,6 @@ and tm =
 type vl_ty =
   | VTyU
   | VTyPi of string option * vl_ty * clos_ty
-  | VTySigma of string option * vl_ty * clos_ty
-  | VTyInt
   | VTyEl of neutral
 
 (* Weak head normal form *)
@@ -111,12 +98,6 @@ and vl_tm =
   | VTmNeutral of neutral
   | VTmLam of string option * vl_ty * clos_tm
   | VTmPiHat of string option * vl_tm * clos_tm
-  | VTmSigmaHat of string option * vl_tm * clos_tm
-  | VTmMkSigma of string option * vl_ty * clos_ty * vl_tm * vl_tm
-  | VTmIntLit of int
-  | VTmIntHat
-  | VTmAdd of vl_tm * vl_tm
-  | VTmSub of vl_tm * vl_tm
 
 and neutral = head * spine
 
@@ -126,12 +107,7 @@ and head =
   | HSorry of int * vl_ty
 
 and spine = elim list
-
-and elim =
-  | EApp of vl_tm
-  | EProj1
-  | EProj2
-
+and elim = EApp of vl_tm
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm
 and env = vl_tm list
