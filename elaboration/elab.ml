@@ -1684,78 +1684,50 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           in
           Raw.App (base, Raw.Ident "s")
         in
-        let rec subst_fields earlier_fields = function
+        let rec subst_fields ef = function
           | Raw.Ident x -> (
-              match List.assoc_opt x earlier_fields with
+              match List.assoc_opt x ef with
               | Some proj -> proj
               | None -> Raw.Ident x)
-          | Raw.App (f, a) ->
-              Raw.App
-                (subst_fields earlier_fields f, subst_fields earlier_fields a)
+          | Raw.App (f, a) -> Raw.App (subst_fields ef f, subst_fields ef a)
           | Raw.Lam (bs, body) ->
               let bound = List.filter_map fst bs in
               let earlier_fields' =
-                List.filter
-                  (fun (n, _) -> not (List.mem n bound))
-                  earlier_fields
+                List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
               Raw.Lam
                 ( List.map
-                    (fun (n, ty) ->
-                      (n, Option.map (subst_fields earlier_fields) ty))
+                    (fun (n, ty) -> (n, Option.map (subst_fields ef) ty))
                     bs,
                   subst_fields earlier_fields' body )
           | Raw.Pi ((ns, ty), body) ->
               let bound = List.filter_map Fun.id ns in
               let earlier_fields' =
-                List.filter
-                  (fun (n, _) -> not (List.mem n bound))
-                  earlier_fields
+                List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
               Raw.Pi
-                ( (ns, subst_fields earlier_fields ty),
-                  subst_fields earlier_fields' body )
-          | Raw.Arrow (a, b) ->
-              Raw.Arrow
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
-          | Raw.Prod (a, b) ->
-              Raw.Prod
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
-          | Raw.Pair (a, b) ->
-              Raw.Pair
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
-          | Raw.Proj1 t -> Raw.Proj1 (subst_fields earlier_fields t)
-          | Raw.Proj2 t -> Raw.Proj2 (subst_fields earlier_fields t)
-          | Raw.Eq (a, b) ->
-              Raw.Eq
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
-          | Raw.Add (a, b) ->
-              Raw.Add
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
-          | Raw.Sub (a, b) ->
-              Raw.Sub
-                (subst_fields earlier_fields a, subst_fields earlier_fields b)
+                ((ns, subst_fields ef ty), subst_fields earlier_fields' body)
+          | Raw.Arrow (a, b) -> Raw.Arrow (subst_fields ef a, subst_fields ef b)
+          | Raw.Prod (a, b) -> Raw.Prod (subst_fields ef a, subst_fields ef b)
+          | Raw.Pair (a, b) -> Raw.Pair (subst_fields ef a, subst_fields ef b)
+          | Raw.Proj1 t -> Raw.Proj1 (subst_fields ef t)
+          | Raw.Proj2 t -> Raw.Proj2 (subst_fields ef t)
+          | Raw.Eq (a, b) -> Raw.Eq (subst_fields ef a, subst_fields ef b)
+          | Raw.Add (a, b) -> Raw.Add (subst_fields ef a, subst_fields ef b)
+          | Raw.Sub (a, b) -> Raw.Sub (subst_fields ef a, subst_fields ef b)
           | Raw.Sigma ((ns, a), b) ->
               let bound = List.filter_map Fun.id ns in
               let earlier_fields' =
-                List.filter
-                  (fun (n, _) -> not (List.mem n bound))
-                  earlier_fields
+                List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
-              Raw.Sigma
-                ( (ns, subst_fields earlier_fields a),
-                  subst_fields earlier_fields' b )
-          | Raw.Ann (t, ty) ->
-              Raw.Ann
-                (subst_fields earlier_fields t, subst_fields earlier_fields ty)
+              Raw.Sigma ((ns, subst_fields ef a), subst_fields earlier_fields' b)
+          | Raw.Ann (t, ty) -> Raw.Ann (subst_fields ef t, subst_fields ef ty)
           | Raw.Let (n, ty_opt, t, b) ->
-              let earlier_fields' =
-                List.filter (fun (x, _) -> x <> n) earlier_fields
-              in
+              let earlier_fields' = List.filter (fun (x, _) -> x <> n) ef in
               Raw.Let
                 ( n,
-                  Option.map (subst_fields earlier_fields) ty_opt,
-                  subst_fields earlier_fields t,
+                  Option.map (subst_fields ef) ty_opt,
+                  subst_fields ef t,
                   subst_fields earlier_fields' b )
           | tm -> tm
         in
