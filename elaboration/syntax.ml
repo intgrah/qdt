@@ -106,8 +106,7 @@ and head =
   | HConst of Name.t
   | HSorry of int * vl_ty
 
-and spine = elim list
-and elim = EApp of vl_tm
+and spine = vl_tm list
 and clos_ty = ClosTy of env * ty
 and clos_tm = ClosTm of env * tm
 and env = vl_tm list
