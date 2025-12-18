@@ -76,8 +76,6 @@ let rec parse_atom : Raw.t t =
  fun input ->
   choice
     [
-      (* parse_fst; *)
-      (* parse_snd; *)
       parse_sorry;
       parse_var;
       parse_type;
@@ -115,20 +113,6 @@ and parse_pair : Raw.t t =
    let* () = token RParen in
    return (Raw.Pair (a, b)))
     input
-
-(* and parse_fst : Raw.t t =
- fun input ->
-  (let* () = token Fst in
-   let* t = parse_atom in
-   return (Raw.Proj1 t))
-    input
-
-and parse_snd : Raw.t t =
- fun input ->
-  (let* () = token Snd in
-   let* t = parse_atom in
-   return (Raw.Proj2 t))
-    input *)
 
 and parse_sorry : Raw.t t = function
   | Sorry :: rest -> Some (Raw.Sorry, rest)

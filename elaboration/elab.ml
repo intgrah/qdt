@@ -126,7 +126,7 @@ and do_app (genv : GlobalEnv.t) (f : vl_tm) (a : vl_tm) : vl_tm =
   match f with
   | VTmLam (_, _, ClosTm (env, body)) -> eval_tm genv (a :: env) body
   | VTmNeutral (h, sp) -> (
-      let ne : neutral = (h, sp @ [ EApp a ]) in
+      let ne : neutral = (h, sp @ [ a ]) in
       match try_iota_reduce genv ne with
       | Some v -> v
       | None -> VTmNeutral ne)
@@ -137,20 +137,14 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
       match GlobalEnv.find_recursor rec_name genv with
       | None -> None
       | Some info -> (
-          let args =
-            List.filter_map
-              (function
-                | EApp v -> Some v)
-              sp
-          in
           let major_idx =
             info.rec_num_params + info.rec_num_motives + info.rec_num_methods
             + info.rec_num_indices
           in
-          if List.length args <= major_idx then
+          if List.length sp <= major_idx then
             None
           else
-            let major = List.nth args major_idx in
+            let major = List.nth sp major_idx in
             match major with
             | VTmNeutral (HConst ctor_name, ctor_sp) -> (
                 match
@@ -161,27 +155,19 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
                 | None -> None
                 | Some rule ->
                     let params =
-                      List.filteri (fun i _ -> i < info.rec_num_params) args
+                      List.filteri (fun i _ -> i < info.rec_num_params) sp
                     in
-                    let motive = List.nth args info.rec_num_params in
+                    let motive = List.nth sp info.rec_num_params in
                     let methods_start = info.rec_num_params + 1 in
                     let methods =
                       List.filteri
                         (fun i _ ->
                           i >= methods_start
                           && i < methods_start + info.rec_num_methods)
-                        args
-                    in
-                    let ctor_apps =
-                      List.filter_map
-                        (function
-                          | EApp v -> Some v)
-                        ctor_sp
+                        sp
                     in
                     let fields =
-                      List.filteri
-                        (fun i _ -> i >= info.rec_num_params)
-                        ctor_apps
+                      List.filteri (fun i _ -> i >= info.rec_num_params) ctor_sp
                     in
                     let method_idx =
                       List.find_index
@@ -263,7 +249,7 @@ and quote_neutral (genv : GlobalEnv.t) (l : int) ((h, sp) : neutral) : tm =
 and quote_spine (genv : GlobalEnv.t) (l : int) (head : tm) : spine -> tm =
   function
   | [] -> head
-  | EApp arg :: sp -> quote_spine genv l (TmApp (head, quote_tm genv l arg)) sp
+  | arg :: sp -> quote_spine genv l (TmApp (head, quote_tm genv l arg)) sp
 
 (* Convert a value type to a term representing its code *)
 and reify_ty (genv : GlobalEnv.t) (l : int) : vl_ty -> tm = function
@@ -347,23 +333,17 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
           match info_opt with
           | None -> false
           | Some info ->
-              let args =
-                List.filter_map
-                  (function
-                    | EApp v -> Some v)
-                  sp
-              in
               if
-                List.length args
+                List.length sp
                 <> info.struct_num_params + info.struct_num_fields
               then
                 false
               else
                 let params =
-                  List.filteri (fun i _ -> i < info.struct_num_params) args
+                  List.filteri (fun i _ -> i < info.struct_num_params) sp
                 in
                 let fields =
-                  List.filteri (fun i _ -> i >= info.struct_num_params) args
+                  List.filteri (fun i _ -> i >= info.struct_num_params) sp
                 in
                 let rec check_fields : string list * vl_tm list -> bool =
                   function
@@ -398,7 +378,7 @@ and conv_head : head * head -> bool = function
 
 and conv_spine (genv : GlobalEnv.t) (l : int) : spine * spine -> bool = function
   | [], [] -> true
-  | EApp a1 :: sp1', EApp a2 :: sp2' ->
+  | a1 :: sp1', a2 :: sp2' ->
       conv_tm genv l (a1, a2) && conv_spine genv l (sp1', sp2')
   | _, _ -> false
 
@@ -643,7 +623,7 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
   | Raw.Proj1 t -> (
       let t', t_ty = infer_tm genv ctx t in
       match t_ty with
-      | VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+      | VTyEl (HConst name, [ a_code_val; b_val ]) ->
           let a_ty = do_el a_code_val in
           let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
           if Name.equal name (Name.parse "Sigma") then
@@ -672,7 +652,7 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
   | Raw.Proj2 t -> (
       let t', t_ty = infer_tm genv ctx t in
       match t_ty with
-      | VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+      | VTyEl (HConst name, [ a_code_val; b_val ]) ->
           let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
           if Name.equal name (Name.parse "Sigma") then
             let b_tm = quote_tm genv (Context.lvl ctx) b_val in
@@ -789,7 +769,7 @@ and check_tm (genv : GlobalEnv.t) (ctx : Context.t) (raw : Raw.t)
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
       go ctx expected binders
-  | Raw.Pair (a, b), VTyEl (HConst name, [ EApp a_code_val; EApp b_val ]) ->
+  | Raw.Pair (a, b), VTyEl (HConst name, [ a_code_val; b_val ]) ->
       if Name.equal name (Name.parse "Sigma") then
         let fst_ty = do_el a_code_val in
         let a' = check_tm genv ctx a fst_ty in
@@ -1164,9 +1144,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     (param_tys : (string option * ty) list)
     (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) :
     vl_ty =
-  let apply_list (f : vl_tm) (args : vl_tm list) : vl_tm =
-    List.fold_left (do_app genv) f args
-  in
+  let apply_list = List.fold_left (do_app genv) in
 
   let mk_pi (lvl : int) (env : env) (name : string option) (dom : vl_ty)
       (body : vl_tm -> vl_ty) : vl_ty =
