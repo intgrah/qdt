@@ -39,28 +39,6 @@ let pp_stage_error fmt = function
   | Parse_error msg -> Format.fprintf fmt "Parse error: %s" msg
   | Elab_error msg -> Format.fprintf fmt "Elaboration error: %s" msg
 
-let summarize_tokens tokens =
-  let buf = Buffer.create 128 in
-  let fmt = Format.formatter_of_buffer buf in
-  let rec loop idx = function
-    | [] -> ()
-    | tok :: rest ->
-        if idx < 5 then (
-          if idx > 0 then
-            Format.fprintf fmt " ";
-          Lexer.pp_token fmt tok;
-          loop (idx + 1) rest)
-  in
-  loop 0 tokens;
-  Format.pp_print_flush fmt ();
-  let summary = Buffer.contents buf in
-  let truncated = List.length tokens > 5 in
-  Format.sprintf "Unexpected tokens remaining: %s%s" summary
-    (if truncated then
-       "..."
-     else
-       "")
-
 let try_lex chars =
   match Lexer.scan [] chars with
   | tokens -> Ok tokens
@@ -77,7 +55,13 @@ let try_parse = function
       | program -> Ok program
       | exception Parser.Parse_error msg -> Error (Parse_error msg)
       | exception Parser.Tokens_remaining remaining ->
-          Error (Parse_error (summarize_tokens remaining))
+          Error
+            (Parse_error
+               (Format.asprintf "Tokens: %a@."
+                  (Format.pp_print_list
+                     ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
+                     Lexer.pp_token)
+                  (List.take 5 remaining)))
       | exception exn -> Error (Parse_error (Printexc.to_string exn)))
 
 let read_file_for_import path =
