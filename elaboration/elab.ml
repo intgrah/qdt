@@ -49,7 +49,7 @@ module GlobalEnv = struct
         ty : vl_ty;
         tm : vl_tm;
       }
-    | Opaque of { ty : vl_ty }
+    | Opaque of { ty : vl_ty } (* Type formers, e.g. Eq, Nat *)
     | Inductive of inductive_info
     | Structure of {
         ind : inductive_info;
@@ -1188,17 +1188,6 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     do_el (mk_ind_app params_order indices_order)
   in
 
-  let rec take n xs =
-    if n <= 0 then
-      []
-    else
-      match
-        xs
-      with
-      | [] -> []
-      | x :: xs -> x :: take (n - 1) xs
-  in
-
   let build_motive_ty (params_rev : env) (params_order : vl_tm list) : vl_ty =
     let rec go_indices (lvl : int) (env : env) (indices_rev : env)
         (indices_order : vl_tm list) = function
@@ -1271,7 +1260,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
             List.map
               (fun (i, name, field_ty) ->
                 let field_var = List.nth fields_order i in
-                let prefix_rev = List.rev (take i fields_order) in
+                let prefix_rev = List.rev (List.take i fields_order) in
                 let nested_binders, rec_indices =
                   extract_nested_rec_info ind num_params field_ty
                 in
