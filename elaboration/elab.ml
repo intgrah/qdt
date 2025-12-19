@@ -154,26 +154,19 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
                 with
                 | None -> None
                 | Some rule ->
-                    let params =
-                      List.filteri (fun i _ -> i < info.rec_num_params) sp
-                    in
+                    let params = List.take info.rec_num_params sp in
                     let motive = List.nth sp info.rec_num_params in
                     let methods_start = info.rec_num_params + 1 in
                     let methods =
-                      List.filteri
-                        (fun i _ ->
-                          i >= methods_start
-                          && i < methods_start + info.rec_num_methods)
-                        sp
+                      List.drop methods_start sp
+                      |> List.take info.rec_num_methods
                     in
-                    let fields =
-                      List.filteri (fun i _ -> i >= info.rec_num_params) ctor_sp
-                    in
+                    let fields = List.drop info.rec_num_params ctor_sp in
                     let method_idx =
                       List.find_index
                         (fun r -> r.GlobalEnv.rule_ctor_name = ctor_name)
                         info.rec_rules
-                      |> Option.value ~default:0
+                      |> Option.get
                     in
                     let method_val = List.nth methods method_idx in
                     let ihs =
@@ -184,9 +177,7 @@ and try_iota_reduce (genv : GlobalEnv.t) : neutral -> vl_tm option = function
                             List.nth rule.rule_rec_indices ih_idx
                           in
                           let field_indices =
-                            List.map
-                              (fun i -> List.nth fields i)
-                              rec_indices_for_this
+                            List.map (List.nth fields) rec_indices_for_this
                           in
                           let rec_head =
                             VTmNeutral
@@ -339,12 +330,8 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
               then
                 false
               else
-                let params =
-                  List.filteri (fun i _ -> i < info.struct_num_params) sp
-                in
-                let fields =
-                  List.filteri (fun i _ -> i >= info.struct_num_params) sp
-                in
+                let params = List.take info.struct_num_params sp in
+                let fields = List.drop info.struct_num_params sp in
                 let rec check_fields : string list * vl_tm list -> bool =
                   function
                   | [], [] -> true
@@ -1114,7 +1101,7 @@ and extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
   in
   let all_args = collect_all_args [] tm in
   if List.length all_args >= num_params then
-    List.filteri (fun i _ -> i >= num_params) all_args
+    List.drop num_params all_args
   else
     []
 
@@ -1427,7 +1414,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
                 let args = extract_indices_from_ty field_ty in
                 let index_args =
                   if List.length args > num_params then
-                    List.filteri (fun i _ -> i >= num_params) args
+                    List.drop num_params args
                   else
                     []
                 in
