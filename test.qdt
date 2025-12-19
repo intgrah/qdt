@@ -8,5 +8,4 @@ example : 1 + 1 = 3 - 1 := Eq.refl Nat 2
 def prod_swap (A B : Type) (p : Prod A B) : Prod B A :=
   Prod.mk B A (Prod.snd A B p) (Prod.fst A B p)
 
-def sigma_snd (A : Type) (B : A -> Type) (p : Sigma A B) : B (Sigma.fst A B p) :=
-  Sigma.snd A B p
+def sigma_snd := Sigma.snd
