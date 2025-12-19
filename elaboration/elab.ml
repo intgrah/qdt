@@ -45,6 +45,12 @@ module GlobalEnv = struct
     struct_field_names : string list;
   }
 
+  type constructor_info = {
+    ty : vl_ty;
+    ind_name : Name.t;
+    ctor_idx : int;
+  }
+
   type entry =
     | Def of {
         ty : vl_ty;
@@ -57,11 +63,7 @@ module GlobalEnv = struct
         info : structure_info;
       }
     | Recursor of recursor_info
-    | Constructor of {
-        ty : vl_ty;
-        ind_name : Name.t;
-        ctor_idx : int;
-      }
+    | Constructor of constructor_info
 
   type t = entry NameMap.t
 
@@ -80,7 +82,7 @@ module GlobalEnv = struct
 
   let find_constructor name env =
     match find_opt name env with
-    | Some (Constructor { ind_name; ctor_idx; _ }) -> Some (ind_name, ctor_idx)
+    | Some (Constructor info) -> Some info
     | _ -> None
 
   let find_inductive name env =
@@ -299,14 +301,14 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
   | HConst ctor_name, sp -> (
       match GlobalEnv.find_constructor ctor_name genv with
       | None -> false
-      | Some (ind_name, _ctor_idx) -> (
+      | Some info -> (
           let info_opt : GlobalEnv.structure_info option =
-            match GlobalEnv.find_structure ind_name genv with
+            match GlobalEnv.find_structure info.ind_name genv with
             | Some info -> Some info
             | None -> (
-                (* Also allow eta for unit-like inductives: one constructor, no fields. *)
+                (* Also allow eta for unit-like types *)
                 match
-                  GlobalEnv.find_recursor (Name.child ind_name "rec") genv
+                  GlobalEnv.find_recursor (Name.child info.ind_name "rec") genv
                 with
                 | Some rec_info
                   when rec_info.rec_num_indices = 0
@@ -318,7 +320,7 @@ and try_eta_struct (genv : GlobalEnv.t) (l : int) (ctor_app : neutral)
                     then
                       Some
                         {
-                          struct_ind_name = ind_name;
+                          struct_ind_name = info.ind_name;
                           struct_ctor_name = ctor_name;
                           struct_num_params = rec_info.rec_num_params;
                           struct_num_fields = 0;
