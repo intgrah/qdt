@@ -19,7 +19,7 @@ module Parser = struct
   let ( <|> ) (p1 : 'a t) (p2 : 'a t) : 'a t =
    fun input ->
     match p1 input with
-    | Some _ as result -> result
+    | Some a -> Some a
     | None -> p2 input
 
   let choice (ps : 'a t list) : 'a t =

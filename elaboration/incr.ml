@@ -47,7 +47,7 @@ let try_lex chars =
   | exception exn -> Error (Lex_error (Printexc.to_string exn))
 
 let try_parse = function
-  | Error _ as err -> err
+  | Error e -> Error e
   | Ok tokens -> (
       match Parser.parse tokens with
       | program -> Ok program
