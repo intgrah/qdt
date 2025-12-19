@@ -850,21 +850,15 @@ and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
   | TmLet (_, ty, t, body) ->
       has_ind_occ_ty ind ty || has_ind_occ_tm ind t || has_ind_occ_tm ind body
 
-let is_valid_ind_app (ind : Name.t) : tm -> bool =
-  let rec go = function
-    | TmConst name -> Name.equal name ind
-    | TmApp (f, _) -> go f
-    | _ -> false
-  in
-  go
+let rec is_valid_ind_app (ind : Name.t) : tm -> bool = function
+  | TmConst name -> Name.equal name ind
+  | TmApp (f, _) -> is_valid_ind_app ind f
+  | _ -> false
 
-let get_app_head : tm -> Name.t option =
-  let rec go = function
-    | TmConst name -> Some name
-    | TmApp (f, _) -> go f
-    | _ -> None
-  in
-  go
+let rec get_app_head : tm -> Name.t option = function
+  | TmConst name -> Some name
+  | TmApp (f, _) -> get_app_head f
+  | _ -> None
 
 let rec has_var_ty (var_idx : int) : ty -> bool = function
   | TyU -> false
