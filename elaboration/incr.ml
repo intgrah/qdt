@@ -1,5 +1,3 @@
-(* Simplified non-incremental implementation *)
-
 type stage_error =
   | Lex_error of string
   | Parse_error of string
