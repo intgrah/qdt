@@ -1,7 +1,6 @@
 import Std.Init
 import Std.Eq
 import Std.Nat
-import Std.Sigma
 
 structure Iso (A B : Type) where
   (hom : A -> B)
@@ -23,53 +22,44 @@ def Eq.ext (A : Type) (x y : A) (p q : x = y) : p = q := sorry
 
 -- ========== Iso Nat Even ==========
 
-def EvenPred (n : Nat) := fun (k : Nat) => n = (k + k)
-def EvenInner (n : Nat) := Sigma Nat (EvenPred n)
-def Even := Sigma Nat EvenInner
+structure Even where
+  (val : Nat)
+  (half : Nat)
+  (half_spec : val = half + half)
 
-def mkInner (n k : Nat) (p : n = (k + k)) : EvenInner n :=
-  Sigma.mk Nat (EvenPred n) k p
+def Nat.toEven (half : Nat) : Even :=
+  Even.mk (half + half) half (Eq.refl Nat (half + half))
 
-def nat_to_even (k : Nat) : Even :=
-  Sigma.mk Nat EvenInner (k + k) (mkInner (k + k) k (Eq.refl Nat (k + k)))
+def Even.toNat (e : Even) : Nat :=
+  Even.half e
 
-def even_to_nat (e : Even) : Nat :=
-  Sigma.fst Nat (EvenPred (Sigma.fst Nat EvenInner e)) (Sigma.snd Nat EvenInner e)
-
-def left_inv : compose Nat Even Nat even_to_nat nat_to_even = id Nat :=
+def left_inv : compose Nat Even Nat Even.toNat Nat.toEven = id Nat :=
   Eq.refl (Nat -> Nat) (id Nat)
 
-def right_inv_pointwise (e : Even) : nat_to_even (even_to_nat e) = e :=
-  let n := Sigma.fst Nat EvenInner e;
-  let inner := Sigma.snd Nat EvenInner e;
-  let k := Sigma.fst Nat (EvenPred n) inner;
-  let k2 := k + k;
-  let hnk := Sigma.snd Nat (EvenPred n) inner;
-  let hkn := Eq.symm Nat n k2 hnk;
-  let mkEven := fun (y : Nat) (p : k2 = y) =>
-    Sigma.mk Nat EvenInner y (mkInner y k (Eq.symm Nat k2 y p));
-  let step1 : nat_to_even k = mkEven n hkn :=
-    Eq.rec Nat k2
-      (fun (y : Nat) (p : k2 = y) => nat_to_even k = mkEven y p)
-      (Eq.symm Even
-        (mkEven k2 (Eq.refl Nat k2))
-        (Sigma.mk Nat EvenInner k2 (mkInner k2 k (Eq.refl Nat k2)))
-        (congr_arg (k2 = k2) Even
-          (fun (p : k2 = k2) => Sigma.mk Nat EvenInner k2 (mkInner k2 k p))
-          (Eq.symm Nat k2 k2 (Eq.refl Nat k2))
-          (Eq.refl Nat k2)
-          (Eq.ext Nat k2 k2 (Eq.symm Nat k2 k2 (Eq.refl Nat k2)) (Eq.refl Nat k2))))
-      n hkn;
-  let step2 : mkEven n hkn = e :=
-    congr_arg (n = k2) Even
-      (fun (p : n = k2) => Sigma.mk Nat EvenInner n (mkInner n k p))
-      (Eq.symm Nat k2 n hkn)
-      hnk
-      (Eq.ext Nat n k2 (Eq.symm Nat k2 n hkn) hnk);
-  Eq.trans Even (nat_to_even k) (mkEven n hkn) e step1 step2
+def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
+  let n := Even.val e;
+  let half := Even.half e;
+  let double := half + half;
+  let half_spec := Even.half_spec e;
+  let double_eq_n := Eq.symm Nat n double half_spec;
+  let mkEven :=
+    fun (y : Nat) (p : double = y) =>
+      Even.mk y half (Eq.symm Nat double y p);
+  let step1 : Nat.toEven half = mkEven n double_eq_n :=
+    Eq.rec Nat double
+      (fun (y : Nat) (p : double = y) => Nat.toEven half = mkEven y p)
+      (Eq.refl Even (Nat.toEven half))
+      n double_eq_n;
+  let step2 : mkEven n double_eq_n = e :=
+    congr_arg (n = double) Even
+      (fun (p : n = double) => Even.mk n half p)
+      (Eq.symm Nat double n double_eq_n)
+      half_spec
+      (Eq.ext Nat n double (Eq.symm Nat double n double_eq_n) half_spec);
+  Eq.trans Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
 
-def right_inv : compose Even Nat Even nat_to_even even_to_nat = id Even :=
-  funext Even Even (compose Even Nat Even nat_to_even even_to_nat) (id Even) right_inv_pointwise
+def right_inv : compose Even Nat Even Nat.toEven Even.toNat = id Even :=
+  funext Even Even (compose Even Nat Even Nat.toEven Even.toNat) (id Even) right_inv_pointwise
 
 def iso_nat_even : Iso Nat Even :=
-  Iso.mk Nat Even nat_to_even even_to_nat left_inv right_inv
+  Iso.mk Nat Even Nat.toEven Even.toNat left_inv right_inv
