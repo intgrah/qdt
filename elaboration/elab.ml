@@ -28,6 +28,7 @@ module GlobalEnv = struct
   }
 
   type recursor_info = {
+    ty : vl_ty;
     rec_ind_name : Name.t;
     rec_num_params : int;
     rec_num_indices : int;
@@ -55,10 +56,7 @@ module GlobalEnv = struct
         ind : inductive_info;
         info : structure_info;
       }
-    | Recursor of {
-        ty : vl_ty;
-        info : recursor_info;
-      }
+    | Recursor of recursor_info
     | Constructor of {
         ty : vl_ty;
         ind_name : Name.t;
@@ -77,7 +75,7 @@ module GlobalEnv = struct
 
   let find_recursor name env =
     match find_opt name env with
-    | Some (Recursor { info; _ }) -> Some info
+    | Some (Recursor info) -> Some info
     | _ -> None
 
   let find_constructor name env =
@@ -1454,6 +1452,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
   in
   let rec_info : GlobalEnv.recursor_info =
     {
+      ty = rec_ty_val;
       rec_ind_name = ind;
       rec_num_params = num_params;
       rec_num_indices = num_indices;
@@ -1462,11 +1461,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
       rec_rules;
     }
   in
-  let genv =
-    NameMap.add rec_name
-      (GlobalEnv.Recursor { ty = rec_ty_val; info = rec_info })
-      genv
-  in
+  let genv = NameMap.add rec_name (GlobalEnv.Recursor rec_info) genv in
   let rec_ty = quote_ty genv 0 rec_ty_val in
   (genv, ((ind, ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
 
