@@ -935,9 +935,7 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
 let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
     =
   if has_ind_occ_ty ind ty then
-    match
-      ty
-    with
+    match ty with
     | TyU -> ()
     | TyPi (_, a, b) ->
         if has_ind_occ_ty ind a then
@@ -950,9 +948,7 @@ let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
 
 and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
   if has_ind_occ_tm ind tm && not (is_valid_ind_app ind tm) then
-    match
-      tm
-    with
+    match tm with
     | TmVar _ -> ()
     | TmConst _ -> ()
     | TmPiHat (_, a, b) ->
@@ -1182,9 +1178,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
       if n = 0 then
         ty
       else
-        match
-          ty
-        with
+        match ty with
         | TyPi (_, _, b) -> strip_params (n - 1) b
         | ty -> ty
     in
@@ -1387,9 +1381,7 @@ let elab_inductive (genv : GlobalEnv.t) (ind_str : string)
             if n = 0 then
               t
             else
-              match
-                t
-              with
+              match t with
               | TyPi (_, _, b) -> strip (n - 1) b
               | _ -> t
           in

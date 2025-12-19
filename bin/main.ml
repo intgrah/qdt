@@ -37,8 +37,7 @@ let print_defs defs =
 let handle_stage_result ~show ~printer = function
   | Update.Initialized (Ok value)
   | Update.Changed (_, Ok value) ->
-      if show then
-        printer value
+      if show then printer value
   | Update.Initialized (Error err)
   | Update.Changed (_, Error err) ->
       Format.printf "%a@." Pipeline.pp_stage_error err
@@ -53,15 +52,13 @@ let rec watch_loop file pipeline last_mtime =
         last_mtime
     | stats ->
         if stats.st_mtime > last_mtime then (
-          match
-            read_file file
-          with
+          match read_file file with
           | None -> last_mtime
           | Some contents ->
               Pipeline.set_source pipeline contents;
               Pipeline.stabilize ();
-              stats.st_mtime)
-        else
+              stats.st_mtime
+        ) else
           last_mtime
   in
   watch_loop file pipeline last_mtime
@@ -93,6 +90,7 @@ let main () =
     in
     Format.eprintf "[inc] watching %s (poll %.1fs)…@." args.input_file
       poll_seconds;
-    watch_loop args.input_file pipeline initial_mtime)
+    watch_loop args.input_file pipeline initial_mtime
+  )
 
 let () = main ()
