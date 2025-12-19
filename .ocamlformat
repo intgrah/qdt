@@ -1,4 +1,4 @@
 profile = default
 type-decl = sparse
 break-cases = all
-if-then-else = vertical
+if-then-else = k-r
