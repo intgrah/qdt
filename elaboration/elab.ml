@@ -906,19 +906,17 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
         in
         List.for_all check_ctor_positive info.ctors
 
-let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) (ty : ty) : unit
-    =
-  if has_ind_occ_ty ind ty then
-    match ty with
-    | TyU -> ()
-    | TyPi (_, a, b) ->
-        if has_ind_occ_ty ind a then
-          raise
-            (Elab_error
-               (Format.sprintf "%s has a non-positive occurrence (in domain)"
-                  (Name.to_string ind)));
-        check_positivity_ty genv ind b
-    | TyEl t -> check_positivity_tm genv ind t
+let rec check_positivity_ty (genv : GlobalEnv.t) (ind : Name.t) : ty -> unit =
+  function
+  | TyU -> ()
+  | TyPi (_, a, b) ->
+      if has_ind_occ_ty ind a then
+        raise
+          (Elab_error
+             (Format.sprintf "%s has a non-positive occurrence (in domain)"
+                (Name.to_string ind)));
+      check_positivity_ty genv ind b
+  | TyEl t -> check_positivity_tm genv ind t
 
 and check_positivity_tm (genv : GlobalEnv.t) (ind : Name.t) (tm : tm) : unit =
   if has_ind_occ_tm ind tm && not (is_valid_ind_app ind tm) then
