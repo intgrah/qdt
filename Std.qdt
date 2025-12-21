@@ -1,6 +1,6 @@
 import Std.Bool
-import Std.Empty
 import Std.Eq
+import Std.False
 import Std.Fin
 import Std.Init
 import Std.Iso
@@ -11,6 +11,6 @@ import Std.Option
 import Std.Prod
 import Std.Sigma
 import Std.Sum
-import Std.Unit
+import Std.True
 import Std.Vector
 import Std.WF
