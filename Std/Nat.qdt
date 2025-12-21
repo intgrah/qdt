@@ -2,7 +2,7 @@ import Std.Eq
 
 inductive Nat where
   | zero
-  | succ : Nat -> Nat
+  | succ : Nat → Nat
 
 def Nat.one   := Nat.succ Nat.zero
 def Nat.two   := Nat.succ Nat.one
@@ -17,7 +17,7 @@ def Nat.add (m n : Nat) : Nat :=
 def Nat.mul (m n : Nat) : Nat :=
   Nat.rec (fun _ => Nat) Nat.zero (fun _ ih => Nat.add m ih) n
 
-inductive Nat.le (n : Nat) : Nat -> Type where
+inductive Nat.le (n : Nat) : Nat → Type where
   | refl : Nat.le n n
   | step (m : Nat) (p : Nat.le n m) : Nat.le n (Nat.succ m)
 
@@ -29,7 +29,7 @@ def Nat.zero_le (n : Nat) : Nat.le Nat.zero n :=
 
 def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
 
-def Nat.factorial : Nat -> Nat :=
+def Nat.factorial : Nat → Nat :=
   Nat.rec (fun _ => Nat) (Nat.succ Nat.zero) (fun k ih => Nat.mul (Nat.succ k) ih)
 
 example : Nat.factorial Nat.three = Nat.six := Eq.refl Nat Nat.six

@@ -3,13 +3,13 @@ import Std.Eq
 import Std.Nat
 
 structure Iso (A B : Type) where
-  (hom : A -> B)
-  (inv : B -> A)
+  (hom : A → B)
+  (inv : B → A)
   (hom_inv_id : comp A B A inv hom = id A)
   (inv_hom_id : comp B A B hom inv = id B)
 
 def Iso.refl (A : Type) : Iso A A :=
-  Iso.mk A A (id A) (id A) (Eq.refl (A -> A) (id A)) (Eq.refl (A -> A) (id A))
+  Iso.mk A A (id A) (id A) (Eq.refl (A → A) (id A)) (Eq.refl (A → A) (id A))
 
 def Iso.symm (A B : Type) (iso : Iso A B) : Iso B A :=
   Iso.mk B A
@@ -34,7 +34,7 @@ def Even.toNat (e : Even) : Nat :=
   Even.half e
 
 def left_inv : comp Nat Even Nat Even.toNat Nat.toEven = id Nat :=
-  Eq.refl (Nat -> Nat) (id Nat)
+  Eq.refl (Nat → Nat) (id Nat)
 
 def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
   let n := Even.val e;

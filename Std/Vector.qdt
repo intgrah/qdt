@@ -1,7 +1,7 @@
 import Std.Nat
 import Std.List
 
-inductive Vector (A : Type) : Nat -> Type where
+inductive Vector (A : Type) : Nat → Type where
   | nil : Vector A Nat.zero
   | cons (n : Nat) (head : A) (tail : Vector A n) : Vector A (Nat.succ n)
 

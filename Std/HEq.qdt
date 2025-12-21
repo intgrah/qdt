@@ -1,4 +1,4 @@
-inductive HEq (A : Type) (a : A) : (B : Type) -> B -> Type where
+inductive HEq (A : Type) (a : A) : (B : Type) → B → Type where
   | refl : HEq A a A a
 
 def HEq.symm (A : Type) (a : A) (B : Type) (b : B) (h : HEq A a B b) : HEq B b A a :=

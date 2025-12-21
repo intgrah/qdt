@@ -4,7 +4,7 @@ inductive Sum (A B : Type) where
   | inl (a : A)
   | inr (b : B)
 
-def Sum.elim (A B C : Type) (f : A -> C) (g : B -> C) (s : Sum A B) : C :=
+def Sum.elim (A B C : Type) (f : A → C) (g : B → C) (s : Sum A B) : C :=
   Sum.rec A B (fun _ => C) (fun a => f a) (fun b => g b) s
 
 def Sum.eta (A B : Type) (s : Sum A B) : Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) s = s :=
