@@ -640,8 +640,7 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
                   t' )
             in
             let fst_val = eval_tm genv (Context.env ctx) fst_tm in
-            let b_code_val = do_app genv b_val fst_val in
-            let snd_ty = do_el b_code_val in
+            let snd_ty = do_el (do_app genv b_val fst_val) in
             let snd_tm =
               TmApp
                 ( TmApp
@@ -889,8 +888,7 @@ let check_inductive_param_positive (genv : GlobalEnv.t) (f_name : Name.t) : bool
         true
       else
         let check_ctor_positive (_ctor_name, ctor_ty) =
-          let rec skip_and_check skip depth ty =
-            match ty with
+          let rec skip_and_check skip depth = function
             | TyPi (_, a, b) ->
                 if skip > 0 then
                   skip_and_check (skip - 1) (depth + 1) b
@@ -1106,7 +1104,8 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
     (param_tys : (string option * ty) list)
     (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) :
     vl_ty =
-  let apply_list = List.fold_left (do_app genv) in
+  let app arg fn = do_app genv fn arg in
+  let apps args fn = List.fold_left (do_app genv) fn args in
 
   let mk_pi (lvl : int) (env : env) (name : string option) (dom : vl_ty)
       (body : vl_tm -> vl_ty) : vl_ty =
@@ -1119,13 +1118,9 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
   let ind_code : vl_tm = VTmNeutral (HConst ind, []) in
   let ctor_code (ctor : Name.t) : vl_tm = VTmNeutral (HConst ctor, []) in
 
-  let mk_ind_app (params_order : vl_tm list) (indices_order : vl_tm list) :
-      vl_tm =
-    apply_list ind_code (params_order @ indices_order)
-  in
   let mk_ind_ty (params_order : vl_tm list) (indices_order : vl_tm list) : vl_ty
       =
-    do_el (mk_ind_app params_order indices_order)
+    do_el (ind_code |> apps params_order |> apps indices_order)
   in
 
   let build_motive_ty (params_rev : env) (params_order : vl_tm list) : vl_ty =
@@ -1177,11 +1172,11 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
           let idx_vals =
             List.map (eval_tm genv env_for_return) return_indices
           in
-          let motive_app = apply_list motive idx_vals in
+          let motive_app = motive |> apps idx_vals in
           let ctor_app =
-            apply_list (ctor_code ctor_name) (params_order @ fields_order)
+            ctor_code ctor_name |> apps params_order |> apps fields_order
           in
-          let result_ty = do_el (do_app genv motive_app ctor_app) in
+          let result_ty = do_el (motive_app |> app ctor_app) in
           let rec_field_infos =
             let rec go i acc = function
               | [] -> List.rev acc
@@ -1213,11 +1208,9 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
                       let idx_vals =
                         List.map (eval_tm genv env_for_indices) rec_indices
                       in
-                      let motive_app = apply_list motive idx_vals in
-                      let field_app =
-                        apply_list field_var (List.rev nested_order)
-                      in
-                      do_el (do_app genv motive_app field_app)
+                      do_el
+                        (motive |> apps idx_vals
+                        |> app (field_var |> apps (List.rev nested_order)))
                   | (n, ty) :: rest ->
                       let dom =
                         eval_ty genv (nested_rev @ prefix_rev @ params_rev) ty
@@ -1274,7 +1267,7 @@ let gen_recursor_ty (genv : GlobalEnv.t) (ind : Name.t) (num_params : int)
               | [] ->
                   let x_ty = mk_ind_ty params_order indices_order in
                   mk_pi lvl env (Some "x") x_ty (fun x ->
-                      let motive_app = apply_list motive indices_order in
+                      let motive_app = motive |> apps indices_order in
                       do_el (do_app genv motive_app x))
               | (name, idx_ty) :: _rest ->
                   let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
@@ -1647,13 +1640,19 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
                         fields))
                   field_ty
               in
-              let motive = Raw.Lam ([ (Some "s", None) ], subst_fty) in
-              let proj_fn = Raw.Lam (field_binders, Raw.Ident field.name) in
-              let rec_with_motive = Raw.App (rec_app, motive) in
-              let rec_with_proj = Raw.App (rec_with_motive, proj_fn) in
-              let rec_with_s = Raw.App (rec_with_proj, Raw.Ident "s") in
-              let full_body = Raw.Ann (rec_with_s, subst_fty) in
-              let body_with_s = Raw.Lam ([ s_binder ], full_body) in
+              let body_with_s =
+                Raw.Lam
+                  ( [ s_binder ],
+                    Raw.Ann
+                      ( Raw.App
+                          ( Raw.App
+                              ( Raw.App
+                                  ( rec_app,
+                                    Raw.Lam ([ (Some "s", None) ], subst_fty) ),
+                                Raw.Lam (field_binders, Raw.Ident field.name) ),
+                            Raw.Ident "s" ),
+                        subst_fty ) )
+              in
               let full_def =
                 if param_binders = [] then
                   body_with_s
