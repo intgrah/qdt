@@ -8,23 +8,23 @@ inductive List (A : Type) where
 def List.append (A : Type) (xs ys : List A) : List A :=
   List.rec A (fun _ => List A) ys (fun h _ ih => List.cons A h ih) xs
 
-def List.map (A B : Type) (f : A -> B) (xs : List A) : List B :=
+def List.map (A B : Type) (f : A → B) (xs : List A) : List B :=
   List.rec A (fun _ => List B) (List.nil B) (fun h _ ih => List.cons B (f h) ih) xs
 
-def List.foldr (A B : Type) (f : A -> B -> B) (z : B) (xs : List A) : B :=
+def List.foldr (A B : Type) (f : A → B → B) (z : B) (xs : List A) : B :=
   List.rec A (fun _ => B) z (fun h _ ih => f h ih) xs
 
-def List.foldl (A B : Type) (f : B -> A -> B) (z : B) (xs : List A) : B :=
-  List.rec A (fun _ => B -> B) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
+def List.foldl (A B : Type) (f : B → A → B) (z : B) (xs : List A) : B :=
+  List.rec A (fun _ => B → B) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
 
-inductive List.Mem (A : Type) (a : A) : List A -> Type where
+inductive List.Mem (A : Type) (a : A) : List A → Type where
   | head (as : List A) : List.Mem A a (List.cons A a as)
-  | tail (b : A) (as : List A) : List.Mem A a as -> List.Mem A a (List.cons A b as)
+  | tail (b : A) (as : List A) : List.Mem A a as → List.Mem A a (List.cons A b as)
 
 def List.flatten (A : Type) (xss : List (List A)) : List A :=
   List.rec (List A) (fun _ => List A) (List.nil A) (fun xs _ ih => List.append A xs ih) xss
 
-def List.flatMap (A B : Type) (f : A -> List B) (xs : List A) : List B :=
+def List.flatMap (A B : Type) (f : A → List B) (xs : List A) : List B :=
   List.flatten B (List.map A (List B) f xs)
 
 def List.length (A : Type) (xs : List A) : Nat :=

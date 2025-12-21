@@ -5,7 +5,7 @@ inductive Bool where
 def Bool.ite (A : Type) (b : Bool) (t f : A) : A :=
   Bool.rec (fun _ => A) t f b
 
-def Bool.dite (A : Bool -> Type) (b : Bool) (t : A Bool.true) (f : A Bool.false) : A b :=
+def Bool.dite (A : Bool → Type) (b : Bool) (t : A Bool.true) (f : A Bool.false) : A b :=
   Bool.rec A t f b
 
 def Bool.not (b : Bool) :=
