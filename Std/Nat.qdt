@@ -1,5 +1,4 @@
 import Std.Eq
-import Std.Empty
 
 inductive Nat where
   | zero

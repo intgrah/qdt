@@ -5,8 +5,8 @@ import Std.Nat
 structure Iso (A B : Type) where
   (hom : A -> B)
   (inv : B -> A)
-  (hom_inv_id : compose A B A inv hom = id A)
-  (inv_hom_id : compose B A B hom inv = id B)
+  (hom_inv_id : comp A B A inv hom = id A)
+  (inv_hom_id : comp B A B hom inv = id B)
 
 def Iso.refl (A : Type) : Iso A A :=
   Iso.mk A A (id A) (id A) (Eq.refl (A -> A) (id A)) (Eq.refl (A -> A) (id A))
@@ -33,7 +33,7 @@ def Nat.toEven (half : Nat) : Even :=
 def Even.toNat (e : Even) : Nat :=
   Even.half e
 
-def left_inv : compose Nat Even Nat Even.toNat Nat.toEven = id Nat :=
+def left_inv : comp Nat Even Nat Even.toNat Nat.toEven = id Nat :=
   Eq.refl (Nat -> Nat) (id Nat)
 
 def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
@@ -58,8 +58,8 @@ def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
       (Eq.ext Nat n double (Eq.symm Nat double n double_eq_n) half_spec);
   Eq.trans Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
 
-def right_inv : compose Even Nat Even Nat.toEven Even.toNat = id Even :=
-  funext Even Even (compose Even Nat Even Nat.toEven Even.toNat) (id Even) right_inv_pointwise
+def right_inv : comp Even Nat Even Nat.toEven Even.toNat = id Even :=
+  funext Even Even (comp Even Nat Even Nat.toEven Even.toNat) (id Even) right_inv_pointwise
 
 def iso_nat_even : Iso Nat Even :=
   Iso.mk Nat Even Nat.toEven Even.toNat left_inv right_inv
