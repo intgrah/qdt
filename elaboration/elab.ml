@@ -1624,13 +1624,12 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let genv, acc =
           List.fold_left
             (fun (genv, acc) (field : Syntax.Raw.field) ->
-              let proj_name = name ^ "." ^ field.name in
-              let s_binder = (Some "s", Some struct_app) in
+              let proj_name = Name.child (Name.parse name) field.name in
               let field_ty = mk_field_ty field in
               let subst_fty =
                 subst_fields
                   (List.filter_map
-                     (fun (other_fname : string) ->
+                     (fun other_fname ->
                        if String.equal other_fname field.name then
                          None
                        else
@@ -1640,9 +1639,9 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
                         fields))
                   field_ty
               in
-              let body_with_s =
+              let body =
                 Raw.Lam
-                  ( [ s_binder ],
+                  ( [ (Some "s", Some struct_app) ],
                     Raw.Ann
                       ( Raw.App
                           ( Raw.App
@@ -1655,20 +1654,19 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
               in
               let full_def =
                 if param_binders = [] then
-                  body_with_s
+                  body
                 else
-                  Raw.Lam (param_binders, body_with_s)
+                  Raw.Lam (param_binders, body)
               in
               let term, ty_val = infer_tm genv Context.empty full_def in
               let term_val = eval_tm genv [] term in
-              let full_fqn = Name.parse proj_name in
               let genv =
-                NameMap.add full_fqn
+                NameMap.add proj_name
                   (GlobalEnv.Def { ty = ty_val; tm = term_val })
                   genv
               in
               let ty_out = quote_ty genv 0 ty_val in
-              (genv, (full_fqn, term, ty_out) :: acc))
+              (genv, (proj_name, term, ty_out) :: acc))
             (genv, acc) fields
         in
         go genv imported importing acc rest
