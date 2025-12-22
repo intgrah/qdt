@@ -6,3 +6,6 @@ structure Fin (n : Nat) where
 
 def Fin.zero (n : Nat) : Fin (Nat.succ n) :=
   Fin.mk (Nat.succ n) Nat.zero (Nat.zero_le (Nat.succ n))
+
+def Fin.eq_of_val_eq (n : Nat) (i j : Fin n) (h : Fin.val n i = Fin.val n j) : i = j :=
+  Eq.refl (Fin n) (Fin.mk n (Fin.val n i) (Fin.isLt n i))
