@@ -43,3 +43,9 @@ def List.length_append (A : Type) (xs ys : List A)
         (congr_arg Nat Nat Nat.succ (List.length A (List.append A t ys)) (Nat.add (List.length A t) (List.length A ys)) ih)
         (Eq.symm Nat (Nat.add (Nat.succ (List.length A t)) (List.length A ys)) (Nat.succ (Nat.add (List.length A t) (List.length A ys))) (Nat.succ_add (List.length A t) (List.length A ys))))
     xs
+
+inductive List.Perm (A : Type) : List A → List A → Type where
+  | nil : List.Perm A (List.nil A) (List.nil A)
+  | cons (x : A) (l1 l2 : List A) : List.Perm A l1 l2 → List.Perm A (List.cons A x l1) (List.cons A x l2)
+  | swap (x y : A) (l : List A) : List.Perm A (List.cons A y (List.cons A x l)) (List.cons A x (List.cons A y l))
+  | trans (l1 l2 l3 : List A) : List.Perm A l1 l2 → List.Perm A l2 l3 → List.Perm A l1 l3
