@@ -1,10 +1,11 @@
-open Elaboration.Syntax
-open Elaboration.Elab
-open Elaboration.Pretty
-module Name = Elaboration.Name
+open Elaboration
+open Syntax
+open Elab
+open Pretty
+open Nbe
 
 let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
-let genv = GlobalEnv.empty
+let genv = Global.empty
 
 module Test_eval = struct
   let identity () =

@@ -82,11 +82,11 @@ let try_elaborate root_dir = function
       | exception Elab.Circular_import m ->
           Error
             (Elab_error
-               (Format.sprintf "Circular import: %s" (Module_name.to_string m)))
+               (Format.sprintf "Circular import: %s" (Name.to_string m)))
       | exception Elab.Import_not_found m ->
           Error
             (Elab_error
-               (Format.sprintf "Import not found: %s" (Module_name.to_string m)))
+               (Format.sprintf "Import not found: %s" (Name.to_string m)))
       | exception exn -> Error (Elab_error (Printexc.to_string exn)))
 
 let create ?(root_dir = ".") () =
