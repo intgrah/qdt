@@ -81,7 +81,7 @@ let rec parse_atom : Raw.t t =
       parse_type;
       parse_int_lit;
       parse_pair;
-      parse_unit_term;
+      parse_true_term;
       parse_ann_or_parens parse_preterm;
     ]
     input
@@ -100,8 +100,8 @@ and parse_int_lit : Raw.t t = function
   | IntLit n :: rest -> Some (Raw.IntLit n, rest)
   | _ -> None
 
-and parse_unit_term : Raw.t t = function
-  | LParen :: RParen :: rest -> Some (Raw.Ident "Unit.unit", rest)
+and parse_true_term : Raw.t t = function
+  | LParen :: RParen :: rest -> Some (Raw.Ident "True.intro", rest)
   | _ -> None
 
 and parse_pair : Raw.t t =
