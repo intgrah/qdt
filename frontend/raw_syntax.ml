@@ -31,6 +31,20 @@ type constructor = {
   ty : t option;
 }
 
+type inductive_info = {
+  name : string;
+  params : binder_group list;
+  ty : t option;
+  ctors : constructor list;
+}
+
+type structure_info = {
+  name : string;
+  params : binder_group list;
+  ty : t option;
+  fields : field list;
+}
+
 type item =
   | Import of { module_name : string } (* import Foo.Bar *)
   | Def of {
@@ -38,17 +52,7 @@ type item =
       body : t;
     }
   | Example of { body : t }
-  | Inductive of {
-      name : string;
-      params : binder_group list;
-      ty : t option;
-      ctors : constructor list;
-    }
-  | Structure of {
-      name : string;
-      params : binder_group list;
-      ty : t option; (* optional result type annotation, always Type *)
-      fields : field list;
-    }
+  | Inductive of inductive_info
+  | Structure of structure_info
 
 type program = item list
