@@ -1,3 +1,4 @@
+open Frontend
 open Syntax
 
 (* ========== Raw Syntax ========== *)
@@ -6,16 +7,16 @@ let pp_name fmt : string option -> unit = function
   | None -> Format.fprintf fmt "_"
   | Some name -> Format.fprintf fmt "%s" name
 
-let rec pp_binder fmt : Raw.binder -> unit = function
+let rec pp_binder fmt : Raw_syntax.binder -> unit = function
   | name, None -> pp_name fmt name
   | name, Some ty -> Format.fprintf fmt "(%a : %a)" pp_name name pp_raw ty
 
-and pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
+and pp_binder_group fmt ((names, ty) : Raw_syntax.binder_group) : unit =
   Format.fprintf fmt "(%a : %a)"
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
 
-and pp_raw fmt : Raw.t -> unit = function
+and pp_raw fmt : Raw_syntax.t -> unit = function
   | Ident name -> Format.fprintf fmt "%s" name
   | App (f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_raw f pp_raw a
   | Lam (binders, body) ->
@@ -43,7 +44,7 @@ and pp_raw fmt : Raw.t -> unit = function
   | Ann (e, ty) -> Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty
   | Sorry -> Format.fprintf fmt "sorry"
 
-let pp_ctor fmt (ctor : Raw.constructor) : unit =
+let pp_ctor fmt (ctor : Raw_syntax.constructor) : unit =
   match (ctor.params, ctor.ty) with
   | [], None -> Format.fprintf fmt "| %s" ctor.name
   | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor.name pp_raw ty
@@ -56,7 +57,7 @@ let pp_ctor fmt (ctor : Raw.constructor) : unit =
         (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder)
         params pp_raw ty
 
-let pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
+let pp_binder_group fmt ((names, ty) : Raw_syntax.binder_group) : unit =
   let pp_name fmt = function
     | Some n -> Format.fprintf fmt "%s" n
     | None -> Format.fprintf fmt "_"
@@ -65,7 +66,7 @@ let pp_binder_group fmt ((names, ty) : Raw.binder_group) : unit =
     (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_name)
     names pp_raw ty
 
-let pp_raw_item fmt : Raw.item -> unit = function
+let pp_raw_item fmt : Raw_syntax.item -> unit = function
   | Def { name; body } ->
       Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
   | Example { body } ->
@@ -95,7 +96,7 @@ let pp_raw_item fmt : Raw.item -> unit = function
             (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_binder_group)
             params
       in
-      let pp_field fmt (field : Raw.field) =
+      let pp_field fmt (field : Raw_syntax.field) =
         match field.binders with
         | [] -> Format.fprintf fmt "(%s : %a)" field.name pp_raw field.ty
         | args ->
@@ -117,7 +118,7 @@ let pp_raw_item fmt : Raw.item -> unit = function
             fields)
   | Import { module_name } -> Format.fprintf fmt "import %s" module_name
 
-let pp_raw_program fmt (prog : Raw.program) : unit =
+let pp_raw_program fmt (prog : Raw_syntax.program) : unit =
   Format.pp_print_list
     ~pp_sep:(fun fmt () -> Format.fprintf fmt "\n\n")
     pp_raw_item fmt prog

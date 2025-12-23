@@ -1,9 +1,10 @@
+open Frontend
 open Syntax
 
 (* Raw Syntax *)
-val pp_raw : Format.formatter -> Raw.t -> unit
-val pp_raw_item : Format.formatter -> Raw.item -> unit
-val pp_raw_program : Format.formatter -> Raw.program -> unit
+val pp_raw : Format.formatter -> Raw_syntax.t -> unit
+val pp_raw_item : Format.formatter -> Raw_syntax.item -> unit
+val pp_raw_program : Format.formatter -> Raw_syntax.program -> unit
 
 (* Core Syntax *)
 val pp_ty_ctx : string list -> Format.formatter -> ty -> unit

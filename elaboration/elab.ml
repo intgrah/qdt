@@ -1,3 +1,4 @@
+open Frontend
 open Syntax
 open Nbe
 
@@ -207,7 +208,7 @@ module Context = struct
   let lookup_name ctx name =
     let rec go k = function
       | [] -> None
-      | { name = Some n; ty } :: _ when String.equal n name -> Some (k, ty)
+      | { name = Some n; ty } :: _ when n = name -> Some (k, ty)
       | _ :: rest -> go (k + 1) rest
     in
     go 0 ctx.entries
@@ -234,49 +235,31 @@ let find_ty (genv : Global.t) (name : Name.t) : vl_ty option =
 
 (* ========== Elaboration ========== *)
 
-let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw.t -> ty = function
-  | Raw.U -> TyU
-  | Raw.Pi ((names, dom), cod) ->
-      let dom' = check_ty genv ctx dom in
-      let dom_val = eval_ty genv (Context.env ctx) dom' in
+let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> ty =
+  function
+  | U -> TyU
+  | Pi ((names, dom), cod) ->
+      let dom = check_ty genv ctx dom in
+      let dom_val = eval_ty genv (Context.env ctx) dom in
       let rec bind_all ctx = function
         | [] -> check_ty genv ctx cod
         | name :: rest ->
             let ctx' = Context.bind name dom_val ctx in
             let cod' = bind_all ctx' rest in
-            TyPi (name, dom', cod')
+            TyPi (name, dom, cod')
       in
       bind_all ctx names
-  | Raw.Arrow (dom, cod) ->
-      let dom' = check_ty genv ctx dom in
-      let dom_val = eval_ty genv (Context.env ctx) dom' in
-      let ctx' = Context.bind None dom_val ctx in
-      let cod' = check_ty genv ctx' cod in
-      TyPi (None, dom', cod')
-  | Raw.Sigma ((names, fst_ty), snd_ty) ->
-      let fst' = check_ty genv ctx fst_ty in
-      let fst_val = eval_ty genv (Context.env ctx) fst' in
-      let rec bind_all ctx = function
-        | [] -> check_ty genv ctx snd_ty
-        | name :: rest ->
-            let fst_code = reify_ty genv (Context.lvl ctx) fst_val in
-            let ctx' = Context.bind name fst_val ctx in
-            let snd' = bind_all ctx' rest in
-            let snd_val = eval_ty genv (Context.env ctx') snd' in
-            let snd_code = reify_ty genv (Context.lvl ctx') snd_val in
-            let snd_fn = TmLam (name, TyEl fst_code, snd_code) in
-            TyEl (TmApp (TmApp (TmConst [ "Sigma" ], fst_code), snd_fn))
-      in
-      bind_all ctx names
-  | Raw.Prod (fst_ty, snd_ty) ->
-      let fst' = check_ty genv ctx fst_ty in
-      let fst_val = eval_ty genv (Context.env ctx) fst' in
-      let fst_code = reify_ty genv (Context.lvl ctx) fst_val in
-      let snd' = check_ty genv ctx snd_ty in
-      let snd_val = eval_ty genv (Context.env ctx) snd' in
-      let snd_code = reify_ty genv (Context.lvl ctx) snd_val in
-      TyEl (TmApp (TmApp (TmConst [ "Prod" ], fst_code), snd_code))
-  | Raw.Eq (a, b) ->
+  | Arrow (dom, cod) ->
+      let dom = check_ty genv ctx dom in
+      let dom_val = eval_ty genv (Context.env ctx) dom in
+      let ctx = Context.bind None dom_val ctx in
+      let cod = check_ty genv ctx cod in
+      TyPi (None, dom, cod)
+  | Sigma (binders, snd_ty) ->
+      check_ty genv ctx (Desugar.desugar_sigma binders snd_ty)
+  | Prod (fst_ty, snd_ty) ->
+      check_ty genv ctx (Desugar.desugar_prod fst_ty snd_ty)
+  | Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
@@ -294,9 +277,9 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw.t -> ty = function
                 (quote_ty genv (Context.lvl ctx) ty_val)));
       TyEl tm
 
-and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
+and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
   function
-  | Raw.Ident name -> (
+  | Ident name -> (
       match Context.lookup_name ctx name with
       | Some (k, ty) -> (TmVar (Idx k), ty)
       | None -> (
@@ -305,7 +288,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
           | Some ty -> (TmConst fqn, ty)
           | None ->
               raise (Elab_error (Format.sprintf "Unbound variable: %s" name))))
-  | Raw.App (f, a) -> (
+  | App (f, a) -> (
       let f', f_ty = infer_tm genv ctx f in
       match f_ty with
       | VTyPi (_, a_ty, ClosTy (env, b_ty)) ->
@@ -313,13 +296,13 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
           let a_val = eval_tm genv (Context.env ctx) a' in
           (TmApp (f', a'), eval_ty genv (a_val :: env) b_ty)
       | _ -> raise (Elab_error "Expected function type in application"))
-  | Raw.U -> raise (Elab_error "Cannot infer type of Type")
-  | Raw.Ann (e, ty) ->
-      let ty' = check_ty genv ctx ty in
-      let ty_val = eval_ty genv (Context.env ctx) ty' in
-      let e' = check_tm genv ctx e ty_val in
-      (e', ty_val)
-  | Raw.Lam (binders, body) ->
+  | U -> raise (Elab_error "Cannot infer type of Type")
+  | Ann (e, ty) ->
+      let ty = check_ty genv ctx ty in
+      let ty_val = eval_ty genv (Context.env ctx) ty in
+      let e = check_tm genv ctx e ty_val in
+      (e, ty_val)
+  | Lam (binders, body) ->
       let rec go ctx = function
         | [] -> infer_tm genv ctx body
         | (name, Some ty) :: rest ->
@@ -335,88 +318,51 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
             raise (Elab_error "Cannot infer type of unannotated lambda :(")
       in
       go ctx binders
-  | Raw.Pi ((names, dom), cod) ->
-      let dom' = infer_tm genv ctx dom in
-      let dom_tm, _ = dom' in
-      let dom_val = do_el (eval_tm genv (Context.env ctx) dom_tm) in
+  | Pi ((names, dom), cod) ->
+      let dom, _ = infer_tm genv ctx dom in
+      let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
       let rec bind_all ctx = function
         | [] ->
             let cod_tm, _ = infer_tm genv ctx cod in
             cod_tm
         | name :: rest ->
-            let ctx' = Context.bind name dom_val ctx in
-            let cod' = bind_all ctx' rest in
-            TmPiHat (name, dom_tm, cod')
+            let ctx = Context.bind name dom_val ctx in
+            let cod = bind_all ctx rest in
+            TmPiHat (name, dom, cod)
       in
       (bind_all ctx names, VTyU)
-  | Raw.Arrow (dom, cod) ->
-      let dom_tm, _ = infer_tm genv ctx dom in
-      let dom_val = do_el (eval_tm genv (Context.env ctx) dom_tm) in
+  | Arrow (dom, cod) ->
+      let dom, _ = infer_tm genv ctx dom in
+      let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
       let ctx' = Context.bind None dom_val ctx in
       let cod_tm, _ = infer_tm genv ctx' cod in
-      (TmPiHat (None, dom_tm, cod_tm), VTyU)
-  | Raw.Sigma ((names, fst_ty), snd_ty) ->
-      let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
-      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
-        raise (Elab_error "Expected Type in sigma domain");
-      let fst_code_val = eval_tm genv (Context.env ctx) fst_tm in
-      let fst_val = do_el fst_code_val in
-      let rec bind_all ctx = function
-        | [] ->
-            let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
-            if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
-              raise (Elab_error "Expected Type in sigma codomain");
-            snd_tm
-        | name :: rest ->
-            let ctx' = Context.bind name fst_val ctx in
-            let snd' = bind_all ctx' rest in
-            let fst_tm' = quote_tm genv (Context.lvl ctx) fst_code_val in
-            let snd_fn = TmLam (name, TyEl fst_tm', snd') in
-            TmApp (TmApp (TmConst [ "Sigma" ], fst_tm'), snd_fn)
-      in
-      (bind_all ctx names, VTyU)
-  | Raw.Prod (fst_ty, snd_ty) ->
-      let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
-      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
-        raise (Elab_error "Expected Type in product domain");
-      let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
-      if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
-        raise (Elab_error "Expected Type in product codomain");
-      (TmApp (TmApp (TmConst [ "Prod" ], fst_tm), snd_tm), VTyU)
-  | Raw.Pair (a, b) ->
-      let a', a_ty = infer_tm genv ctx a in
-      let b', b_ty = infer_tm genv ctx b in
+      (TmPiHat (None, dom, cod_tm), VTyU)
+  | Sigma (binders, snd_ty) ->
+      infer_tm genv ctx (Desugar.desugar_sigma binders snd_ty)
+  | Prod (fst_ty, snd_ty) ->
+      infer_tm genv ctx (Desugar.desugar_prod fst_ty snd_ty)
+  | Pair (a, b) ->
+      let a, a_ty = infer_tm genv ctx a in
+      let b, b_ty = infer_tm genv ctx b in
       let a_code = reify_ty genv (Context.lvl ctx) a_ty in
       let b_code = reify_ty genv (Context.lvl ctx) b_ty in
       let prod_code = TmApp (TmApp (TmConst [ "Prod" ], a_code), b_code) in
       let pair_tm =
         TmApp
-          ( TmApp (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code), b_code), a'),
-            b' )
+          ( TmApp (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code), b_code), a),
+            b )
       in
       let pair_ty = eval_ty genv (Context.env ctx) (TyEl prod_code) in
       (pair_tm, pair_ty)
-  | Raw.NatLit n ->
-      if n < 0 then
-        raise (Elab_error "Negative numeric literal")
-      else
-        let rec nat_raw (n : int) : Raw.t =
-          if n = 0 then
-            Raw.Ident "Nat.zero"
-          else
-            Raw.App (Raw.Ident "Nat.succ", nat_raw (n - 1))
-        in
-        infer_tm genv ctx (nat_raw n)
-  | Raw.Add (a, b) ->
-      infer_tm genv ctx (Raw.App (Raw.App (Raw.Ident "Nat.add", a), b))
-  | Raw.Sub (a, b) ->
-      infer_tm genv ctx (Raw.App (Raw.App (Raw.Ident "Nat.sub", a), b))
-  | Raw.Eq (a, b) ->
+  | NatLit n -> infer_tm genv ctx (Desugar.desugar_nat_lit n)
+  | Add (a, b) -> infer_tm genv ctx (Desugar.desugar_add a b)
+  | Sub (a, b) -> infer_tm genv ctx (Desugar.desugar_sub a b)
+  | Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
       (TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm), VTyU)
-  | Raw.Let (name, ty_opt, rhs, body) ->
+  | Let (name, ty_opt, rhs, body) ->
       let rhs', rhs_ty =
         match ty_opt with
         | Some ty ->
@@ -432,15 +378,15 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let result_ty = eval_ty genv (Context.env ctx') body_ty_quoted in
       ( TmLet (name, quote_ty genv (Context.lvl ctx) rhs_ty, rhs', body'),
         result_ty )
-  | Raw.Sorry ->
+  | Sorry ->
       let id = fresh_sorry_id () in
       let hole_ty = VTyEl (HConst [ Format.sprintf "?ty%d†" id ], []) in
       (TmSorry (id, quote_ty genv (Context.lvl ctx) hole_ty), hole_ty)
 
-and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
+and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw_syntax.t)
     (expected : vl_ty) : tm =
   match (raw, expected) with
-  | Raw.Lam (binders, body), _ ->
+  | Lam (binders, body), _ ->
       let rec go ctx expected = function
         | [] -> check_tm genv ctx body expected
         | (name, ty_opt) :: rest -> (
@@ -468,7 +414,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
       go ctx expected binders
-  | Raw.Pair (a, b), VTyEl (HConst [ "Sigma" ], [ a_code_val; b_val ]) ->
+  | Pair (a, b), VTyEl (HConst [ "Sigma" ], [ a_code_val; b_val ]) ->
       let fst_ty = do_el a_code_val in
       let a' = check_tm genv ctx a fst_ty in
       let a_val = eval_tm genv (Context.env ctx) a' in
@@ -480,7 +426,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
       TmApp
         ( TmApp (TmApp (TmApp (TmConst [ "Sigma"; "mk" ], a_code_tm), b_tm), a'),
           b' )
-  | Raw.Pair (a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
+  | Pair (a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
       let fst_ty = do_el a_code_val in
       let snd_ty = do_el b_val in
       let a' = check_tm genv ctx a fst_ty in
@@ -491,9 +437,9 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
         ( TmApp
             (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code_tm), b_code_tm), a'),
           b' )
-  | Raw.Pair (_, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
+  | Pair (_, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
       raise (Elab_error "Expected sigma/product type in pair")
-  | Raw.Let (name, ty_opt, rhs, body), expected ->
+  | Let (name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
         | Some ty ->
@@ -506,7 +452,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
       let ctx' = Context.bind_def (Some name) rhs_ty rhs_val ctx in
       let body' = check_tm genv ctx' body expected in
       TmLet (name, quote_ty genv (Context.lvl ctx) rhs_ty, rhs', body')
-  | Raw.Sorry, expected ->
+  | Sorry, expected ->
       let id = fresh_sorry_id () in
       TmSorry (id, quote_ty genv (Context.lvl ctx) expected)
   | _ ->
@@ -709,7 +655,7 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
 
 let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    (ctor : Syntax.Raw.constructor) : Name.t * ty * vl_ty =
+    (ctor : Raw_syntax.constructor) : Name.t * ty * vl_ty =
   let full_name = Name.child ind ctor.name in
   let rec build_ctor_body ctx depth = function
     | [] -> (
@@ -1000,8 +946,9 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
   build_params 0 [] [] [] param_tys
 
 let elab_inductive (genv : Global.t) (ind_str : string)
-    (raw_params : Raw.binder_group list) (ind_ty_opt : Raw.t option)
-    (ctors : Syntax.Raw.constructor list) : Global.t * (Name.t * ty) list =
+    (raw_params : Raw_syntax.binder_group list)
+    (ind_ty_opt : Raw_syntax.t option) (ctors : Raw_syntax.constructor list) :
+    Global.t * (Name.t * ty) list =
   let ind = Name.parse ind_str in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
@@ -1154,7 +1101,7 @@ exception Import_not_found of Name.t
 module ModuleNameSet = Set.Make (Name)
 
 let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
-    ~(parse : string -> Raw.program) (prog : Raw.program) :
+    ~(parse : string -> Raw_syntax.program) (prog : Raw_syntax.program) :
     (Name.t * tm * ty) list =
   let rec process_import genv imported importing m =
     if List.mem m importing then raise (Circular_import m);
@@ -1173,11 +1120,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
       (genv, ModuleNameSet.add m imported)
   and go genv imported importing acc = function
     | [] -> (genv, imported, List.rev acc)
-    | Raw.Import { module_name } :: rest ->
+    | Import { module_name } :: rest ->
         let m = Name.parse module_name in
         let genv, imported = process_import genv imported importing m in
         go genv imported importing acc rest
-    | Raw.Def { name; body } :: rest ->
+    | Def { name; body } :: rest ->
         let full_name = Name.parse name in
         let term, ty_val = infer_tm genv Context.empty body in
         let term_val = eval_tm genv [] term in
@@ -1188,10 +1135,10 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         let ty_out = quote_ty genv 0 ty_val in
         go genv imported importing ((full_name, term, ty_out) :: acc) rest
-    | Raw.Example { body } :: rest ->
+    | Example { body } :: rest ->
         let _ = infer_tm genv Context.empty body in
         go genv imported importing acc rest
-    | Raw.Inductive { name; params; ty; ctors } :: rest ->
+    | Inductive { name; params; ty; ctors } :: rest ->
         let genv, results = elab_inductive genv name params ty ctors in
         let acc =
           List.fold_left
@@ -1199,26 +1146,26 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
             acc results
         in
         go genv imported importing acc rest
-    | Raw.Structure { name; params; ty; fields } :: rest ->
-        let fields : Syntax.Raw.field list = fields in
+    | Structure { name; params; ty; fields } :: rest ->
+        let fields : Raw_syntax.field list = fields in
         let () =
           match ty with
           | None -> ()
-          | Some Raw.U -> ()
+          | Some Raw_syntax.U -> ()
           | Some _ -> raise (Elab_error "Structure result type must be Type")
         in
-        let mk_field_ty (field : Syntax.Raw.field) : Raw.t =
+        let mk_field_ty (field : Raw_syntax.field) : Raw_syntax.t =
           List.fold_right
-            (fun bg body -> Raw.Pi (bg, body))
+            (fun bg body -> Raw_syntax.Pi (bg, body))
             field.binders field.ty
         in
         let ctor_binders =
           List.map
-            (fun (field : Syntax.Raw.field) ->
+            (fun (field : Raw_syntax.field) ->
               (Some field.name, Some (mk_field_ty field)))
             fields
         in
-        let ctors : Syntax.Raw.constructor list =
+        let ctors : Raw_syntax.constructor list =
           [ { name = "mk"; params = ctor_binders; ty = None } ]
         in
         let genv, results = elab_inductive genv name params ty ctors in
@@ -1229,11 +1176,12 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
             struct_ctor_name = Name.child ind_name "mk";
             struct_num_params =
               List.fold_left
-                (fun n ((ns, _) : Raw.binder_group) -> n + List.length ns)
+                (fun n ((ns, _) : Raw_syntax.binder_group) ->
+                  n + List.length ns)
                 0 params;
             struct_num_fields = List.length fields;
             struct_field_names =
-              List.map (fun (field : Syntax.Raw.field) -> field.name) fields;
+              List.map (fun (field : Raw_syntax.field) -> field.name) fields;
           }
         in
         let genv =
@@ -1250,65 +1198,64 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
             acc results
         in
         let param_names =
-          List.concat_map (fun ((ns, _) : Raw.binder_group) -> ns) params
+          List.concat_map (fun ((ns, _) : Raw_syntax.binder_group) -> ns) params
         in
         let struct_app =
           List.fold_left
             (fun acc -> function
-              | Some n -> Raw.App (acc, Raw.Ident n)
+              | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
               | None -> acc)
-            (Raw.Ident name) param_names
+            (Raw_syntax.Ident name) param_names
         in
         let make_proj_app fname =
           let base =
             List.fold_left
               (fun acc -> function
-                | Some n -> Raw.App (acc, Raw.Ident n)
+                | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
                 | None -> acc)
-              (Raw.Ident (name ^ "." ^ fname))
+              (Raw_syntax.Ident (name ^ "." ^ fname))
               param_names
           in
-          Raw.App (base, Raw.Ident "s")
+          Raw_syntax.App (base, Raw_syntax.Ident "s")
         in
-        let rec subst_fields ef = function
-          | Raw.Ident x -> (
+        let rec subst_fields ef : Raw_syntax.t -> Raw_syntax.t = function
+          | Ident x -> (
               match List.assoc_opt x ef with
               | Some proj -> proj
-              | None -> Raw.Ident x)
-          | Raw.App (f, a) -> Raw.App (subst_fields ef f, subst_fields ef a)
-          | Raw.Lam (bs, body) ->
+              | None -> Ident x)
+          | App (f, a) -> App (subst_fields ef f, subst_fields ef a)
+          | Lam (bs, body) ->
               let bound = List.filter_map fst bs in
               let earlier_fields' =
                 List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
-              Raw.Lam
+              Lam
                 ( List.map
                     (fun (n, ty) -> (n, Option.map (subst_fields ef) ty))
                     bs,
                   subst_fields earlier_fields' body )
-          | Raw.Pi ((ns, ty), body) ->
+          | Pi ((ns, ty), body) ->
               let bound = List.filter_map Fun.id ns in
               let earlier_fields' =
                 List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
-              Raw.Pi
-                ((ns, subst_fields ef ty), subst_fields earlier_fields' body)
-          | Raw.Arrow (a, b) -> Raw.Arrow (subst_fields ef a, subst_fields ef b)
-          | Raw.Prod (a, b) -> Raw.Prod (subst_fields ef a, subst_fields ef b)
-          | Raw.Pair (a, b) -> Raw.Pair (subst_fields ef a, subst_fields ef b)
-          | Raw.Eq (a, b) -> Raw.Eq (subst_fields ef a, subst_fields ef b)
-          | Raw.Add (a, b) -> Raw.Add (subst_fields ef a, subst_fields ef b)
-          | Raw.Sub (a, b) -> Raw.Sub (subst_fields ef a, subst_fields ef b)
-          | Raw.Sigma ((ns, a), b) ->
+              Pi ((ns, subst_fields ef ty), subst_fields earlier_fields' body)
+          | Arrow (a, b) -> Arrow (subst_fields ef a, subst_fields ef b)
+          | Raw_syntax.Prod (a, b) -> Prod (subst_fields ef a, subst_fields ef b)
+          | Pair (a, b) -> Raw_syntax.Pair (subst_fields ef a, subst_fields ef b)
+          | Eq (a, b) -> Eq (subst_fields ef a, subst_fields ef b)
+          | Add (a, b) -> Add (subst_fields ef a, subst_fields ef b)
+          | Sub (a, b) -> Sub (subst_fields ef a, subst_fields ef b)
+          | Sigma ((ns, a), b) ->
               let bound = List.filter_map Fun.id ns in
               let earlier_fields' =
                 List.filter (fun (n, _) -> not (List.mem n bound)) ef
               in
-              Raw.Sigma ((ns, subst_fields ef a), subst_fields earlier_fields' b)
-          | Raw.Ann (t, ty) -> Raw.Ann (subst_fields ef t, subst_fields ef ty)
-          | Raw.Let (n, ty_opt, t, b) ->
+              Sigma ((ns, subst_fields ef a), subst_fields earlier_fields' b)
+          | Ann (t, ty) -> Ann (subst_fields ef t, subst_fields ef ty)
+          | Let (n, ty_opt, t, b) ->
               let earlier_fields' = List.filter (fun (x, _) -> x <> n) ef in
-              Raw.Let
+              Let
                 ( n,
                   Option.map (subst_fields ef) ty_opt,
                   subst_fields ef t,
@@ -1318,25 +1265,25 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let rec_app =
           List.fold_left
             (fun acc -> function
-              | Some n -> Raw.App (acc, Raw.Ident n)
+              | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
               | None -> acc)
-            (Raw.Ident (name ^ ".rec"))
+            (Raw_syntax.Ident (name ^ ".rec"))
             param_names
         in
         let field_binders =
           List.map
-            (fun (field : Syntax.Raw.field) -> (Some field.name, None))
+            (fun (field : Raw_syntax.field) -> (Some field.name, None))
             fields
         in
         let param_binders =
           List.concat_map
-            (fun ((names, ty) : Raw.binder_group) ->
+            (fun ((names, ty) : Raw_syntax.binder_group) ->
               List.map (fun n -> (n, Some ty)) names)
             params
         in
         let genv, acc =
           List.fold_left
-            (fun (genv, acc) (field : Syntax.Raw.field) ->
+            (fun (genv, acc) (field : Raw_syntax.field) ->
               let proj_name = Name.child (Name.parse name) field.name in
               let field_ty = mk_field_ty field in
               let subst_fty =
@@ -1348,28 +1295,27 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
                        else
                          Some (other_fname, make_proj_app other_fname))
                      (List.map
-                        (fun (field : Syntax.Raw.field) -> field.name)
+                        (fun (field : Raw_syntax.field) -> field.name)
                         fields))
                   field_ty
               in
-              let body =
-                Raw.Lam
+              let body : Raw_syntax.t =
+                Lam
                   ( [ (Some "s", Some struct_app) ],
-                    Raw.Ann
-                      ( Raw.App
-                          ( Raw.App
-                              ( Raw.App
+                    Ann
+                      ( App
+                          ( App
+                              ( App
                                   ( rec_app,
-                                    Raw.Lam ([ (Some "s", None) ], subst_fty) ),
-                                Raw.Lam (field_binders, Raw.Ident field.name) ),
-                            Raw.Ident "s" ),
+                                    Lam ([ (Some "s", None) ], subst_fty) ),
+                                Lam (field_binders, Ident field.name) ),
+                            Ident "s" ),
                         subst_fty ) )
               in
               let full_def =
-                if param_binders = [] then
-                  body
-                else
-                  Raw.Lam (param_binders, body)
+                match param_binders with
+                | [] -> body
+                | _ -> Lam (param_binders, body)
               in
               let term, ty_val = infer_tm genv Context.empty full_def in
               let term_val = eval_tm genv [] term in
@@ -1384,11 +1330,11 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         in
         go genv imported importing acc rest
   in
-  let _, _, result = go Global.empty ModuleNameSet.empty [] [] prog in
+  let genv, _, result = go Global.empty ModuleNameSet.empty [] [] prog in
+  Format.printf "Elaborated %d definitions\n" (Global.NameMap.cardinal genv);
   result
 
-let elab_program (prog : Raw.program) : (Name.t * tm * ty) list =
+let elab_program : Raw_syntax.program -> (Name.t * tm * ty) list =
   elab_program_with_imports ~root:"."
     ~read_file:(fun _ -> "")
     ~parse:(fun _ -> [])
-    prog

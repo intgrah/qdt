@@ -1,4 +1,3 @@
-open Elaboration.Syntax
 open Lexer
 
 exception Parse_error of string
@@ -61,18 +60,18 @@ let parse_binder_name : string option t = function
   | Ident name :: rest -> Some (Some name, rest)
   | _ -> None
 
-let parse_ann_or_parens (p : Raw.t t) : Raw.t t =
+let parse_ann_or_parens (p : Raw_syntax.t t) : Raw_syntax.t t =
   let* () = token LParen in
   let* e = p in
   (let* () = token Colon in
    let* ty = p in
    let* () = token RParen in
-   return (Raw.Ann (e, ty)))
+   return (Raw_syntax.Ann (e, ty)))
   <|>
   let* () = token RParen in
   return e
 
-let rec parse_atom : Raw.t t =
+let rec parse_atom : Raw_syntax.t t =
  fun input ->
   choice
     [
@@ -86,39 +85,39 @@ let rec parse_atom : Raw.t t =
     ]
     input
 
-and parse_var : Raw.t t =
+and parse_var : Raw_syntax.t t =
  fun input ->
   (let* name = parse_ident in
-   return (Raw.Ident name))
+   return (Raw_syntax.Ident name))
     input
 
-and parse_type : Raw.t t = function
-  | Type :: rest -> Some (Raw.U, rest)
+and parse_type : Raw_syntax.t t = function
+  | Type :: rest -> Some (Raw_syntax.U, rest)
   | _ -> None
 
-and parse_int_lit : Raw.t t = function
-  | NatLit n :: rest -> Some (Raw.NatLit n, rest)
+and parse_int_lit : Raw_syntax.t t = function
+  | NatLit n :: rest -> Some (Raw_syntax.NatLit n, rest)
   | _ -> None
 
-and parse_true_term : Raw.t t = function
-  | LParen :: RParen :: rest -> Some (Raw.Ident "True.intro", rest)
+and parse_true_term : Raw_syntax.t t = function
+  | LParen :: RParen :: rest -> Some (Raw_syntax.Ident "True.intro", rest)
   | _ -> None
 
-and parse_pair : Raw.t t =
+and parse_pair : Raw_syntax.t t =
  fun input ->
   (let* () = token LParen in
    let* a = parse_preterm in
    let* () = token Comma in
    let* b = parse_preterm in
    let* () = token RParen in
-   return (Raw.Pair (a, b)))
+   return (Raw_syntax.Pair (a, b)))
     input
 
-and parse_sorry : Raw.t t = function
-  | Sorry :: rest -> Some (Raw.Sorry, rest)
+and parse_sorry : Raw_syntax.t t = function
+  | Sorry :: rest -> Some (Raw_syntax.Sorry, rest)
   | _ -> None
 
-and parse_typed_binder_group : Raw.binder_group t =
+and parse_typed_binder_group : Raw_syntax.binder_group t =
  fun input ->
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
@@ -128,7 +127,7 @@ and parse_typed_binder_group : Raw.binder_group t =
    return (names, ty))
     input
 
-and parse_paren_binder_group : Raw.binder list t =
+and parse_paren_binder_group : Raw_syntax.binder list t =
  fun input ->
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
@@ -141,7 +140,7 @@ and parse_paren_binder_group : Raw.binder list t =
    return (List.map (fun n -> (n, ty_opt)) names))
     input
 
-and parse_lambda : Raw.t t =
+and parse_lambda : Raw_syntax.t t =
  fun input ->
   (let* () = token Fun in
    let* paren_groups = many parse_paren_binder_group in
@@ -161,10 +160,10 @@ and parse_lambda : Raw.t t =
    in
    let* () = token Eq_gt in
    let* body = parse_preterm in
-   return (Raw.Lam (all_binders, body)))
+   return (Raw_syntax.Lam (all_binders, body)))
     input
 
-and parse_let : Raw.t t =
+and parse_let : Raw_syntax.t t =
  fun input ->
   (let* () = token Let in
    let* name = parse_ident in
@@ -177,26 +176,26 @@ and parse_let : Raw.t t =
    let* e = parse_preterm in
    let* () = token Semicolon in
    let* body = parse_preterm in
-   return (Raw.Let (name, ty_opt, e, body)))
+   return (Raw_syntax.Let (name, ty_opt, e, body)))
     input
 
-and parse_pi : Raw.t t =
+and parse_pi : Raw_syntax.t t =
  fun input ->
   (let* group = parse_typed_binder_group in
    let* () = token Arrow in
    let* b = parse_preterm in
-   return (Raw.Pi (group, b)))
+   return (Raw_syntax.Pi (group, b)))
     input
 
-and parse_sigma : Raw.t t =
+and parse_sigma : Raw_syntax.t t =
  fun input ->
   (let* group = parse_typed_binder_group in
    let* () = token Times in
    let* b = parse_preterm in
-   return (Raw.Sigma (group, b)))
+   return (Raw_syntax.Sigma (group, b)))
     input
 
-and parse_app : Raw.t t =
+and parse_app : Raw_syntax.t t =
  fun input ->
   (let* head = parse_atom in
    let* args = many parse_atom in
@@ -206,10 +205,10 @@ and parse_app : Raw.t t =
      | Some e -> args @ [ e ]
      | None -> args
    in
-   return (List.fold_left (fun f a -> Raw.App (f, a)) head all_args))
+   return (List.fold_left (fun f a -> Raw_syntax.App (f, a)) head all_args))
     input
 
-and parse_add_level : Raw.t t =
+and parse_add_level : Raw_syntax.t t =
  fun input ->
   (let* first = parse_app in
    let* rest =
@@ -226,52 +225,52 @@ and parse_add_level : Raw.t t =
      (List.fold_left
         (fun acc op ->
           match op with
-          | `Add b -> Raw.Add (acc, b)
-          | `Sub b -> Raw.Sub (acc, b))
+          | `Add b -> Raw_syntax.Add (acc, b)
+          | `Sub b -> Raw_syntax.Sub (acc, b))
         first rest))
     input
 
-and parse_eq_rhs : Raw.t t =
+and parse_eq_rhs : Raw_syntax.t t =
  fun input -> choice [ parse_lambda; parse_let; parse_add_level ] input
 
-and parse_eq_level : Raw.t t =
+and parse_eq_level : Raw_syntax.t t =
  fun input ->
   (let* a = parse_add_level in
    (let* () = token Equal in
     let* b = parse_eq_rhs in
-    return (Raw.Eq (a, b)))
+    return (Raw_syntax.Eq (a, b)))
    <|> return a)
     input
 
-and parse_prod_level : Raw.t t =
+and parse_prod_level : Raw_syntax.t t =
  fun input ->
   (parse_sigma
   <|>
   let* a = parse_eq_level in
   (let* () = token Times in
    let* b = parse_prod_level in
-   return (Raw.Prod (a, b)))
+   return (Raw_syntax.Prod (a, b)))
   <|> return a)
     input
 
-and parse_arrow_level : Raw.t t =
+and parse_arrow_level : Raw_syntax.t t =
  fun input ->
   (parse_pi
   <|>
   let* a = parse_prod_level in
   (let* () = token Arrow in
    let* b = parse_arrow_level in
-   return (Raw.Arrow (a, b)))
+   return (Raw_syntax.Arrow (a, b)))
   <|> return a)
     input
 
-and parse_preterm : Raw.t t =
+and parse_preterm : Raw_syntax.t t =
  fun input ->
   choice
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-and parse_constructor : Raw.constructor t =
+and parse_constructor : Raw_syntax.constructor t =
  fun input ->
   (let* () = token Pipe in
    let* name = parse_ident in
@@ -282,10 +281,10 @@ and parse_constructor : Raw.constructor t =
        (let* () = token Colon in
         parse_preterm)
    in
-   return { Raw.name; params; ty = ty_opt })
+   return { Raw_syntax.name; params; ty = ty_opt })
     input
 
-and parse_inductive : Raw.item t =
+and parse_inductive : Raw_syntax.item t =
  fun input ->
   (let* () = token Inductive in
    let* name = parse_ident in
@@ -297,10 +296,10 @@ and parse_inductive : Raw.item t =
    in
    let* () = token Where in
    let* ctors = many parse_constructor in
-   return (Raw.Inductive { name; params; ty = ty_opt; ctors }))
+   return (Raw_syntax.Inductive { name; params; ty = ty_opt; ctors }))
     input
 
-and parse_field : Raw.field t =
+and parse_field : Raw_syntax.field t =
  fun input ->
   (let* () = token LParen in
    let* name = parse_ident in
@@ -310,10 +309,10 @@ and parse_field : Raw.field t =
    let* () = token Colon in
    let* ty = parse_preterm in
    let* () = token RParen in
-   return { Raw.name; binders = args; ty })
+   return { Raw_syntax.name; binders = args; ty })
     input
 
-and parse_structure : Raw.item t =
+and parse_structure : Raw_syntax.item t =
  fun input ->
   (let* () = token Structure in
    let* name = parse_ident in
@@ -325,10 +324,10 @@ and parse_structure : Raw.item t =
    in
    let* () = token Where in
    let* fields = many parse_field in
-   return (Raw.Structure { name; params; ty = ty_opt; fields }))
+   return (Raw_syntax.Structure { name; params; ty = ty_opt; fields }))
     input
 
-let rec parse_single_item : Raw.item t =
+let rec parse_single_item : Raw_syntax.item t =
  fun input ->
   choice
     [
@@ -337,20 +336,20 @@ let rec parse_single_item : Raw.item t =
       (let* () = token Def in
        let* name = parse_ident in
        let* body = parse_def_body in
-       return (Raw.Def { name; body }));
+       return (Raw_syntax.Def { name; body }));
       (let* () = token Example in
        let* body = parse_def_body in
-       return (Raw.Example { body }));
+       return (Raw_syntax.Example { body }));
       (let* () = token Import in
        let* name = parse_ident in
-       return (Raw.Import { module_name = name }));
+       return (Raw_syntax.Import { module_name = name }));
     ]
     input
 
-and parse_def_body : Raw.t t =
+and parse_def_body : Raw_syntax.t t =
  fun input ->
   (let* binder_groups = many parse_typed_binder_group in
-   let binders : Raw.binder list =
+   let binders : Raw_syntax.binder list =
      List.concat_map
        (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
        binder_groups
@@ -364,21 +363,22 @@ and parse_def_body : Raw.t t =
    let* body = parse_preterm in
    let body_with_ann =
      match ret_ty_opt with
-     | Some ty -> Raw.Ann (body, ty)
+     | Some ty -> Raw_syntax.Ann (body, ty)
      | None -> body
    in
    let full_body =
      if binders = [] then
        body_with_ann
      else
-       Raw.Lam (binders, body_with_ann)
+       Raw_syntax.Lam (binders, body_with_ann)
    in
    return full_body)
     input
 
-let parse_program : Raw.program t = fun input -> many parse_single_item input
+let parse_program : Raw_syntax.program t =
+ fun input -> many parse_single_item input
 
-let parse (input : token list) : Raw.program =
+let parse (input : token list) : Raw_syntax.program =
   match parse_program input with
   | None ->
       let msg =

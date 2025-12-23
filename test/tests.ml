@@ -1,3 +1,4 @@
+open Frontend
 open Elaboration
 open Syntax
 open Elab
@@ -99,7 +100,9 @@ end
 module Test_elab = struct
   let check_identity () =
     let ctx = Context.empty in
-    let raw = Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x") in
+    let raw =
+      Raw_syntax.Lam ([ (Some "x", Some Raw_syntax.U) ], Raw_syntax.Ident "x")
+    in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
     let tm = check_tm genv ctx raw expected in
     match tm with
@@ -108,19 +111,19 @@ module Test_elab = struct
 
   let pi_type () =
     let ctx = Context.empty in
-    let raw = Raw.Pi (([ Some "x" ], Raw.U), Raw.U) in
+    let raw = Raw_syntax.Pi (([ Some "x" ], Raw_syntax.U), Raw_syntax.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
     let ctx = Context.empty in
-    let raw = Raw.Arrow (Raw.U, Raw.U) in
+    let raw = Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) in
     let ty = check_ty genv ctx raw in
     Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
     let ctx = Context.empty in
-    let raw = Raw.Ident "x" in
+    let raw = Raw_syntax.Ident "x" in
     Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
       (fun () ->
         let _, _ = infer_tm genv ctx raw in
@@ -139,13 +142,14 @@ module Programs = struct
   let simple_id () =
     let prog =
       [
-        Raw.Def
+        Raw_syntax.Def
           {
             name = "id";
             body =
-              Raw.Ann
-                ( Raw.Lam ([ (Some "x", Some Raw.U) ], Raw.Ident "x"),
-                  Raw.Arrow (Raw.U, Raw.U) );
+              Raw_syntax.Ann
+                ( Raw_syntax.Lam
+                    ([ (Some "x", Some Raw_syntax.U) ], Raw_syntax.Ident "x"),
+                  Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) );
           };
       ]
     in
