@@ -5,5 +5,16 @@ inductive Vector (A : Type) : Nat → Type where
   | nil : Vector A Nat.zero
   | cons (n : Nat) (head : A) (tail : Vector A n) : Vector A (Nat.succ n)
 
-def Vector.toList (A : Type) (n : Nat) (v : Vector A n) : List A :=
-  Vector.rec A (fun _ _ => List A) (List.nil A) (fun m h _ ih => List.cons A h ih) n v
+def Vector.toList (A : Type) : (n : Nat) → Vector A n → List A :=
+  Vector.rec A (fun _ _ => List A) (List.nil A) (fun m h _ => List.cons A h)
+
+def Vector.ofList (A : Type) (xs : List A) : Vector A (List.length A xs) :=
+  List.rec A (fun xs => Vector A (List.length A xs)) (Vector.nil A) (fun h t ih => Vector.cons A (List.length A t) h ih) xs
+
+def Vector.map (A B : Type) (n : Nat) (f : A → B) : Vector A n → Vector B n :=
+  Vector.rec A (fun k _ => Vector B k) (Vector.nil B) (fun m h _ => Vector.cons B m (f h)) n
+
+def Vector.append (A : Type) (m n : Nat) (xs : Vector A m) (ys : Vector A n) : Vector A (m + n) :=
+  Eq.subst Nat (Vector A) (n + m) (m + n) (Nat.add_comm n m)
+    (Vector.rec A (fun m _ => Vector A (n + m)) ys
+      (fun m h _ ih => Vector.cons A (n + m) h ih) m xs)
