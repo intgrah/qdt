@@ -97,7 +97,7 @@ and parse_type : Raw.t t = function
   | _ -> None
 
 and parse_int_lit : Raw.t t = function
-  | IntLit n :: rest -> Some (Raw.IntLit n, rest)
+  | NatLit n :: rest -> Some (Raw.NatLit n, rest)
   | _ -> None
 
 and parse_true_term : Raw.t t = function

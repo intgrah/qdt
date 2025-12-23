@@ -24,7 +24,7 @@ type token =
   | Type
   | Underscore
   | Ident of string
-  | IntLit of int
+  | NatLit of int
 
 val pp_token : Format.formatter -> token -> unit
 

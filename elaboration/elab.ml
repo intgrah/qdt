@@ -667,7 +667,7 @@ and infer_tm (genv : GlobalEnv.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
           else
             raise (Elab_error "Expected sigma/product type in projection")
       | _ -> raise (Elab_error "Expected sigma/product type in projection"))
-  | Raw.IntLit n ->
+  | Raw.NatLit n ->
       if n < 0 then
         raise (Elab_error "Negative numeric literal")
       else
