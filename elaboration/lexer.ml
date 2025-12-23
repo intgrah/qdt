@@ -62,6 +62,7 @@ let is_alpha_num = function
   | 'A' .. 'Z'
   | 'a' .. 'z'
   | '_'
+  | '\''
   | '.' ->
       true
   | _ -> false
