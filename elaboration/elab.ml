@@ -110,7 +110,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
                     let rule = List.hd rec_info.rec_rules in
                     if
                       rule.rule_rec_args = [] && rule.rule_nfields = 0
-                      && Name.equal rule.rule_ctor_name ctor_name
+                      && rule.rule_ctor_name = ctor_name
                     then
                       Some
                         {
@@ -161,7 +161,7 @@ and conv_neutral (genv : Global.t) (l : int)
   let head_eq =
     match (h1, h2) with
     | HVar l1, HVar l2 -> l1 = l2
-    | HConst n1, HConst n2 -> Name.equal n1 n2
+    | HConst n1, HConst n2 -> n1 = n2
     | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
     | _, _ -> false
   in
@@ -475,41 +475,40 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
       go ctx expected binders
-  | Raw.Pair (a, b), VTyEl (HConst name, [ a_code_val; b_val ]) ->
-      if Name.equal name (Name.parse "Sigma") then
-        let fst_ty = do_el a_code_val in
-        let a' = check_tm genv ctx a fst_ty in
-        let a_val = eval_tm genv (Context.env ctx) a' in
-        let b_code_val = do_app genv b_val a_val in
-        let snd_ty = do_el b_code_val in
-        let b' = check_tm genv ctx b snd_ty in
-        let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
-        let b_tm = quote_tm genv (Context.lvl ctx) b_val in
-        TmApp
-          ( TmApp
-              ( TmApp
-                  ( TmApp
-                      (TmConst (Name.child (Name.parse "Sigma") "mk"), a_code_tm),
-                    b_tm ),
-                a' ),
-            b' )
-      else if Name.equal name (Name.parse "Prod") then
-        let fst_ty = do_el a_code_val in
-        let snd_ty = do_el b_val in
-        let a' = check_tm genv ctx a fst_ty in
-        let b' = check_tm genv ctx b snd_ty in
-        let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
-        let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
-        TmApp
-          ( TmApp
-              ( TmApp
-                  ( TmApp
-                      (TmConst (Name.child (Name.parse "Prod") "mk"), a_code_tm),
-                    b_code_tm ),
-                a' ),
-            b' )
-      else
-        raise (Elab_error "Expected sigma/product type in pair")
+  | Raw.Pair (a, b), VTyEl (HConst [ "Sigma" ], [ a_code_val; b_val ]) ->
+      let fst_ty = do_el a_code_val in
+      let a' = check_tm genv ctx a fst_ty in
+      let a_val = eval_tm genv (Context.env ctx) a' in
+      let b_code_val = do_app genv b_val a_val in
+      let snd_ty = do_el b_code_val in
+      let b' = check_tm genv ctx b snd_ty in
+      let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+      let b_tm = quote_tm genv (Context.lvl ctx) b_val in
+      TmApp
+        ( TmApp
+            ( TmApp
+                ( TmApp
+                    (TmConst (Name.child (Name.parse "Sigma") "mk"), a_code_tm),
+                  b_tm ),
+              a' ),
+          b' )
+  | Raw.Pair (a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
+      let fst_ty = do_el a_code_val in
+      let snd_ty = do_el b_val in
+      let a' = check_tm genv ctx a fst_ty in
+      let b' = check_tm genv ctx b snd_ty in
+      let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
+      let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
+      TmApp
+        ( TmApp
+            ( TmApp
+                ( TmApp
+                    (TmConst (Name.child (Name.parse "Prod") "mk"), a_code_tm),
+                  b_code_tm ),
+              a' ),
+          b' )
+  | Raw.Pair (_, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
+      raise (Elab_error "Expected sigma/product type in pair")
   | Raw.Let (name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -548,7 +547,7 @@ let rec has_ind_occ_ty (ind : Name.t) : ty -> bool = function
 
 and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
   | TmVar _ -> false
-  | TmConst name -> Name.equal name ind
+  | TmConst name -> name = ind
   | TmLam (_, a, body) -> has_ind_occ_ty ind a || has_ind_occ_tm ind body
   | TmApp (f, a) -> has_ind_occ_tm ind f || has_ind_occ_tm ind a
   | TmPiHat (_, a, b) -> has_ind_occ_tm ind a || has_ind_occ_tm ind b
@@ -557,7 +556,7 @@ and has_ind_occ_tm (ind : Name.t) : tm -> bool = function
       has_ind_occ_ty ind ty || has_ind_occ_tm ind t || has_ind_occ_tm ind body
 
 let rec is_valid_ind_app (ind : Name.t) : tm -> bool = function
-  | TmConst name -> Name.equal name ind
+  | TmConst name -> name = ind
   | TmApp (f, _) -> is_valid_ind_app ind f
   | _ -> false
 
@@ -691,13 +690,13 @@ let rec check_strict_positivity (genv : Global.t) (ind : Name.t) : ty -> unit =
   | _ -> ()
 
 let rec check_returns_inductive (ind : Name.t) : ty -> bool = function
-  | TyEl (TmConst name) -> Name.equal name ind
+  | TyEl (TmConst name) -> name = ind
   | TyEl (TmApp (f, _)) -> check_returns_inductive_tm ind f
   | TyPi (_, _, b) -> check_returns_inductive ind b
   | _ -> false
 
 and check_returns_inductive_tm (ind : Name.t) : tm -> bool = function
-  | TmConst name -> Name.equal name ind
+  | TmConst name -> name = ind
   | TmApp (f, _) -> check_returns_inductive_tm ind f
   | _ -> false
 
@@ -778,13 +777,13 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
 (* ========== Recursor Generation ========== *)
 
 let rec is_recursive_arg_ty (ind : Name.t) : ty -> bool = function
-  | TyEl (TmConst name) -> Name.equal name ind
+  | TyEl (TmConst name) -> name = ind
   | TyEl (TmApp (f, _)) -> is_recursive_arg_tm ind f
   | TyPi (_, _, b) -> is_recursive_arg_ty ind b
   | _ -> false
 
 and is_recursive_arg_tm (ind : Name.t) : tm -> bool = function
-  | TmConst name -> Name.equal name ind
+  | TmConst name -> name = ind
   | TmApp (f, _) -> is_recursive_arg_tm ind f
   | _ -> false
 
@@ -809,7 +808,7 @@ let rec extract_return_indices_from_ctor (ind : Name.t) (num_params : int) :
 and extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
     tm list =
   let rec collect_all_args acc = function
-    | TmConst name when Name.equal name ind -> acc
+    | TmConst name when name = ind -> acc
     | TmApp (f, a) -> collect_all_args (a :: acc) f
     | _ -> []
   in
@@ -1174,7 +1173,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     ~(parse : string -> Raw.program) (prog : Raw.program) :
     (Name.t * tm * ty) list =
   let rec process_import genv imported importing m =
-    if List.exists (Name.equal m) importing then raise (Circular_import m);
+    if List.mem m importing then raise (Circular_import m);
     if ModuleNameSet.mem m imported then
       (genv, imported)
     else
