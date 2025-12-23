@@ -34,18 +34,14 @@ and quote_tm (genv : Global.t) (l : int) : vl_tm -> tm = function
       let b = quote_tm genv (l + 1) (eval_tm genv (var :: env) body) in
       TmPiHat (x, a, b)
 
-and quote_neutral (genv : Global.t) (l : int) ((h, sp) : neutral) : tm =
+and quote_neutral (genv : Global.t) (l : int) ((head, sp) : neutral) : tm =
   let head =
-    match h with
+    match head with
     | HVar (Lvl k) -> TmVar (Idx (l - k - 1))
     | HConst name -> TmConst name
     | HSorry (id, ty) -> TmSorry (id, quote_ty genv l ty)
   in
-  quote_spine genv l head sp
-
-and quote_spine (genv : Global.t) (l : int) (head : tm) : spine -> tm = function
-  | [] -> head
-  | arg :: sp -> quote_spine genv l (TmApp (head, quote_tm genv l arg)) sp
+  List.fold_left (fun head arg -> TmApp (head, quote_tm genv l arg)) head sp
 
 (* Convert a value type to a term representing its code *)
 and reify_ty (genv : Global.t) (l : int) : vl_ty -> tm = function
@@ -60,18 +56,21 @@ and reify_ty (genv : Global.t) (l : int) : vl_ty -> tm = function
 
 (* ========== Conversion ========== *)
 
-let rec conv_ty (genv : Global.t) (l : int) : vl_ty * vl_ty -> bool = function
+let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
+  match (ty1, ty2) with
   | VTyU, VTyU -> true
   | VTyPi (_, a1, ClosTy (env1, b1)), VTyPi (_, a2, ClosTy (env2, b2)) ->
-      conv_ty genv l (a1, a2)
+      conv_ty genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_ty genv (l + 1)
-        (eval_ty genv (var :: env1) b1, eval_ty genv (var :: env2) b2)
+        (eval_ty genv (var :: env1) b1)
+        (eval_ty genv (var :: env2) b2)
   | VTyEl n1, VTyEl n2 -> conv_neutral genv l (n1, n2)
   | _ -> false
 
-and conv_tm (genv : Global.t) (l : int) : vl_tm * vl_tm -> bool = function
+and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
+  match (tm1, tm2) with
   | VTmNeutral n1, VTmNeutral n2 ->
       conv_neutral genv l (n1, n2)
       || try_eta_struct genv l n1 (VTmNeutral n1)
@@ -79,13 +78,15 @@ and conv_tm (genv : Global.t) (l : int) : vl_tm * vl_tm -> bool = function
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) body1, eval_tm genv (var :: env2) body2)
+        (eval_tm genv (var :: env1) body1)
+        (eval_tm genv (var :: env2) body2)
   | VTmPiHat (_, a1, ClosTm (env1, b1)), VTmPiHat (_, a2, ClosTm (env2, b2)) ->
-      conv_tm genv l (a1, a2)
+      conv_tm genv l a1 a2
       &&
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
-        (eval_tm genv (var :: env1) b1, eval_tm genv (var :: env2) b2)
+        (eval_tm genv (var :: env1) b1)
+        (eval_tm genv (var :: env2) b2)
   | _ -> false
 
 and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
@@ -148,7 +149,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
                             do_app genv with_params other
                         | None -> VTmNeutral (HConst proj_name, [])
                       in
-                      conv_tm genv l (field, proj_result)
+                      conv_tm genv l field proj_result
                       && check_fields (fname_rest, field_rest)
                   | _ -> false
                 in
@@ -157,19 +158,14 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
 
 and conv_neutral (genv : Global.t) (l : int)
     (((h1, sp1), (h2, sp2)) : neutral * neutral) : bool =
-  conv_head (h1, h2) && conv_spine genv l (sp1, sp2)
-
-and conv_head : head * head -> bool = function
-  | HVar l1, HVar l2 -> l1 = l2
-  | HConst n1, HConst n2 -> Name.equal n1 n2
-  | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
-  | _, _ -> false
-
-and conv_spine (genv : Global.t) (l : int) : spine * spine -> bool = function
-  | [], [] -> true
-  | a1 :: sp1', a2 :: sp2' ->
-      conv_tm genv l (a1, a2) && conv_spine genv l (sp1', sp2')
-  | _, _ -> false
+  let head_eq =
+    match (h1, h2) with
+    | HVar l1, HVar l2 -> l1 = l2
+    | HConst n1, HConst n2 -> Name.equal n1 n2
+    | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
+    | _, _ -> false
+  in
+  head_eq && List.for_all2 (conv_tm genv l) sp1 sp2
 
 (* ========== Context ========== *)
 
@@ -292,7 +288,7 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw.t -> ty = function
       eq_ty
   | t ->
       let tm, ty_val = infer_tm genv ctx t in
-      if not (conv_ty genv (Context.lvl ctx) (ty_val, VTyU)) then
+      if not (conv_ty genv (Context.lvl ctx) ty_val VTyU) then
         raise
           (Elab_error
              (Format.asprintf "Expected Type, got %a"
@@ -363,14 +359,14 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       (TmPiHat (None, dom_tm, cod_tm), VTyU)
   | Raw.Sigma ((names, fst_ty), snd_ty) ->
       let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
-      if not (conv_ty genv (Context.lvl ctx) (fst_tm_ty, VTyU)) then
+      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
         raise (Elab_error "Expected Type in sigma domain");
       let fst_code_val = eval_tm genv (Context.env ctx) fst_tm in
       let fst_val = do_el fst_code_val in
       let rec bind_all ctx = function
         | [] ->
             let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
-            if not (conv_ty genv (Context.lvl ctx) (snd_tm_ty, VTyU)) then
+            if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
               raise (Elab_error "Expected Type in sigma codomain");
             snd_tm
         | name :: rest ->
@@ -383,10 +379,10 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       (bind_all ctx names, VTyU)
   | Raw.Prod (fst_ty, snd_ty) ->
       let fst_tm, fst_tm_ty = infer_tm genv ctx fst_ty in
-      if not (conv_ty genv (Context.lvl ctx) (fst_tm_ty, VTyU)) then
+      if not (conv_ty genv (Context.lvl ctx) fst_tm_ty VTyU) then
         raise (Elab_error "Expected Type in product domain");
       let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
-      if not (conv_ty genv (Context.lvl ctx) (snd_tm_ty, VTyU)) then
+      if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
         raise (Elab_error "Expected Type in product codomain");
       (TmApp (TmApp (TmConst (Name.parse "Prod"), fst_tm), snd_tm), VTyU)
   | Raw.Pair (a, b) ->
@@ -461,7 +457,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
                 | Some ann ->
                     let ann' = check_ty genv ctx ann in
                     let ann_val = eval_ty genv (Context.env ctx) ann' in
-                    if not (conv_ty genv (Context.lvl ctx) (ann_val, a_ty)) then
+                    if not (conv_ty genv (Context.lvl ctx) ann_val a_ty) then
                       raise
                         (Elab_error
                            (Format.asprintf
@@ -532,7 +528,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
       TmSorry (id, quote_ty genv (Context.lvl ctx) expected)
   | _ ->
       let tm, inferred = infer_tm genv ctx raw in
-      (if not (conv_ty genv (Context.lvl ctx) (inferred, expected)) then
+      (if not (conv_ty genv (Context.lvl ctx) inferred expected) then
          let names = Context.names ctx in
          raise
            (Elab_error
