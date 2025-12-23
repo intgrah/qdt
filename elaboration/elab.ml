@@ -1147,13 +1147,6 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
   let param_names =
     List.concat_map (fun ((ns, _) : Raw_syntax.binder_group) -> ns) info.params
   in
-  let struct_app =
-    List.fold_left
-      (fun acc -> function
-        | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
-        | None -> acc)
-      (Raw_syntax.Ident info.name) param_names
-  in
   let make_proj_app fname : Raw_syntax.t =
     let base =
       List.fold_left
@@ -1245,15 +1238,9 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
             field_ty
         in
         let body : Raw_syntax.t =
-          Lam
-            ( [ (Some "s", Some struct_app) ],
-              Ann
-                ( App
-                    ( App
-                        ( App (rec_app, Lam ([ (Some "s", None) ], subst_fty)),
-                          Lam (field_binders, Ident field.name) ),
-                      Ident "s" ),
-                  subst_fty ) )
+          App
+            ( App (rec_app, Lam ([ (Some "s", None) ], subst_fty)),
+              Lam (field_binders, Ident field.name) )
         in
         let full_def =
           match param_binders with
