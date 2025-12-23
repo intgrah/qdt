@@ -3,7 +3,7 @@ open Lexer
 exception Parse_error of string
 exception Tokens_remaining of token list
 
-module Parser = struct
+open struct
   type input = token list
   type 'a t = input -> ('a * input) option
 
@@ -48,8 +48,6 @@ module Parser = struct
     | None -> Some (None, input)
     | Some (x, input') -> Some (Some x, input')
 end
-
-open Parser
 
 let parse_ident : string t = function
   | Ident name :: rest -> Some (name, rest)
