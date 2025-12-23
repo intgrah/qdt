@@ -125,18 +125,21 @@ and parse_typed_binder_group : Raw_syntax.typed_binder_group t =
    return (names, ty))
     input
 
-and parse_untyped_binder : Raw_syntax.binder_group t =
+and parse_untyped_binder : string t =
  fun input ->
-  match parse_binder_name input with
-  | Some (Some name, rest) -> Some (Raw_syntax.Untyped name, rest)
-  | Some (None, rest) -> Some (Raw_syntax.Untyped "_", rest)
-  | None -> None
+  (let* name = parse_binder_name in
+   return
+     (match name with
+     | Some name -> name
+     | None -> "_"))
+    input
 
 and parse_binder_group : Raw_syntax.binder_group t =
  fun input ->
   ((let* group = parse_typed_binder_group in
     return (Raw_syntax.Typed group))
-  <|> parse_untyped_binder)
+  <|> let* name = parse_untyped_binder in
+      return (Raw_syntax.Untyped name))
     input
 
 and parse_lambda : Raw_syntax.t t =
@@ -255,104 +258,100 @@ and parse_preterm : Raw_syntax.t t =
     [ parse_lambda; parse_let; parse_pi; parse_sigma; parse_arrow_level ]
     input
 
-and parse_constructor : Raw_syntax.constructor t =
- fun input ->
-  (let* () = token Pipe in
-   let* name = parse_ident in
-   let* params = many parse_typed_binder_group in
-   let* ty_opt =
-     optional
-       (let* () = token Colon in
-        parse_preterm)
-   in
-   return { Raw_syntax.name; params; ty = ty_opt })
-    input
+(* ========== Top level ========== *)
 
-and parse_inductive : Raw_syntax.item t =
- fun input ->
-  (let* () = token Inductive in
-   let* name = parse_ident in
-   let* params = many parse_typed_binder_group in
-   let* ty_opt =
-     optional
-       (let* () = token Colon in
-        parse_preterm)
-   in
-   let* () = token Where in
-   let* ctors = many parse_constructor in
-   return (Raw_syntax.Inductive { name; params; ty = ty_opt; ctors }))
-    input
+let parse_constructor : Raw_syntax.constructor t =
+  let* () = token Pipe in
+  let* name = parse_ident in
+  let* params = many parse_typed_binder_group in
+  let* ty_opt =
+    optional
+      (let* () = token Colon in
+       parse_preterm)
+  in
+  return { Raw_syntax.name; params; ty = ty_opt }
 
-and parse_field : Raw_syntax.field t =
- fun input ->
-  (let* () = token LParen in
-   let* name = parse_ident in
-   if String.contains name '.' then
-     raise (Parse_error "Structure field names must be atomic");
-   let* args = many parse_typed_binder_group in
-   let* () = token Colon in
-   let* ty = parse_preterm in
-   let* () = token RParen in
-   return { Raw_syntax.name; binders = args; ty })
-    input
+let parse_inductive : Raw_syntax.item t =
+  let* () = token Inductive in
+  let* name = parse_ident in
+  let* params = many parse_typed_binder_group in
+  let* ty_opt =
+    optional
+      (let* () = token Colon in
+       parse_preterm)
+  in
+  let* () = token Where in
+  let* ctors = many parse_constructor in
+  return (Raw_syntax.Inductive { name; params; ty = ty_opt; ctors })
 
-and parse_structure : Raw_syntax.item t =
- fun input ->
-  (let* () = token Structure in
-   let* name = parse_ident in
-   let* params = many parse_typed_binder_group in
-   let* ty_opt =
-     optional
-       (let* () = token Colon in
-        parse_preterm)
-   in
-   let* () = token Where in
-   let* fields = many parse_field in
-   return (Raw_syntax.Structure { name; params; ty = ty_opt; fields }))
-    input
+let parse_field : Raw_syntax.field t =
+  let* () = token LParen in
+  let* name = parse_ident in
+  if String.contains name '.' then
+    raise (Parse_error "Structure field names must be atomic");
+  let* args = many parse_typed_binder_group in
+  let* () = token Colon in
+  let* ty = parse_preterm in
+  let* () = token RParen in
+  return { Raw_syntax.name; binders = args; ty }
 
-let rec parse_single_item : Raw_syntax.item t =
- fun input ->
+let parse_structure : Raw_syntax.item t =
+  let* () = token Structure in
+  let* name = parse_ident in
+  let* params = many parse_typed_binder_group in
+  let* ty_opt =
+    optional
+      (let* () = token Colon in
+       parse_preterm)
+  in
+  let* () = token Where in
+  let* fields = many parse_field in
+  return (Raw_syntax.Structure { name; params; ty = ty_opt; fields })
+
+let parse_def_body : Raw_syntax.t t =
+  let* binder_groups = many parse_binder_group in
+  let* ret_ty_opt =
+    optional
+      (let* () = token Colon in
+       parse_preterm)
+  in
+  let* () = token Colon_eq in
+  let* body = parse_preterm in
+  let body_with_ann =
+    match ret_ty_opt with
+    | Some ty -> Raw_syntax.Ann (body, ty)
+    | None -> body
+  in
+  let full_body =
+    if binder_groups = [] then
+      body_with_ann
+    else
+      Raw_syntax.Lam (binder_groups, body_with_ann)
+  in
+  return full_body
+
+let parse_def : Raw_syntax.item t =
+  let* () = token Def in
+  let* name = parse_ident in
+  let* body = parse_def_body in
+  return (Raw_syntax.Def { name; body })
+
+let parse_example : Raw_syntax.item t =
+  let* () = token Example in
+  let* body = parse_def_body in
+  return (Raw_syntax.Example { body })
+
+let parse_single_item : Raw_syntax.item t =
   choice
     [
       parse_structure;
       parse_inductive;
-      (let* () = token Def in
-       let* name = parse_ident in
-       let* body = parse_def_body in
-       return (Raw_syntax.Def { name; body }));
-      (let* () = token Example in
-       let* body = parse_def_body in
-       return (Raw_syntax.Example { body }));
+      parse_def;
+      parse_example;
       (let* () = token Import in
        let* name = parse_ident in
        return (Raw_syntax.Import { module_name = name }));
     ]
-    input
-
-and parse_def_body : Raw_syntax.t t =
- fun input ->
-  (let* binder_groups = many parse_binder_group in
-   let* ret_ty_opt =
-     optional
-       (let* () = token Colon in
-        parse_preterm)
-   in
-   let* () = token Colon_eq in
-   let* body = parse_preterm in
-   let body_with_ann =
-     match ret_ty_opt with
-     | Some ty -> Raw_syntax.Ann (body, ty)
-     | None -> body
-   in
-   let full_body =
-     if binder_groups = [] then
-       body_with_ann
-     else
-       Raw_syntax.Lam (binder_groups, body_with_ann)
-   in
-   return full_body)
-    input
 
 let parse_program : Raw_syntax.program t =
  fun input -> many parse_single_item input
