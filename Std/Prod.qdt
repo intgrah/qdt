@@ -2,8 +2,8 @@ structure Prod (A B : Type) where
   (fst : A)
   (snd : B)
 
-def Prod.swap (A B : Type) (p : Prod A B) : Prod B A :=
-  Prod.mk B A (Prod.snd A B p) (Prod.fst A B p)
+def Prod.swap (A B : Type) (p : A × B) : B × A :=
+  (Prod.snd A B p, Prod.fst A B p)
 
-def Prod.eta (A B : Type) (p : Prod A B) : Prod.mk A B (Prod.fst A B p) (Prod.snd A B p) = p :=
-  Eq.refl (Prod A B) p
+def Prod.eta (A B : Type) (p : A × B) : (Prod.fst A B p, Prod.snd A B p) = p :=
+  Eq.refl (A × B) p
