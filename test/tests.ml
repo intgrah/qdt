@@ -16,11 +16,10 @@ module Test_eval = struct
     | _ -> Alcotest.fail "identity evaluation failed"
 
   let beta () =
-    let c = Name.parse "c" in
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst c) in
+    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
     let result = eval_tm genv [] term in
     match result with
-    | VTmNeutral (HConst c', []) when Name.equal c' c -> ()
+    | VTmNeutral (HConst [ "c" ], []) -> ()
     | _ -> Alcotest.fail "beta reduction failed"
 
   let pi_eval () =
@@ -64,9 +63,7 @@ module Test_nbe = struct
   let whnf t = quote_tm genv 0 (eval_tm genv [] t)
 
   let beta () =
-    let term =
-      TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst (Name.parse "c"))
-    in
+    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
     let normalized = whnf term in
     match normalized with
     | TmConst _ -> ()
@@ -76,8 +73,7 @@ module Test_nbe = struct
   let nested () =
     let term =
       TmApp
-        ( TmLam (None, TyU, TmLam (None, TyU, TmVar (Idx 1))),
-          TmConst (Name.parse "c") )
+        (TmLam (None, TyU, TmLam (None, TyU, TmVar (Idx 1))), TmConst [ "c" ])
     in
     let normalized = whnf term in
     match normalized with
@@ -87,9 +83,7 @@ module Test_nbe = struct
           (tm_to_string normalized)
 
   let idempotent () =
-    let term =
-      TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst (Name.parse "c"))
-    in
+    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
     let norm1 = whnf term in
     let norm2 = whnf norm1 in
     Alcotest.(check string) "same" (tm_to_string norm1) (tm_to_string norm2)
@@ -157,8 +151,7 @@ module Programs = struct
     in
     let result = elab_program prog in
     match result with
-    | [ (name, TmLam (_, _, TmVar (Idx 0)), ty) ]
-      when Name.equal name (Name.parse "id") -> (
+    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), ty) ] -> (
         match ty with
         | TyPi (None, TyU, TyU) -> ()
         | _ -> Alcotest.fail "wrong type")
