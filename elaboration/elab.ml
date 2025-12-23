@@ -265,8 +265,7 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw.t -> ty = function
             let snd_val = eval_ty genv (Context.env ctx') snd' in
             let snd_code = reify_ty genv (Context.lvl ctx') snd_val in
             let snd_fn = TmLam (name, TyEl fst_code, snd_code) in
-            TyEl
-              (TmApp (TmApp (TmConst (Name.parse "Sigma"), fst_code), snd_fn))
+            TyEl (TmApp (TmApp (TmConst [ "Sigma" ], fst_code), snd_fn))
       in
       bind_all ctx names
   | Raw.Prod (fst_ty, snd_ty) ->
@@ -276,14 +275,13 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw.t -> ty = function
       let snd' = check_ty genv ctx snd_ty in
       let snd_val = eval_ty genv (Context.env ctx) snd' in
       let snd_code = reify_ty genv (Context.lvl ctx) snd_val in
-      TyEl (TmApp (TmApp (TmConst (Name.parse "Prod"), fst_code), snd_code))
+      TyEl (TmApp (TmApp (TmConst [ "Prod" ], fst_code), snd_code))
   | Raw.Eq (a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
       let eq_ty =
-        TyEl
-          (TmApp (TmApp (TmApp (TmConst (Name.parse "Eq"), a_ty_tm), a_tm), b_tm))
+        TyEl (TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm))
       in
       eq_ty
   | t ->
@@ -374,7 +372,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
             let snd' = bind_all ctx' rest in
             let fst_tm' = quote_tm genv (Context.lvl ctx) fst_code_val in
             let snd_fn = TmLam (name, TyEl fst_tm', snd') in
-            TmApp (TmApp (TmConst (Name.parse "Sigma"), fst_tm'), snd_fn)
+            TmApp (TmApp (TmConst [ "Sigma" ], fst_tm'), snd_fn)
       in
       (bind_all ctx names, VTyU)
   | Raw.Prod (fst_ty, snd_ty) ->
@@ -384,15 +382,13 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let snd_tm, snd_tm_ty = infer_tm genv ctx snd_ty in
       if not (conv_ty genv (Context.lvl ctx) snd_tm_ty VTyU) then
         raise (Elab_error "Expected Type in product codomain");
-      (TmApp (TmApp (TmConst (Name.parse "Prod"), fst_tm), snd_tm), VTyU)
+      (TmApp (TmApp (TmConst [ "Prod" ], fst_tm), snd_tm), VTyU)
   | Raw.Pair (a, b) ->
       let a', a_ty = infer_tm genv ctx a in
       let b', b_ty = infer_tm genv ctx b in
       let a_code = reify_ty genv (Context.lvl ctx) a_ty in
       let b_code = reify_ty genv (Context.lvl ctx) b_ty in
-      let prod_code =
-        TmApp (TmApp (TmConst (Name.parse "Prod"), a_code), b_code)
-      in
+      let prod_code = TmApp (TmApp (TmConst [ "Prod" ], a_code), b_code) in
       let pair_tm =
         TmApp
           ( TmApp (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code), b_code), a'),
@@ -419,8 +415,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = reify_ty genv (Context.lvl ctx) a_ty in
-      ( TmApp (TmApp (TmApp (TmConst (Name.parse "Eq"), a_ty_tm), a_tm), b_tm),
-        VTyU )
+      (TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm), VTyU)
   | Raw.Let (name, ty_opt, rhs, body) ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -439,9 +434,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
         result_ty )
   | Raw.Sorry ->
       let id = fresh_sorry_id () in
-      let hole_ty =
-        VTyEl (HConst (Name.parse (Format.sprintf "?ty%d†" id)), [])
-      in
+      let hole_ty = VTyEl (HConst [ Format.sprintf "?ty%d†" id ], []) in
       (TmSorry (id, quote_ty genv (Context.lvl ctx) hole_ty), hole_ty)
 
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
@@ -485,12 +478,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
       let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
       let b_tm = quote_tm genv (Context.lvl ctx) b_val in
       TmApp
-        ( TmApp
-            ( TmApp
-                ( TmApp
-                    (TmConst (Name.child (Name.parse "Sigma") "mk"), a_code_tm),
-                  b_tm ),
-              a' ),
+        ( TmApp (TmApp (TmApp (TmConst [ "Sigma"; "mk" ], a_code_tm), b_tm), a'),
           b' )
   | Raw.Pair (a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
       let fst_ty = do_el a_code_val in
@@ -501,11 +489,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw.t)
       let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
       TmApp
         ( TmApp
-            ( TmApp
-                ( TmApp
-                    (TmConst (Name.child (Name.parse "Prod") "mk"), a_code_tm),
-                  b_code_tm ),
-              a' ),
+            (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code_tm), b_code_tm), a'),
           b' )
   | Raw.Pair (_, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
       raise (Elab_error "Expected sigma/product type in pair")
