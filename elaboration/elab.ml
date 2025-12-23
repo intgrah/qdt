@@ -946,7 +946,7 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
   build_params 0 [] [] [] param_tys
 
 let elab_inductive (genv : Global.t) (ind : Raw_syntax.inductive_info) :
-    Global.t * (Name.t * ty) list =
+    Global.t * (Name.t * tm * ty) list =
   let ind_name = Name.parse ind.name in
   let rec elab_params ctx acc_tys = function
     | [] -> (ctx, List.rev acc_tys)
@@ -1090,7 +1090,11 @@ let elab_inductive (genv : Global.t) (ind : Raw_syntax.inductive_info) :
   in
   let genv = Global.NameMap.add rec_name (Global.Recursor rec_info) genv in
   let rec_ty = quote_ty genv 0 rec_ty_val in
-  (genv, ((ind_name, ty) :: ctor_name_tys) @ [ (rec_name, rec_ty) ])
+  let results = (ind_name, ty) :: (rec_name, rec_ty) :: ctor_name_tys in
+  let results' =
+    List.fold_left (fun acc (n, ty) -> (n, TmConst n, ty) :: acc) [] results
+  in
+  (genv, results')
 
 let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
     Global.t * (Name.t * tm * ty) list =
@@ -1140,9 +1144,6 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
           genv
     | _ -> genv
   in
-  let acc =
-    List.fold_left (fun acc (n, ty) -> (n, TmConst n, ty) :: acc) [] results
-  in
   let param_names =
     List.concat_map (fun ((ns, _) : Raw_syntax.binder_group) -> ns) info.params
   in
@@ -1153,7 +1154,7 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         | None -> acc)
       (Raw_syntax.Ident info.name) param_names
   in
-  let make_proj_app fname =
+  let make_proj_app fname : Raw_syntax.t =
     let base =
       List.fold_left
         (fun acc -> function
@@ -1162,7 +1163,7 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         (Raw_syntax.Ident (info.name ^ "." ^ fname))
         param_names
     in
-    Raw_syntax.App (base, Raw_syntax.Ident "s")
+    App (base, Ident "s")
   in
   let rec subst_fields ef : Raw_syntax.t -> Raw_syntax.t = function
     | Ident x -> (
@@ -1225,7 +1226,7 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         List.map (fun n -> (n, Some ty)) names)
       info.params
   in
-  let genv, acc =
+  let genv, results =
     List.fold_left
       (fun (genv, acc) (field : Raw_syntax.field) ->
         let proj_name = Name.child (Name.parse info.name) field.name in
@@ -1268,9 +1269,9 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         in
         let ty_out = quote_ty genv 0 ty_val in
         (genv, (proj_name, term, ty_out) :: acc))
-      (genv, acc) info.fields
+      (genv, results) info.fields
   in
-  (genv, acc)
+  (genv, results)
 
 (* ========== Program Elaboration ========== *)
 
@@ -1319,12 +1320,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         go genv imported importing acc rest
     | Inductive info :: rest ->
         let genv, results = elab_inductive genv info in
-        let acc =
-          List.fold_left
-            (fun acc (n, ty) -> (n, TmConst n, ty) :: acc)
-            acc results
-        in
-        go genv imported importing acc rest
+        go genv imported importing (results @ acc) rest
     | Structure info :: rest ->
         let genv, results = elab_structure genv info in
         go genv imported importing (results @ acc) rest

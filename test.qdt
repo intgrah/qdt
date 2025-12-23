@@ -1,7 +1,8 @@
 import Std
 
-inductive Foo where
-  | mk : Nat → Nat → Foo
+structure Foo (A B : Type) where
+  (fst : A)
+  (snd : B)
 
 example : 1 + 1 = 3 - 1 := Eq.refl Nat 2
 
