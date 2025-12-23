@@ -39,7 +39,7 @@ and pp_raw fmt : Raw.t -> unit = function
   | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
   | Proj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" pp_raw t
   | Proj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" pp_raw t
-  | IntLit n -> Format.fprintf fmt "%d" n
+  | NatLit n -> Format.fprintf fmt "%d" n
   | Add (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ + %a@]" pp_raw a pp_raw b
   | Sub (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_raw a pp_raw b
   | Ann (e, ty) -> Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_raw e pp_raw ty

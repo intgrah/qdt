@@ -24,7 +24,7 @@ type token =
   | Type
   | Underscore
   | Ident of string
-  | IntLit of int
+  | NatLit of int
 
 let pp_token fmt : token -> unit = function
   | LParen -> Format.fprintf fmt "("
@@ -52,7 +52,7 @@ let pp_token fmt : token -> unit = function
   | Type -> Format.fprintf fmt "Type"
   | Underscore -> Format.fprintf fmt "_"
   | Ident s -> Format.fprintf fmt "%s" s
-  | IntLit n -> Format.fprintf fmt "%d" n
+  | NatLit n -> Format.fprintf fmt "%d" n
 
 exception Unterminated_comment
 exception Illegal_character of char
@@ -119,7 +119,7 @@ let rec scan front_toks = function
   | (' ' | '\t' | '\n') :: cs -> scan front_toks cs
   | c :: cs when is_digit c ->
       let n, cs = scan_int [ c ] cs in
-      scan (IntLit n :: front_toks) cs
+      scan (NatLit n :: front_toks) cs
   | c :: cs when is_alpha_num c ->
       let tok, cs = scan_ident [ c ] cs in
       let tok =
