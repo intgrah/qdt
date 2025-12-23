@@ -117,7 +117,7 @@ and parse_sorry : Raw_syntax.t t = function
   | Sorry :: rest -> Some (Raw_syntax.Sorry, rest)
   | _ -> None
 
-and parse_typed_binder_group : Raw_syntax.binder_group t =
+and parse_typed_binder_group : Raw_syntax.typed_binder_group t =
  fun input ->
   (let* () = token LParen in
    let* names = many1 parse_binder_name in
@@ -127,40 +127,27 @@ and parse_typed_binder_group : Raw_syntax.binder_group t =
    return (names, ty))
     input
 
-and parse_paren_binder_group : Raw_syntax.binder list t =
+and parse_untyped_binder : Raw_syntax.binder_group t =
  fun input ->
-  (let* () = token LParen in
-   let* names = many1 parse_binder_name in
-   let* ty_opt =
-     optional
-       (let* () = token Colon in
-        parse_preterm)
-   in
-   let* () = token RParen in
-   return (List.map (fun n -> (n, ty_opt)) names))
+  match parse_binder_name input with
+  | Some (Some name, rest) -> Some (Raw_syntax.Untyped name, rest)
+  | Some (None, rest) -> Some (Raw_syntax.Untyped "_", rest)
+  | None -> None
+
+and parse_binder_group : Raw_syntax.binder_group t =
+ fun input ->
+  ((let* group = parse_typed_binder_group in
+    return (Raw_syntax.Typed group))
+  <|> parse_untyped_binder)
     input
 
 and parse_lambda : Raw_syntax.t t =
  fun input ->
   (let* () = token Fun in
-   let* paren_groups = many parse_paren_binder_group in
-   let paren_binders = List.flatten paren_groups in
-   let* all_binders =
-     if paren_binders = [] then
-       let* names = many1 parse_binder_name in
-       let* ty_opt =
-         optional
-           (let* () = token Colon in
-            parse_preterm)
-       in
-       return (List.map (fun n -> (n, ty_opt)) names)
-     else
-       let* bare_names = many parse_binder_name in
-       return (paren_binders @ List.map (fun n -> (n, None)) bare_names)
-   in
+   let* binder_groups = many1 parse_binder_group in
    let* () = token Eq_gt in
    let* body = parse_preterm in
-   return (Raw_syntax.Lam (all_binders, body)))
+   return (Raw_syntax.Lam (binder_groups, body)))
     input
 
 and parse_let : Raw_syntax.t t =
@@ -274,8 +261,7 @@ and parse_constructor : Raw_syntax.constructor t =
  fun input ->
   (let* () = token Pipe in
    let* name = parse_ident in
-   let* params = many parse_paren_binder_group in
-   let params = List.flatten params in
+   let* params = many parse_typed_binder_group in
    let* ty_opt =
      optional
        (let* () = token Colon in
@@ -348,12 +334,7 @@ let rec parse_single_item : Raw_syntax.item t =
 
 and parse_def_body : Raw_syntax.t t =
  fun input ->
-  (let* binder_groups = many parse_typed_binder_group in
-   let binders : Raw_syntax.binder list =
-     List.concat_map
-       (fun (names, ty) -> List.map (fun n -> (n, Some ty)) names)
-       binder_groups
-   in
+  (let* binder_groups = many parse_binder_group in
    let* ret_ty_opt =
      optional
        (let* () = token Colon in
@@ -367,10 +348,10 @@ and parse_def_body : Raw_syntax.t t =
      | None -> body
    in
    let full_body =
-     if binders = [] then
+     if binder_groups = [] then
        body_with_ann
      else
-       Raw_syntax.Lam (binders, body_with_ann)
+       Raw_syntax.Lam (binder_groups, body_with_ann)
    in
    return full_body)
     input

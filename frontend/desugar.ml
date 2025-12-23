@@ -1,8 +1,9 @@
 open Raw_syntax
 
-let desugar_sigma ((names, fst_ty) : binder_group) (snd_ty : t) : t =
+let desugar_sigma ((names, fst_ty) : typed_binder_group) (snd_ty : t) : t =
   List.fold_right
-    (fun name acc -> App (Ident "Sigma", Lam ([ (name, Some fst_ty) ], acc)))
+    (fun name acc ->
+      App (Ident "Sigma", Lam ([ Typed ([ name ], fst_ty) ], acc)))
     names snd_ty
 
 let desugar_prod (fst_ty : t) (snd_ty : t) : t =

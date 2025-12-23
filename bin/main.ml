@@ -9,11 +9,6 @@ let read_file path =
       Format.eprintf "Failed to read %s: %s@." path msg;
       None
 
-let read_file_exn path =
-  match read_file path with
-  | Some contents -> contents
-  | None -> exit 1
-
 let log_stage stage = function
   | Update.Initialized _ -> Format.eprintf "[inc] %s initialized@." stage
   | Update.Changed _ -> Format.eprintf "[inc] %s changed@." stage
@@ -80,7 +75,7 @@ let main () =
       log_stage "elaborated" update;
       handle_stage_result ~show:args.Cli.show_elab ~printer:print_defs update);
 
-  Pipeline.set_source pipeline (read_file_exn args.input_file);
+  Pipeline.set_source pipeline (Option.get (read_file args.input_file));
   Pipeline.stabilize ();
   if args.watch then (
     let initial_mtime =
