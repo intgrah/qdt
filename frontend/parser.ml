@@ -58,17 +58,6 @@ let parse_binder_name : string option t = function
   | Ident name :: rest -> Some (Some name, rest)
   | _ -> None
 
-let parse_ann_or_parens (p : Raw_syntax.t t) : Raw_syntax.t t =
-  let* () = token LParen in
-  let* e = p in
-  (let* () = token Colon in
-   let* ty = p in
-   let* () = token RParen in
-   return (Raw_syntax.Ann (e, ty)))
-  <|>
-  let* () = token RParen in
-  return e
-
 let rec parse_atom : Raw_syntax.t t =
  fun input ->
   choice
@@ -79,8 +68,27 @@ let rec parse_atom : Raw_syntax.t t =
       parse_int_lit;
       parse_pair;
       parse_true_term;
-      parse_ann_or_parens parse_preterm;
+      parse_ann;
+      parse_parens;
     ]
+    input
+
+and parse_ann : Raw_syntax.t t =
+ fun input ->
+  (let* () = token LParen in
+   let* e = parse_preterm in
+   let* () = token Colon in
+   let* ty = parse_preterm in
+   let* () = token RParen in
+   return (Raw_syntax.Ann (e, ty)))
+    input
+
+and parse_parens : Raw_syntax.t t =
+ fun input ->
+  (let* () = token LParen in
+   let* e = parse_preterm in
+   let* () = token RParen in
+   return e)
     input
 
 and parse_var : Raw_syntax.t t =
