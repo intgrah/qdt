@@ -101,7 +101,8 @@ module Test_elab = struct
   let check_identity () =
     let ctx = Context.empty in
     let raw =
-      Raw_syntax.Lam ([ (Some "x", Some Raw_syntax.U) ], Raw_syntax.Ident "x")
+      Raw_syntax.Lam
+        ([ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ], Raw_syntax.Ident "x")
     in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
     let tm = check_tm genv ctx raw expected in
@@ -148,7 +149,8 @@ module Programs = struct
             body =
               Raw_syntax.Ann
                 ( Raw_syntax.Lam
-                    ([ (Some "x", Some Raw_syntax.U) ], Raw_syntax.Ident "x"),
+                    ( [ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ],
+                      Raw_syntax.Ident "x" ),
                   Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) );
           };
       ]

@@ -303,6 +303,15 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
       let e = check_tm genv ctx e ty_val in
       (e, ty_val)
   | Lam (binders, body) ->
+      let flatten_binders (binders : Raw_syntax.binder_group list) :
+          (string option * Raw_syntax.t option) list =
+        List.concat_map
+          (function
+            | Raw_syntax.Untyped name -> [ (Some name, None) ]
+            | Raw_syntax.Typed (names, ty) ->
+                List.map (fun name -> (name, Some ty)) names)
+          binders
+      in
       let rec go ctx = function
         | [] -> infer_tm genv ctx body
         | (name, Some ty) :: rest ->
@@ -317,7 +326,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
         | (_, None) :: _ ->
             raise (Elab_error "Cannot infer type of unannotated lambda :(")
       in
-      go ctx binders
+      go ctx (flatten_binders binders)
   | Pi ((names, dom), cod) ->
       let dom, _ = infer_tm genv ctx dom in
       let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
@@ -387,6 +396,15 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw_syntax.t)
     (expected : vl_ty) : tm =
   match (raw, expected) with
   | Lam (binders, body), _ ->
+      let flatten_binders (binders : Raw_syntax.binder_group list) :
+          (string option * Raw_syntax.t option) list =
+        List.concat_map
+          (function
+            | Raw_syntax.Untyped name -> [ (Some name, None) ]
+            | Raw_syntax.Typed (names, ty) ->
+                List.map (fun name -> (name, Some ty)) names)
+          binders
+      in
       let rec go ctx expected = function
         | [] -> check_tm genv ctx body expected
         | (name, ty_opt) :: rest -> (
@@ -413,7 +431,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw_syntax.t)
                 TmLam (name, quote_ty genv (Context.lvl ctx) a_ty, body')
             | _ -> raise (Elab_error "Expected function type for lambda"))
       in
-      go ctx expected binders
+      go ctx expected (flatten_binders binders)
   | Pair (a, b), VTyEl (HConst [ "Sigma" ], [ a_code_val; b_val ]) ->
       let fst_ty = do_el a_code_val in
       let a' = check_tm genv ctx a fst_ty in
@@ -657,6 +675,12 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
     (ctor : Raw_syntax.constructor) : Name.t * ty * vl_ty =
   let full_name = Name.child ind ctor.name in
+  let flatten_params (params : Raw_syntax.typed_binder_group list) :
+      (string option * Raw_syntax.t option) list =
+    List.concat_map
+      (fun (names, ty) -> List.map (fun name -> (name, Some ty)) names)
+      params
+  in
   let rec build_ctor_body ctx depth = function
     | [] -> (
         match ctor.ty with
@@ -694,7 +718,7 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
         let body_ty = build_ctor_body ctx' (depth + 1) rest in
         TyPi (name, param_ty, body_ty)
   in
-  let ctor_body = build_ctor_body param_ctx 0 ctor.params in
+  let ctor_body = build_ctor_body param_ctx 0 (flatten_params ctor.params) in
   let ctor_ty =
     List.fold_right
       (fun (name, ty) body -> TyPi (name, ty, body))
@@ -1110,10 +1134,10 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
       (fun bg body -> Raw_syntax.Pi (bg, body))
       field.binders field.ty
   in
-  let ctor_binders =
+  let ctor_binders : Raw_syntax.typed_binder_group list =
     List.map
       (fun (field : Raw_syntax.field) ->
-        (Some field.name, Some (mk_field_ty field)))
+        ([ Some field.name ], mk_field_ty field))
       info.fields
   in
   let ctors : Raw_syntax.constructor list =
@@ -1129,7 +1153,8 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
       struct_ctor_name = Name.child ind_name "mk";
       struct_num_params =
         List.fold_left
-          (fun n ((ns, _) : Raw_syntax.binder_group) -> n + List.length ns)
+          (fun n ((ns, _) : Raw_syntax.typed_binder_group) ->
+            n + List.length ns)
           0 info.params;
       struct_num_fields = List.length info.fields;
       struct_field_names =
@@ -1145,7 +1170,9 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
     | _ -> genv
   in
   let param_names =
-    List.concat_map (fun ((ns, _) : Raw_syntax.binder_group) -> ns) info.params
+    List.concat_map
+      (fun ((ns, _) : Raw_syntax.typed_binder_group) -> ns)
+      info.params
   in
   let make_proj_app fname : Raw_syntax.t =
     let base =
@@ -1157,6 +1184,7 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         param_names
     in
     App (base, Ident "s")
+    (* TODO: use a fresh name *)
   in
   let rec subst_fields ef : Raw_syntax.t -> Raw_syntax.t = function
     | Ident x -> (
@@ -1165,13 +1193,25 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         | None -> Ident x)
     | App (f, a) -> App (subst_fields ef f, subst_fields ef a)
     | Lam (bs, body) ->
-        let bound = List.filter_map fst bs in
+        let bound =
+          List.concat_map
+            (function
+              | Raw_syntax.Untyped name -> [ name ]
+              | Raw_syntax.Typed (names, _) -> List.filter_map Fun.id names)
+            bs
+        in
         let earlier_fields' =
           List.filter (fun (n, _) -> not (List.mem n bound)) ef
         in
-        Lam
-          ( List.map (fun (n, ty) -> (n, Option.map (subst_fields ef) ty)) bs,
-            subst_fields earlier_fields' body )
+        let bs' =
+          List.map
+            (function
+              | Raw_syntax.Untyped name -> Raw_syntax.Untyped name
+              | Raw_syntax.Typed (names, ty) ->
+                  Raw_syntax.Typed (names, subst_fields ef ty))
+            bs
+        in
+        Lam (bs', subst_fields earlier_fields' body)
     | Pi ((ns, ty), body) ->
         let bound = List.filter_map Fun.id ns in
         let earlier_fields' =
@@ -1208,15 +1248,15 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
       (Raw_syntax.Ident (info.name ^ ".rec"))
       param_names
   in
-  let field_binders =
+  let field_binders : Raw_syntax.binder_group list =
     List.map
-      (fun (field : Raw_syntax.field) -> (Some field.name, None))
+      (fun (field : Raw_syntax.field) -> Raw_syntax.Untyped field.name)
       info.fields
   in
-  let param_binders =
-    List.concat_map
-      (fun ((names, ty) : Raw_syntax.binder_group) ->
-        List.map (fun n -> (n, Some ty)) names)
+  let param_binders : Raw_syntax.binder_group list =
+    List.map
+      (fun ((names, ty) : Raw_syntax.typed_binder_group) ->
+        Raw_syntax.Typed (names, ty))
       info.params
   in
   let genv, results =
@@ -1239,7 +1279,7 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
         in
         let body : Raw_syntax.t =
           App
-            ( App (rec_app, Lam ([ (Some "s", None) ], subst_fty)),
+            ( App (rec_app, Lam ([ Raw_syntax.Untyped "s" ], subst_fty)),
               Lam (field_binders, Ident field.name) )
         in
         let full_def =

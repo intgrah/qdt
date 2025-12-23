@@ -59,8 +59,7 @@ let try_parse = function
           Error
             (Parse_error
                (Format.asprintf "Tokens: %a@."
-                  (Format.pp_print_list
-                     ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
+                  (Format.pp_print_list ~pp_sep:Format.pp_print_space
                      Lexer.pp_token)
                   (List.take 5 remaining)))
       | exception exn -> Error (Parse_error (Printexc.to_string exn)))
