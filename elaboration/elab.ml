@@ -399,88 +399,11 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw.t -> tm * vl_ty =
       in
       let pair_tm =
         TmApp
-          ( TmApp
-              ( TmApp
-                  ( TmApp (TmConst (Name.child (Name.parse "Prod") "mk"), a_code),
-                    b_code ),
-                a' ),
+          ( TmApp (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code), b_code), a'),
             b' )
       in
       let pair_ty = eval_ty genv (Context.env ctx) (TyEl prod_code) in
       (pair_tm, pair_ty)
-  | Raw.Proj1 t -> (
-      let t', t_ty = infer_tm genv ctx t in
-      match t_ty with
-      | VTyEl (HConst name, [ a_code_val; b_val ]) ->
-          let a_ty = do_el a_code_val in
-          let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
-          if Name.equal name (Name.parse "Sigma") then
-            let b_tm = quote_tm genv (Context.lvl ctx) b_val in
-            ( TmApp
-                ( TmApp
-                    ( TmApp
-                        ( TmConst (Name.child (Name.parse "Sigma") "fst"),
-                          a_code_tm ),
-                      b_tm ),
-                  t' ),
-              a_ty )
-          else if Name.equal name (Name.parse "Prod") then
-            let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
-            ( TmApp
-                ( TmApp
-                    ( TmApp
-                        ( TmConst (Name.child (Name.parse "Prod") "fst"),
-                          a_code_tm ),
-                      b_code_tm ),
-                  t' ),
-              a_ty )
-          else
-            raise (Elab_error "Expected sigma/product type in projection")
-      | _ -> raise (Elab_error "Expected sigma/product type in projection"))
-  | Raw.Proj2 t -> (
-      let t', t_ty = infer_tm genv ctx t in
-      match t_ty with
-      | VTyEl (HConst name, [ a_code_val; b_val ]) ->
-          let a_code_tm = quote_tm genv (Context.lvl ctx) a_code_val in
-          if Name.equal name (Name.parse "Sigma") then
-            let b_tm = quote_tm genv (Context.lvl ctx) b_val in
-            let fst_tm =
-              TmApp
-                ( TmApp
-                    ( TmApp
-                        ( TmConst (Name.child (Name.parse "Sigma") "fst"),
-                          a_code_tm ),
-                      b_tm ),
-                  t' )
-            in
-            let fst_val = eval_tm genv (Context.env ctx) fst_tm in
-            let snd_ty = do_el (do_app genv b_val fst_val) in
-            let snd_tm =
-              TmApp
-                ( TmApp
-                    ( TmApp
-                        ( TmConst (Name.child (Name.parse "Sigma") "snd"),
-                          a_code_tm ),
-                      b_tm ),
-                  t' )
-            in
-            (snd_tm, snd_ty)
-          else if Name.equal name (Name.parse "Prod") then
-            let b_code_tm = quote_tm genv (Context.lvl ctx) b_val in
-            let snd_ty = do_el b_val in
-            let snd_tm =
-              TmApp
-                ( TmApp
-                    ( TmApp
-                        ( TmConst (Name.child (Name.parse "Prod") "snd"),
-                          a_code_tm ),
-                      b_code_tm ),
-                  t' )
-            in
-            (snd_tm, snd_ty)
-          else
-            raise (Elab_error "Expected sigma/product type in projection")
-      | _ -> raise (Elab_error "Expected sigma/product type in projection"))
   | Raw.NatLit n ->
       if n < 0 then
         raise (Elab_error "Negative numeric literal")
@@ -1394,8 +1317,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           | Raw.Arrow (a, b) -> Raw.Arrow (subst_fields ef a, subst_fields ef b)
           | Raw.Prod (a, b) -> Raw.Prod (subst_fields ef a, subst_fields ef b)
           | Raw.Pair (a, b) -> Raw.Pair (subst_fields ef a, subst_fields ef b)
-          | Raw.Proj1 t -> Raw.Proj1 (subst_fields ef t)
-          | Raw.Proj2 t -> Raw.Proj2 (subst_fields ef t)
           | Raw.Eq (a, b) -> Raw.Eq (subst_fields ef a, subst_fields ef b)
           | Raw.Add (a, b) -> Raw.Add (subst_fields ef a, subst_fields ef b)
           | Raw.Sub (a, b) -> Raw.Sub (subst_fields ef a, subst_fields ef b)

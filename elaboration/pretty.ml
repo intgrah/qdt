@@ -37,8 +37,6 @@ and pp_raw fmt : Raw.t -> unit = function
   | Sigma (group, b) ->
       Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_binder_group group pp_raw b
   | Prod (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ × %a@]" pp_raw a pp_raw b
-  | Proj1 t -> Format.fprintf fmt "@[<hov 2>(fst %a)@]" pp_raw t
-  | Proj2 t -> Format.fprintf fmt "@[<hov 2>(snd %a)@]" pp_raw t
   | NatLit n -> Format.fprintf fmt "%d" n
   | Add (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ + %a@]" pp_raw a pp_raw b
   | Sub (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_raw a pp_raw b
