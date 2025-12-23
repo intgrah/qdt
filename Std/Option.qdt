@@ -1,12 +1,7 @@
 inductive Option (A : Type) where
-  | none
-  | some (a : A)
+  | none : Option A
+  | some : A → Option A
 
-def Option.map (A B : Type) (f : A → B) (o : Option A) : Option B :=
-  Option.rec A (fun _ => Option B) (Option.none B) (fun a => Option.some B (f a)) o
-
-def Option.bind (A B : Type) (o : Option A) (f : A → Option B) : Option B :=
-  Option.rec A (fun _ => Option B) (Option.none B) (fun a => f a) o
-
-def Option.getD (A : Type) (o : Option A) (default : A) : A :=
-  Option.rec A (fun _ => A) default (fun a => a) o
+def Option.map (A B : Type) (f : A → B) : Option A → Option B := Option.rec A (fun _ => Option B) (Option.none B) (fun a => Option.some B (f a))
+def Option.bind (A B : Type) (o : Option A) (f : A → Option B) : Option B := Option.rec A (fun _ => Option B) (Option.none B) f o
+def Option.getD (A : Type) (o : Option A) (dflt : A) : A := Option.rec A (fun _ => A) dflt (id A) o

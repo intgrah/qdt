@@ -4,7 +4,7 @@ inductive True where
   | intro
 
 def True.eta (t : True) : () = t :=
-  Eq.refl True t
+  Eq.refl True ()
 
 def True.ext (a b : True) : a = b :=
   Eq.trans True a True.intro b (Eq.symm True True.intro a (True.eta a)) (True.eta b)
