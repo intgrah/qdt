@@ -1,3 +1,6 @@
+open Frontend
+open Elaboration
+
 type stage_error =
   | Lex_error of string
   | Parse_error of string
