@@ -12,8 +12,6 @@ module Raw = struct
     | Sigma of binder_group * t (* (x y : A) × B *)
     | Prod of t * t (* A × B *)
     | Pair of t * t (* (a, b) *)
-    | Proj1 of t (* fst e *)
-    | Proj2 of t (* fst e *)
     | Eq of t * t (* a = b, desugars to Eq _ a b *)
     | NatLit of int (* 0 *)
     | Add of t * t (* a + b *)
