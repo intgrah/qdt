@@ -142,12 +142,12 @@ let rec pp_ty_ctx (names : string list) fmt : ty -> unit = function
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_ty_ctx names) a
         (pp_ty_ctx (x :: names))
         b
-  | TyEl (TmApp (TmApp (TmConst prod, a_code), b_code))
-    when Name.equal prod (Name.parse "Prod") ->
+  | TyEl (TmApp (TmApp (TmConst [ "Prod" ], a_code), b_code)) ->
       Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) (TyEl a_code)
         (pp_ty_ctx names) (TyEl b_code)
-  | TyEl (TmApp (TmApp (TmConst sigma, _a_code), TmLam (x_opt, x_ty, b_code)))
-    when Name.equal sigma (Name.parse "Sigma") ->
+  | TyEl
+      (TmApp (TmApp (TmConst [ "Sigma" ], _a_code), TmLam (x_opt, x_ty, b_code)))
+    ->
       let x = get_name x_opt names in
       Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) x_ty
         (pp_ty_ctx (x :: names))
