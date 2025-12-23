@@ -1,4 +1,5 @@
 (executable
  (public_name code)
  (name main)
- (libraries elaboration unix cmdliner))
+ (modules main incr cli)
+ (libraries frontend elaboration unix cmdliner))

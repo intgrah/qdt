@@ -1,4 +1,4 @@
-module Pipeline = Elaboration.Incr
+module Pipeline = Incr
 module Update = Pipeline.Update
 
 let poll_seconds = 0.1
@@ -23,7 +23,7 @@ let print_tokens tokens =
   Format.printf "%a@."
     (Format.pp_print_list
        ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
-       Elaboration.Lexer.pp_token)
+       Frontend.Lexer.pp_token)
     tokens
 
 let print_program program =

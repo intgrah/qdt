@@ -1,4 +1,4 @@
-open Syntax
+open Elaboration.Syntax
 open Lexer
 
 exception Parse_error of string
