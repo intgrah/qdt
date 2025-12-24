@@ -904,7 +904,7 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
                             (nested_order @ [ v ]) rest)
                 in
 
-                let ih_ty = mk_ih_ty outer_lvl outer_env [] [] nested_binders in
+                let ih_ty = mk_ih_ty lvl env [] [] nested_binders in
                 let ih_name =
                   Some (Format.sprintf "%s_ih" (Option.value name ~default:"x"))
                 in
