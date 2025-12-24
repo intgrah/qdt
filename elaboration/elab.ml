@@ -596,8 +596,8 @@ let rec check_positivity_ty (genv : Global.t) (ind : Name.t) : ty -> unit =
       if has_ind_occ_ty ind a then
         raise
           (Elab_error
-             (Format.sprintf "%s has a non-positive occurrence (in domain)"
-                (Name.to_string ind)));
+             (Format.asprintf "%a has a non-positive occurrence (in domain)"
+                Name.pp ind));
       check_positivity_ty genv ind b
   | TyEl t -> check_positivity_tm genv ind t
 
@@ -610,8 +610,8 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
         if has_ind_occ_tm ind a then
           raise
             (Elab_error
-               (Format.sprintf "%s has a non-positive occurrence (in domain)"
-                  (Name.to_string ind)));
+               (Format.asprintf "%a has a non-positive occurrence (in domain)"
+                  Name.pp ind));
         check_positivity_tm genv ind b
     | TmApp (_, _) -> (
         match get_app_head tm with
@@ -619,22 +619,21 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
             if not (check_inductive_param_positive genv f_name) then
               raise
                 (Elab_error
-                   (Format.sprintf
-                      "%s has a non-positive occurrence (nested in %s)"
-                      (Name.to_string ind) (Name.to_string f_name)))
+                   (Format.asprintf
+                      "%a has a non-positive occurrence (nested in %a)" Name.pp
+                      ind Name.pp f_name))
         | _ ->
             raise
               (Elab_error
-                 (Format.sprintf "%s has a non-valid occurrence (nested)"
-                    (Name.to_string ind))))
+                 (Format.asprintf "%a has a non-valid occurrence (nested)"
+                    Name.pp ind)))
     | TmLam (_, a, body) ->
         check_positivity_ty genv ind a;
         check_positivity_tm genv ind body
     | _ ->
         raise
           (Elab_error
-             (Format.sprintf "%s has a non-valid occurrence"
-                (Name.to_string ind)))
+             (Format.asprintf "%a has a non-valid occurrence" Name.pp ind))
 
 let rec check_strict_positivity (genv : Global.t) (ind : Name.t) : ty -> unit =
   function
@@ -672,8 +671,8 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
       if head = TmConst ind && List.length args < num_params then
         raise
           (Elab_error
-             (Format.sprintf "%s: return type must apply %s to all parameters"
-                (Name.to_string ctor_name) (Name.to_string ind)))
+             (Format.asprintf "%a: return type must apply %a to all parameters"
+                Name.pp ctor_name Name.pp ind))
 
 (* ========== Inductive Types ========== *)
 
@@ -705,8 +704,8 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
             if not (check_returns_inductive ind ret_ty) then
               raise
                 (Elab_error
-                   (Format.sprintf "%s must return %s"
-                      (Name.to_string full_name) (Name.to_string ind)));
+                   (Format.asprintf "%a must return %a" Name.pp full_name
+                      Name.pp ind));
             check_return_params full_name ind num_params ret_ty;
             ret_ty)
     | (name, ty_opt) :: rest ->
@@ -716,8 +715,7 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
           | None ->
               raise
                 (Elab_error
-                   (Format.sprintf "%s: parameter needs type"
-                      (Name.to_string full_name)))
+                   (Format.asprintf "%a: parameter needs type" Name.pp full_name))
         in
         let param_ty_val = eval_ty genv (Context.env ctx) param_ty in
         let ctx' = Context.bind name param_ty_val ctx in
