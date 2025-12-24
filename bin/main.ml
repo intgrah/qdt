@@ -10,9 +10,9 @@ let read_file path =
       None
 
 let log_stage stage = function
-  | Update.Initialized _ -> Format.eprintf "[inc] %s initialized@." stage
-  | Update.Changed _ -> Format.eprintf "[inc] %s changed@." stage
-  | Update.Invalidated -> Format.eprintf "[inc] %s invalidated@." stage
+  | Update.Initialized _ -> Format.eprintf "[inc] %s@." stage
+  | Update.Changed _ -> Format.eprintf "[inc] %s@." stage
+  | Update.Invalidated -> Format.eprintf "[inc] %s@." stage
 
 let print_tokens tokens =
   Format.printf "%a@."
