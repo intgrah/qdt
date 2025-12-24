@@ -240,15 +240,19 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> ty =
   | U -> TyU
   | Pi ((names, dom), cod) ->
       let dom = check_ty genv ctx dom in
-      let dom_val = eval_ty genv (Context.env ctx) dom in
-      let rec bind_all ctx = function
+      let ctx0 = ctx in
+      let dom_val0 = eval_ty genv (Context.env ctx0) dom in
+      let dom_ty_at (n : int) : ty =
+        quote_ty genv (Context.lvl ctx0 + n) dom_val0
+      in
+      let rec bind_all ctx n = function
         | [] -> check_ty genv ctx cod
         | name :: rest ->
-            let ctx' = Context.bind name dom_val ctx in
-            let cod' = bind_all ctx' rest in
-            TyPi (name, dom, cod')
+            let ctx' = Context.bind name dom_val0 ctx in
+            let cod' = bind_all ctx' (n + 1) rest in
+            TyPi (name, dom_ty_at n, cod')
       in
-      bind_all ctx names
+      bind_all ctx0 0 names
   | Arrow (dom, cod) ->
       let dom = check_ty genv ctx dom in
       let dom_val = eval_ty genv (Context.env ctx) dom in
@@ -328,18 +332,22 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
       in
       go ctx (flatten_binders binders)
   | Pi ((names, dom), cod) ->
-      let dom, _ = infer_tm genv ctx dom in
-      let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
-      let rec bind_all ctx = function
+      let dom_tm, _ = infer_tm genv ctx dom in
+      let ctx0 = ctx in
+      let dom_val0 = do_el (eval_tm genv (Context.env ctx0) dom_tm) in
+      let dom_tm_at (n : int) : tm =
+        reify_ty genv (Context.lvl ctx0 + n) dom_val0
+      in
+      let rec bind_all ctx n = function
         | [] ->
             let cod_tm, _ = infer_tm genv ctx cod in
             cod_tm
         | name :: rest ->
-            let ctx = Context.bind name dom_val ctx in
-            let cod = bind_all ctx rest in
-            TmPiHat (name, dom, cod)
+            let ctx = Context.bind name dom_val0 ctx in
+            let cod = bind_all ctx (n + 1) rest in
+            TmPiHat (name, dom_tm_at n, cod)
       in
-      (bind_all ctx names, VTyU)
+      (bind_all ctx0 0 names, VTyU)
   | Arrow (dom, cod) ->
       let dom, _ = infer_tm genv ctx dom in
       let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
@@ -791,6 +799,15 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
   let app arg fn = do_app genv fn arg in
   let apps args fn = List.fold_left (do_app genv) fn args in
 
+  let index_tys =
+    List.mapi
+      (fun i (name_opt, ty) ->
+        match name_opt with
+        | Some _ -> (name_opt, ty)
+        | None -> (Some (Format.sprintf "a%d†" i), ty))
+      index_tys
+  in
+
   let mk_pi (lvl : int) (env : env) (name : string option) (dom : vl_ty)
       (body : vl_tm -> vl_ty) : vl_ty =
     let var = VTmNeutral (HVar (Lvl lvl), []) in
@@ -812,7 +829,7 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
         (indices_order : vl_tm list) = function
       | [] ->
           let x_ty = mk_ind_ty params_order indices_order in
-          mk_pi lvl env (Some "x") x_ty (fun _x -> VTyU)
+          mk_pi lvl env None x_ty (fun _ -> VTyU)
       | (name, idx_ty) :: rest ->
           let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
           mk_pi lvl env name dom (fun idx ->
@@ -883,7 +900,7 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
                 in
 
                 let rec mk_ih_ty (lvl : int) (env : env) (nested_rev : env)
-                    (nested_order : vl_tm list) :
+                    (nested_order : vl_tm list) (binder_idx : int) :
                     (string option * ty) list -> vl_ty = function
                   | [] ->
                       let env_for_indices =
@@ -894,17 +911,22 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
                       in
                       do_el
                         (motive |> apps idx_vals
-                        |> app (field_var |> apps (List.rev nested_order)))
+                        |> app (field_var |> apps nested_order))
                   | (n, ty) :: rest ->
                       let dom =
                         eval_ty genv (nested_rev @ prefix_rev @ params_rev) ty
                       in
-                      mk_pi lvl env n dom (fun v ->
+                      let binder_name =
+                        match n with
+                        | Some name -> Some name
+                        | None -> Some (Format.sprintf "a%d†" binder_idx)
+                      in
+                      mk_pi lvl env binder_name dom (fun v ->
                           mk_ih_ty (lvl + 1) (v :: env) (v :: nested_rev)
-                            (nested_order @ [ v ]) rest)
+                            (nested_order @ [ v ]) (binder_idx + 1) rest)
                 in
 
-                let ih_ty = mk_ih_ty lvl env [] [] nested_binders in
+                let ih_ty = mk_ih_ty lvl env [] [] 0 nested_binders in
                 let ih_name =
                   Some (Format.sprintf "%s_ih" (Option.value name ~default:"x"))
                 in
@@ -950,9 +972,9 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
               match List.drop (List.length indices_order) index_tys with
               | [] ->
                   let x_ty = mk_ind_ty params_order indices_order in
-                  mk_pi lvl env (Some "x") x_ty (fun x ->
+                  mk_pi lvl env None x_ty (fun t ->
                       let motive_app = motive |> apps indices_order in
-                      do_el (do_app genv motive_app x))
+                      do_el (do_app genv motive_app t))
               | (name, idx_ty) :: _rest ->
                   let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
                   mk_pi lvl env name dom (fun idx ->
