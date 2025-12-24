@@ -240,19 +240,18 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> ty =
   | U -> TyU
   | Pi ((names, dom), cod) ->
       let dom = check_ty genv ctx dom in
-      let ctx0 = ctx in
-      let dom_val0 = eval_ty genv (Context.env ctx0) dom in
+      let dom_val = eval_ty genv (Context.env ctx) dom in
       let dom_ty_at (n : int) : ty =
-        quote_ty genv (Context.lvl ctx0 + n) dom_val0
+        quote_ty genv (Context.lvl ctx + n) dom_val
       in
       let rec bind_all ctx n = function
         | [] -> check_ty genv ctx cod
         | name :: rest ->
-            let ctx' = Context.bind name dom_val0 ctx in
+            let ctx' = Context.bind name dom_val ctx in
             let cod' = bind_all ctx' (n + 1) rest in
             TyPi (name, dom_ty_at n, cod')
       in
-      bind_all ctx0 0 names
+      bind_all ctx 0 names
   | Arrow (dom, cod) ->
       let dom = check_ty genv ctx dom in
       let dom_val = eval_ty genv (Context.env ctx) dom in
