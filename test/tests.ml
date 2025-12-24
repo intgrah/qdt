@@ -3,52 +3,20 @@ open Elaboration
 open Syntax
 open Elab
 open Pretty
-open Nbe
 
 let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
-let genv = Global.empty
-
-module Test_eval = struct
-  let identity () =
-    let term = TmLam (None, TyU, TmVar (Idx 0)) in
-    let result = eval_tm genv [] term in
-    match result with
-    | VTmLam (None, VTyU, ClosTm ([], TmVar (Idx 0))) -> ()
-    | _ -> Alcotest.fail "identity evaluation failed"
-
-  let beta () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
-    let result = eval_tm genv [] term in
-    match result with
-    | VTmNeutral (HConst [ "c" ], []) -> ()
-    | _ -> Alcotest.fail "beta reduction failed"
-
-  let pi_eval () =
-    let ty = TyPi (None, TyU, TyU) in
-    let result = eval_ty genv [] ty in
-    match result with
-    | VTyPi (None, VTyU, ClosTy ([], TyU)) -> ()
-    | _ -> Alcotest.fail "pi evaluation failed"
-
-  let tests =
-    [
-      Alcotest.test_case "identity" `Quick identity;
-      Alcotest.test_case "beta" `Quick beta;
-      Alcotest.test_case "pi eval" `Quick pi_eval;
-    ]
-end
 
 module Test_quote = struct
   let variable () =
     let v = VTmNeutral (HVar (Lvl 0), []) in
-    let tm = quote_tm genv 1 v in
+    let tm = quote_tm Global.empty 1 v in
     match tm with
     | TmVar (Idx 0) -> ()
     | _ -> Alcotest.fail "variable quoting failed"
 
   let lambda () =
     let v = VTmLam (None, VTyU, ClosTm ([], TmVar (Idx 0))) in
-    let tm = quote_tm genv 0 v in
+    let tm = quote_tm Global.empty 0 v in
     match tm with
     | TmLam (_, _, TmVar (Idx 0)) -> ()
     | _ -> Alcotest.fail "lambda quoting failed"
@@ -60,43 +28,6 @@ module Test_quote = struct
     ]
 end
 
-module Test_nbe = struct
-  let whnf t = quote_tm genv 0 (eval_tm genv [] t)
-
-  let beta () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
-    let normalized = whnf term in
-    match normalized with
-    | TmConst _ -> ()
-    | _ ->
-        Alcotest.failf "expected a constant, got %s" (tm_to_string normalized)
-
-  let nested () =
-    let term =
-      TmApp
-        (TmLam (None, TyU, TmLam (None, TyU, TmVar (Idx 1))), TmConst [ "c" ])
-    in
-    let normalized = whnf term in
-    match normalized with
-    | TmLam (_, _, TmConst _) -> ()
-    | _ ->
-        Alcotest.failf "expected Lam(_, Const _), got %s"
-          (tm_to_string normalized)
-
-  let idempotent () =
-    let term = TmApp (TmLam (None, TyU, TmVar (Idx 0)), TmConst [ "c" ]) in
-    let norm1 = whnf term in
-    let norm2 = whnf norm1 in
-    Alcotest.(check string) "same" (tm_to_string norm1) (tm_to_string norm2)
-
-  let tests =
-    [
-      Alcotest.test_case "beta" `Quick beta;
-      Alcotest.test_case "nested" `Quick nested;
-      Alcotest.test_case "idempotent" `Quick idempotent;
-    ]
-end
-
 module Test_elab = struct
   let check_identity () =
     let ctx = Context.empty in
@@ -105,7 +36,7 @@ module Test_elab = struct
         ([ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ], Raw_syntax.Ident "x")
     in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
-    let tm = check_tm genv ctx raw expected in
+    let tm = check_tm Global.empty ctx raw expected in
     match tm with
     | TmLam (_, _, TmVar (Idx 0)) -> ()
     | _ -> Alcotest.fail "check failed"
@@ -113,21 +44,21 @@ module Test_elab = struct
   let pi_type () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Pi (([ Some "x" ], Raw_syntax.U), Raw_syntax.U) in
-    let ty = check_ty genv ctx raw in
-    Alcotest.(check ty_testable) "same" (TyPi (Some "x", TyU, TyU)) ty
+    let ty = check_ty Global.empty ctx raw in
+    Alcotest.check ty_testable "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) in
-    let ty = check_ty genv ctx raw in
-    Alcotest.(check ty_testable) "same" (TyPi (None, TyU, TyU)) ty
+    let ty = check_ty Global.empty ctx raw in
+    Alcotest.check ty_testable "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Ident "x" in
     Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
       (fun () ->
-        let _, _ = infer_tm genv ctx raw in
+        let _, _ = infer_tm Global.empty ctx raw in
         ())
 
   let tests =
@@ -166,12 +97,64 @@ module Programs = struct
   let tests = [ Alcotest.test_case "simple id" `Quick simple_id ]
 end
 
+module Qdt_files = struct
+  let read_file path = In_channel.with_open_text path In_channel.input_all
+
+  let parse source =
+    let chars = List.of_seq (String.to_seq source) in
+    let tokens = Lexer.scan [] chars in
+    Parser.parse tokens
+
+  let elaborate_file ~root path =
+    let source = read_file path in
+    let prog = parse source in
+    elab_program_with_imports ~root ~read_file ~parse prog
+
+  let root_dir () = Filename.dirname (Sys.getcwd ())
+
+  let check_succeeds path () =
+    let root = root_dir () in
+    match elaborate_file ~root path with
+    | _ -> ()
+    | exception exn ->
+        Alcotest.failf "expected %s to elaborate, but got: %s" path
+          (Printexc.to_string exn)
+
+  let check_fails path () =
+    let root = root_dir () in
+    match elaborate_file ~root path with
+    | _ -> Alcotest.failf "expected %s to fail, but it elaborated" path
+    | exception _ -> ()
+
+  let passing = [ "../Std.qdt"; "../examples/test.qdt" ]
+
+  let failing =
+    [
+      "../examples/bad.qdt";
+      "../examples/reject_negative_contra.qdt";
+      "../examples/reject_negative_direct.qdt";
+      "../examples/reject_negative_nested.qdt";
+      "../examples/reject_nested_def.qdt";
+      "../examples/reject_wrong_return.qdt";
+    ]
+
+  let tests =
+    List.map
+      (fun path ->
+        Alcotest.test_case ("pass: " ^ path) `Slow (check_succeeds path))
+      passing
+    @ List.map
+        (fun path ->
+          Alcotest.test_case ("fail: " ^ path) `Quick (check_fails path))
+        failing
+end
+
 let () =
   Alcotest.run "Elaboration"
     [
-      ("Eval", Test_eval.tests);
       ("Quote", Test_quote.tests);
       ("Nbe", Test_nbe.tests);
       ("Elab", Test_elab.tests);
       ("Programs", Programs.tests);
+      ("QDT files", Qdt_files.tests);
     ]

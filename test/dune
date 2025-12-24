@@ -1,3 +1,7 @@
 (test
  (name tests)
- (libraries elaboration alcotest))
+ (libraries elaboration alcotest)
+ (deps
+  ../Std.qdt
+  (glob_files ../Std/*.qdt)
+  (glob_files ../examples/*.qdt)))
