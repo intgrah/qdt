@@ -188,9 +188,61 @@ and pp_tm_ctx (names : string list) fmt : tm -> unit = function
 
 let pp_ty = pp_ty_ctx []
 let pp_tm = pp_tm_ctx []
-let ty_to_string = Format.asprintf "%a" pp_ty
-let tm_to_string = Format.asprintf "%a" pp_tm
 
 let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
   Format.fprintf fmt "@[<hv 2>@[<hov 4>def %a :@ %a :=@]@ %a@]" Name.pp name
     pp_ty ty pp_tm term
+
+(* ========== Values ========== *)
+
+let env_names (env : env) : string list =
+  List.init (List.length env) (Format.sprintf "env%d†")
+
+let rec pp_vl_ty_ctx (names : string list) fmt : vl_ty -> unit = function
+  | VTyU -> Format.fprintf fmt "Type"
+  | VTyPi (None, a, clos) ->
+      let x = fresh_name names in
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_vl_ty_ctx names) a
+        (pp_clos_ty x) clos
+  | VTyPi (Some x, a, clos) ->
+      let x = get_name (Some x) names in
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_vl_ty_ctx names) a
+        (pp_clos_ty x) clos
+  | VTyEl n -> pp_neutral_ctx names fmt n
+
+and pp_vl_tm_ctx (names : string list) fmt : vl_tm -> unit = function
+  | VTmNeutral n -> pp_neutral_ctx names fmt n
+  | VTmLam (x_opt, a, clos) ->
+      let x = get_name x_opt names in
+      Format.fprintf fmt "@[<hov 2>(fun %s : %a =>@ %a)@]" x
+        (pp_vl_ty_ctx names) a (pp_clos_tm x) clos
+  | VTmPiHat (None, a, clos) ->
+      let x = fresh_name names in
+      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_vl_tm_ctx names) a
+        (pp_clos_tm x) clos
+  | VTmPiHat (Some x, a, clos) ->
+      let x = get_name (Some x) names in
+      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_vl_tm_ctx names) a
+        (pp_clos_tm x) clos
+
+and pp_neutral_ctx (names : string list) fmt ((head, sp) : neutral) : unit =
+  match sp with
+  | [] -> pp_head fmt head
+  | _ ->
+      Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_head head
+        (pp_list (pp_vl_tm_ctx names))
+        sp
+
+and pp_head fmt : head -> unit = function
+  | HVar lvl -> Format.fprintf fmt "x%d†" (Lvl.to_int lvl)
+  | HConst name -> Format.fprintf fmt "%a" Name.pp name
+  | HSorry (id, _ty) -> Format.fprintf fmt "sorry%d" id
+
+and pp_clos_ty (x : string) fmt : clos_ty -> unit = function
+  | ClosTy (env, body) -> pp_ty_ctx (x :: env_names env) fmt body
+
+and pp_clos_tm (x : string) fmt : clos_tm -> unit = function
+  | ClosTm (env, body) -> pp_tm_ctx (x :: env_names env) fmt body
+
+let pp_vl_ty fmt (ty : vl_ty) : unit = pp_vl_ty_ctx [] fmt ty
+let pp_vl_tm fmt (tm : vl_tm) : unit = pp_vl_tm_ctx [] fmt tm
