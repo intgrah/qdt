@@ -332,27 +332,26 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
       in
       go ctx (flatten_binders binders)
   | Pi ((names, dom), cod) ->
-      let dom_tm, _ = infer_tm genv ctx dom in
-      let ctx0 = ctx in
-      let dom_val0 = do_el (eval_tm genv (Context.env ctx0) dom_tm) in
+      let dom, _ = infer_tm genv ctx dom in
+      let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
       let dom_tm_at (n : int) : tm =
-        reify_ty genv (Context.lvl ctx0 + n) dom_val0
+        reify_ty genv (Context.lvl ctx + n) dom_val
       in
       let rec bind_all ctx n = function
         | [] ->
             let cod_tm, _ = infer_tm genv ctx cod in
             cod_tm
         | name :: rest ->
-            let ctx = Context.bind name dom_val0 ctx in
+            let ctx = Context.bind name dom_val ctx in
             let cod = bind_all ctx (n + 1) rest in
             TmPiHat (name, dom_tm_at n, cod)
       in
-      (bind_all ctx0 0 names, VTyU)
+      (bind_all ctx 0 names, VTyU)
   | Arrow (dom, cod) ->
       let dom, _ = infer_tm genv ctx dom in
       let dom_val = do_el (eval_tm genv (Context.env ctx) dom) in
-      let ctx' = Context.bind None dom_val ctx in
-      let cod_tm, _ = infer_tm genv ctx' cod in
+      let ctx = Context.bind None dom_val ctx in
+      let cod_tm, _ = infer_tm genv ctx cod in
       (TmPiHat (None, dom, cod_tm), VTyU)
   | Sigma (binders, snd_ty) ->
       infer_tm genv ctx (Desugar.desugar_sigma binders snd_ty)
