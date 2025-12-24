@@ -47,6 +47,6 @@ type constraint_ =
 
 type constraints = constraint_ list
 
-let add_constraint (ctx : Elab.Context.t) (ty1 : Syntax.vl_ty)
-    (t1 : Syntax.vl_tm) (ty2 : Syntax.vl_ty) (t2 : Syntax.vl_tm) : constraint_ =
-  CEqual (Elab.Context.lvl ctx, ty1, t1, ty2, t2)
+let add_constraint (ctx : Context.t) (ty1 : Syntax.vl_ty) (t1 : Syntax.vl_tm)
+    (ty2 : Syntax.vl_ty) (t2 : Syntax.vl_tm) : constraint_ =
+  CEqual (ctx.lvl, ty1, t1, ty2, t2)

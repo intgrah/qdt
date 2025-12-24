@@ -9,14 +9,14 @@ let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
 module Test_quote = struct
   let variable () =
     let v = VTmNeutral (HVar (Lvl 0), []) in
-    let tm = quote_tm Global.empty 1 v in
+    let tm = Quote.quote_tm Global.empty 1 v in
     match tm with
     | TmVar (Idx 0) -> ()
     | _ -> Alcotest.fail "variable quoting failed"
 
   let lambda () =
     let v = VTmLam (None, VTyU, ClosTm ([], TmVar (Idx 0))) in
-    let tm = quote_tm Global.empty 0 v in
+    let tm = Quote.quote_tm Global.empty 0 v in
     match tm with
     | TmLam (_, _, TmVar (Idx 0)) -> ()
     | _ -> Alcotest.fail "lambda quoting failed"
@@ -36,7 +36,7 @@ module Test_elab = struct
         ([ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ], Raw_syntax.Ident "x")
     in
     let expected = VTyPi (Some "x", VTyU, ClosTy ([], TyU)) in
-    let tm = check_tm Global.empty ctx raw expected in
+    let tm = Bidir.check_tm Global.empty ctx raw expected in
     match tm with
     | TmLam (_, _, TmVar (Idx 0)) -> ()
     | _ -> Alcotest.fail "check failed"
@@ -44,13 +44,13 @@ module Test_elab = struct
   let pi_type () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Pi (([ Some "x" ], Raw_syntax.U), Raw_syntax.U) in
-    let ty = check_ty Global.empty ctx raw in
+    let ty = Bidir.check_ty Global.empty ctx raw in
     Alcotest.check ty_testable "same" (TyPi (Some "x", TyU, TyU)) ty
 
   let arrow_type () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) in
-    let ty = check_ty Global.empty ctx raw in
+    let ty = Bidir.check_ty Global.empty ctx raw in
     Alcotest.check ty_testable "same" (TyPi (None, TyU, TyU)) ty
 
   let error_var_not_in_scope () =
@@ -58,7 +58,7 @@ module Test_elab = struct
     let raw = Raw_syntax.Ident "x" in
     Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
       (fun () ->
-        let _, _ = infer_tm Global.empty ctx raw in
+        let _, _ = Bidir.infer_tm Global.empty ctx raw in
         ())
 
   let tests =
@@ -77,12 +77,11 @@ module Programs = struct
         Raw_syntax.Def
           {
             name = "id";
+            ty_opt = Some (Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U));
             body =
-              Raw_syntax.Ann
-                ( Raw_syntax.Lam
-                    ( [ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ],
-                      Raw_syntax.Ident "x" ),
-                  Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U) );
+              Raw_syntax.Lam
+                ( [ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ],
+                  Raw_syntax.Ident "x" );
           };
       ]
     in

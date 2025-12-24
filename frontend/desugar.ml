@@ -15,3 +15,7 @@ let rec desugar_nat_lit : int -> t = function
 
 let desugar_add (a : t) (b : t) : t = App (App (Ident "Nat.add", a), b)
 let desugar_sub (a : t) (b : t) : t = App (App (Ident "Nat.sub", a), b)
+
+let desugar_typed_binder_groups :
+    typed_binder_group list -> (string option * t) list =
+  List.concat_map (fun (names, ty) -> List.map (fun name -> (name, ty)) names)
