@@ -114,7 +114,14 @@ let pp_raw_program fmt (prog : Raw_syntax.program) : unit =
 (* ========== Core Syntax ========== *)
 
 let fresh_name (names : string list) : string =
-  Format.sprintf "x%d†" (List.length names)
+  let rec go i =
+    let candidate = Format.sprintf "x%d†" i in
+    if List.mem candidate names then
+      go (i + 1)
+    else
+      candidate
+  in
+  go 0
 
 let get_name (name_opt : string option) (names : string list) : string =
   match name_opt with

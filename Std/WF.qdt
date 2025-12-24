@@ -1,6 +1,16 @@
 inductive Acc (A : Type) (r : A → A → Type) : A → Type where
   | intro (x : A) (h : (y : A) → r y x → Acc A r y) : Acc A r x
 
+example :
+    (A : Type) →
+    (r : A → A → Type) →
+    (motive : (a : A) → Acc A r a → Type) →
+    (intro : (x : A) → (h : (y : A) → r y x → Acc A r y) → ((y : A) → (a : r y x) → motive y (h y a)) → motive x (Acc.intro A r x h)) →
+    (a : A) →
+    (t : Acc A r a) →
+    motive a t :=
+  Acc.rec
+
 def Acc.inv (A : Type) (r : A → A → Type) (x y : A) (hx : Acc A r x) (hyx : r y x) : Acc A r y :=
   (Acc.rec A r
      (fun x _ => (y : A) → r y x → Acc A r y)
@@ -11,5 +21,8 @@ def Acc.inv (A : Type) (r : A → A → Type) (x y : A) (hx : Acc A r x) (hyx : 
 inductive WellFounded (A : Type) (r : A → A → Type) : Type where
   | intro (h : (a : A) → Acc A r a) : WellFounded A r
 
-def WellFounded.apply (A : Type) (r : A → A → Type) (wf : WellFounded A r) (a : A) : Acc A r a :=
-  (WellFounded.rec A r (fun _ => (a : A) → Acc A r a) (fun h => h) wf) a
+def WellFounded.apply (A : Type) (r : A → A → Type) : WellFounded A r → (x : A) → Acc A r x :=
+  WellFounded.rec A r (fun _ => (a : A) → Acc A r a) (fun h => h)
+
+def WellFounded.fixF (A : Type) (r : A → A → Type) (C : A → Type) (F : (x : A) → ((y : A) → r y x → C y) → C x) : (x : A) → Acc A r x → C x :=
+  Acc.rec A r (fun x _ => C x) (fun x _ => F x)
