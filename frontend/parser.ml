@@ -67,29 +67,14 @@ let rec parse_atom : Raw_syntax.t t =
       parse_type;
       parse_int_lit;
       parse_pair;
-      parse_true_term;
-      parse_ann;
-      parse_parens;
+      parse_unit;
+      parse_ann_or_parens;
     ]
     input
 
-and parse_ann : Raw_syntax.t t =
- fun input ->
-  (let* () = token LParen in
-   let* e = parse_preterm in
-   let* () = token Colon in
-   let* ty = parse_preterm in
-   let* () = token RParen in
-   return (Raw_syntax.Ann (e, ty)))
-    input
-
-and parse_parens : Raw_syntax.t t =
- fun input ->
-  (let* () = token LParen in
-   let* e = parse_preterm in
-   let* () = token RParen in
-   return e)
-    input
+and parse_sorry : Raw_syntax.t t = function
+  | Sorry :: rest -> Some (Raw_syntax.Sorry, rest)
+  | _ -> None
 
 and parse_var : Raw_syntax.t t =
  fun input ->
@@ -105,10 +90,6 @@ and parse_int_lit : Raw_syntax.t t = function
   | NatLit n :: rest -> Some (Raw_syntax.NatLit n, rest)
   | _ -> None
 
-and parse_true_term : Raw_syntax.t t = function
-  | LParen :: RParen :: rest -> Some (Raw_syntax.Ident "True.intro", rest)
-  | _ -> None
-
 and parse_pair : Raw_syntax.t t =
  fun input ->
   (let* () = token LParen in
@@ -119,9 +100,22 @@ and parse_pair : Raw_syntax.t t =
    return (Raw_syntax.Pair (a, b)))
     input
 
-and parse_sorry : Raw_syntax.t t = function
-  | Sorry :: rest -> Some (Raw_syntax.Sorry, rest)
+and parse_unit : Raw_syntax.t t = function
+  | LParen :: RParen :: rest -> Some (Raw_syntax.Ident "Unit.unit", rest)
   | _ -> None
+
+and parse_ann_or_parens : Raw_syntax.t t =
+ fun input ->
+  (let* () = token LParen in
+   let* e = parse_preterm in
+   (let* () = token Colon in
+    let* ty = parse_preterm in
+    let* () = token RParen in
+    return (Raw_syntax.Ann (e, ty)))
+   <|>
+   let* () = token RParen in
+   return e)
+    input
 
 and parse_typed_binder_group : Raw_syntax.typed_binder_group t =
  fun input ->
