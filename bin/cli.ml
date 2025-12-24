@@ -1,5 +1,6 @@
 type options = {
   input_file : string;
+  root_dir : string;
   show_lex : bool;
   show_parse : bool;
   show_elab : bool;
@@ -11,6 +12,10 @@ open Cmdliner
 let input_file =
   let doc = "Input file to process" in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"FILE" ~doc)
+
+let root_dir =
+  let doc = "Root directory for imports. Defaults to the current directory." in
+  Arg.(value & opt string (Sys.getcwd ()) & info [ "root" ] ~docv:"DIR" ~doc)
 
 let show_lex =
   let doc = "Show lexer output" in
@@ -28,12 +33,13 @@ let watch =
   let doc = "Watch file for changes" in
   Arg.(value & flag & info [ "w"; "watch" ] ~doc)
 
-let make_options input_file show_lex show_parse show_elab watch =
-  { input_file; show_lex; show_parse; show_elab; watch }
+let make_options input_file root_dir show_lex show_parse show_elab watch =
+  { input_file; root_dir; show_lex; show_parse; show_elab; watch }
 
 let options_term =
   Term.(
-    const make_options $ input_file $ show_lex $ show_parse $ show_elab $ watch)
+    const make_options $ input_file $ root_dir $ show_lex $ show_parse
+    $ show_elab $ watch)
 
 let cmd =
   let doc = "Dependent type checker" in
