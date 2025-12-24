@@ -12,3 +12,8 @@ example :
     (t : Eq3 A x y z) →
     motive y z t :=
   Eq3.rec
+
+inductive No where
+  | no : No → No
+
+def No.elim (A : Type) : No → A := No.rec (fun _ => A) (fun _ => id A)
