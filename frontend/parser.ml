@@ -271,7 +271,7 @@ let parse_constructor : Raw_syntax.constructor t =
       (let* () = token Colon in
        parse_preterm)
   in
-  return { Raw_syntax.name; params; ty = ty_opt }
+  return { Raw_syntax.name; params; ty_opt }
 
 let parse_inductive : Raw_syntax.item t =
   let* () = token Inductive in
@@ -284,7 +284,7 @@ let parse_inductive : Raw_syntax.item t =
   in
   let* () = token Where in
   let* ctors = many parse_constructor in
-  return (Raw_syntax.Inductive { name; params; ty = ty_opt; ctors })
+  return (Raw_syntax.Inductive { name; params; ty_opt; ctors })
 
 let parse_field : Raw_syntax.field t =
   let* () = token LParen in
@@ -308,9 +308,9 @@ let parse_structure : Raw_syntax.item t =
   in
   let* () = token Where in
   let* fields = many parse_field in
-  return (Raw_syntax.Structure { name; params; ty = ty_opt; fields })
+  return (Raw_syntax.Structure { name; params; ty_opt; fields })
 
-let parse_def_body : Raw_syntax.t t =
+let parse_def_body : (Raw_syntax.t * Raw_syntax.t option) t =
   let* binder_groups = many parse_binder_group in
   let* ret_ty_opt =
     optional
@@ -330,18 +330,18 @@ let parse_def_body : Raw_syntax.t t =
     else
       Raw_syntax.Lam (binder_groups, body_with_ann)
   in
-  return full_body
+  return (full_body, ret_ty_opt)
 
 let parse_def : Raw_syntax.item t =
   let* () = token Def in
   let* name = parse_ident in
-  let* body = parse_def_body in
-  return (Raw_syntax.Def { name; body })
+  let* body, ty_opt = parse_def_body in
+  return (Raw_syntax.Def { name; ty_opt; body })
 
 let parse_example : Raw_syntax.item t =
   let* () = token Example in
-  let* body = parse_def_body in
-  return (Raw_syntax.Example { body })
+  let* body, ty_opt = parse_def_body in
+  return (Raw_syntax.Example { ty_opt; body })
 
 let parse_single_item : Raw_syntax.item t =
   choice

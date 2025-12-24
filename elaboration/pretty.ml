@@ -47,7 +47,7 @@ and pp_raw fmt : Raw_syntax.t -> unit = function
   | Sorry -> Format.fprintf fmt "sorry"
 
 let pp_ctor fmt (ctor : Raw_syntax.constructor) : unit =
-  match (ctor.params, ctor.ty) with
+  match (ctor.params, ctor.ty_opt) with
   | [], None -> Format.fprintf fmt "| %s" ctor.name
   | [], Some ty -> Format.fprintf fmt "| %s : %a" ctor.name pp_raw ty
   | params, None ->
@@ -60,16 +60,24 @@ let pp_ctor fmt (ctor : Raw_syntax.constructor) : unit =
         params pp_raw ty
 
 let pp_raw_item fmt : Raw_syntax.item -> unit = function
-  | Def { name; body } ->
-      Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body
-  | Example { body } ->
-      Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body
-  | Inductive { name; params; ty; ctors } -> (
+  | Def { name; ty_opt; body } -> (
+      match ty_opt with
+      | Some ty ->
+          Format.fprintf fmt "@[<hov 2>def %s : %a :=@ %a@]" name pp_raw ty
+            pp_raw body
+      | None -> Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body)
+  | Example { ty_opt; body } -> (
+      match ty_opt with
+      | Some ty ->
+          Format.fprintf fmt "@[<hov 2>example : %a :=@ %a@]" pp_raw ty pp_raw
+            body
+      | None -> Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body)
+  | Inductive { name; params; ty_opt; ctors } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a" (pp_list pp_typed_binder_group) params
       in
-      match ty with
+      match ty_opt with
       | None ->
           Format.fprintf fmt "@[<v 0>inductive %s%a where@,%a@]" name pp_params
             params
@@ -80,7 +88,7 @@ let pp_raw_item fmt : Raw_syntax.item -> unit = function
             pp_params params pp_raw ty
             (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
             ctors)
-  | Structure { name; params; ty; fields } -> (
+  | Structure { name; params; ty_opt; fields } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a" (pp_list pp_typed_binder_group) params
@@ -93,7 +101,7 @@ let pp_raw_item fmt : Raw_syntax.item -> unit = function
               (pp_list pp_typed_binder_group)
               args pp_raw field.ty
       in
-      match ty with
+      match ty_opt with
       | None ->
           Format.fprintf fmt "@[<v 0>structure %s%a where@,%a@]" name pp_params
             params

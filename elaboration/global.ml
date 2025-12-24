@@ -14,11 +14,10 @@ type rec_rule = {
 }
 
 type recursor_info = {
-  ty : vl_ty;
+  ty : ty;
   rec_ind_name : Name.t;
   rec_num_params : int;
   rec_num_indices : int;
-  rec_num_motives : int;
   rec_num_methods : int;
   rec_rules : rec_rule list;
 }
@@ -32,17 +31,17 @@ type structure_info = {
 }
 
 type constructor_info = {
-  ty : vl_ty;
+  ty : ty;
   ind_name : Name.t;
   ctor_idx : int;
 }
 
 type entry =
   | Def of {
-      ty : vl_ty;
+      ty : ty;
       tm : vl_tm;
     }
-  | Opaque of { ty : vl_ty } (* Type formers, e.g. Eq, Nat *)
+  | Opaque of { ty : ty } (* Type formers, e.g. Eq, Nat *)
   | Inductive of inductive_info
   | Structure of {
       ind : inductive_info;
@@ -77,7 +76,18 @@ let find_inductive name env =
   | Some (Structure { ind; _ }) -> Some ind
   | _ -> None
 
-let find_structure name env =
+let find_structure name (env : t) =
   match find_opt name env with
   | Some (Structure { info; _ }) -> Some info
   | _ -> None
+
+let find_ty (name : Name.t) (env : t) : ty option =
+  match find_opt name env with
+  | Some (Def { ty; _ })
+  | Some (Opaque { ty })
+  | Some (Recursor { ty; _ })
+  | Some (Constructor { ty; _ }) ->
+      Some ty
+  | Some (Inductive { ty; _ }) -> Some ty
+  | Some (Structure { ind = { ty; _ }; _ }) -> Some ty
+  | None -> None

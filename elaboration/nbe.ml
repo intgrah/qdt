@@ -41,7 +41,7 @@ and try_iota_reduce (genv : Global.t) : neutral -> vl_tm option = function
       | None -> None
       | Some info -> (
           let major_idx =
-            info.rec_num_params + info.rec_num_motives + info.rec_num_methods
+            info.rec_num_params + 1 (* <- motive *) + info.rec_num_methods
             + info.rec_num_indices
           in
           if List.length sp <= major_idx then
@@ -95,3 +95,114 @@ and try_iota_reduce (genv : Global.t) : neutral -> vl_tm option = function
                     Some (method_val |> apps fields |> apps ihs))
             | _ -> None))
   | _ -> None
+
+let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
+  match (ty1, ty2) with
+  | VTyU, VTyU -> true
+  | VTyPi (_, a1, ClosTy (env1, b1)), VTyPi (_, a2, ClosTy (env2, b2)) ->
+      conv_ty genv l a1 a2
+      &&
+      let var = VTmNeutral (HVar (Lvl l), []) in
+      conv_ty genv (l + 1)
+        (eval_ty genv (var :: env1) b1)
+        (eval_ty genv (var :: env2) b2)
+  | VTyEl n1, VTyEl n2 -> conv_neutral genv l (n1, n2)
+  | _ -> false
+
+and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
+  match (tm1, tm2) with
+  | VTmNeutral n1, VTmNeutral n2 ->
+      conv_neutral genv l (n1, n2)
+      || try_eta_struct genv l n1 (VTmNeutral n1)
+      || try_eta_struct genv l n2 (VTmNeutral n2)
+  | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
+      let var = VTmNeutral (HVar (Lvl l), []) in
+      conv_tm genv (l + 1)
+        (eval_tm genv (var :: env1) body1)
+        (eval_tm genv (var :: env2) body2)
+  | VTmPiHat (_, a1, ClosTm (env1, b1)), VTmPiHat (_, a2, ClosTm (env2, b2)) ->
+      conv_tm genv l a1 a2
+      &&
+      let var = VTmNeutral (HVar (Lvl l), []) in
+      conv_tm genv (l + 1)
+        (eval_tm genv (var :: env1) b1)
+        (eval_tm genv (var :: env2) b2)
+  | _ -> false
+
+and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
+    (other : vl_tm) : bool =
+  match ctor_app with
+  | HConst ctor_name, sp -> (
+      match Global.find_constructor ctor_name genv with
+      | None -> false
+      | Some info -> (
+          let info_opt : Global.structure_info option =
+            match Global.find_structure info.ind_name genv with
+            | Some info -> Some info
+            | None -> (
+                (* Also allow eta for unit-like types *)
+                match
+                  Global.find_recursor (Name.child info.ind_name "rec") genv
+                with
+                | Some rec_info
+                  when rec_info.rec_num_indices = 0
+                       && List.length rec_info.rec_rules = 1 ->
+                    let rule = List.hd rec_info.rec_rules in
+                    if
+                      rule.rule_rec_args = [] && rule.rule_nfields = 0
+                      && rule.rule_ctor_name = ctor_name
+                    then
+                      Some
+                        {
+                          struct_ind_name = info.ind_name;
+                          struct_ctor_name = ctor_name;
+                          struct_num_params = rec_info.rec_num_params;
+                          struct_num_fields = 0;
+                          struct_field_names = [];
+                        }
+                    else
+                      None
+                | _ -> None)
+          in
+          match info_opt with
+          | None -> false
+          | Some info ->
+              if
+                List.length sp
+                <> info.struct_num_params + info.struct_num_fields
+              then
+                false
+              else
+                let params = List.take info.struct_num_params sp in
+                let fields = List.drop info.struct_num_params sp in
+                let rec check_fields : string list * vl_tm list -> bool =
+                  function
+                  | [], [] -> true
+                  | fname :: fname_rest, field :: field_rest ->
+                      let proj_name = Name.child info.struct_ind_name fname in
+                      let proj_result =
+                        match Global.find_tm proj_name genv with
+                        | Some proj_fn ->
+                            let with_params =
+                              List.fold_left (do_app genv) proj_fn params
+                            in
+                            do_app genv with_params other
+                        | None -> VTmNeutral (HConst proj_name, [])
+                      in
+                      conv_tm genv l field proj_result
+                      && check_fields (fname_rest, field_rest)
+                  | _ -> false
+                in
+                check_fields (info.struct_field_names, fields)))
+  | _, _ -> false
+
+and conv_neutral (genv : Global.t) (l : int)
+    (((h1, sp1), (h2, sp2)) : neutral * neutral) : bool =
+  let head_eq =
+    match (h1, h2) with
+    | HVar l1, HVar l2 -> l1 = l2
+    | HConst n1, HConst n2 -> n1 = n2
+    | HSorry (id1, _), HSorry (id2, _) -> id1 = id2
+    | _, _ -> false
+  in
+  head_eq && List.for_all2 (conv_tm genv l) sp1 sp2

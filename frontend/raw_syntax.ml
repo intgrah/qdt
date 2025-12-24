@@ -31,20 +31,20 @@ type field = {
 type constructor = {
   name : string;
   params : typed_binder_group list;
-  ty : t option;
+  ty_opt : t option;
 }
 
 type inductive_info = {
   name : string;
   params : typed_binder_group list;
-  ty : t option;
+  ty_opt : t option;
   ctors : constructor list;
 }
 
 type structure_info = {
   name : string;
   params : typed_binder_group list;
-  ty : t option;
+  ty_opt : t option;
   fields : field list;
 }
 
@@ -52,9 +52,13 @@ type item =
   | Import of { module_name : string } (* import Foo.Bar *)
   | Def of {
       name : string;
+      ty_opt : t option;
       body : t;
     }
-  | Example of { body : t }
+  | Example of {
+      ty_opt : t option;
+      body : t;
+    }
   | Inductive of inductive_info
   | Structure of structure_info
 
