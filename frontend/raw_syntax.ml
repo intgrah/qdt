@@ -61,6 +61,11 @@ type item =
       ty_opt : t option;
       body : t;
     }
+  | Axiom of {
+      name : string;
+      params : typed_binder_group list;
+      ty : t;
+    }
   | Inductive of inductive_info
   | Structure of structure_info
 

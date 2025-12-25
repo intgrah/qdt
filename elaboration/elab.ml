@@ -34,9 +34,9 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let genv, imported = process_import genv imported importing m in
         go genv imported importing acc rest
     | Def { name; params; ty_opt; body } :: rest ->
-        let full_name = Name.parse name in
+        let name = Name.parse name in
         let params = Desugar.desugar_typed_binder_groups params in
-        let param_ctx, param_tys = Inductive.elab_params genv params in
+        let param_ctx, param_tys = Params.elab_params genv params in
         let term, ty_val =
           match ty_opt with
           | Some ty_raw ->
@@ -46,29 +46,18 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
               (term, expected_ty_val)
           | None -> Bidir.infer_tm genv param_ctx body
         in
-        let term_with_params =
-          List.fold_right
-            (fun (name, param_ty) body -> TmLam (name, param_ty, body))
-            param_tys term
-        in
+        let term_with_params = Params.build_lambda param_tys term in
         let term_val = eval_tm genv param_ctx.env term_with_params in
-        let full_ty =
-          List.fold_right
-            (fun (name, param_ty) body -> TyPi (name, param_ty, body))
-            param_tys
-            (Quote.quote_ty genv param_ctx.lvl ty_val)
+        let ty =
+          Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
         in
         let genv =
-          Global.NameMap.add full_name
-            (Global.Def { ty = full_ty; tm = term_val })
-            genv
+          Global.NameMap.add name (Global.Def { ty; tm = term_val }) genv
         in
-        go genv imported importing
-          ((full_name, term_with_params, full_ty) :: acc)
-          rest
+        go genv imported importing ((name, term_with_params, ty) :: acc) rest
     | Example { params; ty_opt; body } :: rest ->
         let params = Desugar.desugar_typed_binder_groups params in
-        let param_ctx, _param_tys = Inductive.elab_params genv params in
+        let param_ctx, _param_tys = Params.elab_params genv params in
         let _, _ =
           match ty_opt with
           | Some ty_raw ->
@@ -79,6 +68,17 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           | None -> Bidir.infer_tm genv param_ctx body
         in
         go genv imported importing acc rest
+    | Axiom { name; params; ty } :: rest ->
+        let name = Name.parse name in
+        let params = Desugar.desugar_typed_binder_groups params in
+        let param_ctx, param_tys = Params.elab_params genv params in
+        let ty = Bidir.check_ty genv param_ctx ty in
+        let ty_val = eval_ty genv param_ctx.env ty in
+        let ty =
+          Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
+        in
+        let genv = Global.NameMap.add name (Global.Axiom { ty }) genv in
+        go genv imported importing ((name, TmSorry (0, ty), ty) :: acc) rest
     | Inductive info :: rest ->
         let genv, results = Inductive.elab_inductive genv info in
         go genv imported importing (results @ acc) rest

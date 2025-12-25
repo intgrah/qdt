@@ -17,6 +17,7 @@ type token =
   | Fun
   | Sorry
   | Example
+  | Axiom
   | Inductive
   | Structure
   | Where
@@ -45,6 +46,7 @@ let pp_token fmt : token -> unit = function
   | Fun -> Format.fprintf fmt "fun"
   | Sorry -> Format.fprintf fmt "sorry"
   | Example -> Format.fprintf fmt "example"
+  | Axiom -> Format.fprintf fmt "axiom"
   | Inductive -> Format.fprintf fmt "inductive"
   | Structure -> Format.fprintf fmt "structure"
   | Where -> Format.fprintf fmt "where"
@@ -131,6 +133,7 @@ let rec scan front_toks = function
         | "Type" -> Type
         | "sorry" -> Sorry
         | "example" -> Example
+        | "axiom" -> Axiom
         | "inductive" -> Inductive
         | "structure" -> Structure
         | "where" -> Where

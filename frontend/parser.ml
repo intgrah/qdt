@@ -334,6 +334,14 @@ let parse_example : Raw_syntax.item t =
   let* params, ty_opt, body = parse_def_body in
   return (Raw_syntax.Example { params; ty_opt; body })
 
+let parse_axiom : Raw_syntax.item t =
+  let* () = token Axiom in
+  let* name = parse_ident in
+  let* params = many parse_typed_binder_group in
+  let* () = token Colon in
+  let* ty = parse_preterm in
+  return (Raw_syntax.Axiom { name; params; ty })
+
 let parse_single_item : Raw_syntax.item t =
   choice
     [
@@ -341,6 +349,7 @@ let parse_single_item : Raw_syntax.item t =
       parse_inductive;
       parse_def;
       parse_example;
+      parse_axiom;
       (let* () = token Import in
        let* name = parse_ident in
        return (Raw_syntax.Import { module_name = name }));
