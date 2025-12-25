@@ -262,10 +262,13 @@ and parse_preterm : Raw_syntax.t t =
 
 (* ========== Top level ========== *)
 
+let parse_params : Raw_syntax.typed_binder_group list t =
+  many parse_typed_binder_group
+
 let parse_constructor : Raw_syntax.constructor t =
   let* () = token Pipe in
   let* name = parse_ident in
-  let* params = many parse_typed_binder_group in
+  let* params = parse_params in
   let* ty_opt =
     optional
       (let* () = token Colon in
@@ -276,7 +279,7 @@ let parse_constructor : Raw_syntax.constructor t =
 let parse_inductive : Raw_syntax.item t =
   let* () = token Inductive in
   let* name = parse_ident in
-  let* params = many parse_typed_binder_group in
+  let* params = parse_params in
   let* ty_opt =
     optional
       (let* () = token Colon in
@@ -291,7 +294,7 @@ let parse_field : Raw_syntax.field t =
   let* name = parse_ident in
   if String.contains name '.' then
     raise (Parse_error "Structure field names must be atomic");
-  let* args = many parse_typed_binder_group in
+  let* args = parse_params in
   let* () = token Colon in
   let* ty = parse_preterm in
   let* () = token RParen in
@@ -300,7 +303,7 @@ let parse_field : Raw_syntax.field t =
 let parse_structure : Raw_syntax.item t =
   let* () = token Structure in
   let* name = parse_ident in
-  let* params = many parse_typed_binder_group in
+  let* params = parse_params in
   let* ty_opt =
     optional
       (let* () = token Colon in
@@ -313,7 +316,7 @@ let parse_structure : Raw_syntax.item t =
 let parse_def_body :
     (Raw_syntax.typed_binder_group list * Raw_syntax.t option * Raw_syntax.t) t
     =
-  let* params = many parse_typed_binder_group in
+  let* params = parse_params in
   let* ret_ty_opt =
     optional
       (let* () = token Colon in
@@ -337,7 +340,7 @@ let parse_example : Raw_syntax.item t =
 let parse_axiom : Raw_syntax.item t =
   let* () = token Axiom in
   let* name = parse_ident in
-  let* params = many parse_typed_binder_group in
+  let* params = parse_params in
   let* () = token Colon in
   let* ty = parse_preterm in
   return (Raw_syntax.Axiom { name; params; ty })
