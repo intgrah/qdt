@@ -310,8 +310,10 @@ let parse_structure : Raw_syntax.item t =
   let* fields = many parse_field in
   return (Raw_syntax.Structure { name; params; ty_opt; fields })
 
-let parse_def_body : (Raw_syntax.t * Raw_syntax.t option) t =
-  let* binder_groups = many parse_binder_group in
+let parse_def_body :
+    (Raw_syntax.typed_binder_group list * Raw_syntax.t option * Raw_syntax.t) t
+    =
+  let* params = many parse_typed_binder_group in
   let* ret_ty_opt =
     optional
       (let* () = token Colon in
@@ -319,29 +321,18 @@ let parse_def_body : (Raw_syntax.t * Raw_syntax.t option) t =
   in
   let* () = token Colon_eq in
   let* body = parse_preterm in
-  let body_with_ann =
-    match ret_ty_opt with
-    | Some ty -> Raw_syntax.Ann (body, ty)
-    | None -> body
-  in
-  let full_body =
-    if binder_groups = [] then
-      body_with_ann
-    else
-      Raw_syntax.Lam (binder_groups, body_with_ann)
-  in
-  return (full_body, ret_ty_opt)
+  return (params, ret_ty_opt, body)
 
 let parse_def : Raw_syntax.item t =
   let* () = token Def in
   let* name = parse_ident in
-  let* body, ty_opt = parse_def_body in
-  return (Raw_syntax.Def { name; ty_opt; body })
+  let* params, ty_opt, body = parse_def_body in
+  return (Raw_syntax.Def { name; params; ty_opt; body })
 
 let parse_example : Raw_syntax.item t =
   let* () = token Example in
-  let* body, ty_opt = parse_def_body in
-  return (Raw_syntax.Example { ty_opt; body })
+  let* params, ty_opt, body = parse_def_body in
+  return (Raw_syntax.Example { params; ty_opt; body })
 
 let parse_single_item : Raw_syntax.item t =
   choice

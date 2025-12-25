@@ -52,10 +52,12 @@ type item =
   | Import of { module_name : string } (* import Foo.Bar *)
   | Def of {
       name : string;
+      params : typed_binder_group list;
       ty_opt : t option;
       body : t;
     }
   | Example of {
+      params : typed_binder_group list;
       ty_opt : t option;
       body : t;
     }

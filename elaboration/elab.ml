@@ -2,8 +2,6 @@ open Frontend
 open Syntax
 open Nbe
 
-exception Elab_error of string
-
 (* ========== Program Elaboration ========== *)
 
 exception Circular_import of Name.t
@@ -35,20 +33,51 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let m = Name.parse module_name in
         let genv, imported = process_import genv imported importing m in
         go genv imported importing acc rest
-    | Def { name; ty_opt = _; body } :: rest ->
+    | Def { name; params; ty_opt; body } :: rest ->
         let full_name = Name.parse name in
-        let term, ty_val = Bidir.infer_tm genv Context.empty body in
-        let term_val = eval_tm genv [] term in
-        let ty_quoted = Quote.quote_ty genv 0 ty_val in
+        let params = Desugar.desugar_typed_binder_groups params in
+        let param_ctx, param_tys = Inductive.elab_params genv params in
+        let term, ty_val =
+          match ty_opt with
+          | Some ty_raw ->
+              let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
+              let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
+              let term = Bidir.check_tm genv param_ctx body expected_ty_val in
+              (term, expected_ty_val)
+          | None -> Bidir.infer_tm genv param_ctx body
+        in
+        let term_with_params =
+          List.fold_right
+            (fun (name, param_ty) body -> TmLam (name, param_ty, body))
+            param_tys term
+        in
+        let term_val = eval_tm genv param_ctx.env term_with_params in
+        let full_ty =
+          List.fold_right
+            (fun (name, param_ty) body -> TyPi (name, param_ty, body))
+            param_tys
+            (Quote.quote_ty genv param_ctx.lvl ty_val)
+        in
         let genv =
           Global.NameMap.add full_name
-            (Global.Def { ty = ty_quoted; tm = term_val })
+            (Global.Def { ty = full_ty; tm = term_val })
             genv
         in
-        let ty_out = Quote.quote_ty genv 0 ty_val in
-        go genv imported importing ((full_name, term, ty_out) :: acc) rest
-    | Example { ty_opt = _; body } :: rest ->
-        let _ = Bidir.infer_tm genv Context.empty body in
+        go genv imported importing
+          ((full_name, term_with_params, full_ty) :: acc)
+          rest
+    | Example { params; ty_opt; body } :: rest ->
+        let params = Desugar.desugar_typed_binder_groups params in
+        let param_ctx, _param_tys = Inductive.elab_params genv params in
+        let _, _ =
+          match ty_opt with
+          | Some ty_raw ->
+              let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
+              let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
+              let term = Bidir.check_tm genv param_ctx body expected_ty_val in
+              (term, expected_ty_val)
+          | None -> Bidir.infer_tm genv param_ctx body
+        in
         go genv imported importing acc rest
     | Inductive info :: rest ->
         let genv, results = Inductive.elab_inductive genv info in

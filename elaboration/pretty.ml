@@ -60,18 +60,30 @@ let pp_ctor fmt (ctor : Raw_syntax.constructor) : unit =
         params pp_raw ty
 
 let pp_raw_item fmt : Raw_syntax.item -> unit = function
-  | Def { name; ty_opt; body } -> (
+  | Def { name; params; ty_opt; body } -> (
+      let pp_params fmt params =
+        if params <> [] then
+          Format.fprintf fmt " %a" (pp_list pp_typed_binder_group) params
+      in
       match ty_opt with
       | Some ty ->
-          Format.fprintf fmt "@[<hov 2>def %s : %a :=@ %a@]" name pp_raw ty
-            pp_raw body
-      | None -> Format.fprintf fmt "@[<hov 2>def %s :=@ %a@]" name pp_raw body)
-  | Example { ty_opt; body } -> (
+          Format.fprintf fmt "@[<hov 2>def %s%a : %a :=@ %a@]" name pp_params
+            params pp_raw ty pp_raw body
+      | None ->
+          Format.fprintf fmt "@[<hov 2>def %s%a :=@ %a@]" name pp_params params
+            pp_raw body)
+  | Example { params; ty_opt; body } -> (
+      let pp_params fmt params =
+        if params <> [] then
+          Format.fprintf fmt " %a" (pp_list pp_typed_binder_group) params
+      in
       match ty_opt with
       | Some ty ->
-          Format.fprintf fmt "@[<hov 2>example : %a :=@ %a@]" pp_raw ty pp_raw
-            body
-      | None -> Format.fprintf fmt "@[<hov 2>example :=@ %a@]" pp_raw body)
+          Format.fprintf fmt "@[<hov 2>example%a : %a :=@ %a@]" pp_params params
+            pp_raw ty pp_raw body
+      | None ->
+          Format.fprintf fmt "@[<hov 2>example%a :=@ %a@]" pp_params params
+            pp_raw body)
   | Inductive { name; params; ty_opt; ctors } -> (
       let pp_params fmt params =
         if params <> [] then
