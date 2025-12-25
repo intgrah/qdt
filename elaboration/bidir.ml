@@ -165,10 +165,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Raw_syntax.t -> tm * vl_ty =
       let body_ty_quoted = Quote.quote_ty genv ctx'.lvl body_ty in
       let result_ty = Nbe.eval_ty genv ctx'.env body_ty_quoted in
       (TmLet (name, Quote.quote_ty genv ctx.lvl rhs_ty, rhs', body'), result_ty)
-  | Sorry ->
-      let id = fresh_sorry_id () in
-      let hole_ty = VTyEl (HConst [ Format.sprintf "?ty%d†" id ], []) in
-      (TmSorry (id, Quote.quote_ty genv ctx.lvl hole_ty), hole_ty)
+  | Sorry -> raise (Elab_error "Cannot infer type of sorry")
 
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Raw_syntax.t)
     (expected : vl_ty) : tm =
