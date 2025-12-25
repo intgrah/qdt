@@ -1,6 +1,16 @@
+import Std.Eq
+
 structure Category (Ob : Type) (Hom : Ob → Ob → Type) where
   (id (A : Ob) : Hom A A)
   (comp (A B C : Ob) : Hom A B → Hom B C → Hom A C)
   (id_comp (A B : Ob) (f : Hom A B) : comp A A B (id A) f = f)
   (comp_id (A B : Ob) (f : Hom A B) : comp A B B f (id B) = f)
   (comp_assoc (A B C D : Ob) (f : Hom A B) (g : Hom B C) (h : Hom C D) : comp A C D (comp A B C f g) h = comp A B D f (comp B C D g h))
+
+def Category.Discrete (A : Type) : Category A (Eq A) :=
+  Category.mk A (Eq A)
+    (Eq.refl A)
+    (Eq.trans A)
+    (fun a b f => sorry)
+    (fun a b f => sorry)
+    (fun a b c d f g h => sorry)
