@@ -11,6 +11,7 @@ import Std.List
 import Std.Nat
 import Std.Option
 import Std.Prod
+import Std.Relation
 import Std.Sigma
 import Std.Sum
 import Std.True
