@@ -175,25 +175,20 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
               else
                 let params = List.take info.struct_num_params sp in
                 let fields = List.drop info.struct_num_params sp in
-                let rec check_fields : string list * vl_tm list -> bool =
-                  function
-                  | [], [] -> true
-                  | fname :: fname_rest, field :: field_rest ->
-                      let proj_name = Name.child info.struct_ind_name fname in
-                      let proj_result =
-                        match Global.find_tm proj_name genv with
-                        | Some proj_fn ->
-                            let with_params =
-                              List.fold_left (do_app genv) proj_fn params
-                            in
-                            do_app genv with_params other
-                        | None -> VTmNeutral (HConst proj_name, [])
-                      in
-                      conv_tm genv l field proj_result
-                      && check_fields (fname_rest, field_rest)
-                  | _ -> false
-                in
-                check_fields (info.struct_field_names, fields)))
+                List.for_all2
+                  (fun fname field ->
+                    let proj_name = Name.child info.struct_ind_name fname in
+                    let proj_result =
+                      match Global.find_tm proj_name genv with
+                      | Some proj_fn ->
+                          let with_params =
+                            List.fold_left (do_app genv) proj_fn params
+                          in
+                          do_app genv with_params other
+                      | None -> VTmNeutral (HConst proj_name, [])
+                    in
+                    conv_tm genv l field proj_result)
+                  info.struct_field_names fields))
   | _, _ -> false
 
 and conv_neutral (genv : Global.t) (l : int)
