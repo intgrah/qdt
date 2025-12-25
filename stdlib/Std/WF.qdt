@@ -1,3 +1,6 @@
+import Std.False
+import Std.Relation
+
 inductive Acc (A : Type) (r : A → A → Type) : A → Type where
   | intro (x : A) (h : (y : A) → r y x → Acc A r y) : Acc A r x
 
@@ -24,5 +27,65 @@ inductive WellFounded (A : Type) (r : A → A → Type) : Type where
 def WellFounded.apply (A : Type) (r : A → A → Type) : WellFounded A r → (x : A) → Acc A r x :=
   WellFounded.rec A r (fun _ => (a : A) → Acc A r a) (fun h => h)
 
-def WellFounded.fixF (A : Type) (r : A → A → Type) (C : A → Type) (F : (x : A) → ((y : A) → r y x → C y) → C x) : (x : A) → Acc A r x → C x :=
+def WellFounded.fixF
+    (A : Type)
+    (r : A → A → Type)
+    (C : A → Type)
+    (F : (x : A) → ((y : A) → r y x → C y) → C x) :
+    (x : A) → Acc A r x → C x :=
   Acc.rec A r (fun x _ => C x) (fun x _ => F x)
+
+def WellFounded.fix
+    (A : Type)
+    (r : A → A → Type)
+    (C : A → Type)
+    (F : (x : A) → ((y : A) → r y x → C y) → C x)
+    (hwf : WellFounded A r)
+    (x : A) : C x :=
+  WellFounded.fixF A r C F x (WellFounded.apply A r hwf x)
+
+def WellFounded.empty (A : Type) : WellFounded A (Relation.empty A) :=
+  WellFounded.intro A (Relation.empty A)
+    (fun x =>
+      Acc.intro A (Relation.empty A) x
+        (fun y => False.elim (Acc A (Relation.empty A) y)))
+
+def Subrelation.accessible
+    (A : Type)
+    (q r : A → A → Type)
+    (h : Subrelation A r q) :
+    (a : A) → Acc A r a → Acc A q a :=
+  Acc.rec A r
+    (fun x _ => Acc A q x)
+    (fun x _ ih => Acc.intro A q x (fun y hyq => ih y (h y x hyq)))
+
+def Subrelation.wf
+    (A : Type)
+    (q r : A → A → Type)
+    (h : Subrelation A r q)
+    (hwf : WellFounded A r) : WellFounded A q :=
+  WellFounded.intro A q (fun a =>
+    Subrelation.accessible A q r h a (WellFounded.apply A r hwf a))
+
+def Acc.transGen (A : Type) (r : A → A → Type) : (a : A) → Acc A r a → Acc A (Relation.TransGen A r) a :=
+  Acc.rec A r
+    (fun x _ => Acc A (Relation.TransGen A r) x)
+    (fun x _ ih =>
+      Acc.intro A (Relation.TransGen A r) x
+        (fun y =>
+          Relation.TransGen.rec A r
+            (fun a b _ => Acc A (Relation.TransGen A r) a)
+            sorry--(fun a b _ hyx => ih y hyx)
+            sorry--(fun a b c hyz hzx _ =>
+              -- Acc.inv A (Relation.TransGen A r) b a (ih b hzx) hyz)
+            y x))
+
+def Acc.transGen' (A : Type) (r : A → A → Type) : (a : A) → Acc A (Relation.TransGen A r) a → Acc A r a :=
+  Subrelation.accessible A r (Relation.TransGen A r) (Relation.TransGen.single A r)
+
+def WellFounded.transGen
+    (A : Type)
+    (r : A → A → Type)
+    (h : WellFounded A r) : WellFounded A (Relation.TransGen A r) :=
+  WellFounded.intro A (Relation.TransGen A r)
+    (fun a => Acc.transGen A r a (WellFounded.apply A r h a))
