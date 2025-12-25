@@ -1,4 +1,3 @@
-exception Parse_error of string
-exception Tokens_remaining of Lexer.token list
+exception Syntax_error of string
 
 val parse : Lexer.token list -> Raw_syntax.program
