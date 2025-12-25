@@ -1,4 +1,5 @@
 import Std.Bool
+import Std.Category
 import Std.Eq
 import Std.Empty
 import Std.False
