@@ -45,3 +45,17 @@ inductive List.Perm (A : Type) : List A → List A → Type where
   | cons (x : A) (l1 l2 : List A) : List.Perm A l1 l2 → List.Perm A (List.cons A x l1) (List.cons A x l2)
   | swap (x y : A) (l : List A) : List.Perm A (List.cons A y (List.cons A x l)) (List.cons A x (List.cons A y l))
   | trans (l1 l2 l3 : List A) : List.Perm A l1 l2 → List.Perm A l2 l3 → List.Perm A l1 l3
+
+inductive List.Sublist (A : Type) : List A → List A → Type where
+  | slnil : List.Sublist A (List.nil A) (List.nil A)
+  | cons (a : A) (l1 l2 : List A) : List.Sublist A l1 l2 → List.Sublist A l1 (List.cons A a l2)
+  | cons2 (a : A) (l1 l2 : List A) : List.Sublist A l1 l2 → List.Sublist A (List.cons A a l1) (List.cons A a l2)
+
+inductive Forall2 (A B : Type) (R : A → B → Type) : List A → List B → Type where
+  | nil : Forall2 A B R (List.nil A) (List.nil B)
+  | cons (a : A) (b : B) (as : List A) (bs : List B) : R a b → Forall2 A B R as bs → Forall2 A B R (List.cons A a as) (List.cons B b bs)
+
+inductive SublistForall2 (A B : Type) (R : A → B → Type) : List A → List B → Type where
+  | nil (l : List B) : SublistForall2 A B R (List.nil A) l
+  | cons (a : A) (b : B) (l1 : List A) (l2 : List B) : R a b → SublistForall2 A B R l1 l2 → SublistForall2 A B R (List.cons A a l1) (List.cons B b l2)
+  | cons_right (b : B) (l1 : List A) (l2 : List B) : SublistForall2 A B R l1 l2 → SublistForall2 A B R l1 (List.cons B b l2)
