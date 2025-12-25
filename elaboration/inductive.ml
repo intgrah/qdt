@@ -487,20 +487,23 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
 
   build_params 0 [] [] [] param_tys
 
+let elab_params =
+  let rec go ctx acc genv = function
+    | [] -> (ctx, List.rev acc)
+    | (name, ty) :: rest ->
+        let ty = Bidir.check_ty genv ctx ty in
+        let ty_val = Nbe.eval_ty genv ctx.env ty in
+        let ctx = Context.bind name ty_val ctx in
+        go ctx ((name, ty) :: acc) genv rest
+  in
+  go Context.empty []
+
 let elab_inductive (genv : Global.t) (ind : Raw_syntax.inductive_info) :
     Global.t * (Name.t * tm * ty) list =
   let ind_name = Name.parse ind.name in
   let params = Desugar.desugar_typed_binder_groups ind.params in
-  let rec elab_params ctx acc_tys = function
-    | [] -> (ctx, List.rev acc_tys)
-    | (name, ty_raw) :: rest ->
-        let param_ty = Bidir.check_ty genv ctx ty_raw in
-        let param_ty_val = Nbe.eval_ty genv ctx.env param_ty in
-        let ctx = Context.bind name param_ty_val ctx in
-        let acc_tys = (name, param_ty) :: acc_tys in
-        elab_params ctx acc_tys rest
-  in
-  let param_ctx, param_tys = elab_params Context.empty [] params in
+
+  let param_ctx, param_tys = elab_params genv params in
   let num_params = List.length param_tys in
   let result_ty =
     match ind.ty_opt with
