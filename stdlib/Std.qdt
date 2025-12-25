@@ -1,3 +1,4 @@
+import Std.Algebra
 import Std.Bool
 import Std.Category
 import Std.Eq
