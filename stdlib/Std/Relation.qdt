@@ -1,17 +1,23 @@
-inductive TransGen (A : Type) (r : A → A → Type) : A → A → Type where
-  | single (a b : A) : r a b → TransGen A r a b
-  | tail (a b c : A) : TransGen A r a b → r b c → TransGen A r a c
+import Std.False
 
-inductive ReflTransGen (A : Type) (r : A → A → Type) (a : A) : A → Type where
-  | refl : ReflTransGen A r a a
-  | tail (b c : A) : ReflTransGen A r a b → r b c → ReflTransGen A r a c
+inductive Relation.ReflGen (A : Type) (r : A → A → Type) : A → A → Type where
+  | refl (a : A) : Relation.ReflGen A r a a
+  | single (a b : A) : r a b → Relation.ReflGen A r a b
+  
+inductive Relation.TransGen (A : Type) (r : A → A → Type) : A → A → Type where
+  | single (a b : A) : r a b → Relation.TransGen A r a b
+  | tail (a b c : A) : Relation.TransGen A r a b → r b c → Relation.TransGen A r a c
 
-inductive ReflGen (A : Type) (r : A → A → Type) (a : A) : A → Type where
-  | refl : ReflGen A r a a
-  | single (b : A) : r a b → ReflGen A r a b
+inductive Relation.ReflTransGen (A : Type) (r : A → A → Type) : A → A → Type where
+  | refl (a : A) : Relation.ReflTransGen A r a a
+  | tail (a b c : A) : Relation.ReflTransGen A r a b → r b c → Relation.ReflTransGen A r a c
 
-inductive EqvGen (A : Type) (r : A → A → Type) : A → A → Type where
-  | rel (x y : A) : r x y → EqvGen A r x y
-  | refl (x : A) : EqvGen A r x x
-  | symm (x y : A) : EqvGen A r x y → EqvGen A r y x
-  | trans (x y z : A) : EqvGen A r x y → EqvGen A r y z → EqvGen A r x z
+inductive Relation.EqvGen (A : Type) (r : A → A → Type) : A → A → Type where
+  | rel (x y : A) : r x y → Relation.EqvGen A r x y
+  | refl (x : A) : Relation.EqvGen A r x x
+  | symm (x y : A) : Relation.EqvGen A r x y → Relation.EqvGen A r y x
+  | trans (x y z : A) : Relation.EqvGen A r x y → Relation.EqvGen A r y z → Relation.EqvGen A r x z
+
+def Relation.empty (A : Type) : A → A → Type := fun _ _ => False
+
+def Subrelation (A : Type) (r q : A → A → Type) := (x y : A) → q x y → r x y
