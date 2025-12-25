@@ -1,0 +1,21 @@
+import Std.Algebra.Group
+
+structure CommGroup (A : Type) where
+  (mul : A → A → A)
+  (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
+  (one : A)
+  (mul_one (x : A) : mul x one = x)
+  (one_mul (x : A) : mul one x = x)
+  (inv : A → A)
+  (inv_mul_cancel (x : A) : mul (inv x) x = one)
+  (mul_comm (x y : A) : mul x y = mul y x)
+
+def CommGroup.toGroup (A : Type) (inst : CommGroup A) : Group A :=
+  Group.mk A
+    (CommGroup.mul A inst)
+    (CommGroup.mul_assoc A inst)
+    (CommGroup.one A inst)
+    (CommGroup.mul_one A inst)
+    (CommGroup.one_mul A inst)
+    (CommGroup.inv A inst)
+    (CommGroup.inv_mul_cancel A inst)

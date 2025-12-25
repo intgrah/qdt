@@ -1,0 +1,30 @@
+import Std.Algebra.Semigroup
+import Std.List
+import Std.Nat
+
+structure Monoid (A : Type) where
+  (mul : A → A → A)
+  (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
+  (one : A)
+  (mul_one (x : A) : mul x one = x)
+  (one_mul (x : A) : mul one x = x)
+
+def Monoid.npow (A : Type) (inst : Monoid A) (n : Nat) (x : A) : A :=
+  Nat.rec (fun _ => A) (Monoid.one A inst) (fun _ => Monoid.mul A inst x) n
+
+def Monoid.Free (A : Type) : Monoid (List A) :=
+  Monoid.mk
+    (List A)
+    (List.append A)
+    (List.append_assoc A)
+    (List.nil A)
+    (List.append_nil A)
+    (List.nil_append A)
+
+def Monoid.toSemigroup (A : Type) (inst : Monoid A) : Semigroup A :=
+  Semigroup.mk A (Monoid.mul A inst) (Monoid.mul_assoc A inst)
+
+structure Monoid.Hom (A B : Type) (instA : Monoid A) (instB : Monoid B) where
+  (toFun : A → B)
+  (map_mul (a b : A) : toFun (Monoid.mul A instA a b) = Monoid.mul B instB (toFun a) (toFun b))
+  (map_one : toFun (Monoid.one A instA) = Monoid.one B instB)

@@ -1,0 +1,3 @@
+structure Semigroup (A : Type) where
+  (mul : A → A → A)
+  (mul_assoc (a b c : A) : mul (mul a b) c = mul a (mul b c))
