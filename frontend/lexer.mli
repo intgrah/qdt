@@ -17,6 +17,7 @@ type token =
   | Fun
   | Sorry
   | Example
+  | Axiom
   | Inductive
   | Structure
   | Where

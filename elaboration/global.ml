@@ -42,6 +42,7 @@ type entry =
       tm : vl_tm;
     }
   | Opaque of { ty : ty } (* Type formers, e.g. Eq, Nat *)
+  | Axiom of { ty : ty }
   | Inductive of inductive_info
   | Structure of {
       ind : inductive_info;
@@ -85,6 +86,7 @@ let find_ty (name : Name.t) (env : t) : ty option =
   match find_opt name env with
   | Some (Def { ty; _ })
   | Some (Opaque { ty })
+  | Some (Axiom { ty })
   | Some (Recursor { ty; _ })
   | Some (Constructor { ty; _ }) ->
       Some ty

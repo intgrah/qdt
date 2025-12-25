@@ -224,11 +224,7 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
   in
   let params = Desugar.desugar_typed_binder_groups ctor.params in
   let ctor_body = build_ctor_body param_ctx 0 params in
-  let ctor_ty =
-    List.fold_right
-      (fun (name, ty) body -> TyPi (name, ty, body))
-      param_tys ctor_body
-  in
+  let ctor_ty = Params.build_pi param_tys ctor_body in
   check_strict_positivity genv ind ctor_ty;
   (full_name, ctor_ty)
 
@@ -487,34 +483,19 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
 
   build_params 0 [] [] [] param_tys
 
-let elab_params =
-  let rec go ctx acc genv = function
-    | [] -> (ctx, List.rev acc)
-    | (name, ty) :: rest ->
-        let ty = Bidir.check_ty genv ctx ty in
-        let ty_val = Nbe.eval_ty genv ctx.env ty in
-        let ctx = Context.bind name ty_val ctx in
-        go ctx ((name, ty) :: acc) genv rest
-  in
-  go Context.empty []
-
 let elab_inductive (genv : Global.t) (ind : Raw_syntax.inductive_info) :
     Global.t * (Name.t * tm * ty) list =
   let ind_name = Name.parse ind.name in
   let params = Desugar.desugar_typed_binder_groups ind.params in
 
-  let param_ctx, param_tys = elab_params genv params in
+  let param_ctx, param_tys = Params.elab_params genv params in
   let num_params = List.length param_tys in
   let result_ty =
     match ind.ty_opt with
     | None -> TyU
     | Some ty_raw -> Bidir.check_ty genv param_ctx ty_raw
   in
-  let ty =
-    List.fold_right
-      (fun (name, ty) body -> TyPi (name, ty, body))
-      param_tys result_ty
-  in
+  let ty = Params.build_pi param_tys result_ty in
   let genv = Global.NameMap.add ind_name (Global.Opaque { ty }) genv in
   let ctors =
     List.map (elab_ctor genv ind_name param_ctx param_tys num_params) ind.ctors

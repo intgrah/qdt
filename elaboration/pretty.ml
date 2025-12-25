@@ -84,6 +84,13 @@ let pp_raw_item fmt : Raw_syntax.item -> unit = function
       | None ->
           Format.fprintf fmt "@[<hov 2>example%a :=@ %a@]" pp_params params
             pp_raw body)
+  | Axiom { name; params; ty } ->
+      let pp_params fmt params =
+        if params <> [] then
+          Format.fprintf fmt " %a" (pp_list pp_typed_binder_group) params
+      in
+      Format.fprintf fmt "@[<hov 2>axiom %s%a : %a@]" name pp_params params
+        pp_raw ty
   | Inductive { name; params; ty_opt; ctors } -> (
       let pp_params fmt params =
         if params <> [] then
