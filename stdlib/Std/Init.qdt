@@ -10,5 +10,4 @@ def comp_assoc
     comp A B D (comp B C D f g) h = comp A C D f (comp A B C g h) :=
   Eq.refl (A → D) (comp A B D (comp B C D f g) h)
 
--- Function extensionality axiom
-def funext (A B : Type) (f g : A → B) (h : (x : A) → f x = g x) : f = g := sorry
+axiom funext (A B : Type) (f g : A → B) (h : (x : A) → f x = g x) : f = g
