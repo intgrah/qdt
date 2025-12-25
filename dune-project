@@ -18,5 +18,7 @@
  (depends
   ocaml
   incremental
+  base
+  ppx_compare
   (alcotest :with-test)
   (bisect_ppx :with-test)))
