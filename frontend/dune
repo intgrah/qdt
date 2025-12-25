@@ -1,2 +1,4 @@
 (library
- (name frontend))
+ (name frontend)
+ (preprocess
+  (pps ppx_compare)))
