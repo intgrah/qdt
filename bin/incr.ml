@@ -80,7 +80,7 @@ let try_elaborate root_dir = function
           ~read_file:read_file_for_import ~parse:parse_for_import program
       with
       | defs -> Ok defs
-      | exception Elab.Elab_error msg -> Error (Elab_error msg)
+      | exception Bidir.Elab_error msg -> Error (Elab_error msg)
       | exception Elab.Circular_import m ->
           Error (Elab_error (Format.asprintf "Circular import: %a" Name.pp m))
       | exception Elab.Import_not_found m ->

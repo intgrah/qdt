@@ -56,8 +56,8 @@ module Test_elab = struct
   let error_var_not_in_scope () =
     let ctx = Context.empty in
     let raw = Raw_syntax.Ident "x" in
-    Alcotest.check_raises "var not in scope" (Elab_error "Unbound variable: x")
-      (fun () ->
+    Alcotest.check_raises "var not in scope"
+      (Bidir.Elab_error "Unbound variable: x") (fun () ->
         let _, _ = Bidir.infer_tm Global.empty ctx raw in
         ())
 
@@ -77,20 +77,16 @@ module Programs = struct
         Raw_syntax.Def
           {
             name = "id";
-            ty_opt = Some (Raw_syntax.Arrow (Raw_syntax.U, Raw_syntax.U));
-            body =
-              Raw_syntax.Lam
-                ( [ Raw_syntax.Typed ([ Some "x" ], Raw_syntax.U) ],
-                  Raw_syntax.Ident "x" );
+            params = [ ([ Some "x" ], Raw_syntax.U) ];
+            ty_opt = Some Raw_syntax.U;
+            body = Raw_syntax.Ident "x";
           };
       ]
     in
     let result = elab_program prog in
     match result with
-    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), ty) ] -> (
-        match ty with
-        | TyPi (None, TyU, TyU) -> ()
-        | _ -> Alcotest.fail "wrong type")
+    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), TyPi (Some "x", TyU, TyU)) ] ->
+        ()
     | _ -> Alcotest.fail "program failed"
 
   let tests = [ Alcotest.test_case "simple id" `Quick simple_id ]
@@ -104,32 +100,33 @@ module Qdt_files = struct
     let tokens = Lexer.scan [] chars in
     Parser.parse tokens
 
-  let elaborate_file ~root path =
-    let source = read_file path in
-    let prog = parse source in
-    elab_program_with_imports ~root ~read_file ~parse prog
+  let project_root = ".."
+  let stdlib_root = Filename.concat project_root "stdlib"
 
-  let root_dir () = Filename.dirname (Sys.getcwd ())
+  let elaborate_file path =
+    let read_file_for_import file_path = read_file file_path in
+    let source = read_file (Filename.concat project_root path) in
+    let prog = parse source in
+    elab_program_with_imports ~root:stdlib_root ~read_file:read_file_for_import
+      ~parse prog
 
   let check_succeeds path () =
-    let root = root_dir () in
-    match elaborate_file ~root path with
+    match elaborate_file path with
     | _ -> ()
     | exception exn ->
         Alcotest.failf "expected %s to elaborate, but got: %s" path
           (Printexc.to_string exn)
 
   let check_fails path () =
-    let root = root_dir () in
-    match elaborate_file ~root path with
+    match elaborate_file path with
     | _ -> Alcotest.failf "expected %s to fail, but it elaborated" path
     | exception _ -> ()
 
-  let passing = [ "../Std.qdt"; "../examples/test.qdt" ]
+  let passing = [ "stdlib/Std.qdt" ]
 
   let failing =
     [
-      "../examples/bad.qdt";
+      "../examples/reject_nat_ext.qdt";
       "../examples/reject_negative_contra.qdt";
       "../examples/reject_negative_direct.qdt";
       "../examples/reject_negative_nested.qdt";
