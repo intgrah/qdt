@@ -54,15 +54,7 @@ let try_parse = function
   | Ok tokens -> (
       match Parser.parse tokens with
       | program -> Ok program
-      | exception Parser.Parse_error msg -> Error (Parse_error msg)
-      | exception Parser.Tokens_remaining remaining ->
-          Error
-            (Parse_error
-               (Format.asprintf "Tokens: %a@."
-                  (Format.pp_print_list ~pp_sep:Format.pp_print_space
-                     Lexer.pp_token)
-                  (List.take 5 remaining)))
-      | exception exn -> Error (Parse_error (Printexc.to_string exn)))
+      | exception Parser.Syntax_error msg -> Error (Parse_error msg))
 
 let read_file_for_import path =
   In_channel.with_open_text path In_channel.input_all

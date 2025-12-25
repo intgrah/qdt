@@ -24,9 +24,9 @@ and pp_raw fmt : Raw_syntax.t -> unit = function
       Format.fprintf fmt "@[<hov 2>(fun %a =>@ %a)@]" (pp_list pp_binder_group)
         binders pp_raw body
   | Pi (group, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_typed_binder_group group
-        pp_raw b
-  | Arrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a@ → %a@]" pp_raw a pp_raw b
+      Format.fprintf fmt "@[<hov>%a →@ %a@]" pp_typed_binder_group group pp_raw
+        b
+  | Arrow (a, b) -> Format.fprintf fmt "@[<hov 2>%a →@ %a@]" pp_raw a pp_raw b
   | Let (name, None, rhs, body) ->
       Format.fprintf fmt "@[<v 0>@[<hov 2>(let %s :=@ %a in@]@ %a)@]" name
         pp_raw rhs pp_raw body
@@ -155,70 +155,138 @@ let get_name (name_opt : string option) (names : string list) : string =
   | Some name -> name
   | None -> fresh_name names
 
-let rec pp_ty_ctx (names : string list) fmt : ty -> unit = function
+let parens_if cond fmt (pp : Format.formatter -> unit) =
+  if cond then
+    Format.fprintf fmt "(@[%t@])" pp
+  else
+    pp fmt
+
+(* Precedence levels: lower = looser binding *)
+let prec_let = 0
+let prec_pi = 1
+let prec_fun = 1
+let prec_app = 3
+let prec_atom = 4
+
+let rec pp_ty_prec (names : string list) (ctx_prec : int) fmt : ty -> unit =
+  function
   | TyU -> Format.fprintf fmt "Type"
   | TyPi (None, a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_ty_ctx names) a
-        (pp_ty_ctx (fresh_name names :: names))
-        b
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hv 0>%a@]@ →@ @[<hv 0>%a@]"
+          (pp_ty_prec names prec_pi) a
+          (pp_ty_prec (fresh_name names :: names) prec_pi)
+          b
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
   | TyPi (Some x, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_ty_ctx names) a
-        (pp_ty_ctx (x :: names))
-        b
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hov 0>(%s :@;<1 2>%a) →@ %a@]" x
+          (pp_ty_prec names prec_fun)
+          a
+          (pp_ty_prec (x :: names) prec_pi)
+          b
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
   | TyEl (TmApp (TmApp (TmConst [ "Prod" ], a_code), b_code)) ->
-      Format.fprintf fmt "@[<hov 2>%a@ × %a@]" (pp_ty_ctx names) (TyEl a_code)
-        (pp_ty_ctx names) (TyEl b_code)
-  | TyEl
-      (TmApp (TmApp (TmConst [ "Sigma" ], _a_code), TmLam (x_opt, x_ty, b_code)))
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hov 2>%a@ × %a@]"
+          (pp_ty_prec names prec_app)
+          (TyEl a_code) (pp_ty_prec names prec_pi) (TyEl b_code)
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
+  | TyEl (TmApp (TmApp (TmConst [ "Sigma" ], _), TmLam (x_opt, x_ty, b_code)))
     ->
       let x = get_name x_opt names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ × %a@]" x (pp_ty_ctx names) x_ty
-        (pp_ty_ctx (x :: names))
-        (TyEl b_code)
-  | TyEl t -> Format.fprintf fmt "@[<hov 2>%a@]" (pp_tm_ctx names) t
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hov 0>(%s :@;<1 2>%a) × %a@]" x
+          (pp_ty_prec names prec_fun)
+          x_ty
+          (pp_ty_prec (x :: names) prec_pi)
+          (TyEl b_code)
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
+  | TyEl t -> Format.fprintf fmt "%a" (pp_tm_prec names ctx_prec) t
 
-and pp_tm_ctx (names : string list) fmt : tm -> unit = function
+and pp_tm_prec (names : string list) (ctx_prec : int) fmt : tm -> unit =
+  let rec flatten_app acc = function
+    | TmApp (f, a) -> flatten_app (a :: acc) f
+    | head -> (head, acc)
+  in
+  function
   | TmVar (Idx l) ->
-      if l < List.length names then
-        Format.fprintf fmt "%s" (List.nth names l)
-      else
-        Format.fprintf fmt "x%d†" l
+      let nm =
+        if l < List.length names then
+          List.nth names l
+        else
+          Format.sprintf "x%d†" l
+      in
+      Format.fprintf fmt "%s" nm
   | TmConst name -> Format.fprintf fmt "%a" Name.pp name
   | TmLam (name_opt, a, body) ->
+      let my_prec = prec_fun in
       let x = get_name name_opt names in
-      Format.fprintf fmt "@[<hov 2>(fun %s : %a =>@ %a)@]" x (pp_ty_ctx names) a
-        (pp_tm_ctx (x :: names))
-        body
-  | TmApp ((TmLam _ as f), a) ->
-      Format.fprintf fmt "@[<hov 2>(%a)@ (%a)@]" (pp_tm_ctx names) f
-        (pp_tm_ctx names) a
-  | TmApp (f, ((TmVar _ | TmConst _) as a)) ->
-      Format.fprintf fmt "@[<hov 2>%a@ %a@]" (pp_tm_ctx names) f
-        (pp_tm_ctx names) a
-  | TmApp (f, a) ->
-      Format.fprintf fmt "@[<hov 2>%a@ (%a)@]" (pp_tm_ctx names) f
-        (pp_tm_ctx names) a
+      let pp fmt =
+        Format.fprintf fmt "@[<hov 2>fun %s : %a =>@ %a@]" x
+          (pp_ty_prec names prec_fun)
+          a
+          (pp_tm_prec (x :: names) prec_fun)
+          body
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
   | TmPiHat (None, a, b) ->
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_tm_ctx names) a
-        (pp_tm_ctx (fresh_name names :: names))
-        b
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hov>%a →@ %a@]" (pp_tm_prec names prec_pi) a
+          (pp_tm_prec (fresh_name names :: names) prec_pi)
+          b
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
   | TmPiHat (Some x, a, b) ->
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_tm_ctx names) a
-        (pp_tm_ctx (x :: names))
-        b
+      let my_prec = prec_pi in
+      let pp fmt =
+        Format.fprintf fmt "@[<hov 0>(%s :@;<1 2>%a) →@ %a@]" x
+          (pp_tm_prec names prec_fun)
+          a
+          (pp_tm_prec (x :: names) prec_pi)
+          b
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
   | TmSorry _ -> Format.fprintf fmt "sorry"
   | TmLet (x, ty, t, body) ->
-      Format.fprintf fmt "@[<v 0>@[<hov 2>let %s : %a :=@ %a;@]@ %a@]" x
-        (pp_ty_ctx names) ty (pp_tm_ctx names) t
-        (pp_tm_ctx (x :: names))
-        body
+      let my_prec = prec_let in
+      let pp fmt =
+        Format.fprintf fmt "@[<v 0>@[<hov 2>let %s : %a :=@ %a;@]@ %a@]" x
+          (pp_ty_prec names prec_fun)
+          ty
+          (pp_tm_prec names prec_let)
+          t
+          (pp_tm_prec (x :: names) prec_let)
+          body
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
+  | tm ->
+      (* application or atom *)
+      let head, args = flatten_app [] tm in
+      let my_prec = prec_app in
+      let pp fmt =
+        let pp_head fmt = pp_tm_prec names my_prec fmt head in
+        let pp_args fmt = pp_list (pp_tm_prec names prec_atom) fmt args in
+        Format.fprintf fmt "@[<hov 2>%t@ %t@]" pp_head pp_args
+      in
+      parens_if (ctx_prec > my_prec) fmt pp
 
-let pp_ty = pp_ty_ctx []
-let pp_tm = pp_tm_ctx []
+let pp_ty_ctx names fmt ty = pp_ty_prec names prec_let fmt ty
+let pp_ty = pp_ty_prec [] prec_let
+let pp_tm = pp_tm_prec [] prec_let
 
 let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
-  Format.fprintf fmt "@[<hv 2>@[<hov 4>def %a :@ %a :=@]@ %a@]" Name.pp name
-    pp_ty ty pp_tm term
+  Format.fprintf fmt "@[<v 0>def %a :@;<0 4>%a@;<0 4>:= %a@]" Name.pp name pp_ty
+    ty pp_tm term
 
 (* ========== Values ========== *)
 
@@ -229,11 +297,11 @@ let rec pp_vl_ty_ctx (names : string list) fmt : vl_ty -> unit = function
   | VTyU -> Format.fprintf fmt "Type"
   | VTyPi (None, a, clos) ->
       let x = fresh_name names in
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_vl_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vl_ty_ctx names) a
         (pp_clos_ty x) clos
   | VTyPi (Some x, a, clos) ->
       let x = get_name (Some x) names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_vl_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vl_ty_ctx names) a
         (pp_clos_ty x) clos
   | VTyEl n -> pp_neutral_ctx names fmt n
 
@@ -245,11 +313,11 @@ and pp_vl_tm_ctx (names : string list) fmt : vl_tm -> unit = function
         (pp_vl_ty_ctx names) a (pp_clos_tm x) clos
   | VTmPiHat (None, a, clos) ->
       let x = fresh_name names in
-      Format.fprintf fmt "@[<hov 2>%a@ → %a@]" (pp_vl_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vl_tm_ctx names) a
         (pp_clos_tm x) clos
   | VTmPiHat (Some x, a, clos) ->
       let x = get_name (Some x) names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a)@ → %a@]" x (pp_vl_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vl_tm_ctx names) a
         (pp_clos_tm x) clos
 
 and pp_neutral_ctx (names : string list) fmt ((head, sp) : neutral) : unit =
@@ -266,10 +334,10 @@ and pp_head fmt : head -> unit = function
   | HSorry (id, _ty) -> Format.fprintf fmt "sorry%d" id
 
 and pp_clos_ty (x : string) fmt : clos_ty -> unit = function
-  | ClosTy (env, body) -> pp_ty_ctx (x :: env_names env) fmt body
+  | ClosTy (env, body) -> pp_ty_prec (x :: env_names env) prec_let fmt body
 
 and pp_clos_tm (x : string) fmt : clos_tm -> unit = function
-  | ClosTm (env, body) -> pp_tm_ctx (x :: env_names env) fmt body
+  | ClosTm (env, body) -> pp_tm_prec (x :: env_names env) prec_let fmt body
 
 let pp_vl_ty fmt (ty : vl_ty) : unit = pp_vl_ty_ctx [] fmt ty
 let pp_vl_tm fmt (tm : vl_tm) : unit = pp_vl_tm_ctx [] fmt tm

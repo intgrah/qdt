@@ -33,58 +33,88 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let m = Name.parse module_name in
         let genv, imported = process_import genv imported importing m in
         go genv imported importing acc rest
-    | Def { name; params; ty_opt; body } :: rest ->
+    | Def { name; params; ty_opt; body } :: rest -> (
         let name = Name.parse name in
-        let params = Desugar.desugar_typed_binder_groups params in
-        let param_ctx, param_tys = Params.elab_params genv params in
-        let term, ty_val =
-          match ty_opt with
-          | Some ty_raw ->
-              let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
-              let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
-              let term = Bidir.check_tm genv param_ctx body expected_ty_val in
-              (term, expected_ty_val)
-          | None -> Bidir.infer_tm genv param_ctx body
-        in
-        let term_with_params = Params.build_lambda param_tys term in
-        let term_val = eval_tm genv param_ctx.env term_with_params in
-        let ty =
-          Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
-        in
-        let genv =
-          Global.NameMap.add name (Global.Def { ty; tm = term_val }) genv
-        in
-        go genv imported importing ((name, term_with_params, ty) :: acc) rest
-    | Example { params; ty_opt; body } :: rest ->
-        let params = Desugar.desugar_typed_binder_groups params in
-        let param_ctx, _param_tys = Params.elab_params genv params in
-        let _, _ =
-          match ty_opt with
-          | Some ty_raw ->
-              let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
-              let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
-              let term = Bidir.check_tm genv param_ctx body expected_ty_val in
-              (term, expected_ty_val)
-          | None -> Bidir.infer_tm genv param_ctx body
-        in
-        go genv imported importing acc rest
-    | Axiom { name; params; ty } :: rest ->
+        try
+          let params = Desugar.desugar_typed_binder_groups params in
+          let param_ctx, param_tys = Params.elab_params genv params in
+          let term, ty_val =
+            match ty_opt with
+            | Some ty_raw ->
+                let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
+                let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
+                let term = Bidir.check_tm genv param_ctx body expected_ty_val in
+                (term, expected_ty_val)
+            | None -> Bidir.infer_tm genv param_ctx body
+          in
+          let term_with_params = Params.build_lambda param_tys term in
+          let term_val = eval_tm genv param_ctx.env term_with_params in
+          let ty =
+            Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
+          in
+          let genv =
+            Global.NameMap.add name (Global.Def { ty; tm = term_val }) genv
+          in
+          go genv imported importing ((name, term_with_params, ty) :: acc) rest
+        with
+        | exn ->
+            Format.printf "Elaboration error in %s: %s\n" (Name.to_string name)
+              (Printexc.to_string exn);
+            go genv imported importing acc rest)
+    | Example { params; ty_opt; body } :: rest -> (
+        try
+          let params = Desugar.desugar_typed_binder_groups params in
+          let param_ctx, _param_tys = Params.elab_params genv params in
+          let _, _ =
+            match ty_opt with
+            | Some ty_raw ->
+                let expected_ty = Bidir.check_ty genv param_ctx ty_raw in
+                let expected_ty_val = eval_ty genv param_ctx.env expected_ty in
+                let term = Bidir.check_tm genv param_ctx body expected_ty_val in
+                (term, expected_ty_val)
+            | None -> Bidir.infer_tm genv param_ctx body
+          in
+          go genv imported importing acc rest
+        with
+        | exn ->
+            Format.printf "Elaboration error in example: %s\n"
+              (Printexc.to_string exn);
+            go genv imported importing acc rest)
+    | Axiom { name; params; ty } :: rest -> (
         let name = Name.parse name in
-        let params = Desugar.desugar_typed_binder_groups params in
-        let param_ctx, param_tys = Params.elab_params genv params in
-        let ty = Bidir.check_ty genv param_ctx ty in
-        let ty_val = eval_ty genv param_ctx.env ty in
-        let ty =
-          Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
-        in
-        let genv = Global.NameMap.add name (Global.Axiom { ty }) genv in
-        go genv imported importing ((name, TmSorry (0, ty), ty) :: acc) rest
-    | Inductive info :: rest ->
-        let genv, results = Inductive.elab_inductive genv info in
-        go genv imported importing (results @ acc) rest
-    | Structure info :: rest ->
-        let genv, results = Structure.elab_structure genv info in
-        go genv imported importing (results @ acc) rest
+        try
+          let params = Desugar.desugar_typed_binder_groups params in
+          let param_ctx, param_tys = Params.elab_params genv params in
+          let ty = Bidir.check_ty genv param_ctx ty in
+          let ty_val = eval_ty genv param_ctx.env ty in
+          let ty =
+            Params.build_pi param_tys (Quote.quote_ty genv param_ctx.lvl ty_val)
+          in
+          let genv = Global.NameMap.add name (Global.Axiom { ty }) genv in
+          go genv imported importing ((name, TmSorry (0, ty), ty) :: acc) rest
+        with
+        | exn ->
+            Format.printf "Elaboration error in axiom %s: %s\n"
+              (Name.to_string name) (Printexc.to_string exn);
+            go genv imported importing acc rest)
+    | Inductive info :: rest -> (
+        try
+          let genv, results = Inductive.elab_inductive genv info in
+          go genv imported importing (results @ acc) rest
+        with
+        | exn ->
+            Format.printf "Elaboration error in inductive %s: %s\n" info.name
+              (Printexc.to_string exn);
+            go genv imported importing acc rest)
+    | Structure info :: rest -> (
+        try
+          let genv, results = Structure.elab_structure genv info in
+          go genv imported importing (results @ acc) rest
+        with
+        | exn ->
+            Format.printf "Elaboration error in structure %s: %s\n" info.name
+              (Printexc.to_string exn);
+            go genv imported importing acc rest)
   in
   let genv, _, result = go Global.empty ModuleNameSet.empty [] [] prog in
   Format.printf "Elaborated %d definitions\n" (Global.NameMap.cardinal genv);
