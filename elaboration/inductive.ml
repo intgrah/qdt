@@ -1,5 +1,5 @@
-open Frontend
 open Syntax
+open Frontend
 open Nbe
 
 exception Positivity of string
@@ -190,7 +190,7 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
 
 let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    (ctor : Raw_syntax.constructor) : Name.t * ty =
+    (ctor : Ast.Command.inductive_constructor) : Name.t * ty =
   let full_name = Name.child ind ctor.name in
 
   let rec build_ctor_body ctx depth = function
@@ -222,7 +222,7 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
         let body_ty = build_ctor_body ctx' (depth + 1) rest in
         TyPi (name, param_ty, body_ty)
   in
-  let params = Desugar.desugar_typed_binder_groups ctor.params in
+  let params = List.map (fun (_src, name, ty) -> (name, ty)) ctor.params in
   let ctor_body = build_ctor_body param_ctx 0 params in
   let ctor_ty = Params.build_pi param_tys ctor_body in
   check_strict_positivity genv ind ctor_ty;
@@ -483,12 +483,11 @@ let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
 
   build_params 0 [] [] [] param_tys
 
-let elab_inductive (genv : Global.t) (ind : Raw_syntax.inductive_info) :
+let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
     Global.t * (Name.t * tm * ty) list =
   let ind_name = Name.parse ind.name in
-  let params = Desugar.desugar_typed_binder_groups ind.params in
 
-  let param_ctx, param_tys = Params.elab_params genv params in
+  let param_ctx, param_tys = Params.elab_params genv ind.params in
   let num_params = List.length param_tys in
   let result_ty =
     match ind.ty_opt with

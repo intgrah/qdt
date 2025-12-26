@@ -1,42 +1,51 @@
-open Frontend
 open Syntax
+open Frontend
 
-let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
+let elab_structure (genv : Global.t) (info : Ast.Command.structure) :
     Global.t * (Name.t * tm * ty) list =
   let ind_name = Name.parse info.name in
   let () =
     match info.ty_opt with
     | None -> ()
-    | Some Raw_syntax.U -> ()
+    | Some (Ast.U _) -> ()
     | Some _ -> raise (Failure "Structure result type must be Type")
   in
-  let mk_field_ty (field : Raw_syntax.field) : Raw_syntax.t =
+  let mk_field_ty (field : Ast.Command.structure_field) : Ast.t =
     List.fold_right
-      (fun bg body -> Raw_syntax.Pi (bg, body))
-      field.binders field.ty
+      (fun (_src, name, ty) body ->
+        Ast.Pi (field.src, (field.src, name, ty), body))
+      field.params field.ty
   in
-  let ctor_binders : Raw_syntax.typed_binder_group list =
+  let ctor_binders : Ast.typed_binder list =
     List.map
-      (fun (field : Raw_syntax.field) ->
-        ([ Some field.name ], mk_field_ty field))
+      (fun (field : Ast.Command.structure_field) ->
+        (field.src, Some field.name, mk_field_ty field))
       info.fields
   in
-  let ctors : Raw_syntax.constructor list =
-    [ { name = "mk"; params = ctor_binders; ty_opt = None } ]
+  let ctors : Ast.Command.inductive_constructor list =
+    [ { src = info.src; name = "mk"; params = ctor_binders; ty_opt = None } ]
   in
   let genv, results =
     Inductive.elab_inductive genv
-      { name = info.name; params = info.params; ty_opt = info.ty_opt; ctors }
+      {
+        src = info.src;
+        name = info.name;
+        params = info.params;
+        ty_opt = info.ty_opt;
+        ctors;
+      }
   in
-  let params = Desugar.desugar_typed_binder_groups info.params in
+  let params = List.map (fun (_src, name, _ty) -> name) info.params in
   let struct_info : Global.structure_info =
     {
       struct_ind_name = ind_name;
       struct_ctor_name = Name.child ind_name "mk";
-      struct_num_params = List.length params;
+      struct_num_params = List.length info.params;
       struct_num_fields = List.length info.fields;
       struct_field_names =
-        List.map (fun (field : Raw_syntax.field) -> field.name) info.fields;
+        List.map
+          (fun (field : Ast.Command.structure_field) -> field.name)
+          info.fields;
     }
   in
   let genv =
@@ -47,68 +56,57 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
           genv
     | _ -> genv
   in
-  let param_names = List.map fst params in
-  let make_proj_app fname : Raw_syntax.t =
+  let param_names = params in
+  let make_proj_app fname : Ast.t =
     let base =
       List.fold_left
         (fun acc -> function
-          | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
+          | Some n -> Ast.App (None, acc, Ast.Ident (None, n))
           | None -> acc)
-        (Raw_syntax.Ident (info.name ^ "." ^ fname))
+        (Ast.Ident (None, info.name ^ "." ^ fname))
         param_names
     in
-    App (base, Ident "s")
-    (* TODO: use a fresh name *)
+    Ast.App (None, base, Ast.Ident (None, "s"))
   in
-  let rec subst_fields ef : Raw_syntax.t -> Raw_syntax.t = function
-    | Ident x -> (
+  let rec subst_fields ef : Ast.t -> Ast.t = function
+    | Ast.Ident (_, x) -> (
         match List.assoc_opt x ef with
         | Some proj -> proj
-        | None -> Ident x)
-    | App (f, a) -> App (subst_fields ef f, subst_fields ef a)
-    | Lam (bs, body) ->
-        let bound =
-          List.concat_map
-            (function
-              | Raw_syntax.Untyped name -> [ name ]
-              | Raw_syntax.Typed (names, _) -> List.filter_map Fun.id names)
-            bs
+        | None -> Ast.Ident (None, x))
+    | Ast.App (_, f, a) -> Ast.App (None, subst_fields ef f, subst_fields ef a)
+    | Ast.Lam (_, binder, body) ->
+        let name =
+          match binder with
+          | Ast.Untyped (_, name)
+          | Ast.Typed (_, name, _) ->
+              name
         in
         let earlier_fields' =
-          List.filter (fun (n, _) -> not (List.mem n bound)) ef
+          List.filter (fun (n, _) -> not (Some n = name)) ef
         in
-        let bs' =
-          List.map
-            (function
-              | Raw_syntax.Untyped name -> Raw_syntax.Untyped name
-              | Raw_syntax.Typed (names, ty) ->
-                  Raw_syntax.Typed (names, subst_fields ef ty))
-            bs
+        let binder' =
+          match binder with
+          | Ast.Untyped (src, name) -> Ast.Untyped (src, name)
+          | Ast.Typed (src, name, ty) ->
+              Ast.Typed (src, name, subst_fields ef ty)
         in
-        Lam (bs', subst_fields earlier_fields' body)
-    | Pi ((ns, ty), body) ->
-        let bound = List.filter_map Fun.id ns in
+        Ast.Lam (None, binder', subst_fields earlier_fields' body)
+    | Ast.Pi (src, (src_binder, name, ty), body) ->
         let earlier_fields' =
-          List.filter (fun (n, _) -> not (List.mem n bound)) ef
+          List.filter (fun (n, _) -> not (Some n = name)) ef
         in
-        Pi ((ns, subst_fields ef ty), subst_fields earlier_fields' body)
-    | Arrow (a, b) -> Arrow (subst_fields ef a, subst_fields ef b)
-    | Raw_syntax.Prod (a, b) -> Prod (subst_fields ef a, subst_fields ef b)
-    | Pair (a, b) -> Raw_syntax.Pair (subst_fields ef a, subst_fields ef b)
-    | Eq (a, b) -> Eq (subst_fields ef a, subst_fields ef b)
-    | Add (a, b) -> Add (subst_fields ef a, subst_fields ef b)
-    | Sub (a, b) -> Sub (subst_fields ef a, subst_fields ef b)
-    | Sigma ((ns, a), b) ->
-        let bound = List.filter_map Fun.id ns in
-        let earlier_fields' =
-          List.filter (fun (n, _) -> not (List.mem n bound)) ef
-        in
-        Sigma ((ns, subst_fields ef a), subst_fields earlier_fields' b)
-    | Ann (t, ty) -> Ann (subst_fields ef t, subst_fields ef ty)
-    | Let (n, ty_opt, t, b) ->
+        Ast.Pi
+          ( src,
+            (src_binder, name, subst_fields ef ty),
+            subst_fields earlier_fields' body )
+    | Ast.Pair (_, a, b) -> Ast.Pair (None, subst_fields ef a, subst_fields ef b)
+    | Ast.Eq (_, a, b) -> Ast.Eq (None, subst_fields ef a, subst_fields ef b)
+    | Ast.Ann (_, t, ty) -> Ast.Ann (None, subst_fields ef t, subst_fields ef ty)
+    | Ast.Let (_, n, ty_opt, t, b) ->
         let earlier_fields' = List.filter (fun (x, _) -> x <> n) ef in
-        Let
-          ( n,
+        Ast.Let
+          ( None,
+            n,
             Option.map (subst_fields ef) ty_opt,
             subst_fields ef t,
             subst_fields earlier_fields' b )
@@ -117,25 +115,23 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
   let rec_app =
     List.fold_left
       (fun acc -> function
-        | Some n -> Raw_syntax.App (acc, Raw_syntax.Ident n)
+        | Some n -> Ast.App (None, acc, Ast.Ident (None, n))
         | None -> acc)
-      (Raw_syntax.Ident (info.name ^ ".rec"))
+      (Ast.Ident (None, info.name ^ ".rec"))
       param_names
   in
-  let field_binders : Raw_syntax.binder_group list =
+  let field_binders : Ast.binder list =
     List.map
-      (fun (field : Raw_syntax.field) -> Raw_syntax.Untyped field.name)
+      (fun (field : Ast.Command.structure_field) ->
+        Ast.Untyped (None, Some field.name))
       info.fields
   in
-  let param_binders : Raw_syntax.binder_group list =
-    List.map
-      (fun ((names, ty) : Raw_syntax.typed_binder_group) ->
-        Raw_syntax.Typed (names, ty))
-      info.params
+  let param_binders : Ast.binder list =
+    List.map (fun binder -> Ast.Typed binder) info.params
   in
   let genv, results =
     List.fold_left
-      (fun (genv, acc) (field : Raw_syntax.field) ->
+      (fun (genv, acc) (field : Ast.Command.structure_field) ->
         let proj_name = Name.child (Name.parse info.name) field.name in
         let field_ty = mk_field_ty field in
         let subst_fty =
@@ -147,19 +143,32 @@ let elab_structure (genv : Global.t) (info : Raw_syntax.structure_info) :
                  else
                    Some (other_fname, make_proj_app other_fname))
                (List.map
-                  (fun (field : Raw_syntax.field) -> field.name)
+                  (fun (field : Ast.Command.structure_field) -> field.name)
                   info.fields))
             field_ty
         in
-        let body : Raw_syntax.t =
-          App
-            ( App (rec_app, Lam ([ Raw_syntax.Untyped "s" ], subst_fty)),
-              Lam (field_binders, Ident field.name) )
+        let body : Ast.t =
+          Ast.App
+            ( None,
+              Ast.App
+                ( None,
+                  rec_app,
+                  Ast.Lam (None, Ast.Untyped (None, Some "s"), subst_fty) ),
+              Ast.Lam
+                ( None,
+                  List.hd field_binders,
+                  List.fold_right
+                    (fun binder acc -> Ast.Lam (None, binder, acc))
+                    (List.tl field_binders)
+                    (Ast.Ident (None, field.name)) ) )
         in
         let full_def =
           match param_binders with
           | [] -> body
-          | _ -> Lam (param_binders, body)
+          | hd :: tl ->
+              List.fold_right
+                (fun binder acc -> Ast.Lam (None, binder, acc))
+                (hd :: tl) body
         in
         let term, ty_val = Bidir.infer_tm genv Context.empty full_def in
         let term_val = Nbe.eval_tm genv [] term in

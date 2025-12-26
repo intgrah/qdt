@@ -1,3 +1,19 @@
-exception Syntax_error of string
+type parse_error = {
+  msg : string;
+  pos : Syntax.position;
+}
 
-val parse : Lexer.token list -> Raw_syntax.program
+exception Syntax_error of parse_error
+
+type prec =
+  | PrecMin
+  | PrecLet
+  | PrecFun
+  | PrecPi
+  | PrecEq
+  | PrecAdd
+  | PrecApp
+  | PrecMax
+
+val compare_prec : prec -> prec -> int
+val parse : string -> Cst.program

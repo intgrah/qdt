@@ -1,6 +1,316 @@
-open Lexer
+open Cst
+open Syntax
 
-exception Syntax_error of string
+type parse_error = {
+  msg : string;
+  pos : position;
+}
+
+exception Syntax_error of parse_error
+
+(* ========== Positions and state ========== *)
+
+type rune = {
+  ch : Uchar.t;
+  line : int;
+  col : int;
+}
+
+type state = {
+  dec : rune array;
+  idx : int;
+}
+
+let get_pos (st : state) : Syntax.position =
+  if st.idx < Array.length st.dec then
+    let r = st.dec.(st.idx) in
+    { offset = st.idx; line = r.line; column = r.col }
+  else if Array.length st.dec = 0 then
+    { offset = 0; line = 1; column = 1 }
+  else
+    let r = st.dec.(Array.length st.dec - 1) in
+    { offset = Array.length st.dec; line = r.line; column = r.col + 1 }
+
+let decode_source (s : string) : rune array =
+  let byte_len = String.length s in
+  let rec loop byte_idx line col cp acc =
+    if byte_idx >= byte_len then
+      let runes = Array.of_list (List.rev acc) in
+      runes
+    else
+      let dec = String.get_utf_8_uchar s byte_idx in
+      let len_bytes = Uchar.utf_decode_length dec in
+      let ch = Uchar.utf_decode_uchar dec in
+      let pos : Syntax.position = { offset = cp; line; column = col } in
+      if not (Uchar.utf_decode_is_valid dec) then
+        raise (Syntax_error { msg = "Invalid UTF-8 sequence"; pos })
+      else
+        let rune = { ch; line; col } in
+        let line', col' =
+          if Uchar.to_int ch = Char.code '\n' then
+            (line + 1, 1)
+          else
+            (line, col + 1)
+        in
+        loop (byte_idx + len_bytes) line' col' (cp + 1) (rune :: acc)
+  in
+  loop 0 1 1 0 []
+
+let init_state (s : string) : state = { dec = decode_source s; idx = 0 }
+
+module Parser = struct
+  type 'a t = state -> ('a * state, parse_error) result
+
+  let pure (x : 'a) : 'a t = fun st -> Ok (x, st)
+
+  let bind (m : 'a t) (f : 'a -> 'b t) : 'b t =
+   fun st ->
+    match m st with
+    | Ok (a, st') -> f a st'
+    | Error _ as e -> e
+
+  let ( let* ) = bind
+  let ( >>= ) = bind
+  let ( >> ) p f = p >>= fun () -> f
+
+  let ( let+ ) (f : state -> 'a) (k : 'a -> 'b t) : 'b t =
+    (fun st -> Ok (f st, st)) >>= k
+
+  let alt p1 p2 =
+   fun st ->
+    match p1 st with
+    | Ok _ as r -> r
+    | Error _ -> p2 st
+
+  let ( <|> ) = alt
+
+  let fail msg : 'a t =
+    let+ pos = get_pos in
+    fun _ -> Error { msg; pos }
+
+  let lift2 f p1 p2 =
+    let* x1 = p1 in
+    let* x2 = p2 in
+    pure (f x1 x2)
+
+  let optional p =
+   fun st ->
+    match p st with
+    | Ok (x, st') -> Ok (Some x, st')
+    | Error _ -> Ok (None, st)
+
+  let rec many (p : 'a t) : 'a list t =
+    (let* x = p in
+     let* xs = many p in
+     pure (x :: xs))
+    <|> pure []
+
+  let many1 p = lift2 List.cons p (many p)
+
+  let rec choice : 'a t list -> 'a t -> 'a t =
+   fun ps fail ->
+    match ps with
+    | [] -> fail
+    | p :: ps -> alt p (choice ps fail)
+end
+
+open Parser
+
+let is_eof st = st.idx >= Array.length st.dec
+
+let get_cp st =
+  if is_eof st then
+    None
+  else
+    Some (Uchar.to_int st.dec.(st.idx).ch)
+
+let advance_char : unit Parser.t =
+ fun st ->
+  if is_eof st then
+    Error { msg = "Unexpected end of input"; pos = get_pos st }
+  else
+    Ok ((), { st with idx = st.idx + 1 })
+
+let rec advance_n (n : int) : unit Parser.t =
+  if n = 0 then
+    pure ()
+  else
+    advance_char >> advance_n (n - 1)
+
+let rec skip_line : unit Parser.t =
+ fun st ->
+  (let+ eof = is_eof in
+   if eof then
+     pure ()
+   else
+     let+ cp = get_cp in
+     match cp with
+     | Some cp when cp = Char.code '\n' -> advance_char
+     | _ -> advance_char >> skip_line)
+    st
+
+let rec ws : unit Parser.t =
+ fun st ->
+  (let+ eof = is_eof in
+   if eof then
+     pure ()
+   else
+     let+ cp = get_cp in
+     let+ cp_next = fun st -> get_cp { st with idx = st.idx + 1 } in
+     match (cp, cp_next) with
+     | Some cp, _
+       when cp = Char.code ' '
+            || cp = Char.code '\t'
+            || cp = Char.code '\r'
+            || cp = Char.code '\n' ->
+         advance_char >> ws
+     | Some 0x2D, Some 0x2D (* '--' *) ->
+         let* () = advance_n 2 in
+         let* () = skip_line in
+         ws
+     | Some 0x2F, Some 0x2D (* '/-' *) ->
+         let rec skip_block depth : unit Parser.t =
+           let+ eof = is_eof in
+           if eof then
+             fail "Unterminated comment"
+           else
+             let+ cp = get_cp in
+             let+ cp_next = fun st -> get_cp { st with idx = st.idx + 1 } in
+             match (cp, cp_next) with
+             | Some 0x2F, Some 0x2D -> advance_n 2 >> skip_block (depth + 1)
+             | Some 0x2D, Some 0x2F -> advance_n 2 >> skip_block (depth - 1)
+             | _ -> advance_char >> skip_block depth
+         in
+         advance_n 2 >> skip_block 0 >> ws
+     | _ -> pure ())
+    st
+
+let is_ident_char cp =
+  (cp >= Char.code 'A' && cp <= Char.code 'Z')
+  || (cp >= Char.code 'a' && cp <= Char.code 'z')
+  || (cp >= Char.code '0' && cp <= Char.code '9')
+  || cp = Char.code '_'
+  || cp = Char.code '\''
+  || cp = Char.code '.'
+
+let is_ident_start cp =
+  (cp >= Char.code 'A' && cp <= Char.code 'Z')
+  || (cp >= Char.code 'a' && cp <= Char.code 'z')
+  || cp = Char.code '_'
+  || cp = Char.code '\''
+
+let read_ident : string Parser.t =
+  let+ cp = get_cp in
+  match cp with
+  | None -> fail "expected identifier"
+  | Some cp ->
+      if not (is_ident_start cp) then
+        fail "expected identifier"
+      else
+        let buf = Buffer.create 16 in
+        Buffer.add_utf_8_uchar buf (Uchar.of_int cp);
+        let* () = advance_char in
+        let rec loop_aux () : string Parser.t =
+          let+ eof = is_eof in
+          if eof then
+            pure (Buffer.contents buf)
+          else
+            let+ cp' = get_cp in
+            match cp' with
+            | Some cp_val when is_ident_char cp_val ->
+                Buffer.add_utf_8_uchar buf (Uchar.of_int cp_val);
+                let* () = advance_char in
+                loop_aux ()
+            | _ -> pure (Buffer.contents buf)
+        in
+        loop_aux ()
+
+let get_start_pos : Cst.t -> Syntax.position = function
+  | Missing src
+  | Ident (src, _)
+  | App (src, _, _)
+  | Lam (src, _, _)
+  | Pi (src, _, _)
+  | Arrow (src, _, _)
+  | Let (src, _, _, _, _)
+  | U src
+  | Sigma (src, _, _)
+  | Prod (src, _, _)
+  | Pair (src, _, _)
+  | Eq (src, _, _)
+  | NatLit (src, _)
+  | Add (src, _, _)
+  | Sub (src, _, _)
+  | Ann (src, _, _)
+  | Sorry src -> (
+      match src with
+      | None -> { offset = 0; line = 0; column = 0 }
+      | Some { start_pos; _ } -> start_pos)
+
+let decode_string_to_uchars (s : string) : Uchar.t list =
+  let rec loop byte_idx acc =
+    if byte_idx >= String.length s then
+      List.rev acc
+    else
+      let dec = String.get_utf_8_uchar s byte_idx in
+      if not (Uchar.utf_decode_is_valid dec) then
+        failwith (Format.sprintf "Invalid UTF-8 in string: %s" s)
+      else
+        let uchar = Uchar.utf_decode_uchar dec in
+        let len_bytes = Uchar.utf_decode_length dec in
+        loop (byte_idx + len_bytes) (uchar :: acc)
+  in
+  loop 0 []
+
+let str (s : string) : unit Parser.t =
+  let expected = decode_string_to_uchars s in
+  let rec loop expected_list : unit Parser.t =
+    match expected_list with
+    | [] -> pure ()
+    | expected_uchar :: rest ->
+        let+ eof = is_eof in
+        if eof then
+          fail (Format.sprintf "unexpected end of input, expected '%s'" s)
+        else
+          let+ uchar = fun st -> st.dec.(st.idx).ch in
+          if Uchar.equal uchar expected_uchar then
+            advance_char >> loop rest
+          else
+            fail (Format.sprintf "expected '%s'" s)
+  in
+  ws >> loop expected
+
+let keyword (kw : string) : unit Parser.t = str kw
+let arrow : unit Parser.t = str "->" <|> str "→"
+let times : unit Parser.t = str "×"
+
+let parse_nat : int Parser.t =
+  let* () = ws in
+  let+ eof = is_eof in
+  if eof then
+    fail "expected numeral"
+  else
+    let+ cp = get_cp in
+    match cp with
+    | Some cp when cp >= Char.code '0' && cp <= Char.code '9' ->
+        let rec loop_aux acc : int Parser.t =
+          let+ cp = get_cp in
+          match cp with
+          | Some d when d >= Char.code '0' && d <= Char.code '9' ->
+              let* () = advance_char in
+              loop_aux ((acc * 10) + (d - Char.code '0'))
+          | _ -> pure acc
+        in
+        let* () = advance_char in
+        loop_aux (cp - Char.code '0')
+    | _ -> fail "expected numeral"
+
+let parse_ident : (Syntax.src * string) Parser.t =
+  let* () = ws in
+  let+ start_pos = get_pos in
+  let* name = read_ident in
+  let+ end_pos = get_pos in
+  pure (Some { start_pos; end_pos }, name)
 
 type prec =
   | PrecMin
@@ -13,93 +323,194 @@ type prec =
   | PrecMax
 [@@deriving compare]
 
-open struct
-  type input = token list
-  type 'a t = input -> ('a * input) option
+let parse_binder_name : string option Parser.t =
+  let* _src, name = parse_ident in
+  if name = "_" then
+    pure None
+  else
+    pure (Some name)
 
-  let return (x : 'a) : 'a t = fun input -> Some (x, input)
-  let fail : 'a t = fun _ -> None
+let rec parse_typed_binder_group : Cst.typed_binder_group Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* () = str "(" in
+   let* names = many1 parse_binder_name in
+   let* () = str ":" in
+   let* ty = parse_preterm in
+   let* () = str ")" in
+   let+ end_pos = get_pos in
+   pure (Some { start_pos; end_pos }, names, ty))
+    st
 
-  let ( let* ) (p : 'a t) (f : 'a -> 'b t) : 'b t =
-   fun input ->
-    match p input with
-    | None -> None
-    | Some (x, input') -> f x input'
+and parse_binder_group : Cst.binder_group Parser.t =
+ fun st ->
+  ((let* group = parse_typed_binder_group in
+    pure (Cst.Typed group))
+  <|> let+ start_pos = get_pos in
+      let* name = parse_binder_name in
+      let+ end_pos = get_pos in
+      pure (Cst.Untyped (Some { start_pos; end_pos }, name)))
+    st
 
-  let ( <|> ) (p1 : 'a t) (p2 : 'a t) : 'a t =
-   fun input ->
-    match p1 input with
-    | Some a -> Some a
-    | None -> p2 input
+and parse_lambda_leading : Cst.t Parser.t =
+ fun st ->
+  (let+ start_pos = get_pos in
+   let* () = keyword "fun" in
+   let* binders = many1 parse_binder_group in
+   let* () = keyword "=>" in
+   let* body = parse_preterm in
+   let+ end_pos = get_pos in
+   pure (Cst.Lam (Some { start_pos; end_pos }, binders, body)))
+    st
 
-  let choice (ps : 'a t list) : 'a t = List.fold_right ( <|> ) ps fail
+and parse_let_leading : Cst.t Parser.t =
+ fun st ->
+  (let+ start_pos = get_pos in
+   let* () = keyword "let" in
+   let* _info_name, name = parse_ident in
+   let* ty_opt = optional (str ":" >> parse_preterm) in
+   let* () = keyword ":=" in
+   let* rhs = parse_preterm in
+   let* () = str ";" in
+   let* body = parse_preterm in
+   let+ end_pos = get_pos in
+   pure (Cst.Let (Some { start_pos; end_pos }, name, ty_opt, rhs, body)))
+    st
 
-  let token (t : token) : unit t = function
-    | [] -> None
-    | tok :: rest when tok = t -> Some ((), rest)
-    | _ -> None
+and parse_pi_leading : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* group = parse_typed_binder_group in
+   let* () = arrow in
+   let* b = pratt_parser PrecPi in
+   let+ end_pos = get_pos in
+   pure (Cst.Pi (Some { start_pos; end_pos }, group, b)))
+    st
 
-  let many (p : 'a t) : 'a list t =
-    let rec go acc input =
-      match p input with
-      | None -> Some (List.rev acc, input)
-      | Some (x, input') -> go (x :: acc) input'
-    in
-    go []
+and parse_sigma_leading : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* group = parse_typed_binder_group in
+   let* () = times in
+   let* b = pratt_parser PrecPi in
+   let+ end_pos = get_pos in
+   pure (Cst.Sigma (Some { start_pos; end_pos }, group, b)))
+    st
 
-  let many1 (p : 'a t) : 'a list t =
-    let* first = p in
-    let* rest = many p in
-    return (first :: rest)
+and parse_unit : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* () = str "(" in
+   let* () = ws in
+   let+ cp = get_cp in
+   if cp = Some (Char.code ')') then
+     let* () = advance_char in
+     let+ end_pos = get_pos in
+     pure (Cst.Ident (Some { start_pos; end_pos }, "Unit.unit"))
+   else
+     fail "expected unit")
+    st
 
-  let optional (p : 'a t) : 'a option t =
-   fun input ->
-    match p input with
-    | None -> Some (None, input)
-    | Some (x, input') -> Some (Some x, input')
-end
+and parse_ann_pair_paren : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* () = str "(" in
+   let* e = parse_preterm in
+   let* () = ws in
+   let+ cp = get_cp in
+   if cp = Some (Char.code ',') then
+     let* () = str "," in
+     let* b = parse_preterm in
+     let* () = str ")" in
+     let+ end_pos = get_pos in
+     pure (Cst.Pair (Some { start_pos; end_pos }, e, b))
+   else if cp = Some (Char.code ':') then
+     let* () = str ":" in
+     let* ty = parse_preterm in
+     let* () = str ")" in
+     let+ end_pos = get_pos in
+     pure (Cst.Ann (Some { start_pos; end_pos }, e, ty))
+   else
+     let* () = str ")" in
+     pure e)
+    st
 
-(* ========== Pratt Parser Infrastructure ========== *)
+and parse_sorry : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* () = keyword "sorry" in
+   let+ end_pos = get_pos in
+   pure (Cst.Sorry (Some { start_pos; end_pos })))
+    st
 
-type leading_parser = Raw_syntax.t t
+and parse_type : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* () = keyword "Type" in
+   let+ end_pos = get_pos in
+   pure (Cst.U (Some { start_pos; end_pos })))
+    st
 
-(* prec, lhs_prec, and left operand, returns combined expression *)
-type trailing_parser = prec -> prec -> Raw_syntax.t -> Raw_syntax.t t
+and parse_nat_lit : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* n = parse_nat in
+   let+ end_pos = get_pos in
+   pure (Cst.NatLit (Some { start_pos; end_pos }, n)))
+    st
 
-(* Try all leading parsers in order until one succeeds *)
+and parse_ident_atom : Cst.t Parser.t =
+ fun st ->
+  (let* () = ws in
+   let+ start_pos = get_pos in
+   let* name = read_ident in
+   let+ end_pos = get_pos in
+   let kw =
+     [
+       "fun";
+       "let";
+       "def";
+       "example";
+       "axiom";
+       "inductive";
+       "structure";
+       "where";
+       "import";
+     ]
+   in
+   if List.mem name kw then
+     fail "keyword in expression"
+   else
+     pure (Cst.Ident (Some { start_pos; end_pos }, name)))
+    st
 
-(* Try all trailing parsers in order until one succeeds *)
+and parse_atom_leading : Cst.t Parser.t =
+ fun st ->
+  (let+ eof = is_eof in
+   if eof then
+     fail "unexpected end of input"
+   else
+     choice
+       [
+         parse_unit;
+         parse_ann_pair_paren;
+         parse_sorry;
+         parse_type;
+         parse_nat_lit;
+         parse_ident_atom;
+       ]
+       (fail "expected atom"))
+    st
 
-let parse_ident : string t = function
-  | Ident name :: rest -> Some (name, rest)
-  | _ -> None
-
-let parse_binder_name : string option t = function
-  | Underscore :: rest -> Some (None, rest)
-  | Ident name :: rest -> Some (Some name, rest)
-  | _ -> None
-
-let parse_sorry : Raw_syntax.t t = function
-  | Sorry :: rest -> Some (Raw_syntax.Sorry, rest)
-  | _ -> None
-
-let parse_var : Raw_syntax.t t =
-  let* name = parse_ident in
-  return (Raw_syntax.Ident name)
-
-let parse_type : Raw_syntax.t t = function
-  | Type :: rest -> Some (Raw_syntax.U, rest)
-  | _ -> None
-
-let parse_int_lit : Raw_syntax.t t = function
-  | NatLit n :: rest -> Some (Raw_syntax.NatLit n, rest)
-  | _ -> None
-
-let parse_unit : Raw_syntax.t t = function
-  | LParen :: RParen :: rest -> Some (Raw_syntax.Ident "Unit.unit", rest)
-  | _ -> None
-
-let rec pratt_parser (min_prec : prec) : Raw_syntax.t t =
+and pratt_parser min_prec : Cst.t Parser.t =
   let leading_parsers =
     [
       (PrecMax, parse_pi_leading);
@@ -111,322 +522,225 @@ let rec pratt_parser (min_prec : prec) : Raw_syntax.t t =
   in
   let trailing_parsers =
     [
-      (PrecApp, PrecMax, parse_app_trailing);
-      (PrecAdd, PrecAdd, parse_add_trailing);
-      (PrecEq, PrecEq, parse_eq_trailing);
-      (PrecPi, PrecPi, parse_prod_trailing);
-      (PrecPi, PrecPi, parse_arrow_trailing);
+      (PrecApp, parse_app_trailing);
+      (PrecAdd, parse_add_trailing);
+      (PrecEq, parse_eq_trailing);
+      (PrecPi, parse_prod_trailing);
+      (PrecPi, parse_arrow_trailing);
     ]
   in
-
-  let leading_parsers =
-    List.filter_map
-      (fun (prec, parser) ->
-        if compare_prec prec min_prec >= 0 then
-          Some parser
+  let* () = ws in
+  let rec try_leading = function
+    | [] -> fail "expected expression"
+    | (p_prec, p) :: ps ->
+        if compare_prec p_prec min_prec >= 0 then
+          p <|> try_leading ps
         else
-          None)
-      leading_parsers
+          try_leading ps
   in
-
-  let* left = choice leading_parsers in
-
-  let try_trailing_parsers (left : Raw_syntax.t) : Raw_syntax.t t =
-    let trailing_parsers =
-      List.filter_map
-        (fun (prec, lhs_prec, parser) ->
-          if compare_prec prec min_prec >= 0 then
-            Some (parser prec lhs_prec left)
+  let* left = try_leading leading_parsers in
+  let rec parse_trailing left =
+    let rec try_trailing = function
+      | [] -> pure left
+      | (p_prec, p) :: ps ->
+          if compare_prec p_prec min_prec >= 0 then
+            p left >>= parse_trailing <|> try_trailing ps
           else
-            None)
-        trailing_parsers
+            try_trailing ps
     in
-    choice trailing_parsers
+    try_trailing trailing_parsers
   in
+  parse_trailing left
 
-  let rec parse_trailing_loop (left : Raw_syntax.t) : Raw_syntax.t t =
-    let* left_opt = optional (try_trailing_parsers left) in
-    match left_opt with
-    | Some new_left -> parse_trailing_loop new_left
-    | None -> return left
-  in
-  parse_trailing_loop left
+and parse_preterm : Cst.t Parser.t = fun st -> (pratt_parser PrecMin) st
 
-and parse_pair : Raw_syntax.t t =
- fun input ->
-  (let* () = token LParen in
-   let* a = pratt_parser PrecMin in
-   let* () = token Comma in
-   let* b = pratt_parser PrecMin in
-   let* () = token RParen in
-   return (Raw_syntax.Pair (a, b)))
-    input
+and parse_app_trailing (left : Cst.t) : Cst.t Parser.t =
+  (let* arg = parse_lambda_leading in
+   let+ end_pos = get_pos in
+   let start_pos = get_start_pos left in
+   pure (Cst.App (Some { start_pos; end_pos }, left, arg)))
+  <|> (let* arg = parse_let_leading in
+       let+ end_pos = get_pos in
+       let start_pos = get_start_pos left in
+       pure (Cst.App (Some { start_pos; end_pos }, left, arg)))
+  <|> let* arg = parse_atom_leading in
+      let+ end_pos = get_pos in
+      let start_pos = get_start_pos left in
+      pure (Cst.App (Some { start_pos; end_pos }, left, arg))
 
-and parse_ann_or_parens : Raw_syntax.t t =
- fun input ->
-  (let* () = token LParen in
-   let* e = pratt_parser PrecMin in
-   (let* () = token Colon in
-    let* ty = pratt_parser PrecMin in
-    let* () = token RParen in
-    return (Raw_syntax.Ann (e, ty)))
-   <|>
-   let* () = token RParen in
-   return e)
-    input
+and parse_add_trailing (left : Cst.t) : Cst.t Parser.t =
+  let* () = ws in
+  let+ cp = get_cp in
+  match cp with
+  | Some cp when cp = Char.code '+' || cp = Char.code '-' ->
+      let is_plus = cp = Char.code '+' in
+      let* () = advance_char in
+      let* b = pratt_parser PrecAdd in
+      let+ end_pos = get_pos in
+      let start_pos = get_start_pos left in
+      if is_plus then
+        pure (Cst.Add (Some { start_pos; end_pos }, left, b))
+      else
+        pure (Cst.Sub (Some { start_pos; end_pos }, left, b))
+  | _ -> fail "expected + or -"
 
-(* Leading parsers for atoms *)
-and parse_atom_leading : leading_parser =
- fun input ->
-  choice
-    [
-      parse_sorry;
-      parse_var;
-      parse_type;
-      parse_int_lit;
-      parse_pair;
-      parse_unit;
-      parse_ann_or_parens;
-    ]
-    input
+and parse_eq_trailing (left : Cst.t) : Cst.t Parser.t =
+  let* () = ws in
+  let+ cp = get_cp in
+  match cp with
+  | Some cp when cp = Char.code '=' ->
+      let* () = advance_char in
+      let* b = pratt_parser PrecEq in
+      let+ end_pos = get_pos in
+      let start_pos = get_start_pos left in
+      pure (Cst.Eq (Some { start_pos; end_pos }, left, b))
+  | _ -> fail "expected ="
 
-and parse_typed_binder_group : Raw_syntax.typed_binder_group t =
- fun input ->
-  (let* () = token LParen in
-   let* names = many1 parse_binder_name in
-   let* () = token Colon in
-   let* ty = pratt_parser PrecMin in
-   let* () = token RParen in
-   return (names, ty))
-    input
+and parse_prod_trailing (left : Cst.t) : Cst.t Parser.t =
+  let* () = times in
+  let* b = pratt_parser PrecPi in
+  let+ end_pos = get_pos in
+  let start_pos = get_start_pos left in
+  pure (Cst.Prod (Some { start_pos; end_pos }, left, b))
 
-and parse_untyped_binder : string t =
- fun input ->
-  (let* name = parse_binder_name in
-   return
-     (match name with
-     | Some name -> name
-     | None -> "_"))
-    input
+and parse_arrow_trailing (left : Cst.t) : Cst.t Parser.t =
+  let* () = arrow in
+  let* b = pratt_parser PrecPi in
+  let+ end_pos = get_pos in
+  let start_pos = get_start_pos left in
+  pure (Cst.Arrow (Some { start_pos; end_pos }, left, b))
 
-and parse_binder_group : Raw_syntax.binder_group t =
- fun input ->
-  ((let* group = parse_typed_binder_group in
-    return (Raw_syntax.Typed group))
-  <|> let* name = parse_untyped_binder in
-      return (Raw_syntax.Untyped name))
-    input
+(* ========== Top level items ========== *)
 
-and parse_lambda_leading : leading_parser =
- fun input ->
-  (let* () = token Fun in
-   let* binder_groups = many1 parse_binder_group in
-   let* () = token Eq_gt in
-   let* body = pratt_parser PrecMin in
-   return (Raw_syntax.Lam (binder_groups, body)))
-    input
-
-and parse_let_leading : leading_parser =
- fun input ->
-  (let* () = token Let in
-   let* name = parse_ident in
-   let* ty_opt =
-     optional
-       (let* () = token Colon in
-        pratt_parser PrecMin)
-   in
-   let* () = token Colon_eq in
-   let* e = pratt_parser PrecMin in
-   let* () = token Semicolon in
-   let* body = pratt_parser PrecMin in
-   return (Raw_syntax.Let (name, ty_opt, e, body)))
-    input
-
-(* Leading parser for Pi *)
-and parse_pi_leading : leading_parser =
- fun input ->
-  (let* group = parse_typed_binder_group in
-   let* () = token Arrow in
-   let* b = pratt_parser PrecPi in
-   return (Raw_syntax.Pi (group, b)))
-    input
-
-(* Leading parser for Sigma *)
-and parse_sigma_leading : leading_parser =
- fun input ->
-  (let* group = parse_typed_binder_group in
-   let* () = token Times in
-   let* b = pratt_parser PrecPi in
-   return (Raw_syntax.Sigma (group, b)))
-    input
-
-(* Trailing parser for application *)
-and parse_app_trailing : trailing_parser =
- fun _prec _lhs_prec left input ->
-  (* Parse an argument (atom or lambda/let) *)
-  match parse_atom_leading input with
-  | Some (arg, input') -> Some (Raw_syntax.App (left, arg), input')
-  | None -> (
-      (* Try lambda or let *)
-      match parse_lambda_leading input with
-      | Some (arg, input') -> Some (Raw_syntax.App (left, arg), input')
-      | None -> (
-          match parse_let_leading input with
-          | Some (arg, input') -> Some (Raw_syntax.App (left, arg), input')
-          | None -> None))
-
-(* Trailing parser for addition *)
-and parse_add_trailing : trailing_parser =
- fun _prec _lhs_prec left input ->
-  ((let* () = token Plus in
-    let* b = pratt_parser PrecAdd in
-    return (Raw_syntax.Add (left, b)))
-  <|>
-  let* () = token Minus in
-  let* b = pratt_parser PrecAdd in
-  return (Raw_syntax.Sub (left, b)))
-  |> fun p -> p input
-
-(* Trailing parser for equality *)
-and parse_eq_trailing : trailing_parser =
- fun _prec _lhs_prec left input ->
-  (let* () = token Equal in
-   let* b = pratt_parser PrecEq in
-   return (Raw_syntax.Eq (left, b)))
-  |> fun p -> p input
-
-(* Trailing parser for product *)
-and parse_prod_trailing : trailing_parser =
- fun _prec _lhs_prec left input ->
-  (let* () = token Times in
-   let* b = pratt_parser PrecPi in
-   return (Raw_syntax.Prod (left, b)))
-  |> fun p -> p input
-
-(* Trailing parser for arrow *)
-and parse_arrow_trailing : trailing_parser =
- fun _prec _lhs_prec left input ->
-  (let* () = token Arrow in
-   let* b = pratt_parser PrecPi in
-   return (Raw_syntax.Arrow (left, b)))
-  |> fun p -> p input
-
-and parse_preterm : Raw_syntax.t t = fun input -> pratt_parser PrecMin input
-
-(* ========== Top level ========== *)
-
-let parse_params : Raw_syntax.typed_binder_group list t =
+let parse_params : Cst.typed_binder_group list Parser.t =
   many parse_typed_binder_group
 
-let parse_constructor : Raw_syntax.constructor t =
-  let* () = token Pipe in
-  let* name = parse_ident in
+let parse_constructor : Cst.Command.inductive_constructor Parser.t =
+  let* () = ws in
+  let+ start_pos = get_pos in
+  let* () = str "|" in
+  let* _info, name = parse_ident in
   let* params = parse_params in
-  let* ty_opt =
-    optional
-      (let* () = token Colon in
-       parse_preterm)
-  in
-  return { Raw_syntax.name; params; ty_opt }
+  let* ty_opt = optional (str ":" >> parse_preterm) in
+  let+ end_pos = get_pos in
+  pure { Cst.Command.src = Some { start_pos; end_pos }; name; params; ty_opt }
 
-let parse_inductive : Raw_syntax.item t =
-  let* () = token Inductive in
-  let* name = parse_ident in
+let parse_inductive : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "inductive" in
+  let* _info, name = parse_ident in
   let* params = parse_params in
-  let* ty_opt =
-    optional
-      (let* () = token Colon in
-       parse_preterm)
-  in
-  let* () = token Where in
+  let* ty_opt = optional (str ":" >> parse_preterm) in
+  let* () = keyword "where" in
   let* ctors = many parse_constructor in
-  return (Raw_syntax.Inductive { name; params; ty_opt; ctors })
+  let+ end_pos = get_pos in
+  pure
+    (Cst.Command.Inductive
+       { src = Some { start_pos; end_pos }; name; params; ty_opt; ctors })
 
-let parse_field : Raw_syntax.field t =
-  let* () = token LParen in
-  let* name = parse_ident in
+let parse_field : Cst.Command.structure_field Parser.t =
+  let+ start_pos = get_pos in
+  let* () = str "(" in
+  let* _src, name = parse_ident in
   if String.contains name '.' then
-    raise (Syntax_error "Structure field names must be atomic");
-  let* args = parse_params in
-  let* () = token Colon in
-  let* ty = parse_preterm in
-  let* () = token RParen in
-  return { Raw_syntax.name; binders = args; ty }
+    fail "Structure field names must be atomic"
+  else
+    let* args = parse_params in
+    let* () = str ":" in
+    let* ty = parse_preterm in
+    let* () = str ")" in
+    let+ end_pos = get_pos in
+    pure
+      { Cst.Command.src = Some { start_pos; end_pos }; name; params = args; ty }
 
-let parse_structure : Raw_syntax.item t =
-  let* () = token Structure in
-  let* name = parse_ident in
+let parse_structure : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "structure" in
+  let* _info, name = parse_ident in
   let* params = parse_params in
   let* ty_opt =
     optional
-      (let* () = token Colon in
+      (let* () = str ":" in
        parse_preterm)
   in
-  let* () = token Where in
+  let* () = keyword "where" in
   let* fields = many parse_field in
-  return (Raw_syntax.Structure { name; params; ty_opt; fields })
+  let+ end_pos = get_pos in
+  pure
+    (Cst.Command.Structure
+       { src = Some { start_pos; end_pos }; name; params; ty_opt; fields })
 
 let parse_def_body :
-    (Raw_syntax.typed_binder_group list * Raw_syntax.t option * Raw_syntax.t) t
-    =
+    (Cst.typed_binder_group list * Cst.t option * Cst.t) Parser.t =
   let* params = parse_params in
   let* ret_ty_opt =
     optional
-      (let* () = token Colon in
+      (let* () = str ":" in
        parse_preterm)
   in
-  let* () = token Colon_eq in
+  let* () = keyword ":=" in
   let* body = parse_preterm in
-  return (params, ret_ty_opt, body)
+  pure (params, ret_ty_opt, body)
 
-let parse_def : Raw_syntax.item t =
-  let* () = token Def in
-  let* name = parse_ident in
+let parse_def : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "def" in
+  let* _src, name = parse_ident in
   let* params, ty_opt, body = parse_def_body in
-  return (Raw_syntax.Def { name; params; ty_opt; body })
+  let+ end_pos = get_pos in
+  pure
+    (Cst.Command.Definition
+       { src = Some { start_pos; end_pos }; name; params; ty_opt; body })
 
-let parse_example : Raw_syntax.item t =
-  let* () = token Example in
+let parse_example : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "example" in
   let* params, ty_opt, body = parse_def_body in
-  return (Raw_syntax.Example { params; ty_opt; body })
+  let+ end_pos = get_pos in
+  pure
+    (Cst.Command.Example
+       { src = Some { start_pos; end_pos }; params; ty_opt; body })
 
-let parse_axiom : Raw_syntax.item t =
-  let* () = token Axiom in
-  let* name = parse_ident in
+let parse_axiom : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "axiom" in
+  let* _src, name = parse_ident in
   let* params = parse_params in
-  let* () = token Colon in
+  let* () = str ":" in
   let* ty = parse_preterm in
-  return (Raw_syntax.Axiom { name; params; ty })
+  let+ end_pos = get_pos in
+  pure
+    (Cst.Command.Axiom { src = Some { start_pos; end_pos }; name; params; ty })
 
-let parse_single_item : Raw_syntax.item t =
+let parse_import : Cst.Command.t Parser.t =
+  let+ start_pos = get_pos in
+  let* () = keyword "import" in
+  let* _info, module_name = parse_ident in
+  let+ end_pos = get_pos in
+  pure (Cst.Command.Import { src = Some { start_pos; end_pos }; module_name })
+
+let parse_item : Cst.Command.t Parser.t =
   choice
     [
-      parse_structure;
-      parse_inductive;
+      parse_import;
       parse_def;
       parse_example;
       parse_axiom;
-      (let* () = token Import in
-       let* name = parse_ident in
-       return (Raw_syntax.Import { module_name = name }));
+      parse_inductive;
+      parse_structure;
     ]
+    (fail "unexpected end of input")
 
-let parse_program : Raw_syntax.program t =
- fun input -> many parse_single_item input
+let rec parse_program acc : Cst.program Parser.t =
+  let* () = ws in
+  let+ eof = is_eof in
+  if eof then
+    pure (List.rev acc)
+  else
+    let* item = parse_item in
+    parse_program (item :: acc)
 
-let parse (input : token list) : Raw_syntax.program =
-  match parse_program input with
-  | None ->
-      let msg =
-        match input with
-        | [] -> "Unexpected end of input"
-        | t :: _ -> Format.asprintf "Unexpected token: %a" pp_token t
-      in
-      raise (Syntax_error msg)
-  | Some (x, []) -> x
-  | Some (_, remaining) ->
-      raise
-        (Syntax_error
-           (Format.asprintf "Syntax error: %a"
-              (Format.pp_print_list ~pp_sep:Format.pp_print_space pp_token)
-              (List.take 10 remaining)))
+let parse s =
+  match parse_program [] (init_state s) with
+  | Ok (prog, _) -> prog
+  | Error e -> raise (Syntax_error e)

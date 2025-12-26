@@ -1,9 +1,10 @@
 open Syntax
+open Frontend
 
-let elab_params genv params =
+let elab_params genv (params : Ast.typed_binder list) =
   let rec go ctx acc genv = function
     | [] -> (ctx, List.rev acc)
-    | (name, ty) :: rest ->
+    | (_, name, ty) :: rest ->
         let ty = Bidir.check_ty genv ctx ty in
         let ty_val = Nbe.eval_ty genv ctx.env ty in
         let ctx = Context.bind name ty_val ctx in
