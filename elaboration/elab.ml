@@ -11,14 +11,14 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
   let rec process_import genv imported importing (m : Ast.Command.import) =
     let name = Name.parse m.module_name in
     if List.mem name importing then
-      raise (Error.make_with_src ~kind:Import "Circular import" m.src);
+      Error.raise_with_src ~kind:Import "Circular import" m.src;
     if ModuleNameSet.mem name imported then
       (genv, imported)
     else
       let path = Filename.concat root (String.concat "/" name ^ ".qdt") in
       let content =
         try read_file path with
-        | _ -> raise (Error.make_with_src ~kind:Import "Import not found" m.src)
+        | _ -> Error.raise_with_src ~kind:Import "Import not found" m.src
       in
       let imported_prog = Parser.parse content in
       let imported_prog = Desugar.desugar_program imported_prog in
@@ -31,7 +31,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     | Import import :: rest ->
         let genv, imported = process_import genv imported importing import in
         go genv imported importing acc rest ~filename
-    | Definition { src; name; params; ty_opt; body } :: rest -> (
+    | Definition { src = _; name; params; ty_opt; body } :: rest -> (
         let name = Name.parse name in
         try
           let param_ctx, param_tys = Params.elab_params genv params in
@@ -58,17 +58,8 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         with
         | Error.Error err ->
             Format.eprintf "%a\n" (Error.pp ~filename) err;
-            go genv imported importing acc rest ~filename
-        | exn ->
-            let err =
-              Error.make_with_src_t ~kind:Elaboration
-                (Format.asprintf "Elaboration error in %s: %s"
-                   (Name.to_string name) (Printexc.to_string exn))
-                src
-            in
-            Format.eprintf "%a\n" (Error.pp ~filename) err;
             go genv imported importing acc rest ~filename)
-    | Example { src; params; ty_opt; body } :: rest -> (
+    | Example { src = _; params; ty_opt; body } :: rest -> (
         try
           let param_ctx, _param_tys = Params.elab_params genv params in
           let _, _ =
@@ -84,17 +75,8 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         with
         | Error.Error err ->
             Format.eprintf "%a\n" (Error.pp ~filename) err;
-            go genv imported importing acc rest ~filename
-        | exn ->
-            let err =
-              Error.make_with_src_t ~kind:Elaboration
-                (Format.asprintf "Elaboration error in example: %s"
-                   (Printexc.to_string exn))
-                src
-            in
-            Format.eprintf "%a\n" (Error.pp ~filename) err;
             go genv imported importing acc rest ~filename)
-    | Axiom { src; name; params; ty } :: rest -> (
+    | Axiom { src = _; name; params; ty } :: rest -> (
         let name = Name.parse name in
         try
           let param_ctx, param_tys = Params.elab_params genv params in
@@ -110,15 +92,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         with
         | Error.Error err ->
             Format.eprintf "%a\n" (Error.pp ~filename) err;
-            go genv imported importing acc rest ~filename
-        | exn ->
-            let err =
-              Error.make_with_src_t ~kind:Elaboration
-                (Format.asprintf "Elaboration error in axiom %s: %s"
-                   (Name.to_string name) (Printexc.to_string exn))
-                src
-            in
-            Format.eprintf "%a\n" (Error.pp ~filename) err;
             go genv imported importing acc rest ~filename)
     | Inductive info :: rest -> (
         try
@@ -127,15 +100,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         with
         | Error.Error err ->
             Format.eprintf "%a\n" (Error.pp ~filename) err;
-            go genv imported importing acc rest ~filename
-        | exn ->
-            let err =
-              Error.make_with_src_t ~kind:Elaboration
-                (Format.asprintf "Elaboration error in inductive %s: %s"
-                   info.name (Printexc.to_string exn))
-                info.src
-            in
-            Format.eprintf "%a\n" (Error.pp ~filename) err;
             go genv imported importing acc rest ~filename)
     | Structure info :: rest -> (
         try
@@ -143,15 +107,6 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
           go genv imported importing (results @ acc) rest ~filename
         with
         | Error.Error err ->
-            Format.eprintf "%a\n" (Error.pp ~filename) err;
-            go genv imported importing acc rest ~filename
-        | exn ->
-            let err =
-              Error.make_with_src_t ~kind:Elaboration
-                (Format.asprintf "Elaboration error in structure %s: %s"
-                   info.name (Printexc.to_string exn))
-                info.src
-            in
             Format.eprintf "%a\n" (Error.pp ~filename) err;
             go genv imported importing acc rest ~filename)
   in
