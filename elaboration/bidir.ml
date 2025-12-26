@@ -23,8 +23,7 @@ let fresh_sorry_id =
     id
 
 let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
-  | Missing src ->
-      raise (Error.make_with_src ~kind:Type_check "Missing term" src)
+  | Missing src -> Error.raise_with_src ~kind:Type_check "Missing term" src
   | U _ -> TyU
   | Pi (_src, (_, name, dom), cod) ->
       let dom = check_ty genv ctx dom in
@@ -44,18 +43,16 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
       let tm, ty_val = infer_tm genv ctx t in
       (if not (Nbe.conv_ty genv ctx.lvl ty_val VTyU) then
          let src = get_src t in
-         raise
-           (Error.make_with_src ~kind:Type_check
-              (Format.asprintf "Expected Type, got %a"
-                 (Pretty.pp_ty_ctx (Context.names ctx))
-                 (Quote.quote_ty genv ctx.lvl ty_val))
-              src));
+         Error.raise_with_src ~kind:Type_check
+           (Format.asprintf "Expected Type, got %a"
+              (Pretty.pp_ty_ctx (Context.names ctx))
+              (Quote.quote_ty genv ctx.lvl ty_val))
+           src);
       TyEl tm
 
 and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
   function
-  | Missing src ->
-      raise (Error.make_with_src ~kind:Type_check "Missing term" src)
+  | Missing src -> Error.raise_with_src ~kind:Type_check "Missing term" src
   | Ident (src, name) -> (
       match Context.lookup_name ctx name with
       | Some (k, ty) -> (TmVar (Idx k), ty)
@@ -64,10 +61,9 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
           match Global.find_ty fqn genv with
           | Some ty -> (TmConst fqn, Nbe.eval_ty genv ctx.env ty)
           | None ->
-              raise
-                (Error.make_with_src ~kind:Type_check
-                   (Format.sprintf "Unbound variable: %s" name)
-                   src)))
+              Error.raise_with_src ~kind:Type_check
+                (Format.sprintf "Unbound variable: %s" name)
+                src))
   | App (src, f, a) -> (
       let f', f_ty = infer_tm genv ctx f in
       match f_ty with
@@ -76,12 +72,10 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
           let a_val = Nbe.eval_tm genv ctx.env a' in
           (TmApp (f', a'), Nbe.eval_ty genv (a_val :: env) b_ty)
       | _ ->
-          raise
-            (Error.make_with_src ~kind:Type_check
-               "Expected function type in application" src))
+          Error.raise_with_src ~kind:Type_check
+            "Expected function type in application" src)
   | U src ->
-      raise
-        (Error.make_with_src ~kind:Type_check "Cannot infer type of Type" src)
+      Error.raise_with_src ~kind:Type_check "Cannot infer type of Type" src
   | Ann (_src, e, ty) ->
       let ty = check_ty genv ctx ty in
       let ty_val = Nbe.eval_ty genv ctx.env ty in
@@ -90,9 +84,8 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
   | Lam (src, binder, body) -> (
       match binder with
       | Ast.Untyped _ ->
-          raise
-            (Error.make_with_src ~kind:Type_check
-               "Cannot infer type of unannotated lambda :(" src)
+          Error.raise_with_src ~kind:Type_check
+            "Cannot infer type of unannotated lambda :(" src
       | Ast.Typed (_, name_opt, ty) ->
           let ty' = check_ty genv ctx ty in
           let ty_val = Nbe.eval_ty genv ctx.env ty' in
@@ -140,8 +133,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
       let result_ty = Nbe.eval_ty genv ctx'.env body_ty_quoted in
       (TmLet (name, Quote.quote_ty genv ctx.lvl rhs_ty, rhs', body'), result_ty)
   | Sorry src ->
-      raise
-        (Error.make_with_src ~kind:Type_check "Cannot infer type of sorry" src)
+      Error.raise_with_src ~kind:Type_check "Cannot infer type of sorry" src
 
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
     (expected : vl_ty) : tm =
@@ -158,24 +150,21 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
           let ann' = check_ty genv ctx ann in
           let ann_val = Nbe.eval_ty genv ctx.env ann' in
           if not (Nbe.conv_ty genv ctx.lvl ann_val a_ty) then
-            raise
-              (Error.make_with_src ~kind:Type_check
-                 (Format.asprintf
-                    "Lambda annotation mismatch: expected %a, got %a"
-                    (Pretty.pp_ty_ctx (Context.names ctx))
-                    (Quote.quote_ty genv ctx.lvl a_ty)
-                    (Pretty.pp_ty_ctx (Context.names ctx))
-                    (Quote.quote_ty genv ctx.lvl ann_val))
-                 binder_src);
+            Error.raise_with_src ~kind:Type_check
+              (Format.asprintf "Lambda annotation mismatch: expected %a, got %a"
+                 (Pretty.pp_ty_ctx (Context.names ctx))
+                 (Quote.quote_ty genv ctx.lvl a_ty)
+                 (Pretty.pp_ty_ctx (Context.names ctx))
+                 (Quote.quote_ty genv ctx.lvl ann_val))
+              binder_src;
           let ctx' = Context.bind name_opt a_ty ctx in
           let var = VTmNeutral (HVar (Lvl ctx.lvl), []) in
           let b_ty_val = Nbe.eval_ty genv (var :: env) b_ty in
           let body' = check_tm genv ctx' body b_ty_val in
           TmLam (name_opt, Quote.quote_ty genv ctx.lvl a_ty, body'))
   | Lam (src, _, _), _ ->
-      raise
-        (Error.make_with_src ~kind:Type_check
-           "Expected function type for lambda" src)
+      Error.raise_with_src ~kind:Type_check "Expected function type for lambda"
+        src
   | Pair (_src, a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
       let fst_ty = Nbe.do_el a_code_val in
       let snd_ty = Nbe.do_el b_val in
@@ -188,9 +177,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
             (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code_tm), b_code_tm), a'),
           b' )
   | Pair (src, _, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
-      raise
-        (Error.make_with_src ~kind:Type_check "Expected product type in pair"
-           src)
+      Error.raise_with_src ~kind:Type_check "Expected product type in pair" src
   | Let (_src, name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -212,12 +199,11 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
       (if not (Nbe.conv_ty genv ctx.lvl inferred expected) then
          let names = Context.names ctx in
          let src = get_src raw in
-         raise
-           (Error.make_with_src ~kind:Type_check
-              (Format.asprintf "Type mismatch: expected %a, got %a"
-                 (Pretty.pp_ty_ctx names)
-                 (Quote.quote_ty genv ctx.lvl expected)
-                 (Pretty.pp_ty_ctx names)
-                 (Quote.quote_ty genv ctx.lvl inferred))
-              src));
+         Error.raise_with_src ~kind:Type_check
+           (Format.asprintf "Type mismatch: expected %a, got %a"
+              (Pretty.pp_ty_ctx names)
+              (Quote.quote_ty genv ctx.lvl expected)
+              (Pretty.pp_ty_ctx names)
+              (Quote.quote_ty genv ctx.lvl inferred))
+           src);
       tm
