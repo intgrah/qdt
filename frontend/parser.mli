@@ -11,7 +11,10 @@ type prec =
   | PrecFun
   | PrecPi
   | PrecEq
-  | PrecAdd
+  | PrecAddL
+  | PrecAddR
+  | PrecMulL
+  | PrecMulR
   | PrecApp
   | PrecMax
 

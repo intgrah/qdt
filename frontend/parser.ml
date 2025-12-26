@@ -227,13 +227,17 @@ let read_ident : string Parser.t =
 
 let get_start_pos : Cst.t -> Syntax.position = function
   | Missing src
+  | U src
+  | Sorry src -> (
+      match src with
+      | None -> { offset = 0; line = 0; column = 0 }
+      | Some { start_pos; _ } -> start_pos)
   | Ident (src, _)
   | App (src, _, _)
   | Lam (src, _, _)
   | Pi (src, _, _)
   | Arrow (src, _, _)
   | Let (src, _, _, _, _)
-  | U src
   | Sigma (src, _, _)
   | Prod (src, _, _)
   | Pair (src, _, _)
@@ -241,8 +245,8 @@ let get_start_pos : Cst.t -> Syntax.position = function
   | NatLit (src, _)
   | Add (src, _, _)
   | Sub (src, _, _)
-  | Ann (src, _, _)
-  | Sorry src -> (
+  | Mul (src, _, _)
+  | Ann (src, _, _) -> (
       match src with
       | None -> { offset = 0; line = 0; column = 0 }
       | Some { start_pos; _ } -> start_pos)
@@ -318,7 +322,10 @@ type prec =
   | PrecFun
   | PrecPi
   | PrecEq
-  | PrecAdd
+  | PrecAddL
+  | PrecAddR
+  | PrecMulL
+  | PrecMulR
   | PrecApp
   | PrecMax
 [@@deriving compare]
@@ -522,11 +529,12 @@ and pratt_parser min_prec : Cst.t Parser.t =
   in
   let trailing_parsers =
     [
-      (PrecApp, parse_app_trailing);
-      (PrecAdd, parse_add_trailing);
-      (PrecEq, parse_eq_trailing);
-      (PrecPi, parse_prod_trailing);
-      (PrecPi, parse_arrow_trailing);
+      (PrecApp, PrecApp, parse_app_trailing);
+      (PrecMulL, PrecMulR, parse_mul_trailing);
+      (PrecAddL, PrecAddR, parse_add_trailing);
+      (PrecEq, PrecEq, parse_eq_trailing);
+      (PrecPi, PrecPi, parse_prod_trailing);
+      (PrecPi, PrecPi, parse_arrow_trailing);
     ]
   in
   let* () = ws in
@@ -542,9 +550,9 @@ and pratt_parser min_prec : Cst.t Parser.t =
   let rec parse_trailing left =
     let rec try_trailing = function
       | [] -> pure left
-      | (p_prec, p) :: ps ->
-          if compare_prec p_prec min_prec >= 0 then
-            p left >>= parse_trailing <|> try_trailing ps
+      | (left_prec, right_prec, p) :: ps ->
+          if compare_prec left_prec min_prec >= 0 then
+            p right_prec left >>= parse_trailing <|> try_trailing ps
           else
             try_trailing ps
     in
@@ -554,7 +562,7 @@ and pratt_parser min_prec : Cst.t Parser.t =
 
 and parse_preterm : Cst.t Parser.t = fun st -> (pratt_parser PrecMin) st
 
-and parse_app_trailing (left : Cst.t) : Cst.t Parser.t =
+and parse_app_trailing (_right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
   (let* arg = parse_lambda_leading in
    let+ end_pos = get_pos in
    let start_pos = get_start_pos left in
@@ -568,14 +576,26 @@ and parse_app_trailing (left : Cst.t) : Cst.t Parser.t =
       let start_pos = get_start_pos left in
       pure (Cst.App (Some { start_pos; end_pos }, left, arg))
 
-and parse_add_trailing (left : Cst.t) : Cst.t Parser.t =
+and parse_mul_trailing (right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
+  let* () = ws in
+  let+ cp = get_cp in
+  match cp with
+  | Some cp when cp = Char.code '*' ->
+      let* () = advance_char in
+      let* b = pratt_parser right_prec in
+      let+ end_pos = get_pos in
+      let start_pos = get_start_pos left in
+      pure (Cst.Mul (Some { start_pos; end_pos }, left, b))
+  | _ -> fail "expected *"
+
+and parse_add_trailing (right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
   let* () = ws in
   let+ cp = get_cp in
   match cp with
   | Some cp when cp = Char.code '+' || cp = Char.code '-' ->
       let is_plus = cp = Char.code '+' in
       let* () = advance_char in
-      let* b = pratt_parser PrecAdd in
+      let* b = pratt_parser right_prec in
       let+ end_pos = get_pos in
       let start_pos = get_start_pos left in
       if is_plus then
@@ -584,28 +604,28 @@ and parse_add_trailing (left : Cst.t) : Cst.t Parser.t =
         pure (Cst.Sub (Some { start_pos; end_pos }, left, b))
   | _ -> fail "expected + or -"
 
-and parse_eq_trailing (left : Cst.t) : Cst.t Parser.t =
+and parse_eq_trailing (right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
   let* () = ws in
   let+ cp = get_cp in
   match cp with
   | Some cp when cp = Char.code '=' ->
       let* () = advance_char in
-      let* b = pratt_parser PrecEq in
+      let* b = pratt_parser right_prec in
       let+ end_pos = get_pos in
       let start_pos = get_start_pos left in
       pure (Cst.Eq (Some { start_pos; end_pos }, left, b))
   | _ -> fail "expected ="
 
-and parse_prod_trailing (left : Cst.t) : Cst.t Parser.t =
+and parse_prod_trailing (right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
   let* () = times in
-  let* b = pratt_parser PrecPi in
+  let* b = pratt_parser right_prec in
   let+ end_pos = get_pos in
   let start_pos = get_start_pos left in
   pure (Cst.Prod (Some { start_pos; end_pos }, left, b))
 
-and parse_arrow_trailing (left : Cst.t) : Cst.t Parser.t =
+and parse_arrow_trailing (right_prec : prec) (left : Cst.t) : Cst.t Parser.t =
   let* () = arrow in
-  let* b = pratt_parser PrecPi in
+  let* b = pratt_parser right_prec in
   let+ end_pos = get_pos in
   let start_pos = get_start_pos left in
   pure (Cst.Arrow (Some { start_pos; end_pos }, left, b))

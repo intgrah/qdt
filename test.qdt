@@ -14,3 +14,8 @@ example :
   Eq3.rec
 
 def check := Relation.TransGen.rec
+
+example (a b c : Nat) : a - b - c = (a - b) - c := Eq.refl Nat (a - b - c)
+example (a b c : Nat) : a * b * c = (a * b) * c := Eq.refl Nat (a * b * c)
+example (a b c : Nat) : a + b * c = a + (b * c) := Eq.refl Nat (a + b * c)
+example (a b c : Nat) : a * b + c = (a * b) + c := Eq.refl Nat (a * b + c)
