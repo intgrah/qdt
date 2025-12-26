@@ -35,66 +35,56 @@ and do_app (genv : Global.t) (f : vl_tm) (a : vl_tm) : vl_tm =
       | None -> VTmNeutral ne)
   | _ -> raise (Eval_error "do_app: expected lambda or neutral")
 
-and try_iota_reduce (genv : Global.t) : neutral -> vl_tm option = function
-  | HConst rec_name, sp -> (
-      match Global.find_recursor rec_name genv with
-      | None -> None
-      | Some info -> (
-          let major_idx =
-            info.rec_num_params + 1 (* <- motive *) + info.rec_num_methods
-            + info.rec_num_indices
-          in
-          if List.length sp <= major_idx then
-            None
-          else
-            let major = List.nth sp major_idx in
-            match major with
-            | VTmNeutral (HConst ctor_name, ctor_sp) -> (
-                match
-                  List.find_opt
-                    (fun r -> r.Global.rule_ctor_name = ctor_name)
-                    info.rec_rules
-                with
-                | None -> None
-                | Some rule ->
-                    let params = List.take info.rec_num_params sp in
-                    let motive = List.nth sp info.rec_num_params in
-                    let methods_start = info.rec_num_params + 1 in
-                    let methods =
-                      List.drop methods_start sp
-                      |> List.take info.rec_num_methods
-                    in
-                    let fields = List.drop info.rec_num_params ctor_sp in
-                    let method_idx =
-                      List.find_index
-                        (fun r -> r.Global.rule_ctor_name = ctor_name)
-                        info.rec_rules
-                      |> Option.get
-                    in
-                    let method_val = List.nth methods method_idx in
-                    let app arg fn = do_app genv fn arg in
-                    let apps args fn = List.fold_left (do_app genv) fn args in
-                    let ihs =
-                      List.mapi
-                        (fun ih_idx rec_arg_idx ->
-                          let field = List.nth fields rec_arg_idx in
-                          let rec_indices_for_this =
-                            List.nth rule.rule_rec_indices ih_idx
-                          in
-                          let field_indices =
-                            List.map (List.nth fields) rec_indices_for_this
-                          in
-                          let rec_head =
-                            VTmNeutral
-                              (HConst (Name.child info.rec_ind_name "rec"), [])
-                          in
-                          rec_head |> apps params |> app motive |> apps methods
-                          |> apps field_indices |> app field)
-                        rule.rule_rec_args
-                    in
-                    Some (method_val |> apps fields |> apps ihs))
-            | _ -> None))
-  | _ -> None
+and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
+  let ( let* ) = Option.bind in
+  let* rec_name, sp =
+    match ne with
+    | HConst rec_name, sp -> Some (rec_name, sp)
+    | _ -> None
+  in
+  let* info = Global.find_recursor rec_name genv in
+  let major_idx =
+    info.rec_num_params + 1 (* <- motive *) + info.rec_num_methods
+    + info.rec_num_indices
+  in
+  let* major = List.nth_opt sp major_idx in
+  let* ctor_name, ctor_sp =
+    match major with
+    | VTmNeutral (HConst ctor_name, ctor_sp) -> Some (ctor_name, ctor_sp)
+    | _ -> None
+  in
+
+  let* rule =
+    List.find_opt (fun r -> r.Global.rule_ctor_name = ctor_name) info.rec_rules
+  in
+  let params = List.take info.rec_num_params sp in
+  let motive = List.nth sp info.rec_num_params in
+  let methods_start = info.rec_num_params + 1 in
+  let methods = List.drop methods_start sp |> List.take info.rec_num_methods in
+  let fields = List.drop info.rec_num_params ctor_sp in
+  let method_idx =
+    List.find_index
+      (fun r -> r.Global.rule_ctor_name = ctor_name)
+      info.rec_rules
+    |> Option.get
+  in
+  let method_val = List.nth methods method_idx in
+  let app arg fn = do_app genv fn arg in
+  let apps args fn = List.fold_left (do_app genv) fn args in
+  let ihs =
+    List.mapi
+      (fun ih_idx rec_arg_idx ->
+        let field = List.nth fields rec_arg_idx in
+        let rec_indices_for_this = List.nth rule.rule_rec_indices ih_idx in
+        let field_indices = List.map (List.nth fields) rec_indices_for_this in
+        let rec_head =
+          VTmNeutral (HConst (Name.child info.rec_ind_name "rec"), [])
+        in
+        rec_head |> apps params |> app motive |> apps methods
+        |> apps field_indices |> app field)
+      rule.rule_rec_args
+  in
+  Some (method_val |> apps fields |> apps ihs)
 
 let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
   match (ty1, ty2) with
