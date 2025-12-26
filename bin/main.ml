@@ -1,6 +1,3 @@
-module Pipeline = Incr
-module Update = Pipeline.Update
-
 let poll_seconds = 0.1
 
 let read_file path =
@@ -9,34 +6,22 @@ let read_file path =
       Format.eprintf "Failed to read %s: %s@." path msg;
       None
 
-let log_stage stage = function
-  | Update.Initialized _ -> Format.eprintf "[inc] %s@." stage
-  | Update.Changed _ -> Format.eprintf "[inc] %s@." stage
-  | Update.Invalidated -> Format.eprintf "[inc] %s@." stage
+let log_stage stage : 'a Incr.update -> unit = function
+  | Initialized _ -> Format.eprintf "[inc] %s@." stage
+  | Changed _ -> Format.eprintf "[inc] %s@." stage
+  | Invalidated -> Format.eprintf "[inc] %s@." stage
 
-let print_tokens tokens =
-  Format.printf "%a@."
-    (Format.pp_print_list
-       ~pp_sep:(fun fmt () -> Format.fprintf fmt " ")
-       Frontend.Lexer.pp_token)
-    tokens
+let print_program = Format.printf "%a@." Elaboration.Pretty.pp_ast_program
+let print_defs = List.iter (Format.printf "%a@.@." Elaboration.Pretty.pp_def)
 
-let print_program program =
-  Format.printf "%a@." Elaboration.Pretty.pp_raw_program program
-
-let print_defs defs =
-  List.iter
-    (fun def -> Format.printf "%a@.@." Elaboration.Pretty.pp_def def)
-    defs
-
-let handle_stage_result ~show ~printer = function
-  | Update.Initialized (Ok value)
-  | Update.Changed (_, Ok value) ->
+let handle_stage_result ~show ~printer : 'a Incr.update -> unit = function
+  | Initialized (Ok value)
+  | Changed (_, Ok value) ->
       if show then printer value
-  | Update.Initialized (Error err)
-  | Update.Changed (_, Error err) ->
-      Format.printf "%a@." Pipeline.pp_stage_error err
-  | Update.Invalidated -> ()
+  | Initialized (Error err)
+  | Changed (_, Error err) ->
+      Format.printf "%s@." err
+  | Invalidated -> ()
 
 let rec watch_loop file pipeline last_mtime =
   Unix.sleepf poll_seconds;
@@ -50,8 +35,8 @@ let rec watch_loop file pipeline last_mtime =
           match read_file file with
           | None -> last_mtime
           | Some contents ->
-              Pipeline.set_source pipeline contents;
-              Pipeline.stabilize ();
+              Incr.set_source pipeline contents;
+              Incr.stabilize ();
               stats.st_mtime
         ) else
           last_mtime
@@ -60,22 +45,19 @@ let rec watch_loop file pipeline last_mtime =
 
 let main () =
   let args = Cli.parse_args () in
-  let pipeline = Pipeline.create ~root_dir:args.root_dir () in
+  let pipeline = Incr.create ~root_dir:args.root_dir () in
 
   (* Attach debug handlers *)
-  Pipeline.on_tokens_update pipeline ~f:(fun update ->
-      log_stage "tokens" update;
-      handle_stage_result ~show:args.Cli.show_lex ~printer:print_tokens update);
-  Pipeline.on_program_update pipeline ~f:(fun update ->
+  Incr.on_program_update pipeline ~f:(fun update ->
       log_stage "program" update;
       handle_stage_result ~show:args.Cli.show_parse ~printer:print_program
         update);
-  Pipeline.on_elaborated_update pipeline ~f:(fun update ->
+  Incr.on_elaborated_update pipeline ~f:(fun update ->
       log_stage "elaborated" update;
       handle_stage_result ~show:args.Cli.show_elab ~printer:print_defs update);
 
-  Pipeline.set_source pipeline (Option.get (read_file args.input_file));
-  Pipeline.stabilize ();
+  Incr.set_source pipeline (Option.get (read_file args.input_file));
+  Incr.stabilize ();
   if args.watch then (
     let initial_mtime =
       match Unix.stat args.input_file with
