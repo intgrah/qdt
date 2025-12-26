@@ -12,15 +12,14 @@ and pp_typed_binder_group fmt ((_, names, ty) : Cst.typed_binder_group) : unit =
   Format.fprintf fmt "(%a : %a)" (pp_list pp_name) names pp_cst ty
 
 and pp_binder_group fmt : Cst.binder_group -> unit = function
-  | Cst.Untyped (_, name) -> pp_name fmt name
-  | Cst.Typed group -> pp_typed_binder_group fmt group
+  | Untyped (_, name) -> pp_name fmt name
+  | Typed group -> pp_typed_binder_group fmt group
 
 and pp_cst fmt : Cst.t -> unit = function
-  | Cst.Missing _ -> Format.fprintf fmt "<missing>"
-  | Cst.Ident (_, name) -> Format.fprintf fmt "%s" name
-  | Cst.App (_, f, a) ->
-      Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_cst f pp_cst a
-  | Cst.Lam (_, binders, body) ->
+  | Missing _ -> Format.fprintf fmt "<missing>"
+  | Ident (_, name) -> Format.fprintf fmt "%s" name
+  | App (_, f, a) -> Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_cst f pp_cst a
+  | Lam (_, binders, body) ->
       Format.fprintf fmt "@[<hov 2>(fun %a =>@ %a)@]" (pp_list pp_binder_group)
         binders pp_cst body
   | Pi (_, group, b) ->
@@ -45,6 +44,7 @@ and pp_cst fmt : Cst.t -> unit = function
   | NatLit (_, n) -> Format.fprintf fmt "%d" n
   | Add (_, a, b) -> Format.fprintf fmt "@[<hov 2>%a@ + %a@]" pp_cst a pp_cst b
   | Sub (_, a, b) -> Format.fprintf fmt "@[<hov 2>%a@ - %a@]" pp_cst a pp_cst b
+  | Mul (_, a, b) -> Format.fprintf fmt "@[<hov 2>%a@ * %a@]" pp_cst a pp_cst b
   | Ann (_, e, ty) ->
       Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" pp_cst e pp_cst ty
   | Sorry _ -> Format.fprintf fmt "sorry"
@@ -150,9 +150,9 @@ let needs_parens (parent_prec : prec option) (child_prec : prec) : bool =
   | Some p -> compare_prec p child_prec > 0
 
 let rec pp_ast_prec (parent_prec : prec option) fmt : Ast.t -> unit = function
-  | Ast.Missing _ -> Format.fprintf fmt "<missing>"
-  | Ast.Ident (_, name) -> Format.fprintf fmt "%s" name
-  | Ast.App (_, f, a) ->
+  | Missing _ -> Format.fprintf fmt "<missing>"
+  | Ident (_, name) -> Format.fprintf fmt "%s" name
+  | App (_, f, a) ->
       let prec = PrecApp in
       let pp_f = pp_ast_prec (Some prec) in
       let pp_a = pp_ast_prec (Some prec) in
@@ -160,7 +160,7 @@ let rec pp_ast_prec (parent_prec : prec option) fmt : Ast.t -> unit = function
         Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_f f pp_a a
       else
         Format.fprintf fmt "@[<hov 2>%a@ %a@]" pp_f f pp_a a
-  | Ast.Lam (_, binder, body) ->
+  | Lam (_, binder, body) ->
       let prec = PrecFun in
       let pp_binder fmt = function
         | Ast.Untyped (_, name) -> pp_name fmt name
@@ -174,7 +174,7 @@ let rec pp_ast_prec (parent_prec : prec option) fmt : Ast.t -> unit = function
       else
         Format.fprintf fmt "@[<hov 2>fun %a =>@ %a@]" pp_binder binder pp_body
           body
-  | Ast.Pi (_, (_, name, ty), body) ->
+  | Pi (_, (_, name, ty), body) ->
       let prec = PrecPi in
       let pp_ty = pp_ast_prec None in
       let pp_body = pp_ast_prec (Some prec) in
@@ -188,17 +188,17 @@ let rec pp_ast_prec (parent_prec : prec option) fmt : Ast.t -> unit = function
       else
         Format.fprintf fmt "@[<hov>%a : %a →@ %a@]" pp_name name pp_ty ty
           pp_body body
-  | Ast.Let (_, name, None, rhs, body) ->
+  | Let (_, name, None, rhs, body) ->
       let prec = PrecLet in
       Format.fprintf fmt "@[<v 0>@[<hov 2>let %s :=@ %a in@]@ %a@]" name
         (pp_ast_prec (Some prec)) rhs (pp_ast_prec (Some prec)) body
-  | Ast.Let (_, name, Some ty, rhs, body) ->
+  | Let (_, name, Some ty, rhs, body) ->
       let prec = PrecLet in
       Format.fprintf fmt "@[<v 0>@[<hov 2>let %s : %a :=@ %a in@]@ %a@]" name
         (pp_ast_prec None) ty (pp_ast_prec (Some prec)) rhs
         (pp_ast_prec (Some prec)) body
-  | Ast.U _ -> Format.fprintf fmt "Type"
-  | Ast.Eq (_, a, b) ->
+  | U _ -> Format.fprintf fmt "Type"
+  | Eq (_, a, b) ->
       let prec = PrecEq in
       let pp_a = pp_ast_prec (Some prec) in
       let pp_b = pp_ast_prec (Some prec) in
@@ -206,13 +206,13 @@ let rec pp_ast_prec (parent_prec : prec option) fmt : Ast.t -> unit = function
         Format.fprintf fmt "@[<hov 2>(%a@ = %a)@]" pp_a a pp_b b
       else
         Format.fprintf fmt "@[<hov 2>%a@ = %a@]" pp_a a pp_b b
-  | Ast.Pair (_, a, b) ->
+  | Pair (_, a, b) ->
       Format.fprintf fmt "@[<hov 2>(%a,@ %a)@]" (pp_ast_prec None) a
         (pp_ast_prec None) b
-  | Ast.Ann (_, e, ty) ->
+  | Ann (_, e, ty) ->
       Format.fprintf fmt "@[<hov 2>(%a@ : %a)@]" (pp_ast_prec None) e
         (pp_ast_prec None) ty
-  | Ast.Sorry _ -> Format.fprintf fmt "sorry"
+  | Sorry _ -> Format.fprintf fmt "sorry"
 
 let pp_ast fmt (t : Ast.t) = pp_ast_prec None fmt t
 
@@ -220,7 +220,9 @@ let pp_ast_typed_binder fmt (_, name, ty) =
   Format.fprintf fmt "(%a : %a)" pp_name name pp_ast ty
 
 let pp_ast_command fmt : Ast.Command.t -> unit = function
-  | Ast.Command.Definition { src = _; name; params; ty_opt; body } -> (
+  | Import { src = _; module_name } ->
+      Format.fprintf fmt "import %s" module_name
+  | Definition { src = _; name; params; ty_opt; body } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a"
@@ -235,7 +237,7 @@ let pp_ast_command fmt : Ast.Command.t -> unit = function
       | None ->
           Format.fprintf fmt "@[<hov 2>def %s%a :=@ %a@]" name pp_params params
             pp_ast body)
-  | Ast.Command.Example { src = _; params; ty_opt; body } -> (
+  | Example { src = _; params; ty_opt; body } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a"
@@ -250,7 +252,7 @@ let pp_ast_command fmt : Ast.Command.t -> unit = function
       | None ->
           Format.fprintf fmt "@[<hov 2>example%a :=@ %a@]" pp_params params
             pp_ast body)
-  | Ast.Command.Axiom { src = _; name; params; ty } ->
+  | Axiom { src = _; name; params; ty } ->
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a"
@@ -260,7 +262,7 @@ let pp_ast_command fmt : Ast.Command.t -> unit = function
       in
       Format.fprintf fmt "@[<hov 2>axiom %s%a : %a@]" name pp_params params
         pp_ast ty
-  | Ast.Command.Inductive { src = _; name; params; ty_opt; ctors } -> (
+  | Inductive { src = _; name; params; ty_opt; ctors } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a"
@@ -294,7 +296,7 @@ let pp_ast_command fmt : Ast.Command.t -> unit = function
             pp_params params pp_ast ty
             (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_ctor)
             ctors)
-  | Ast.Command.Structure { src = _; name; params; ty_opt; fields } -> (
+  | Structure { src = _; name; params; ty_opt; fields } -> (
       let pp_params fmt params =
         if params <> [] then
           Format.fprintf fmt " %a"
@@ -322,8 +324,6 @@ let pp_ast_command fmt : Ast.Command.t -> unit = function
             pp_params params pp_ast ty
             (Format.pp_print_list ~pp_sep:Format.pp_print_cut pp_field)
             fields)
-  | Ast.Command.Import { src = _; module_name } ->
-      Format.fprintf fmt "import %s" module_name
 
 let pp_ast_program fmt (prog : Ast.program) : unit =
   Format.pp_print_list

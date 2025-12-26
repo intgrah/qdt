@@ -16,6 +16,7 @@ type t =
   | NatLit of src * int (* 0 *)
   | Add of src * t * t (* a + b *)
   | Sub of src * t * t (* a - b *)
+  | Mul of src * t * t (* a * b *)
   | Ann of src * t * t (* (a : A) *)
   | Sorry of src (* sorry *)
 

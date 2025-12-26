@@ -47,6 +47,8 @@ let rec desugar : Cst.t -> Ast.t = function
       App (src, App (src, Ident (src, "Nat.add"), desugar a), desugar b)
   | Sub (src, a, b) ->
       App (src, App (src, Ident (src, "Nat.sub"), desugar a), desugar b)
+  | Mul (src, a, b) ->
+      App (src, App (src, Ident (src, "Nat.mul"), desugar a), desugar b)
   | Ann (src, e, ty) -> Ann (src, desugar e, desugar ty)
   | Sorry src -> Sorry src
 
