@@ -17,7 +17,7 @@ and eval_tm (genv : Global.t) (env : env) : tm -> vl_tm = function
   | TmVar (Idx l) -> List.nth env l
   | TmConst name -> (
       match Global.find_tm name genv with
-      | Some v -> v
+      | Some v -> eval_tm genv [] v
       | None -> VTmNeutral (HConst name, []))
   | TmLam (x, a, body) -> VTmLam (x, eval_ty genv env a, ClosTm (env, body))
   | TmApp (f, a) -> do_app genv (eval_tm genv env f) (eval_tm genv env a)
@@ -148,6 +148,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
                     let proj_result =
                       match Global.find_tm proj_name genv with
                       | Some proj_fn ->
+                          let proj_fn = eval_tm genv [] proj_fn in
                           let with_params =
                             List.fold_left (do_app genv) proj_fn params
                           in
