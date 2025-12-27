@@ -28,13 +28,10 @@ structure Even where
 def Nat.toEven (half : Nat) : Even :=
   Even.mk (half + half) half (Eq.refl Nat (half + half))
 
-def Even.toNat (e : Even) : Nat :=
-  Even.half e
-
-def left_inv : comp Nat Even Nat Even.toNat Nat.toEven = id Nat :=
+def left_inv : comp Nat Even Nat Even.half Nat.toEven = id Nat :=
   Eq.refl (Nat → Nat) (id Nat)
 
-def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
+def right_inv_pointwise (e : Even) : Nat.toEven (Even.half e) = e :=
   let n := Even.val e;
   let half := Even.half e;
   let double := half + half;
@@ -56,8 +53,8 @@ def right_inv_pointwise (e : Even) : Nat.toEven (Even.toNat e) = e :=
       (Eq.ext Nat n double (Eq.symm Nat double n double_eq_n) half_spec);
   Eq.trans Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
 
-def right_inv : comp Even Nat Even Nat.toEven Even.toNat = id Even :=
-  funext Even Even (comp Even Nat Even Nat.toEven Even.toNat) (id Even) right_inv_pointwise
+def right_inv : comp Even Nat Even Nat.toEven Even.half = id Even :=
+  funext Even Even (comp Even Nat Even Nat.toEven Even.half) (id Even) right_inv_pointwise
 
 def iso_nat_even : Iso Nat Even :=
-  Iso.mk Nat Even Nat.toEven Even.toNat left_inv right_inv
+  Iso.mk Nat Even Nat.toEven Even.half left_inv right_inv
