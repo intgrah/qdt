@@ -1,9 +1,7 @@
-open Syntax
 open Frontend
 open Ast
 
-let elab_structure (genv : Global.t) (info : Command.structure) :
-    Global.t * (Name.t * tm * ty) list =
+let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
   let ind_name = Name.parse info.name in
   let () =
     match info.ty_opt with
@@ -25,7 +23,7 @@ let elab_structure (genv : Global.t) (info : Command.structure) :
   let ctors : Command.inductive_constructor list =
     [ { src = info.src; name = "mk"; params = ctor_binders; ty_opt = None } ]
   in
-  let genv, results =
+  let genv =
     Inductive.elab_inductive genv
       {
         src = info.src;
@@ -127,55 +125,47 @@ let elab_structure (genv : Global.t) (info : Command.structure) :
   let param_binders : binder list =
     List.map (fun binder -> Typed binder) info.params
   in
-  let genv, results =
-    List.fold_left
-      (fun (genv, acc) (field : Command.structure_field) ->
-        let proj_name = Name.child (Name.parse info.name) field.name in
-        let field_ty = mk_field_ty field in
-        let subst_fty =
-          subst_fields
-            (List.filter_map
-               (fun other_fname ->
-                 if String.equal other_fname field.name then
-                   None
-                 else
-                   Some (other_fname, make_proj_app other_fname))
-               (List.map
-                  (fun (field : Command.structure_field) -> field.name)
-                  info.fields))
-            field_ty
-        in
-        let body : t =
-          App
-            ( None,
-              App
-                (None, rec_app, Lam (None, Untyped (None, Some "s"), subst_fty)),
-              Lam
-                ( None,
-                  List.hd field_binders,
-                  List.fold_right
-                    (fun binder acc -> Lam (None, binder, acc))
-                    (List.tl field_binders)
-                    (Ident (None, field.name)) ) )
-        in
-        let full_def =
-          match param_binders with
-          | [] -> body
-          | hd :: tl ->
-              List.fold_right
-                (fun binder acc -> Lam (None, binder, acc))
-                (hd :: tl) body
-        in
-        let term, ty_val = Bidir.infer_tm genv Context.empty full_def in
-        let term_val = Nbe.eval_tm genv [] term in
-        let ty_quoted = Quote.quote_ty genv 0 ty_val in
-        let genv =
-          Global.NameMap.add proj_name
-            (Global.Def { ty = ty_quoted; tm = term_val })
-            genv
-        in
-        let ty_out = Quote.quote_ty genv 0 ty_val in
-        (genv, (proj_name, term, ty_out) :: acc))
-      (genv, results) info.fields
-  in
-  (genv, results)
+  List.fold_left
+    (fun genv (field : Command.structure_field) ->
+      let proj_name = Name.child (Name.parse info.name) field.name in
+      let field_ty = mk_field_ty field in
+      let subst_fty =
+        subst_fields
+          (List.filter_map
+             (fun other_fname ->
+               if String.equal other_fname field.name then
+                 None
+               else
+                 Some (other_fname, make_proj_app other_fname))
+             (List.map
+                (fun (field : Command.structure_field) -> field.name)
+                info.fields))
+          field_ty
+      in
+      let body : t =
+        App
+          ( None,
+            App (None, rec_app, Lam (None, Untyped (None, Some "s"), subst_fty)),
+            Lam
+              ( None,
+                List.hd field_binders,
+                List.fold_right
+                  (fun binder acc -> Lam (None, binder, acc))
+                  (List.tl field_binders)
+                  (Ident (None, field.name)) ) )
+      in
+      let full_def =
+        match param_binders with
+        | [] -> body
+        | hd :: tl ->
+            List.fold_right
+              (fun binder acc -> Lam (None, binder, acc))
+              (hd :: tl) body
+      in
+      let term, ty_val = Bidir.infer_tm genv Context.empty full_def in
+      let term_val = Nbe.eval_tm genv [] term in
+      let ty_quoted = Quote.quote_ty genv 0 ty_val in
+      Global.NameMap.add proj_name
+        (Global.Def { ty = ty_quoted; tm = term_val })
+        genv)
+    genv info.fields

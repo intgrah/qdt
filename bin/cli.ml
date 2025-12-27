@@ -2,7 +2,7 @@ type options = {
   input_file : string;
   root_dir : string;
   show_parse : bool;
-  show_elab : bool;
+  show_elab : string list;
   watch : bool;
 }
 
@@ -21,8 +21,22 @@ let show_parse =
   Arg.(value & flag & info [ "p"; "parse" ] ~doc)
 
 let show_elab =
-  let doc = "Show elaboration output" in
-  Arg.(value & flag & info [ "e"; "elab" ] ~doc)
+  let doc =
+    "Print selected definitions after elaboration (comma-separated). Example: \
+     -e Nat.rec,Nat"
+  in
+  let parse (s : string) : string list =
+    s
+    |> String.split_on_char ','
+    |> List.map String.trim
+    |> List.filter (fun s -> s <> "")
+  in
+  let elab_names : string list Arg.conv =
+    let parser (s : string) = Ok (parse s) in
+    let pp fmt (xs : string list) = Format.pp_print_string fmt (String.concat "," xs) in
+    Arg.conv (parser, pp)
+  in
+  Arg.(value & opt elab_names [] & info [ "e"; "elab" ] ~docv:"NAMES" ~doc)
 
 let watch =
   let doc = "Watch file for changes" in
