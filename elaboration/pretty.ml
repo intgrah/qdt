@@ -475,8 +475,8 @@ let pp_ty = pp_ty_prec [] (Some PrecLet)
 let pp_tm = pp_tm_prec [] (Some PrecLet)
 
 let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
-  Format.fprintf fmt "@[<v 0>@[<hov 2>def %a :@;<1 4>%a :=@]@;<0 2>%a@]"
-    Name.pp name pp_ty ty pp_tm term
+  Format.fprintf fmt "@[<v 0>@[<hov 2>def %a :@;<1 4>%a :=@]@;<0 2>%a@]" Name.pp
+    name pp_ty ty pp_tm term
 
 (* ========== Values ========== *)
 
