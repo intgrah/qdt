@@ -1,0 +1,6 @@
+inductive Sexp (A : Type) : Type where
+  | Atom : A → Sexp A
+  | List : List (Sexp A) → Sexp A
+
+inductive Foo : Type where
+  | f : (Bool → Foo) → Foo
