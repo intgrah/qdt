@@ -26,13 +26,11 @@ and tm =
   | TmSorry of int * ty
   | TmLet of string * ty * tm * tm
 
-(* Weak head normal form *)
 type vl_ty =
   | VTyU
   | VTyPi of string option * vl_ty * clos_ty
   | VTyEl of neutral
 
-(* Weak head normal form *)
 and vl_tm =
   | VTmNeutral of neutral
   | VTmLam of string option * vl_ty * clos_tm
