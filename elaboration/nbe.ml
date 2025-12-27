@@ -44,8 +44,7 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   in
   let* info = Global.find_recursor rec_name genv in
   let major_idx =
-    info.rec_num_params + 1 (* <- motive *) + info.rec_num_methods
-    + info.rec_num_indices
+    info.rec_num_params + 1 + info.rec_num_methods + info.rec_num_indices
   in
   let* major = List.nth_opt sp major_idx in
   let* ctor_name, ctor_sp =
@@ -59,32 +58,24 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   in
   let params = List.take info.rec_num_params sp in
   let motive = List.nth sp info.rec_num_params in
-  let methods_start = info.rec_num_params + 1 in
-  let methods = List.drop methods_start sp |> List.take info.rec_num_methods in
+  let methods =
+    List.drop (info.rec_num_params + 1) sp |> List.take info.rec_num_methods
+  in
   let fields = List.drop info.rec_num_params ctor_sp in
-  let method_idx =
-    List.find_index
-      (fun r -> r.Global.rule_ctor_name = ctor_name)
-      info.rec_rules
-    |> Option.get
+  let pattern_val = eval_tm genv [] rule.rule_rec_rhs in
+  let rec apply_all_args f args =
+    match args with
+    | [] -> f
+    | arg :: rest -> (
+        match f with
+        | VTmLam (_, _, ClosTm (env, body)) ->
+            let new_env = arg :: env in
+            let new_body_val = eval_tm genv new_env body in
+            apply_all_args new_body_val rest
+        | _ -> raise (Eval_error "Expected lambda when applying arguments"))
   in
-  let method_val = List.nth methods method_idx in
-  let app arg fn = do_app genv fn arg in
-  let apps args fn = List.fold_left (do_app genv) fn args in
-  let ihs =
-    List.mapi
-      (fun ih_idx rec_arg_idx ->
-        let field = List.nth fields rec_arg_idx in
-        let rec_indices_for_this = List.nth rule.rule_rec_indices ih_idx in
-        let field_indices = List.map (List.nth fields) rec_indices_for_this in
-        let rec_head =
-          VTmNeutral (HConst (Name.child info.rec_ind_name "rec"), [])
-        in
-        rec_head |> apps params |> app motive |> apps methods
-        |> apps field_indices |> app field)
-      rule.rule_rec_args
-  in
-  Some (method_val |> apps fields |> apps ihs)
+  let all_args = params @ [ motive ] @ methods @ fields in
+  Some (apply_all_args pattern_val all_args)
 
 let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
   match (ty1, ty2) with
@@ -138,9 +129,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
                   when rec_info.rec_num_indices = 0
                        && List.length rec_info.rec_rules = 1 ->
                     let rule = List.hd rec_info.rec_rules in
-                    if
-                      rule.rule_rec_args = [] && rule.rule_nfields = 0
-                      && rule.rule_ctor_name = ctor_name
+                    if rule.rule_nfields = 0 && rule.rule_ctor_name = ctor_name
                     then
                       Some
                         {

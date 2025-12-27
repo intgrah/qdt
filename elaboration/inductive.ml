@@ -2,6 +2,12 @@ open Syntax
 open Frontend
 open Nbe
 
+[@@@warning "-33"]
+
+open Pretty
+
+[@@@warning "+33"]
+
 let pos_error message = Error.raise_with_src ~kind:Error.Positivity message None
 (* ========== Positivity Checking ========== *)
 
@@ -509,8 +515,8 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
     gen_recursor_ty genv ind_name num_params param_tys index_tys ctors
   in
   let rec_rules =
-    List.map
-      (fun (ctor_name, ctor_ty) ->
+    List.mapi
+      (fun method_idx (ctor_name, ctor_ty) ->
         let fields_ty =
           let rec strip n t =
             if n = 0 then
@@ -539,7 +545,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
                 None)
             all_fields
         in
-        let rec_indices =
+        let rec_index_patterns =
           List.map
             (fun rec_idx ->
               let rec get_field_ty n = function
@@ -563,19 +569,83 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
                   | TmVar (Idx i) ->
                       let field_num = rec_idx - 1 - i in
                       if field_num >= 0 && field_num < nfields then
-                        Some field_num
+                        Some (TmVar (Idx i))
                       else
                         None
                   | _ -> None)
                 index_args)
             rec_args
         in
+        let num_methods = List.length ctors in
+        let build_ih rec_arg_idx index_patterns =
+          let field_idx = rec_arg_idx in
+          let field_var = TmVar (Idx field_idx) in
+          let index_tms =
+            List.map
+              (function
+                | TmVar (Idx db_idx) ->
+                    let earlier_field_idx = rec_arg_idx - 1 - db_idx in
+                    TmVar (Idx earlier_field_idx)
+                | tm -> tm)
+              index_patterns
+          in
+          let rec_app = TmConst rec_name in
+          let rec_app =
+            List.fold_left
+              (fun acc i ->
+                let param_idx = nfields + num_methods + num_params - i in
+                TmApp (acc, TmVar (Idx param_idx)))
+              rec_app
+              (List.init num_params Fun.id)
+          in
+          let motive_idx = nfields + num_methods in
+          let rec_app = TmApp (rec_app, TmVar (Idx motive_idx)) in
+          let rec_app =
+            List.fold_left
+              (fun acc i ->
+                let method_idx = nfields + num_methods - 1 - i in
+                TmApp (acc, TmVar (Idx method_idx)))
+              rec_app
+              (List.init num_methods Fun.id)
+          in
+          let rec_app =
+            List.fold_left (fun acc x -> TmApp (acc, x)) rec_app index_tms
+          in
+          TmApp (rec_app, field_var)
+        in
+        let ihs = List.map2 build_ih rec_args rec_index_patterns in
+        let method_var_idx = nfields + (num_methods - 1) - method_idx in
+        let method_var = TmVar (Idx method_var_idx) in
+        let field_vars = List.init nfields (fun i -> TmVar (Idx i)) in
+        let rhs_body =
+          List.fold_left
+            (fun acc x -> TmApp (acc, x))
+            method_var (field_vars @ ihs)
+        in
+        let rhs_body =
+          List.fold_right
+            (fun _ acc -> TmLam (None, TyU, acc))
+            (List.init nfields (fun _ -> ()))
+            rhs_body
+        in
+        let rhs_body =
+          List.fold_right
+            (fun _ acc -> TmLam (None, TyU, acc))
+            (List.init num_methods (fun _ -> ()))
+            rhs_body
+        in
+        let rhs_body = TmLam (None, TyU, rhs_body) in
+        let rhs_body =
+          List.fold_right
+            (fun _ acc -> TmLam (None, TyU, acc))
+            (List.init num_params (fun _ -> ()))
+            rhs_body
+        in
         Global.
           {
             rule_ctor_name = ctor_name;
             rule_nfields = nfields;
-            rule_rec_args = rec_args;
-            rule_rec_indices = rec_indices;
+            rule_rec_rhs = rhs_body;
           })
       ctors
   in
