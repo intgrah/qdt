@@ -13,9 +13,31 @@ example :
     motive y z t :=
   Eq3.rec
 
-def check := Relation.TransGen.rec
-
 example (a b c : Nat) : a - b - c = (a - b) - c := Eq.refl Nat (a - b - c)
 example (a b c : Nat) : a * b * c = (a * b) * c := Eq.refl Nat (a * b * c)
 example (a b c : Nat) : a + b * c = a + (b * c) := Eq.refl Nat (a + b * c)
 example (a b c : Nat) : a * b + c = (a * b) + c := Eq.refl Nat (a * b + c)
+
+inductive Sexp (A : Type) : Type where
+  | atom : A → Sexp A
+  | list : List (Sexp A) → Sexp A
+
+example :
+    (A : Type) →
+    (motive_1 : Sexp A → Type) →
+    (motive_2 : List (Sexp A) → Type) →
+    (atom : (a : A) → motive_1 (Sexp.atom A a)) →
+    (list : (a : List (Sexp A)) → motive_2 a → motive_1 (Sexp.list A a)) →
+    (nil : motive_2 (List.nil (Sexp A))) →
+    (cons : (head : Sexp A) → (tail : List (Sexp A)) → motive_1 head → motive_2 tail → motive_2 (List.cons (Sexp A) head tail)) →
+    (t : Sexp A) →
+    motive_1 t :=
+  Sexp.rec
+
+inductive SexpF (A : Type) : Bool → Type where
+  | atom : A → SexpF A Bool.true
+  | list : SexpF A Bool.false → SexpF A Bool.true
+  | nil  : SexpF A Bool.false
+  | cons : SexpF A Bool.true → SexpF A Bool.false → SexpF A Bool.false
+
+def Sexp (A : Type) : Type := SexpF A Bool.true
