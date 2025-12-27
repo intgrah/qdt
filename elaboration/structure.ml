@@ -162,10 +162,9 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
               (fun binder acc -> Lam (None, binder, acc))
               (hd :: tl) body
       in
-      let term, ty_val = Bidir.infer_tm genv Context.empty full_def in
-      let term_val = Nbe.eval_tm genv [] term in
+      let tm, ty_val = Bidir.infer_tm genv Context.empty full_def in
       let ty_quoted = Quote.quote_ty genv 0 ty_val in
       Global.NameMap.add proj_name
-        (Global.Def { ty = ty_quoted; tm = term_val })
+        (Global.Definition { ty = ty_quoted; tm })
         genv)
     genv info.fields

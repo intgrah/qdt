@@ -87,7 +87,7 @@ module Programs = struct
       Elab.elab_program_with_imports ~root:"." ~read_file:(fun _ -> "") prog
     in
     match Global.find_opt [ "id" ] genv with
-    | Some (Global.Def { ty; _ }) ->
+    | Some (Global.Definition { ty; _ }) ->
         Alcotest.check ty_testable "same" (TyPi (Some "x", TyU, TyU)) ty
     | _ -> Alcotest.fail "program failed"
 

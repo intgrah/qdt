@@ -36,9 +36,9 @@ type constructor_info = {
 }
 
 type entry =
-  | Def of {
+  | Definition of {
       ty : ty;
-      tm : vl_tm;
+      tm : tm;
     }
   | Opaque of { ty : ty } (* Type formers, e.g. Eq, Nat *)
   | Axiom of { ty : ty }
@@ -57,7 +57,7 @@ let find_opt = NameMap.find_opt
 
 let find_tm name env =
   match find_opt name env with
-  | Some (Def { tm; _ }) -> Some tm
+  | Some (Definition { tm; _ }) -> Some tm
   | _ -> None
 
 let find_recursor name env =
@@ -83,7 +83,7 @@ let find_structure name (env : t) =
 
 let find_ty (name : Name.t) (env : t) : ty option =
   match find_opt name env with
-  | Some (Def { ty; _ })
+  | Some (Definition { ty; _ })
   | Some (Opaque { ty })
   | Some (Axiom { ty })
   | Some (Recursor { ty; _ })

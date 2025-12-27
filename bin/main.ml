@@ -62,8 +62,7 @@ let main () =
             | None -> ()
             | Some ty -> (
                 match entry with
-                | Global.Def { tm; _ } ->
-                    let tm = Quote.quote_tm genv 0 tm in
+                | Global.Definition { tm; _ } ->
                     Format.printf "%a@.@." Pretty.pp_def (name, tm, ty)
                 | Global.Opaque _ ->
                     Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp

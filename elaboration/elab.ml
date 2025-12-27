@@ -17,23 +17,22 @@ type st = {
 let elab_definition (d : Ast.Command.definition) (st : st) : st =
   let name = Name.parse d.name in
   let param_ctx, param_tys = Params.elab_params st.genv d.params in
-  let term, ty_val =
+  let tm, ty =
     match d.ty_opt with
-    | None -> Bidir.infer_tm st.genv param_ctx d.body
+    | None ->
+        let tm, ty_val = Bidir.infer_tm st.genv param_ctx d.body in
+        (tm, Quote.quote_ty st.genv param_ctx.lvl ty_val)
     | Some ty_raw ->
-        let expected_ty = Bidir.check_ty st.genv param_ctx ty_raw in
-        let expected_ty_val = eval_ty st.genv param_ctx.env expected_ty in
-        let term = Bidir.check_tm st.genv param_ctx d.body expected_ty_val in
-        (term, expected_ty_val)
+        let ty = Bidir.check_ty st.genv param_ctx ty_raw in
+        let ty_val = eval_ty st.genv param_ctx.env ty in
+        let tm = Bidir.check_tm st.genv param_ctx d.body ty_val in
+        (tm, ty)
   in
-  let term_with_params = Params.build_lambda param_tys term in
-  let term_val = eval_tm st.genv param_ctx.env term_with_params in
-  let ty =
-    Params.build_pi param_tys (Quote.quote_ty st.genv param_ctx.lvl ty_val)
-  in
+  let tm = Params.build_lambda param_tys tm in
+  let ty = Params.build_pi param_tys ty in
   {
     st with
-    genv = Global.NameMap.add name (Global.Def { ty; tm = term_val }) st.genv;
+    genv = Global.NameMap.add name (Global.Definition { ty; tm }) st.genv;
   }
 
 let elab_example (e : Ast.Command.example) (st : st) : st =
