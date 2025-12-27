@@ -360,7 +360,7 @@ let rec pp_ty_prec (names : string list) (ctx_prec : prec option) fmt :
       let my_prec = PrecPi in
       let pp fmt =
         Format.fprintf fmt "@[<hv 0>%a@]@ →@ @[<hv 0>%a@]"
-          (pp_ty_prec names (Some PrecPi))
+          (pp_ty_prec names (Some PrecApp))
           a
           (pp_ty_prec (fresh_name names :: names) (Some PrecPi))
           b
@@ -411,7 +411,7 @@ and pp_tm_prec (names : string list) (ctx_prec : prec option) fmt : tm -> unit =
         if l < List.length names then
           List.nth names l
         else
-          Format.sprintf "x%d†" l
+          Format.sprintf "idx%d†" l
       in
       Format.pp_print_string fmt nm
   | TmConst name -> Name.pp fmt name
@@ -430,7 +430,7 @@ and pp_tm_prec (names : string list) (ctx_prec : prec option) fmt : tm -> unit =
       let my_prec = PrecPi in
       let pp fmt =
         Format.fprintf fmt "@[<hov>%a →@ %a@]"
-          (pp_tm_prec names (Some PrecPi))
+          (pp_tm_prec names (Some PrecApp))
           a
           (pp_tm_prec (fresh_name names :: names) (Some PrecPi))
           b
@@ -475,8 +475,8 @@ let pp_ty = pp_ty_prec [] (Some PrecLet)
 let pp_tm = pp_tm_prec [] (Some PrecLet)
 
 let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
-  Format.fprintf fmt "@[<v 0>def %a :@;<0 4>%a@;<0 4>:= %a@]" Name.pp name pp_ty
-    ty pp_tm term
+  Format.fprintf fmt "@[<v 0>@[<hov 2>def %a :@;<1 4>%a :=@]@;<0 2>%a@]"
+    Name.pp name pp_ty ty pp_tm term
 
 (* ========== Values ========== *)
 

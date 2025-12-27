@@ -3,7 +3,7 @@ open Elaboration
 
 type 'a stage_result = ('a, string) result
 type program_result = Ast.program stage_result
-type elaborated_result = (Name.t * Syntax.tm * Syntax.ty) list stage_result
+type elaborated_result = Global.t stage_result
 
 type snapshot = {
   program : program_result;

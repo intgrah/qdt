@@ -2,13 +2,8 @@ open Syntax
 open Frontend
 open Nbe
 
-[@@@warning "-33"]
-
-open Pretty
-
-[@@@warning "+33"]
-
 let pos_error message = Error.raise_with_src ~kind:Error.Positivity message None
+
 (* ========== Positivity Checking ========== *)
 
 let rec has_ind_occ_ty (ind : Name.t) : ty -> bool = function
@@ -153,15 +148,15 @@ let rec check_strict_positivity (genv : Global.t) (ind : Name.t) : ty -> unit =
       check_strict_positivity genv ind b
   | _ -> ()
 
+let rec check_returns_inductive_tm (ind : Name.t) : tm -> bool = function
+  | TmConst name -> name = ind
+  | TmApp (f, _) -> check_returns_inductive_tm ind f
+  | _ -> false
+
 let rec check_returns_inductive (ind : Name.t) : ty -> bool = function
   | TyEl (TmConst name) -> name = ind
   | TyEl (TmApp (f, _)) -> check_returns_inductive_tm ind f
   | TyPi (_, _, b) -> check_returns_inductive ind b
-  | _ -> false
-
-and check_returns_inductive_tm (ind : Name.t) : tm -> bool = function
-  | TmConst name -> name = ind
-  | TmApp (f, _) -> check_returns_inductive_tm ind f
   | _ -> false
 
 let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
@@ -186,46 +181,72 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
 
 (* ========== Inductive Types ========== *)
 
+type ctor_info = {
+  ctor_name : Name.t;
+  ctor_ty : ty;
+  ctor_fields_ty : ty;
+}
+
 let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (num_params : int)
-    (ctor : Ast.Command.inductive_constructor) : Name.t * ty =
-  let full_name = Name.child ind ctor.name in
+    (ctor : Ast.Command.inductive_constructor) : ctor_info =
+  (* ["Vector"; "cons"] *)
+  let ctor_name = Name.child ind ctor.name in
 
-  let rec build_ctor_body ctx depth = function
-    | [] -> (
-        match ctor.ty_opt with
-        | None ->
-            let base = TmConst ind in
-            let applied =
-              List.fold_left
-                (fun acc i ->
-                  TmApp (acc, TmVar (Idx (depth + num_params - 1 - i))))
-                base
-                (List.init num_params Fun.id)
-            in
-            TyEl applied
-        | Some ret_raw ->
-            let ret_ty = Bidir.check_ty genv ctx ret_raw in
-            if not (check_returns_inductive ind ret_ty) then
-              pos_error
-                (Format.asprintf "%a must return %a" Name.pp full_name Name.pp
-                   ind);
-            check_return_params full_name ind num_params ret_ty;
-            ret_ty)
-    | (name, ty) :: rest ->
-        let param_ty = Bidir.check_ty genv ctx ty in
-        let param_ty_val = eval_ty genv ctx.env param_ty in
-        let ctx' = Context.bind name param_ty_val ctx in
-        let body_ty = build_ctor_body ctx' (depth + 1) rest in
-        TyPi (name, param_ty, body_ty)
+  (*
+    ctor.params =
+      [ (n : Nat); (head : A); (tail : Vector A n) ]
+
+    ctor.ty_opt =
+      Vector A (Nat.succ n)
+  *)
+  let ctor_fields_ty =
+    let depth = List.length ctor.params in
+    let raw_ret =
+      match ctor.ty_opt with
+      | Some ret_raw -> ret_raw
+      | None -> Ast.U ctor.src
+    in
+    let raw_ty =
+      List.fold_right
+        (fun ((src, _name, _ty) as binder) body -> Ast.Pi (src, binder, body))
+        ctor.params raw_ret
+    in
+    let checked_ty = Bidir.check_ty genv param_ctx raw_ty in
+    let ctor_fields_ty =
+      match ctor.ty_opt with
+      | Some _ -> checked_ty
+      | None ->
+          let default_ret_ty : ty =
+            TyEl
+              (List.fold_left
+                 (fun acc x -> TmApp (acc, x))
+                 (TmConst ind)
+                 (List.init num_params (fun i ->
+                      TmVar (Idx (depth + num_params - 1 - i)))))
+          in
+          let rec replace_return = function
+            | TyPi (name, a, b) -> TyPi (name, a, replace_return b)
+            | _ -> default_ret_ty
+          in
+          replace_return checked_ty
+    in
+    if not (check_returns_inductive ind ctor_fields_ty) then
+      pos_error
+        (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp ind);
+    check_return_params ctor_name ind num_params ctor_fields_ty;
+    ctor_fields_ty
   in
-  let params = List.map (fun (_src, name, ty) -> (name, ty)) ctor.params in
-  let ctor_body = build_ctor_body param_ctx 0 params in
-  let ctor_ty = Params.build_pi param_tys ctor_body in
+  let ctor_ty = Params.build_pi param_tys ctor_fields_ty in
   check_strict_positivity genv ind ctor_ty;
-  (full_name, ctor_ty)
+  { ctor_name; ctor_ty; ctor_fields_ty }
 
 (* ========== Recursor Generation ========== *)
+
+let rec is_recursive_arg_tm (ind : Name.t) : tm -> bool = function
+  | TmConst name -> name = ind
+  | TmApp (f, _) -> is_recursive_arg_tm ind f
+  | _ -> false
 
 let rec is_recursive_arg_ty (ind : Name.t) : ty -> bool = function
   | TyEl (TmConst name) -> name = ind
@@ -233,30 +254,7 @@ let rec is_recursive_arg_ty (ind : Name.t) : ty -> bool = function
   | TyPi (_, _, b) -> is_recursive_arg_ty ind b
   | _ -> false
 
-and is_recursive_arg_tm (ind : Name.t) : tm -> bool = function
-  | TmConst name -> name = ind
-  | TmApp (f, _) -> is_recursive_arg_tm ind f
-  | _ -> false
-
-let extract_app_args : tm -> tm list =
-  let rec go acc = function
-    | TmApp (f, a) -> go (a :: acc) f
-    | _ -> List.rev acc
-  in
-  go []
-
-let rec extract_indices : ty -> (string option * ty) list = function
-  | TyPi (name, a, b) -> (name, a) :: extract_indices b
-  | TyU -> []
-  | _ -> []
-
-let rec extract_return_indices_from_ctor (ind : Name.t) (num_params : int) :
-    ty -> tm list = function
-  | TyPi (_, _, b) -> extract_return_indices_from_ctor ind num_params b
-  | TyEl tm -> extract_args_after_params ind num_params tm
-  | _ -> []
-
-and extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
+let extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
     tm list =
   let rec collect_all_args acc = function
     | TmConst name when name = ind -> acc
@@ -269,232 +267,28 @@ and extract_args_after_params (ind : Name.t) (num_params : int) (tm : tm) :
   else
     []
 
-let extract_nested_rec_info (ind : Name.t) (num_params : int) (ty : ty) :
-    (string option * ty) list * tm list =
-  let rec go acc = function
-    | TyPi (name, arg_ty, body) -> go ((name, arg_ty) :: acc) body
-    | TyEl tm ->
-        let indices = extract_args_after_params ind num_params tm in
-        (List.rev acc, indices)
-    | _ -> (List.rev acc, [])
-  in
-  go [] ty
-
-(* Generate recursor type for an inductive *)
-let gen_recursor_ty (genv : Global.t) (ind : Name.t) (num_params : int)
-    (param_tys : (string option * ty) list)
-    (index_tys : (string option * ty) list) (ctor_tys : (Name.t * ty) list) :
-    vl_ty =
-  let app arg fn = do_app genv fn arg in
-  let apps args fn = List.fold_left (do_app genv) fn args in
-
-  let index_tys =
-    List.mapi
-      (fun i (name_opt, ty) ->
-        match name_opt with
-        | Some _ -> (name_opt, ty)
-        | None -> (Some (Format.sprintf "a%d†" i), ty))
-      index_tys
-  in
-
-  let mk_pi (lvl : int) (env : env) (name : string option) (dom : vl_ty)
-      (body : vl_tm -> vl_ty) : vl_ty =
-    let var = VTmNeutral (HVar (Lvl lvl), []) in
-    let body_val = body var in
-    let body_ty = Quote.quote_ty genv (lvl + 1) body_val in
-    VTyPi (name, dom, ClosTy (env, body_ty))
-  in
-
-  let ind_code : vl_tm = VTmNeutral (HConst ind, []) in
-  let ctor_code (ctor : Name.t) : vl_tm = VTmNeutral (HConst ctor, []) in
-
-  let mk_ind_ty (params_order : vl_tm list) (indices_order : vl_tm list) : vl_ty
-      =
-    do_el (ind_code |> apps params_order |> apps indices_order)
-  in
-
-  let build_motive_ty (params_rev : env) (params_order : vl_tm list) : vl_ty =
-    let rec go_indices (lvl : int) (env : env) (indices_rev : env)
-        (indices_order : vl_tm list) = function
-      | [] ->
-          let x_ty = mk_ind_ty params_order indices_order in
-          mk_pi lvl env None x_ty (fun _ -> VTyU)
-      | (name, idx_ty) :: rest ->
-          let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
-          mk_pi lvl env name dom (fun idx ->
-              go_indices (lvl + 1) (idx :: env) (idx :: indices_rev)
-                (indices_order @ [ idx ]) rest)
-    in
-    go_indices (List.length params_rev) params_rev [] [] index_tys
-  in
-
-  let build_method_ty (outer_lvl : int) (outer_env : env) (params_rev : env)
-      (params_order : vl_tm list) (motive : vl_tm) (ctor_name : Name.t)
-      (ctor_ty : ty) : vl_ty =
-    let rec strip_params n ty =
-      if n = 0 then
-        ty
-      else
-        match ty with
-        | TyPi (_, _, b) -> strip_params (n - 1) b
-        | ty -> ty
-    in
-    let fields_ty = strip_params num_params ctor_ty in
-
-    let rec collect_fields acc = function
-      | TyPi (name, arg_ty, rest) ->
-          collect_fields
-            ((name, arg_ty, is_recursive_arg_ty ind arg_ty) :: acc)
-            rest
-      | _ -> List.rev acc
-    in
-    let fields = collect_fields [] fields_ty in
-
-    let return_indices =
-      extract_return_indices_from_ctor ind num_params ctor_ty
-    in
-
-    let rec bind_fields (lvl : int) (env : env) (fields_rev : env)
-        (fields_order : vl_tm list) : (string option * ty * bool) list -> vl_ty
-        = function
-      | [] ->
-          let env_for_return = fields_rev @ params_rev in
-          let idx_vals =
-            List.map (eval_tm genv env_for_return) return_indices
-          in
-          let motive_app = motive |> apps idx_vals in
-          let ctor_app =
-            ctor_code ctor_name |> apps params_order |> apps fields_order
-          in
-          let result_ty = do_el (motive_app |> app ctor_app) in
-          let rec_field_infos =
-            let rec go i acc = function
-              | [] -> List.rev acc
-              | (name, field_ty, is_rec) :: rest ->
-                  if is_rec then
-                    go (i + 1) ((i, name, field_ty) :: acc) rest
-                  else
-                    go (i + 1) acc rest
-            in
-            go 0 [] fields
-          in
-
-          let ih_infos =
-            List.map
-              (fun (i, name, field_ty) ->
-                let field_var = List.nth fields_order i in
-                let prefix_rev = List.rev (List.take i fields_order) in
-                let nested_binders, rec_indices =
-                  extract_nested_rec_info ind num_params field_ty
-                in
-
-                let rec mk_ih_ty (lvl : int) (env : env) (nested_rev : env)
-                    (nested_order : vl_tm list) (binder_idx : int) :
-                    (string option * ty) list -> vl_ty = function
-                  | [] ->
-                      let env_for_indices =
-                        nested_rev @ prefix_rev @ params_rev
-                      in
-                      let idx_vals =
-                        List.map (eval_tm genv env_for_indices) rec_indices
-                      in
-                      do_el
-                        (motive |> apps idx_vals
-                        |> app (field_var |> apps nested_order))
-                  | (n, ty) :: rest ->
-                      let dom =
-                        eval_ty genv (nested_rev @ prefix_rev @ params_rev) ty
-                      in
-                      let binder_name =
-                        match n with
-                        | Some name -> Some name
-                        | None -> Some (Format.sprintf "a%d†" binder_idx)
-                      in
-                      mk_pi lvl env binder_name dom (fun v ->
-                          mk_ih_ty (lvl + 1) (v :: env) (v :: nested_rev)
-                            (nested_order @ [ v ]) (binder_idx + 1) rest)
-                in
-
-                let ih_ty = mk_ih_ty lvl env [] [] 0 nested_binders in
-                let ih_name =
-                  Some (Format.sprintf "%s_ih" (Option.value name ~default:"x"))
-                in
-                (ih_name, ih_ty))
-              rec_field_infos
-          in
-
-          let rec bind_ihs (lvl : int) (env : env) :
-              (string option * vl_ty) list -> vl_ty = function
-            | [] -> result_ty
-            | (ih_name, ih_ty) :: rest ->
-                mk_pi lvl env ih_name ih_ty (fun ih ->
-                    bind_ihs (lvl + 1) (ih :: env) rest)
-          in
-          bind_ihs lvl env ih_infos
-      | (name, field_ty, _is_rec) :: rest ->
-          let dom = eval_ty genv (fields_rev @ params_rev) field_ty in
-          mk_pi lvl env name dom (fun v ->
-              bind_fields (lvl + 1) (v :: env) (v :: fields_rev)
-                (fields_order @ [ v ]) rest)
-    in
-    bind_fields outer_lvl outer_env [] [] fields
-  in
-
-  let rec build_params (lvl : int) (env : env) (params_rev : env)
-      (params_order : vl_tm list) : (string option * ty) list -> vl_ty =
-    function
-    | [] ->
-        let motive_dom = build_motive_ty params_rev params_order in
-        mk_pi lvl env (Some "motive") motive_dom (fun motive ->
-            let rec build_methods (lvl : int) (env : env) :
-                (Name.t * ty) list -> vl_ty = function
-              | [] -> build_indices lvl env motive [] []
-              | (ctor_name, ctor_ty) :: rest ->
-                  let method_ty =
-                    build_method_ty lvl env params_rev params_order motive
-                      ctor_name ctor_ty
-                  in
-                  mk_pi lvl env None method_ty (fun _m ->
-                      build_methods (lvl + 1) (_m :: env) rest)
-            and build_indices (lvl : int) (env : env) (motive : vl_tm)
-                (indices_rev : env) (indices_order : vl_tm list) : vl_ty =
-              match List.drop (List.length indices_order) index_tys with
-              | [] ->
-                  let x_ty = mk_ind_ty params_order indices_order in
-                  mk_pi lvl env None x_ty (fun t ->
-                      let motive_app = motive |> apps indices_order in
-                      do_el (do_app genv motive_app t))
-              | (name, idx_ty) :: _rest ->
-                  let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
-                  mk_pi lvl env name dom (fun idx ->
-                      build_indices (lvl + 1) (idx :: env) motive
-                        (idx :: indices_rev) (indices_order @ [ idx ]))
-            in
-            build_methods (lvl + 1) (motive :: env) ctor_tys)
-    | (name, ty) :: rest ->
-        let dom = eval_ty genv params_rev ty in
-        mk_pi lvl env name dom (fun v ->
-            build_params (lvl + 1) (v :: env) (v :: params_rev)
-              (params_order @ [ v ]) rest)
-  in
-
-  build_params 0 [] [] [] param_tys
-
-let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
-    Global.t * (Name.t * tm * ty) list =
+let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
+  (* Vector *)
   let ind_name = Name.parse ind.name in
-
+  (* [A : Type], [("a", Type)] *)
   let param_ctx, param_tys = Params.elab_params genv ind.params in
+  (* 1 *)
   let num_params = List.length param_tys in
+  (* A : Type |- (Nat -> Type) is a well formed type *)
   let result_ty =
     match ind.ty_opt with
-    | None -> TyU
+    | None -> TyU (* Default to Type *)
     | Some ty_raw -> Bidir.check_ty genv param_ctx ty_raw
   in
+  (* (A : Type) -> Nat -> Type *)
   let ty = Params.build_pi param_tys result_ty in
+  (* Vector : (A : Type) -> (n : Nat) -> Type *)
   let genv = Global.NameMap.add ind_name (Global.Opaque { ty }) genv in
-  let ctors =
+  let ctor_infos =
     List.map (elab_ctor genv ind_name param_ctx param_tys num_params) ind.ctors
+  in
+  let ctors =
+    List.map (fun { ctor_name; ctor_ty; _ } -> (ctor_name, ctor_ty)) ctor_infos
   in
   let genv =
     List.fold_left
@@ -509,56 +303,251 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
     Global.NameMap.add ind_name (Global.Inductive { ty; ctors }) genv
   in
   let rec_name = Name.child ind_name "rec" in
-  let index_tys = extract_indices result_ty in
+  let index_tys =
+    let rec go = function
+      | TyPi (name, a, b) -> (name, a) :: go b
+      | TyU -> []
+      | _ -> []
+    in
+    go result_ty
+  in
   let num_indices = List.length index_tys in
-  let rec_ty_val =
-    gen_recursor_ty genv ind_name num_params param_tys index_tys ctors
+  let ctor_fields (fields_ty : ty) : (string option * ty * bool) list =
+    let rec go acc = function
+      | TyPi (name, arg_ty, rest) ->
+          go ((name, arg_ty, is_recursive_arg_ty ind_name arg_ty) :: acc) rest
+      | _ -> List.rev acc
+    in
+    go [] fields_ty
+  in
+  let rec_ty_val : vl_ty =
+    let ind = ind_name in
+    let ctors = ctor_infos in
+    (* Vector.rec :
+       (A : Type) ->
+       (motive : (n : Nat) -> Vector A n -> Type) ->
+       motive Nat.zero (Vector.nil A) ->
+       ((n : Nat) ->
+        (head : A) ->
+        (tail : Vector A n) ->
+        motive n tail ->
+        motive (Nat.succ n) (Vector.cons A n head tail)) ->
+       (n : Nat) ->
+       (x : Vector A n) ->
+       motive n x
+    *)
+    let app arg fn = do_app genv fn arg in
+    let apps args fn = List.fold_left (do_app genv) fn args in
+
+    let index_tys =
+      List.mapi
+        (fun i (name_opt, ty) ->
+          match name_opt with
+          | Some _ -> (name_opt, ty)
+          | None -> (Some (Format.sprintf "a%d†" i), ty))
+        index_tys
+    in
+
+    let mk_pi (lvl : int) (env : env) (name : string option) (dom : vl_ty)
+        (body : vl_tm -> vl_ty) : vl_ty =
+      let var = VTmNeutral (HVar (Lvl lvl), []) in
+      let body_ty = Quote.quote_ty genv (lvl + 1) (body var) in
+      VTyPi (name, dom, ClosTy (env, body_ty))
+    in
+
+    let mk_ind_ty (params_rev : vl_tm list) (indices_order : vl_tm list) : vl_ty
+        =
+      VTyEl (HConst ind, List.rev_append params_rev indices_order)
+    in
+
+    let build_method_ty (outer_lvl : int) (outer_env : env) (params_rev : env)
+        (motive : vl_tm) (ctor_name : Name.t) (ctor_fields_ty : ty) : vl_ty =
+      let fields = ctor_fields ctor_fields_ty in
+
+      let return_indices =
+        let rec go = function
+          | TyPi (_, _, b) -> go b
+          | TyEl tm -> extract_args_after_params ind num_params tm
+          | _ -> []
+        in
+        go ctor_fields_ty
+      in
+
+      let rec bind_fields (lvl : int) (env : env) (fields_rev : env)
+          (fields_order : vl_tm list) :
+          (string option * ty * bool) list -> vl_ty = function
+        | [] ->
+            let env_for_return = fields_rev @ params_rev in
+            let idx_vals =
+              List.map (eval_tm genv env_for_return) return_indices
+            in
+            let motive_app = motive |> apps idx_vals in
+            let ctor_app =
+              VTmNeutral (HConst ctor_name, [])
+              |> apps (List.rev_append params_rev fields_order)
+            in
+            let result_ty = do_el (motive_app |> app ctor_app) in
+            let rec_field_infos =
+              let rec go i acc = function
+                | [] -> List.rev acc
+                | (name, field_ty, is_rec) :: rest ->
+                    if is_rec then
+                      go (i + 1) ((i, name, field_ty) :: acc) rest
+                    else
+                      go (i + 1) acc rest
+              in
+              go 0 [] fields
+            in
+
+            let ih_infos =
+              List.map
+                (fun (i, name, field_ty) ->
+                  let field_var = List.nth fields_order i in
+                  let prefix = List.take i fields_order in
+                  let nested_binders, rec_indices =
+                    let rec go acc = function
+                      | TyPi (name, arg_ty, body) ->
+                          go ((name, arg_ty) :: acc) body
+                      | TyEl tm ->
+                          let indices =
+                            extract_args_after_params ind num_params tm
+                          in
+                          (List.rev acc, indices)
+                      | _ -> (List.rev acc, [])
+                    in
+                    go [] field_ty
+                  in
+
+                  let rec mk_ih_ty (lvl : int) (env : env) (nested_rev : env)
+                      (nested_order : vl_tm list) (binder_idx : int) :
+                      (string option * ty) list -> vl_ty = function
+                    | [] ->
+                        let env_for_indices =
+                          nested_rev @ List.rev_append prefix params_rev
+                        in
+                        let idx_vals =
+                          List.map (eval_tm genv env_for_indices) rec_indices
+                        in
+                        do_el
+                          (motive |> apps idx_vals
+                          |> app (field_var |> apps nested_order))
+                    | (n, ty) :: rest ->
+                        let dom =
+                          eval_ty genv
+                            (nested_rev @ List.rev_append prefix params_rev)
+                            ty
+                        in
+                        let binder_name =
+                          match n with
+                          | Some name -> Some name
+                          | None -> Some (Format.sprintf "a%d†" binder_idx)
+                        in
+                        mk_pi lvl env binder_name dom (fun v ->
+                            mk_ih_ty (lvl + 1) (v :: env) (v :: nested_rev)
+                              (nested_order @ [ v ]) (binder_idx + 1) rest)
+                  in
+
+                  let ih_ty = mk_ih_ty lvl env [] [] 0 nested_binders in
+                  let ih_name =
+                    Some
+                      (Format.sprintf "%s_ih" (Option.value name ~default:"x"))
+                  in
+                  (ih_name, ih_ty))
+                rec_field_infos
+            in
+
+            let rec bind_ihs (lvl : int) (env : env) :
+                (string option * vl_ty) list -> vl_ty = function
+              | [] -> result_ty
+              | (ih_name, ih_ty) :: rest ->
+                  mk_pi lvl env ih_name ih_ty (fun ih ->
+                      bind_ihs (lvl + 1) (ih :: env) rest)
+            in
+            bind_ihs lvl env ih_infos
+        | (name, field_ty, _is_rec) :: rest ->
+            let dom = eval_ty genv (fields_rev @ params_rev) field_ty in
+            mk_pi lvl env name dom (fun v ->
+                bind_fields (lvl + 1) (v :: env) (v :: fields_rev)
+                  (fields_order @ [ v ]) rest)
+      in
+      bind_fields outer_lvl outer_env [] [] fields
+    in
+
+    let rec build_params (lvl : int) (env : env) (params_rev : env) :
+        (string option * ty) list -> vl_ty = function
+      | [] ->
+          let motive_dom : vl_ty =
+            let rec go_indices (lvl : int) (env : env) (indices_rev : env)
+                (indices_order : vl_tm list) = function
+              | [] ->
+                  let x_ty = mk_ind_ty params_rev indices_order in
+                  mk_pi lvl env None x_ty (fun _ -> VTyU)
+              | (name, idx_ty) :: rest ->
+                  let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
+                  mk_pi lvl env name dom (fun idx ->
+                      go_indices (lvl + 1) (idx :: env) (idx :: indices_rev)
+                        (indices_order @ [ idx ]) rest)
+            in
+            go_indices (List.length params_rev) params_rev [] [] index_tys
+          in
+          mk_pi lvl env (Some "motive") motive_dom (fun motive ->
+              let rec build_methods (lvl : int) (env : env) :
+                  ctor_info list -> vl_ty = function
+                | [] -> build_indices lvl env motive [] []
+                | { ctor_name; ctor_fields_ty; _ } :: rest ->
+                    let method_ty =
+                      build_method_ty lvl env params_rev motive ctor_name
+                        ctor_fields_ty
+                    in
+                    mk_pi lvl env None method_ty (fun _m ->
+                        build_methods (lvl + 1) (_m :: env) rest)
+              and build_indices (lvl : int) (env : env) (motive : vl_tm)
+                  (indices_rev : env) (indices_order : vl_tm list) : vl_ty =
+                match List.drop (List.length indices_order) index_tys with
+                | [] ->
+                    let x_ty = mk_ind_ty params_rev indices_order in
+                    mk_pi lvl env None x_ty (fun t ->
+                        let motive_app = motive |> apps indices_order in
+                        do_el (do_app genv motive_app t))
+                | (name, idx_ty) :: _rest ->
+                    let dom = eval_ty genv (indices_rev @ params_rev) idx_ty in
+                    mk_pi lvl env name dom (fun idx ->
+                        build_indices (lvl + 1) (idx :: env) motive
+                          (idx :: indices_rev) (indices_order @ [ idx ]))
+              in
+              build_methods (lvl + 1) (motive :: env) ctors)
+      | (name, ty) :: rest ->
+          let dom = eval_ty genv params_rev ty in
+          mk_pi lvl env name dom (fun v ->
+              build_params (lvl + 1) (v :: env) (v :: params_rev) rest)
+    in
+
+    build_params 0 [] [] param_tys
   in
   let rec_rules =
     List.mapi
-      (fun method_idx (ctor_name, ctor_ty) ->
-        let fields_ty =
-          let rec strip n t =
-            if n = 0 then
-              t
-            else
-              match t with
-              | TyPi (_, _, b) -> strip (n - 1) b
-              | _ -> t
-          in
-          strip num_params ctor_ty
-        in
-        let rec collect_fields idx = function
-          | TyPi (_, arg_ty, rest) ->
-              let is_rec = is_recursive_arg_ty ind_name arg_ty in
-              (idx, is_rec) :: collect_fields (idx + 1) rest
-          | _ -> []
-        in
-        let all_fields = collect_fields 0 fields_ty in
-        let nfields = List.length all_fields in
+      (fun method_idx { ctor_name; ctor_fields_ty = fields_ty; _ } ->
+        let fields = ctor_fields fields_ty in
+        let nfields = List.length fields in
         let rec_args =
-          List.filter_map
-            (fun (idx, is_rec) ->
-              if is_rec then
-                Some idx
-              else
-                None)
-            all_fields
+          let rec go idx = function
+            | [] -> []
+            | (_, _, true) :: rest -> idx :: go (idx + 1) rest
+            | (_, _, false) :: rest -> go (idx + 1) rest
+          in
+          go 0 fields
         in
         let rec_index_patterns =
           List.map
             (fun rec_idx ->
-              let rec get_field_ty n = function
-                | TyPi (_, arg_ty, rest) ->
-                    if n = 0 then
-                      arg_ty
-                    else
-                      get_field_ty (n - 1) rest
-                | _ -> TyU
-              in
-              let field_ty = get_field_ty rec_idx fields_ty in
+              let _name, field_ty, _is_rec = List.nth fields rec_idx in
               let rec extract_indices_from_ty = function
-                | TyEl tm -> extract_app_args tm
+                | TyEl tm ->
+                    let rec go acc = function
+                      | TmApp (f, a) -> go (a :: acc) f
+                      | _ -> List.rev acc
+                    in
+                    go [] tm
                 | TyPi (_, _, b) -> extract_indices_from_ty b
                 | _ -> []
               in
@@ -569,7 +558,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
                   | TmVar (Idx i) ->
                       let field_num = rec_idx - 1 - i in
                       if field_num >= 0 && field_num < nfields then
-                        Some (TmVar (Idx i))
+                        Some i
                       else
                         None
                   | _ -> None)
@@ -577,77 +566,32 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
             rec_args
         in
         let num_methods = List.length ctors in
+        let app x f = TmApp (f, x) in
+        let apps xs f = List.fold_left (fun acc x -> TmApp (acc, x)) f xs in
         let build_ih rec_arg_idx index_patterns =
-          let field_idx = rec_arg_idx in
-          let field_var = TmVar (Idx field_idx) in
-          let index_tms =
-            List.map
-              (function
-                | TmVar (Idx db_idx) ->
-                    let earlier_field_idx = rec_arg_idx - 1 - db_idx in
-                    TmVar (Idx earlier_field_idx)
-                | tm -> tm)
-              index_patterns
-          in
-          let rec_app = TmConst rec_name in
-          let rec_app =
-            List.fold_left
-              (fun acc i ->
-                let param_idx = nfields + num_methods + num_params - i in
-                TmApp (acc, TmVar (Idx param_idx)))
-              rec_app
-              (List.init num_params Fun.id)
-          in
-          let motive_idx = nfields + num_methods in
-          let rec_app = TmApp (rec_app, TmVar (Idx motive_idx)) in
-          let rec_app =
-            List.fold_left
-              (fun acc i ->
-                let method_idx = nfields + num_methods - 1 - i in
-                TmApp (acc, TmVar (Idx method_idx)))
-              rec_app
-              (List.init num_methods Fun.id)
-          in
-          let rec_app =
-            List.fold_left (fun acc x -> TmApp (acc, x)) rec_app index_tms
-          in
-          TmApp (rec_app, field_var)
+          TmConst rec_name
+          |> apps
+               (List.init num_params (fun i ->
+                    TmVar (Idx (nfields + num_methods + num_params - i))))
+          |> app (TmVar (Idx (nfields + num_methods)))
+          |> apps
+               (List.init num_methods (fun i ->
+                    TmVar (Idx (nfields + num_methods - 1 - i))))
+          |> apps
+               (List.map
+                  (fun i -> TmVar (Idx (nfields - rec_arg_idx + i)))
+                  index_patterns)
+          |> app (TmVar (Idx (nfields - 1 - rec_arg_idx)))
         in
         let ihs = List.map2 build_ih rec_args rec_index_patterns in
-        let method_var_idx = nfields + (num_methods - 1) - method_idx in
-        let method_var = TmVar (Idx method_var_idx) in
-        let field_vars = List.init nfields (fun i -> TmVar (Idx i)) in
-        let rhs_body =
-          List.fold_left
-            (fun acc x -> TmApp (acc, x))
-            method_var (field_vars @ ihs)
-        in
-        let rhs_body =
-          List.fold_right
-            (fun _ acc -> TmLam (None, TyU, acc))
-            (List.init nfields (fun _ -> ()))
-            rhs_body
-        in
-        let rhs_body =
-          List.fold_right
-            (fun _ acc -> TmLam (None, TyU, acc))
-            (List.init num_methods (fun _ -> ()))
-            rhs_body
-        in
-        let rhs_body = TmLam (None, TyU, rhs_body) in
-        let rhs_body =
-          List.fold_right
-            (fun _ acc -> TmLam (None, TyU, acc))
-            (List.init num_params (fun _ -> ()))
-            rhs_body
+        let rule_rec_rhs =
+          TmVar (Idx (nfields + (num_methods - 1) - method_idx))
+          |> apps (List.init nfields (fun i -> TmVar (Idx (nfields - 1 - i))))
+          |> apps ihs
         in
         Global.
-          {
-            rule_ctor_name = ctor_name;
-            rule_nfields = nfields;
-            rule_rec_rhs = rhs_body;
-          })
-      ctors
+          { rule_ctor_name = ctor_name; rule_nfields = nfields; rule_rec_rhs })
+      ctor_infos
   in
   let rec_ty = Quote.quote_ty genv 0 rec_ty_val in
 
@@ -661,9 +605,4 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) :
       rec_rules;
     }
   in
-  let genv = Global.NameMap.add rec_name (Global.Recursor rec_info) genv in
-  let results = (ind_name, ty) :: (rec_name, rec_ty) :: ctors in
-  let results' =
-    List.fold_left (fun acc (n, ty) -> (n, TmConst n, ty) :: acc) [] results
-  in
-  (genv, results')
+  Global.NameMap.add rec_name (Global.Recursor rec_info) genv

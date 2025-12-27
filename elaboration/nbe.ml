@@ -62,20 +62,8 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
     List.drop (info.rec_num_params + 1) sp |> List.take info.rec_num_methods
   in
   let fields = List.drop info.rec_num_params ctor_sp in
-  let pattern_val = eval_tm genv [] rule.rule_rec_rhs in
-  let rec apply_all_args f args =
-    match args with
-    | [] -> f
-    | arg :: rest -> (
-        match f with
-        | VTmLam (_, _, ClosTm (env, body)) ->
-            let new_env = arg :: env in
-            let new_body_val = eval_tm genv new_env body in
-            apply_all_args new_body_val rest
-        | _ -> raise (Eval_error "Expected lambda when applying arguments"))
-  in
-  let all_args = params @ [ motive ] @ methods @ fields in
-  Some (apply_all_args pattern_val all_args)
+  let env = List.rev (params @ [ motive ] @ methods @ fields) in
+  Some (eval_tm genv env rule.rule_rec_rhs)
 
 let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
   match (ty1, ty2) with

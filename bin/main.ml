@@ -1,3 +1,5 @@
+open Elaboration
+
 let poll_seconds = 0.1
 
 let read_file path =
@@ -10,9 +12,6 @@ let log_stage stage : 'a Incr.update -> unit = function
   | Initialized _ -> Format.eprintf "[inc] %s@." stage
   | Changed _ -> Format.eprintf "[inc] %s@." stage
   | Invalidated -> Format.eprintf "[inc] %s@." stage
-
-let print_program = Format.printf "%a@." Elaboration.Pretty.pp_ast_program
-let print_defs = List.iter (Format.printf "%a@.@." Elaboration.Pretty.pp_def)
 
 let handle_stage_result ~show ~printer : 'a Incr.update -> unit = function
   | Initialized (Ok value)
@@ -50,11 +49,49 @@ let main () =
   (* Attach debug handlers *)
   Incr.on_program_update pipeline ~f:(fun update ->
       log_stage "program" update;
-      handle_stage_result ~show:args.Cli.show_parse ~printer:print_program
+      handle_stage_result ~show:args.Cli.show_parse
+        ~printer:(Format.printf "%a@." Pretty.pp_ast_program)
         update);
   Incr.on_elaborated_update pipeline ~f:(fun update ->
       log_stage "elaborated" update;
-      handle_stage_result ~show:args.Cli.show_elab ~printer:print_defs update);
+      let show = args.Cli.show_elab <> [] in
+      handle_stage_result ~show
+        ~printer:(fun genv ->
+          let print_entry (name : Name.t) (entry : Global.entry) =
+            match Global.find_ty name genv with
+            | None -> ()
+            | Some ty -> (
+                match entry with
+                | Global.Def { tm; _ } ->
+                    let tm = Quote.quote_tm genv 0 tm in
+                    Format.printf "%a@.@." Pretty.pp_def (name, tm, ty)
+                | Global.Opaque _ ->
+                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
+                      name Pretty.pp_ty ty
+                | Global.Axiom _ ->
+                    Format.printf "@[<hov 2>axiom %a :@;<1 4>%a@]@.@." Name.pp
+                      name Pretty.pp_ty ty
+                | Global.Inductive _ ->
+                    Format.printf "@[<hov 2>inductive %a :@;<1 4>%a@]@.@."
+                      Name.pp name Pretty.pp_ty ty
+                | Global.Structure _ ->
+                    Format.printf "@[<hov 2>structure %a :@;<1 4>%a@]@.@."
+                      Name.pp name Pretty.pp_ty ty
+                | Global.Recursor _ ->
+                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
+                      name Pretty.pp_ty ty
+                | Global.Constructor _ ->
+                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
+                      name Pretty.pp_ty ty)
+          in
+          List.iter
+            (fun name_str ->
+              let name = Name.parse name_str in
+              match Global.find_opt name genv with
+              | None -> Format.printf "Unknown constant: %s@." name_str
+              | Some entry -> print_entry name entry)
+            args.show_elab)
+        update);
 
   Incr.set_source pipeline (Option.get (read_file args.input_file));
   Incr.stabilize ();
