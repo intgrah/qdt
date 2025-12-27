@@ -26,14 +26,14 @@ let show_elab =
      -e Nat.rec,Nat"
   in
   let parse (s : string) : string list =
-    s
-    |> String.split_on_char ','
-    |> List.map String.trim
+    s |> String.split_on_char ',' |> List.map String.trim
     |> List.filter (fun s -> s <> "")
   in
   let elab_names : string list Arg.conv =
     let parser (s : string) = Ok (parse s) in
-    let pp fmt (xs : string list) = Format.pp_print_string fmt (String.concat "," xs) in
+    let pp fmt (xs : string list) =
+      Format.pp_print_string fmt (String.concat "," xs)
+    in
     Arg.conv (parser, pp)
   in
   Arg.(value & opt elab_names [] & info [ "e"; "elab" ] ~docv:"NAMES" ~doc)

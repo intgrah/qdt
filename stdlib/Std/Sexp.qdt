@@ -1,6 +1,5 @@
-inductive Sexp (A : Type) : Type where
-  | Atom : A → Sexp A
-  | List : List (Sexp A) → Sexp A
+import Std.List
 
-inductive Foo : Type where
-  | f : (Bool → Foo) → Foo
+inductive Sexp (A : Type) : Type where
+  | atom : A → Sexp A
+  | list : List (Sexp A) → Sexp A

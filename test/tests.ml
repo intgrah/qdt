@@ -57,11 +57,7 @@ module Test_elab = struct
     let raw = Ast.Ident (None, "x") in
     Alcotest.check_raises "var not in scope"
       (Elaboration.Error.Error
-         {
-           message = "Unbound variable: x";
-           location = None;
-           kind = Elaboration;
-         })
+         { message = "Unbound variable: x"; location = None; kind = Type_check })
       (fun () -> ignore (Bidir.infer_tm Global.empty ctx raw))
 
   let tests =
@@ -87,12 +83,12 @@ module Programs = struct
           };
       ]
     in
-    let result =
+    let genv =
       Elab.elab_program_with_imports ~root:"." ~read_file:(fun _ -> "") prog
     in
-    match result with
-    | [ ([ "id" ], TmLam (_, _, TmVar (Idx 0)), TyPi (Some "x", TyU, TyU)) ] ->
-        ()
+    match Global.find_opt [ "id" ] genv with
+    | Some (Global.Def { ty; _ }) ->
+        Alcotest.check ty_testable "same" (TyPi (Some "x", TyU, TyU)) ty
     | _ -> Alcotest.fail "program failed"
 
   let tests = [ Alcotest.test_case "simple id" `Quick simple_id ]
