@@ -32,7 +32,7 @@ def List.length_append (A : Type) (xs ys : List A)
         (Nat.succ (List.length A (List.append A t ys)))
         (Nat.succ (Nat.add (List.length A t) (List.length A ys)))
         (Nat.add (Nat.succ (List.length A t)) (List.length A ys))
-        (congr_arg Nat Nat Nat.succ (List.length A (List.append A t ys)) (Nat.add (List.length A t) (List.length A ys)) ih)
+        (congrArg Nat Nat Nat.succ (List.length A (List.append A t ys)) (Nat.add (List.length A t) (List.length A ys)) ih)
         (Eq.symm Nat (Nat.add (Nat.succ (List.length A t)) (List.length A ys)) (Nat.succ (Nat.add (List.length A t) (List.length A ys))) (Nat.succ_add (List.length A t) (List.length A ys))))
     xs
 
@@ -42,7 +42,7 @@ def List.append_nil (A : Type) (xs : List A) : List.append A xs (List.nil A) = x
   List.rec A
     (fun ys => List.append A ys (List.nil A) = ys)
     (Eq.refl (List A) (List.nil A))
-    (fun h t => congr_arg (List A) (List A) (List.cons A h) (List.append A t (List.nil A)) t)
+    (fun h t => congrArg (List A) (List A) (List.cons A h) (List.append A t (List.nil A)) t)
     xs
 
 def List.append_assoc (A : Type) (xs ys zs : List A) : List.append A (List.append A xs ys) zs = List.append A xs (List.append A ys zs) :=
@@ -50,7 +50,7 @@ def List.append_assoc (A : Type) (xs ys zs : List A) : List.append A (List.appen
     (fun xs => List.append A (List.append A xs ys) zs = List.append A xs (List.append A ys zs))
     (Eq.refl (List A) (List.append A ys zs))
     (fun h t =>
-      congr_arg (List A) (List A) (List.cons A h)
+      congrArg (List A) (List A) (List.cons A h)
         (List.append A (List.append A t ys) zs)
         (List.append A t (List.append A ys zs)))
     xs

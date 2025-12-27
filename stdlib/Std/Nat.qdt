@@ -37,12 +37,12 @@ def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
 def Nat.zero_add : (n : Nat) → 0 + n = n :=
   Nat.rec (fun k => 0 + k = k)
     (Eq.refl Nat 0)
-    (fun k ih => congr_arg Nat Nat Nat.succ (0 + k) k ih)
+    (fun k ih => congrArg Nat Nat Nat.succ (0 + k) k ih)
 
 def Nat.succ_add (m n : Nat) : Nat.succ m + n = Nat.succ (m + n) :=
   Nat.rec (fun k => Nat.succ m + k = Nat.succ (m + k))
     (Eq.refl Nat (Nat.succ m))
-    (fun k ih => congr_arg Nat Nat Nat.succ (Nat.succ m + k) (Nat.succ (m + k)) ih)
+    (fun k ih => congrArg Nat Nat Nat.succ (Nat.succ m + k) (Nat.succ (m + k)) ih)
     n
 
 def Nat.add_comm (m n : Nat) : m + n = n + m :=
@@ -53,17 +53,17 @@ def Nat.add_comm (m n : Nat) : m + n = n + m :=
         (Nat.succ (m + k))
         (Nat.succ (k + m))
         (Nat.succ k + m)
-        (congr_arg Nat Nat Nat.succ (m + k) (k + m) ih)
+        (congrArg Nat Nat Nat.succ (m + k) (k + m) ih)
         (Eq.symm Nat (Nat.succ k + m) (Nat.succ (k + m)) (Nat.succ_add k m)))
     n
 
 def Nat.add_assoc (a b c : Nat) : a + b + c = a + (b + c) :=
   Nat.rec (fun k => a + b + k = a + (b + k))
     (Eq.refl Nat (a + b))
-    (fun k => congr_arg Nat Nat Nat.succ (a + b + k) (a + (b + k)))
+    (fun k => congrArg Nat Nat Nat.succ (a + b + k) (a + (b + k)))
     c
 
-def Nat.succ_inj (m n : Nat) : Nat.succ m = Nat.succ n → m = n := congr_arg Nat Nat Nat.pred (Nat.succ m) (Nat.succ n)
+def Nat.succ_inj (m n : Nat) : Nat.succ m = Nat.succ n → m = n := congrArg Nat Nat Nat.pred (Nat.succ m) (Nat.succ n)
 
 def Nat.le_succ (n : Nat) : Nat.le n (Nat.succ n) := Nat.le.step n n (Nat.le.refl n)
 

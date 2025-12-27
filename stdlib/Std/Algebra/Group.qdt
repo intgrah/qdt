@@ -23,9 +23,9 @@ def Group.inv_inv (A : Type) (inst : Group A) (x : A) : Group.inv A inst (Group.
   let x'' := inv x';
 
   let h1 : x'' = mul x'' one := Eq.symm A (mul x'' one) x'' (mul_one x'');
-  let h2 : mul x'' one = mul x'' (mul x' x) := congr_arg A A (fun z => mul x'' z) one (mul x' x) (Eq.symm A (mul x' x) one (inv_mul_cancel x));
+  let h2 : mul x'' one = mul x'' (mul x' x) := congrArg A A (fun z => mul x'' z) one (mul x' x) (Eq.symm A (mul x' x) one (inv_mul_cancel x));
   let h3 : mul x'' (mul x' x) = mul (mul x'' x') x := Eq.symm A (mul (mul x'' x') x) (mul x'' (mul x' x)) (mul_assoc x'' x' x);
-  let h4 : mul (mul x'' x') x = mul one x := congr_arg A A (fun z => mul z x) (mul x'' x') one (inv_mul_cancel x');
+  let h4 : mul (mul x'' x') x = mul one x := congrArg A A (fun z => mul z x) (mul x'' x') one (inv_mul_cancel x');
   let h5 : mul one x = x := one_mul x;
 
   let h12 : x'' = mul x'' (mul x' x) := Eq.trans A x'' (mul x'' one) (mul x'' (mul x' x)) h1 h2;
@@ -44,7 +44,7 @@ def Group.mul_inv_cancel (A : Type) (inst : Group A) (x : A) : Group.mul A inst 
   let x'' := inv x';
 
   let step_rewrite : mul x x' = mul x'' x' :=
-    congr_arg A A (fun z => mul z x') x x'' (Eq.symm A x'' x (Group.inv_inv A inst x));
+    congrArg A A (fun z => mul z x') x x'' (Eq.symm A x'' x (Group.inv_inv A inst x));
 
   Eq.trans A (mul x x') (mul x'' x') one step_rewrite (inv_mul_cancel x')
 
