@@ -9,8 +9,7 @@ type inductive_info = {
 type rec_rule = {
   rule_ctor_name : Name.t;
   rule_nfields : int;
-  rule_rec_args : int list;
-  rule_rec_indices : int list list;
+  rule_rec_rhs : tm;
 }
 
 type recursor_info = {
