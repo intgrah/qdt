@@ -2,7 +2,7 @@ open Syntax
 open Frontend
 open Nbe
 
-let pos_error message = Error.raise_with_src ~kind:Error.Positivity message None
+let error message = Error.raise_with_src ~kind:Error.Positivity message None
 
 (* ========== Positivity Checking ========== *)
 
@@ -106,7 +106,7 @@ let rec check_positivity_ty (genv : Global.t) (ind : Name.t) : ty -> unit =
   | TyU -> ()
   | TyPi (_, a, b) ->
       if has_ind_occ_ty ind a then
-        pos_error
+        error
           (Format.asprintf "%a has a non-positive occurrence (in domain)"
              Name.pp ind);
       check_positivity_ty genv ind b
@@ -119,7 +119,7 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
     | TmConst _ -> ()
     | TmPiHat (_, a, b) ->
         if has_ind_occ_tm ind a then
-          pos_error
+          error
             (Format.asprintf "%a has a non-positive occurrence (in domain)"
                Name.pp ind);
         check_positivity_tm genv ind b
@@ -127,19 +127,18 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
         match get_app_head tm with
         | Some f_name when Option.is_some (Global.find_inductive f_name genv) ->
             if not (check_inductive_param_positive genv f_name) then
-              pos_error
+              error
                 (Format.asprintf
                    "%a has a non-positive occurrence (nested in %a)" Name.pp ind
                    Name.pp f_name)
         | _ ->
-            pos_error
+            error
               (Format.asprintf "%a has a non-valid occurrence (nested)" Name.pp
                  ind))
     | TmLam (_, a, body) ->
         check_positivity_ty genv ind a;
         check_positivity_tm genv ind body
-    | _ ->
-        pos_error (Format.asprintf "%a has a non-valid occurrence" Name.pp ind)
+    | _ -> error (Format.asprintf "%a has a non-valid occurrence" Name.pp ind)
 
 let rec check_strict_positivity (genv : Global.t) (ind : Name.t) : ty -> unit =
   function
@@ -175,7 +174,7 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (num_params : int)
       in
       let head, args = get_app_args [] ret_tm in
       if head = TmConst ind && List.length args < num_params then
-        pos_error
+        error
           (Format.asprintf "%a: return type must apply %a to all parameters"
              Name.pp ctor_name Name.pp ind)
 
@@ -232,8 +231,7 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
           replace_return checked_ty
     in
     if not (check_returns_inductive ind ctor_fields_ty) then
-      pos_error
-        (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp ind);
+      error (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp ind);
     check_return_params ctor_name ind num_params ctor_fields_ty;
     ctor_fields_ty
   in
