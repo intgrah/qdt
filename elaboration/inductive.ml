@@ -205,28 +205,21 @@ let fresh_name used =
   in
   find 0
 
-let assign_fresh_names (ty : ty) : ty =
+let assign_fresh_names : ty -> ty =
   let rec go used = function
-    | TyPi (name, a, b) ->
-        let a', used_after_a = go used a in
-        let name', used_after_name =
-          match name with
-          | Some n -> (Some n, n :: used_after_a)
-          | None ->
-              let fresh = fresh_name used_after_a in
-              (Some fresh, fresh :: used_after_a)
-        in
-        let b', used_after_b = go used_after_name b in
-        (TyPi (name', a', b'), used_after_b)
-    | TyU -> (TyU, used)
-    | TyEl t -> (TyEl t, used)
+    | TyPi (Some name, a, b) -> TyPi (Some name, a, go (name :: used) b)
+    | TyPi (None, a, b) ->
+        let name = fresh_name used in
+        TyPi (Some name, a, go (name :: used) b)
+    | TyU -> TyU
+    | TyEl t -> TyEl t
   in
-  fst (go [] ty)
+  go []
 
-let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
+let elab_ctor (genv : Global.t) (ind_name : Name.t) (param_ctx : Context.t)
     (param_tys : (string option * ty) list) (nparams : int)
     (ctor : Ast.Command.inductive_constructor) : Global.constructor_info * ty =
-  let ctor_name = Name.child ind ctor.name in
+  let ctor_name = Name.child ind_name ctor.name in
   let field_ctx, field_tys_rev =
     List.fold_left
       (fun (ctx, acc) (_src, name, ty_raw) ->
@@ -241,17 +234,18 @@ let elab_ctor (genv : Global.t) (ind : Name.t) (param_ctx : Context.t)
     match ctor.ty_opt with
     | Some ret_raw ->
         let ret_ty = Bidir.check_ty genv field_ctx ret_raw in
-        if not (check_returns_inductive ind ret_ty) then
+        if not (check_returns_inductive ind_name ret_ty) then
           error
-            (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp ind);
+            (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp
+               ind_name);
         ret_ty
-    | None -> TyEl (TmConst ind |-- vars nparams (List.length ctor.params))
+    | None -> TyEl (TmConst ind_name |-- vars nparams (List.length ctor.params))
   in
   let ctor_fields_ty = field_tys @--> assign_fresh_names ret_ty in
 
-  check_return_params ctor_name ind nparams ctor_fields_ty;
+  check_return_params ctor_name ind_name nparams ctor_fields_ty;
   let ty = param_tys @--> ctor_fields_ty in
-  check_strict_positivity genv ind ty;
+  check_strict_positivity genv ind_name ty;
   ({ ctor_name; ty }, ctor_fields_ty)
 
 (* ========== Recursor Generation ========== *)
