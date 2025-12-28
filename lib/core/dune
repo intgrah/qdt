@@ -1,5 +1,22 @@
 (library
  (name core)
  (libraries frontend)
+ (modules
+  bidir
+  context
+  core_syntax
+  elab
+  error
+  global
+  inductive
+  name
+  nbe
+  params
+  pretty
+  quote
+  semantics
+  structure
+  syntax)
+ (modules_without_implementation semantics syntax)
  (instrumentation
   (backend bisect_ppx)))
