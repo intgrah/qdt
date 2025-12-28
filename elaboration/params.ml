@@ -1,4 +1,3 @@
-open Syntax
 open Frontend
 
 let elab_params genv (params : Ast.typed_binder list) =
@@ -11,8 +10,3 @@ let elab_params genv (params : Ast.typed_binder list) =
         go ctx ((name, ty) :: acc) genv rest
   in
   go Context.empty [] genv params
-
-let build_pi = List.fold_right (fun (name, ty) body -> TyPi (name, ty, body))
-
-let build_lambda =
-  List.fold_right (fun (name, ty) body -> TmLam (name, ty, body))

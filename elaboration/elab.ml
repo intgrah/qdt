@@ -1,3 +1,4 @@
+open Core_syntax
 open Frontend
 open Nbe
 
@@ -28,8 +29,8 @@ let elab_definition (d : Ast.Command.definition) (st : st) : st =
         let tm = Bidir.check_tm st.genv param_ctx d.body ty_val in
         (tm, ty)
   in
-  let tm = Params.build_lambda param_tys tm in
-  let ty = Params.build_pi param_tys ty in
+  let tm = param_tys @==> tm in
+  let ty = param_tys @--> ty in
   { st with genv = Global.add name (Global.Definition { ty; tm }) st.genv }
 
 let elab_example (e : Ast.Command.example) (st : st) : st =
@@ -50,9 +51,7 @@ let elab_axiom (a : Ast.Command.axiom) (st : st) : st =
   let param_ctx, param_tys = Params.elab_params st.genv a.params in
   let ty = Bidir.check_ty st.genv param_ctx a.ty in
   let ty_val = eval_ty st.genv param_ctx.env ty in
-  let ty =
-    Params.build_pi param_tys (Quote.quote_ty st.genv param_ctx.lvl ty_val)
-  in
+  let ty = param_tys @--> Quote.quote_ty st.genv param_ctx.lvl ty_val in
   { st with genv = Global.add name (Global.Axiom { ty }) st.genv }
 
 let elab_inductive (info : Ast.Command.inductive) (st : st) : st =
