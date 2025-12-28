@@ -1,7 +1,7 @@
 open Syntax
+open Core_syntax
 open Frontend
 open Ast
-open Core_syntax
 
 let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
   let ind_name = Name.parse info.name in

@@ -1,4 +1,5 @@
 open Syntax
+open Semantics
 open Frontend
 open Parser
 
@@ -483,31 +484,31 @@ let pp_def fmt ((name, term, ty) : Name.t * tm * ty) : unit =
 let env_names (env : env) : string list =
   List.init (List.length env) (Format.sprintf "env%d†")
 
-let rec pp_vl_ty_ctx (names : string list) fmt : vl_ty -> unit = function
+let rec pp_vty_ctx (names : string list) fmt : vty -> unit = function
   | VTyU -> Format.fprintf fmt "Type"
   | VTyPi (None, a, clos) ->
       let x = fresh_name names in
-      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vl_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vty_ctx names) a
         (pp_clos_ty x) clos
   | VTyPi (Some x, a, clos) ->
       let x = get_name (Some x) names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vl_ty_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vty_ctx names) a
         (pp_clos_ty x) clos
   | VTyEl n -> pp_neutral_ctx names fmt n
 
-and pp_vl_tm_ctx (names : string list) fmt : vl_tm -> unit = function
+and pp_vtm_ctx (names : string list) fmt : vtm -> unit = function
   | VTmNeutral n -> pp_neutral_ctx names fmt n
   | VTmLam (x_opt, a, clos) ->
       let x = get_name x_opt names in
       Format.fprintf fmt "@[<hov 2>(fun %s : %a =>@ %a)@]" x
-        (pp_vl_ty_ctx names) a (pp_clos_tm x) clos
+        (pp_vty_ctx names) a (pp_clos_tm x) clos
   | VTmPiHat (None, a, clos) ->
       let x = fresh_name names in
-      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vl_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>%a →@ %a@]" (pp_vtm_ctx names) a
         (pp_clos_tm x) clos
   | VTmPiHat (Some x, a, clos) ->
       let x = get_name (Some x) names in
-      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vl_tm_ctx names) a
+      Format.fprintf fmt "@[<hov 2>(%s : %a) →@ %a@]" x (pp_vtm_ctx names) a
         (pp_clos_tm x) clos
 
 and pp_neutral_ctx (names : string list) fmt ((head, sp) : neutral) : unit =
@@ -515,11 +516,11 @@ and pp_neutral_ctx (names : string list) fmt ((head, sp) : neutral) : unit =
   | [] -> pp_head fmt head
   | _ ->
       Format.fprintf fmt "@[<hov 2>(%a@ %a)@]" pp_head head
-        (pp_list (pp_vl_tm_ctx names))
+        (pp_list (pp_vtm_ctx names))
         sp
 
 and pp_head fmt : head -> unit = function
-  | HVar lvl -> Format.fprintf fmt "lvl%d†" (Lvl.to_int lvl)
+  | HVar lvl -> Format.fprintf fmt "lvl%d†" (Semantics.Lvl.to_int lvl)
   | HConst name -> Name.pp fmt name
   | HSorry (id, _ty) -> Format.fprintf fmt "sorry_%d" id
 
@@ -531,5 +532,5 @@ and pp_clos_tm (x : string) fmt : clos_tm -> unit = function
   | ClosTm (env, body) ->
       pp_tm_prec (x :: env_names env) (Some PrecLet) fmt body
 
-let pp_vl_ty fmt (ty : vl_ty) : unit = pp_vl_ty_ctx [] fmt ty
-let pp_vl_tm fmt (tm : vl_tm) : unit = pp_vl_tm_ctx [] fmt tm
+let pp_vty fmt (ty : vty) : unit = pp_vty_ctx [] fmt ty
+let pp_vtm fmt (tm : vtm) : unit = pp_vtm_ctx [] fmt tm

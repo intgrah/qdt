@@ -1,6 +1,6 @@
 (test
  (name tests)
- (libraries elaboration alcotest)
+ (libraries core alcotest)
  (deps
   ../stdlib/Std.qdt
   (glob_files ../stdlib/Std/*.qdt)

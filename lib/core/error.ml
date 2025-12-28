@@ -1,6 +1,6 @@
 open Frontend
 
-type location = { span : Syntax.span }
+type location = { span : Source.span }
 
 type t = {
   message : string;
@@ -20,7 +20,7 @@ exception Error of t
 
 let make ?(location = None) ~kind message = { message; location; kind }
 
-let make_with_src ~kind message (src : Syntax.src) : t =
+let make_with_src ~kind message (src : Source.src) : t =
   let location =
     match src with
     | None -> None
@@ -28,7 +28,7 @@ let make_with_src ~kind message (src : Syntax.src) : t =
   in
   { message; location; kind }
 
-let raise ~kind message (src : Syntax.src) =
+let raise ~kind message (src : Source.src) =
   raise (Error (make_with_src ~kind message src))
 
 let pp ~filename fmt err =

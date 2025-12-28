@@ -43,10 +43,11 @@ let instantiate_meta (mcxt : metacontext) (m : meta_var) (body : meta_body) :
   | None -> raise (Unify_error "Cannot instantiate meta without type")
 
 type constraint_ =
-  | CEqual of lvl * Syntax.vl_ty * Syntax.vl_tm * Syntax.vl_ty * Syntax.vl_tm
+  | CEqual of
+      lvl * Semantics.vty * Semantics.vtm * Semantics.vty * Semantics.vtm
 
 type constraints = constraint_ list
 
-let add_constraint (ctx : Context.t) (ty1 : Syntax.vl_ty) (t1 : Syntax.vl_tm)
-    (ty2 : Syntax.vl_ty) (t2 : Syntax.vl_tm) : constraint_ =
+let add_constraint (ctx : Context.t) (ty1 : Semantics.vty) (t1 : Semantics.vtm)
+    (ty2 : Semantics.vty) (t2 : Semantics.vtm) : constraint_ =
   CEqual (ctx.lvl, ty1, t1, ty2, t2)

@@ -1,13 +1,14 @@
 open Frontend
-open Elaboration
+open Core
 open Syntax
+open Semantics
 open Pretty
 
 let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
 
 module Test_quote = struct
   let variable () =
-    let v = VTmNeutral (HVar (Lvl 0), []) in
+    let v = VTmNeutral (HVar (Lvl.Lvl 0), []) in
     let tm = Quote.quote_tm Global.empty 1 v in
     match tm with
     | TmVar (Idx 0) -> ()
@@ -56,7 +57,7 @@ module Test_elab = struct
     let ctx = Context.empty in
     let raw = Ast.Ident (None, "x") in
     Alcotest.check_raises "var not in scope"
-      (Elaboration.Error.Error
+      (Error.Error
          { message = "Unbound variable: x"; location = None; kind = Type_check })
       (fun () -> ignore (Bidir.infer_tm Global.empty ctx raw))
 
