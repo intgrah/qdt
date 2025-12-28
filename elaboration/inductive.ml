@@ -286,7 +286,9 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
     List.map (elab_ctor genv ind_name param_ctx param_tys num_params) ind.ctors
   in
   let ctors =
-    List.map (fun { ctor_name; ctor_ty; _ } -> (ctor_name, ctor_ty)) ctor_infos
+    List.map
+      (fun { ctor_name; ctor_ty; ctor_fields_ty = _ } -> (ctor_name, ctor_ty))
+      ctor_infos
   in
   let genv =
     List.fold_left
@@ -306,17 +308,15 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
     go result_ty
   in
   let num_indices = List.length index_tys in
-  let ctor_fields (fields_ty : ty) : (string option * ty * bool) list =
+  let ctor_fields : ty -> (string option * ty * bool) list =
     let rec go acc = function
       | TyPi (name, arg_ty, rest) ->
           go ((name, arg_ty, is_recursive_arg_ty ind_name arg_ty) :: acc) rest
       | _ -> List.rev acc
     in
-    go [] fields_ty
+    go []
   in
   let rec_ty_val : vl_ty =
-    let ind = ind_name in
-    let ctors = ctor_infos in
     (* Vector.rec :
        (A : Type) ->
        (motive : (n : Nat) -> Vector A n -> Type) ->
@@ -351,7 +351,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
 
     let mk_ind_ty (params_rev : vl_tm list) (indices_order : vl_tm list) : vl_ty
         =
-      VTyEl (HConst ind, List.rev_append params_rev indices_order)
+      VTyEl (HConst ind_name, List.rev_append params_rev indices_order)
     in
 
     let build_method_ty (outer_lvl : int) (outer_env : env) (params_rev : env)
@@ -361,7 +361,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
       let return_indices =
         let rec go = function
           | TyPi (_, _, b) -> go b
-          | TyEl tm -> extract_args_after_params ind num_params tm
+          | TyEl tm -> extract_args_after_params ind_name num_params tm
           | _ -> []
         in
         go ctor_fields_ty
@@ -404,7 +404,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
                           go ((name, arg_ty) :: acc) body
                       | TyEl tm ->
                           let indices =
-                            extract_args_after_params ind num_params tm
+                            extract_args_after_params ind_name num_params tm
                           in
                           (List.rev acc, indices)
                       | _ -> (List.rev acc, [])
@@ -509,7 +509,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
                         build_indices (lvl + 1) (idx :: env) motive
                           (idx :: indices_rev) (indices_order @ [ idx ]))
               in
-              build_methods (lvl + 1) (motive :: env) ctors)
+              build_methods (lvl + 1) (motive :: env) ctor_infos)
       | (name, ty) :: rest ->
           let dom = eval_ty genv params_rev ty in
           mk_pi lvl env name dom (fun v ->
@@ -583,8 +583,6 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
           |> apps (List.init nfields (fun i -> TmVar (Idx (nfields - 1 - i))))
           |> apps ihs
         in
-        if ctor_name = [ "Vector"; "cons" ] then
-          Format.eprintf "%a" Pretty.pp_tm rule_rec_rhs;
         Global.
           { rule_ctor_name = ctor_name; rule_nfields = nfields; rule_rec_rhs })
       ctor_infos
