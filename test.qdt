@@ -41,3 +41,6 @@ inductive SexpF (A : Type) : Bool → Type where
   | cons : SexpF A Bool.true → SexpF A Bool.false → SexpF A Bool.false
 
 def Sexp (A : Type) : Type := SexpF A Bool.true
+
+def Vector.sum := Vector.rec Nat (fun _ _ => Nat) 0 (fun _ h _ ih => Nat.add h ih)
+example : Vector.sum 1 (Vector.cons Nat 0 2 (Vector.nil Nat)) = 2 := Eq.refl Nat 2
