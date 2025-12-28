@@ -28,7 +28,7 @@ let make_with_src ~kind message (src : Syntax.src) : t =
   in
   { message; location; kind }
 
-let raise_with_src ~kind message (src : Syntax.src) =
+let raise ~kind message (src : Syntax.src) =
   raise (Error (make_with_src ~kind message src))
 
 let pp ~filename fmt err =

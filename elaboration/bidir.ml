@@ -1,22 +1,6 @@
 open Syntax
 open Frontend
 
-let error message src = Error.raise_with_src ~kind:Type_check message src
-
-let get_src : Ast.t -> Frontend.Syntax.src = function
-  | Missing src
-  | Ident (src, _)
-  | App (src, _, _)
-  | Lam (src, _, _)
-  | Pi (src, _, _)
-  | Let (src, _, _, _, _)
-  | U src
-  | Pair (src, _, _)
-  | Eq (src, _, _)
-  | Ann (src, _, _)
-  | Sorry src ->
-      src
-
 let fresh_sorry_id =
   let counter = ref 0 in
   fun () ->
@@ -25,7 +9,7 @@ let fresh_sorry_id =
     id
 
 let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
-  | Missing src -> error "Missing term" src
+  | Missing src -> Error.raise ~kind:Type_check "Missing term" src
   | U _ -> TyU
   | Pi (_src, (_, name, dom), cod) ->
       let dom = check_ty genv ctx dom in
@@ -43,18 +27,17 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
       eq_ty
   | t ->
       let tm, ty_val = infer_tm genv ctx t in
-      (if not (Nbe.conv_ty genv ctx.lvl ty_val VTyU) then
-         let src = get_src t in
-         error
-           (Format.asprintf "Expected Type, got %a"
-              (Pretty.pp_ty_ctx (Context.names ctx))
-              (Quote.quote_ty genv ctx.lvl ty_val))
-           src);
+      if not (Nbe.conv_ty genv ctx.lvl ty_val VTyU) then
+        Error.raise ~kind:Type_check
+          (Format.asprintf "Expected Type, got %a"
+             (Pretty.pp_ty_ctx (Context.names ctx))
+             (Quote.quote_ty genv ctx.lvl ty_val))
+          (Ast.get_src t);
       TyEl tm
 
 and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
   function
-  | Missing src -> error "Missing term" src
+  | Missing src -> Error.raise ~kind:Type_check "Missing term" src
   | Ident (src, name) -> (
       match Context.lookup_name ctx name with
       | Some (k, ty) -> (TmVar (Idx k), ty)
@@ -62,7 +45,10 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
           let fqn = Name.parse name in
           match Global.find_ty fqn genv with
           | Some ty -> (TmConst fqn, Nbe.eval_ty genv ctx.env ty)
-          | None -> error (Format.sprintf "Unbound variable: %s" name) src))
+          | None ->
+              Error.raise ~kind:Type_check
+                (Format.sprintf "Unbound variable: %s" name)
+                src))
   | App (src, f, a) -> (
       let f', f_ty = infer_tm genv ctx f in
       match f_ty with
@@ -70,8 +56,10 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
           let a' = check_tm genv ctx a a_ty in
           let a_val = Nbe.eval_tm genv ctx.env a' in
           (TmApp (f', a'), Nbe.eval_ty genv (a_val :: env) b_ty)
-      | _ -> error "Expected function type in application" src)
-  | U src -> error "Cannot infer type of Type" src
+      | _ ->
+          Error.raise ~kind:Type_check "Expected function type in application"
+            src)
+  | U src -> Error.raise ~kind:Type_check "Cannot infer type of Type" src
   | Ann (_src, e, ty) ->
       let ty = check_ty genv ctx ty in
       let ty_val = Nbe.eval_ty genv ctx.env ty in
@@ -79,7 +67,9 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
       (e, ty_val)
   | Lam (src, binder, body) -> (
       match binder with
-      | Ast.Untyped _ -> error "Cannot infer type of unannotated lambda :(" src
+      | Ast.Untyped _ ->
+          Error.raise ~kind:Type_check
+            "Cannot infer type of unannotated lambda :(" src
       | Ast.Typed (_, name_opt, ty) ->
           let ty' = check_ty genv ctx ty in
           let ty_val = Nbe.eval_ty genv ctx.env ty' in
@@ -126,7 +116,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vl_ty =
       let body_ty_quoted = Quote.quote_ty genv ctx'.lvl body_ty in
       let result_ty = Nbe.eval_ty genv ctx'.env body_ty_quoted in
       (TmLet (name, Quote.quote_ty genv ctx.lvl rhs_ty, rhs', body'), result_ty)
-  | Sorry src -> error "Cannot infer type of sorry" src
+  | Sorry src -> Error.raise ~kind:Type_check "Cannot infer type of sorry" src
 
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
     (expected : vl_ty) : tm =
@@ -143,7 +133,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
           let ann' = check_ty genv ctx ann in
           let ann_val = Nbe.eval_ty genv ctx.env ann' in
           if not (Nbe.conv_ty genv ctx.lvl ann_val a_ty) then
-            error
+            Error.raise ~kind:Type_check
               (Format.asprintf "Lambda annotation mismatch: expected %a, got %a"
                  (Pretty.pp_ty_ctx (Context.names ctx))
                  (Quote.quote_ty genv ctx.lvl a_ty)
@@ -155,7 +145,8 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
           let b_ty_val = Nbe.eval_ty genv (var :: env) b_ty in
           let body' = check_tm genv ctx' body b_ty_val in
           TmLam (name_opt, Quote.quote_ty genv ctx.lvl a_ty, body'))
-  | Lam (src, _, _), _ -> error "Expected function type for lambda" src
+  | Lam (src, _, _), _ ->
+      Error.raise ~kind:Type_check "Expected function type for lambda" src
   | Pair (_src, a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
       let fst_ty = Nbe.do_el a_code_val in
       let snd_ty = Nbe.do_el b_val in
@@ -168,7 +159,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
             (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code_tm), b_code_tm), a'),
           b' )
   | Pair (src, _, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
-      error "Expected product type in pair" src
+      Error.raise ~kind:Type_check "Expected product type in pair" src
   | Let (_src, name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -185,16 +176,15 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t)
   | Sorry _src, expected ->
       let id = fresh_sorry_id () in
       TmSorry (id, Quote.quote_ty genv ctx.lvl expected)
-  | _ ->
+  | raw, expected ->
       let tm, inferred = infer_tm genv ctx raw in
       (if not (Nbe.conv_ty genv ctx.lvl inferred expected) then
          let names = Context.names ctx in
-         let src = get_src raw in
-         error
+         Error.raise ~kind:Type_check
            (Format.asprintf "Type mismatch: expected %a, got %a"
               (Pretty.pp_ty_ctx names)
               (Quote.quote_ty genv ctx.lvl expected)
               (Pretty.pp_ty_ctx names)
               (Quote.quote_ty genv ctx.lvl inferred))
-           src);
+           (Ast.get_src raw));
       tm

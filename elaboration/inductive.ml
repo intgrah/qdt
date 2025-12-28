@@ -1,8 +1,6 @@
 open Syntax
 open Frontend
 
-let error message = Error.raise_with_src ~kind:Error.Positivity message None
-
 (* ========== Positivity Checking ========== *)
 
 let rec has_ind_occ_ty (ind : Name.t) : ty -> bool = function
@@ -106,9 +104,10 @@ let rec check_positivity_ty (genv : Global.t) (ind : Name.t) : ty -> unit =
   | TyU -> ()
   | TyPi (_, a, b) ->
       if has_ind_occ_ty ind a then
-        error
+        Error.raise ~kind:Error.Positivity
           (Format.asprintf "%a has a non-positive occurrence (in domain)"
-             Name.pp ind);
+             Name.pp ind)
+          None;
       check_positivity_ty genv ind b
   | TyEl t -> check_positivity_tm genv ind t
 
@@ -119,26 +118,32 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
     | TmConst _ -> ()
     | TmPiHat (_, a, b) ->
         if has_ind_occ_tm ind a then
-          error
+          Error.raise ~kind:Error.Positivity
             (Format.asprintf "%a has a non-positive occurrence (in domain)"
-               Name.pp ind);
+               Name.pp ind)
+            None;
         check_positivity_tm genv ind b
     | TmApp (_, _) -> (
         match get_app_head tm with
         | Some f_name when Option.is_some (Global.find_inductive f_name genv) ->
             if not (check_inductive_param_positive genv f_name) then
-              error
+              Error.raise ~kind:Error.Positivity
                 (Format.asprintf
                    "%a has a non-positive occurrence (nested in %a)" Name.pp ind
                    Name.pp f_name)
+                None
         | _ ->
-            error
+            Error.raise ~kind:Error.Positivity
               (Format.asprintf "%a has a non-valid occurrence (nested)" Name.pp
-                 ind))
+                 ind)
+              None)
     | TmLam (_, a, body) ->
         check_positivity_ty genv ind a;
         check_positivity_tm genv ind body
-    | _ -> error (Format.asprintf "%a has a non-valid occurrence" Name.pp ind)
+    | _ ->
+        Error.raise ~kind:Error.Positivity
+          (Format.asprintf "%a has a non-valid occurrence" Name.pp ind)
+          None
 
 let rec check_strict_positivity (genv : Global.t) (ind : Name.t) : ty -> unit =
   function
@@ -174,9 +179,10 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (nparams : int)
       in
       let head, args = get_app_args [] ret_tm in
       if head = TmConst ind && List.length args < nparams then
-        error
+        Error.raise ~kind:Error.Positivity
           (Format.asprintf "%a: return type must apply %a to all parameters"
              Name.pp ctor_name Name.pp ind)
+          None
 
 (* ========== Inductive Types ========== *)
 
@@ -235,9 +241,10 @@ let elab_ctor (genv : Global.t) (ind_name : Name.t) (param_ctx : Context.t)
     | Some ret_raw ->
         let ret_ty = Bidir.check_ty genv field_ctx ret_raw in
         if not (check_returns_inductive ind_name ret_ty) then
-          error
+          Error.raise ~kind:Error.Positivity
             (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp
-               ind_name);
+               ind_name)
+            None;
         ret_ty
     | None -> TyEl (TmConst ind_name |-- vars nparams (List.length ctor.params))
   in
