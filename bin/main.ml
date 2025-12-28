@@ -1,4 +1,4 @@
-open Elaboration
+open Core
 
 let poll_seconds = 0.1
 

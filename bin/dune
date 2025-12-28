@@ -2,4 +2,4 @@
  (public_name code)
  (name main)
  (modules main incr cli)
- (libraries frontend elaboration unix cmdliner))
+ (libraries frontend core unix cmdliner))

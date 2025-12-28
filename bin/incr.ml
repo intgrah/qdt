@@ -1,5 +1,5 @@
 open Frontend
-open Elaboration
+open Core
 
 type 'a stage_result = ('a, string) result
 type program_result = Ast.program stage_result
