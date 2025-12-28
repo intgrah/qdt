@@ -281,7 +281,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
   (* (A : Type) -> Nat -> Type *)
   let ty = Params.build_pi param_tys result_ty in
   (* Vector : (A : Type) -> (n : Nat) -> Type *)
-  let genv = Global.NameMap.add ind_name (Global.Opaque { ty }) genv in
+  let genv = Global.add ind_name (Global.Opaque { ty }) genv in
   let ctor_infos =
     List.map (elab_ctor genv ind_name param_ctx param_tys num_params) ind.ctors
   in
@@ -291,15 +291,11 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
   let genv =
     List.fold_left
       (fun g (ctor_idx, (name, ty)) ->
-        Global.NameMap.add name
-          (Global.Constructor { ty; ind_name; ctor_idx })
-          g)
+        Global.add name (Global.Constructor { ty; ind_name; ctor_idx }) g)
       genv
       (List.mapi (fun i x -> (i, x)) ctors)
   in
-  let genv =
-    Global.NameMap.add ind_name (Global.Inductive { ty; ctors }) genv
-  in
+  let genv = Global.add ind_name (Global.Inductive { ty; ctors }) genv in
   let rec_name = Name.child ind_name "rec" in
   let index_tys =
     let rec go = function
@@ -543,7 +539,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
                 | TyEl tm ->
                     let rec go acc = function
                       | TmApp (f, a) -> go (a :: acc) f
-                      | _ -> List.rev acc
+                      | _ -> acc
                     in
                     go [] tm
                 | TyPi (_, _, b) -> extract_indices_from_ty b
@@ -587,6 +583,8 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
           |> apps (List.init nfields (fun i -> TmVar (Idx (nfields - 1 - i))))
           |> apps ihs
         in
+        if ctor_name = [ "Vector"; "cons" ] then
+          Format.eprintf "%a" Pretty.pp_tm rule_rec_rhs;
         Global.
           { rule_ctor_name = ctor_name; rule_nfields = nfields; rule_rec_rhs })
       ctor_infos
@@ -603,4 +601,4 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
       rec_rules;
     }
   in
-  Global.NameMap.add rec_name (Global.Recursor rec_info) genv
+  Global.add rec_name (Global.Recursor rec_info) genv
