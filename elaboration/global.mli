@@ -1,8 +1,13 @@
 type t
 
+type constructor_info = {
+  ty : Syntax.ty;
+  ctor_name : Name.t;
+}
+
 type inductive_info = {
   ty : Syntax.ty;
-  ctors : (Name.t * Syntax.ty) list;
+  ind_ctors : constructor_info list;
 }
 
 type rec_rule = {
@@ -13,25 +18,18 @@ type rec_rule = {
 
 type recursor_info = {
   ty : Syntax.ty;
-  rec_ind_name : Name.t;
+  rec_name : Name.t;
   rec_num_params : int;
   rec_num_indices : int;
-  rec_num_methods : int;
   rec_rules : rec_rule list;
 }
 
 type structure_info = {
+  ty : Syntax.ty;
   struct_ind_name : Name.t;
   struct_ctor_name : Name.t;
   struct_num_params : int;
-  struct_num_fields : int;
-  struct_field_names : string list;
-}
-
-type constructor_info = {
-  ty : Syntax.ty;
-  ind_name : Name.t;
-  ctor_idx : int;
+  struct_fields : string list;
 }
 
 type entry =
@@ -42,10 +40,7 @@ type entry =
   | Opaque of { ty : Syntax.ty }
   | Axiom of { ty : Syntax.ty }
   | Inductive of inductive_info
-  | Structure of {
-      ind : inductive_info;
-      info : structure_info;
-    }
+  | Structure of structure_info
   | Recursor of recursor_info
   | Constructor of constructor_info
 

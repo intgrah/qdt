@@ -12,8 +12,7 @@ let elab_params genv (params : Ast.typed_binder list) =
   in
   go Context.empty [] genv params
 
-let build_pi =
-  List.fold_right (fun (name, param_ty) body -> TyPi (name, param_ty, body))
+let build_pi = List.fold_right (fun (name, ty) body -> TyPi (name, ty, body))
 
 let build_lambda =
-  List.fold_right (fun (name, param_ty) body -> TmLam (name, param_ty, body))
+  List.fold_right (fun (name, ty) body -> TmLam (name, ty, body))

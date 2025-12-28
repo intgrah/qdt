@@ -334,7 +334,7 @@ let pp_ast_program fmt (prog : Ast.program) : unit =
 
 let fresh_name (names : string list) : string =
   let rec go i =
-    let candidate = Format.sprintf "x%d†" i in
+    let candidate = Format.sprintf "x%d" i in
     if List.mem candidate names then
       go (i + 1)
     else
@@ -519,7 +519,7 @@ and pp_neutral_ctx (names : string list) fmt ((head, sp) : neutral) : unit =
         sp
 
 and pp_head fmt : head -> unit = function
-  | HVar lvl -> Format.fprintf fmt "x%d†" (Lvl.to_int lvl)
+  | HVar lvl -> Format.fprintf fmt "lvl%d†" (Lvl.to_int lvl)
   | HConst name -> Name.pp fmt name
   | HSorry (id, _ty) -> Format.fprintf fmt "sorry_%d" id
 

@@ -34,22 +34,22 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
       }
   in
   let params = List.map (fun (_src, name, _ty) -> name) info.params in
-  let struct_info : Global.structure_info =
-    {
-      struct_ind_name = ind_name;
-      struct_ctor_name = Name.child ind_name "mk";
-      struct_num_params = List.length info.params;
-      struct_num_fields = List.length info.fields;
-      struct_field_names =
-        List.map
-          (fun (field : Command.structure_field) -> field.name)
-          info.fields;
-    }
-  in
   let genv =
     match Global.find_inductive ind_name genv with
     | Some ind ->
-        Global.add ind_name (Global.Structure { ind; info = struct_info }) genv
+        let struct_info : Global.structure_info =
+          {
+            ty = ind.ty;
+            struct_ind_name = ind_name;
+            struct_ctor_name = Name.child ind_name "mk";
+            struct_num_params = List.length info.params;
+            struct_fields =
+              List.map
+                (fun (field : Command.structure_field) -> field.name)
+                info.fields;
+          }
+        in
+        Global.add ind_name (Global.Structure struct_info) genv
     | _ -> genv
   in
   let param_names = params in
