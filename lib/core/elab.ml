@@ -1,4 +1,5 @@
 open Core_syntax
+open Quote
 open Frontend
 open Nbe
 
@@ -22,7 +23,7 @@ let elab_definition (d : Ast.Command.definition) (st : st) : st =
     match d.ty_opt with
     | None ->
         let tm, ty_val = Bidir.infer_tm st.genv param_ctx d.body in
-        (tm, Quote.quote_ty st.genv param_ctx.lvl ty_val)
+        (tm, quote_ty st.genv param_ctx.lvl ty_val)
     | Some ty_raw ->
         let ty = Bidir.check_ty st.genv param_ctx ty_raw in
         let ty_val = eval_ty st.genv param_ctx.env ty in
@@ -51,7 +52,7 @@ let elab_axiom (a : Ast.Command.axiom) (st : st) : st =
   let param_ctx, param_tys = Params.elab_params st.genv a.params in
   let ty = Bidir.check_ty st.genv param_ctx a.ty in
   let ty_val = eval_ty st.genv param_ctx.env ty in
-  let ty = param_tys @--> Quote.quote_ty st.genv param_ctx.lvl ty_val in
+  let ty = param_tys @--> quote_ty st.genv param_ctx.lvl ty_val in
   { st with genv = Global.add name (Global.Axiom { ty }) st.genv }
 
 let elab_inductive (info : Ast.Command.inductive) (st : st) : st =

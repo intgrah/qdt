@@ -18,5 +18,5 @@ val pp_tm : Format.formatter -> tm -> unit
 val pp_def : Format.formatter -> Name.t * tm * ty -> unit
 
 (* Values *)
-val pp_vl_ty : Format.formatter -> vl_ty -> unit
-val pp_vl_tm : Format.formatter -> vl_tm -> unit
+val pp_vty : Format.formatter -> Semantics.vty -> unit
+val pp_vtm : Format.formatter -> Semantics.vtm -> unit

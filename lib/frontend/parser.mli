@@ -1,6 +1,6 @@
 type parse_error = {
   msg : string;
-  pos : Syntax.position;
+  pos : Source.position;
 }
 
 exception Syntax_error of parse_error

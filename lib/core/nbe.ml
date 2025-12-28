@@ -1,19 +1,20 @@
 open Syntax
+open Semantics
 
 exception Eval_error of string
 
-let rec eval_ty (genv : Global.t) (env : env) : ty -> vl_ty = function
+let rec eval_ty (genv : Global.t) (env : env) : ty -> vty = function
   | TyU -> VTyU
   | TyPi (x, a, b) -> VTyPi (x, eval_ty genv env a, ClosTy (env, b))
   | TyEl t -> do_el (eval_tm genv env t)
 
-and do_el : vl_tm -> vl_ty = function
+and do_el : vtm -> vty = function
   | VTmPiHat (x, a, ClosTm (env', b)) ->
       VTyPi (x, do_el a, ClosTy (env', TyEl b))
   | VTmNeutral n -> VTyEl n
   | _ -> raise (Eval_error "do_el: expected type code or neutral")
 
-and eval_tm (genv : Global.t) (env : env) : tm -> vl_tm = function
+and eval_tm (genv : Global.t) (env : env) : tm -> vtm = function
   | TmVar (Idx l) -> List.nth env l
   | TmConst name -> (
       match Global.find_definition name genv with
@@ -25,7 +26,7 @@ and eval_tm (genv : Global.t) (env : env) : tm -> vl_tm = function
   | TmSorry (id, ty) -> VTmNeutral (HSorry (id, eval_ty genv env ty), [])
   | TmLet (_, _, t, body) -> eval_tm genv (eval_tm genv env t :: env) body
 
-and do_app (genv : Global.t) (f : vl_tm) (a : vl_tm) : vl_tm =
+and do_app (genv : Global.t) (f : vtm) (a : vtm) : vtm =
   match f with
   | VTmLam (_, _, ClosTm (env, body)) -> eval_tm genv (a :: env) body
   | VTmNeutral (h, sp) -> (
@@ -35,7 +36,7 @@ and do_app (genv : Global.t) (f : vl_tm) (a : vl_tm) : vl_tm =
       | None -> VTmNeutral ne)
   | _ -> raise (Eval_error "do_app: expected lambda or neutral")
 
-and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
+and try_iota_reduce (genv : Global.t) (ne : neutral) : vtm option =
   let ( let* ) = Option.bind in
   let* rec_name, sp =
     match ne with
@@ -65,7 +66,7 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   let env = List.rev (params_motives_methods @ fields) in
   Some (eval_tm genv env rule.rule_rec_rhs)
 
-let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
+let rec conv_ty (genv : Global.t) (l : int) (ty1 : vty) (ty2 : vty) : bool =
   match (ty1, ty2) with
   | VTyU, VTyU -> true
   | VTyPi (_, a1, ClosTy (env1, b1)), VTyPi (_, a2, ClosTy (env2, b2)) ->
@@ -78,7 +79,7 @@ let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
   | VTyEl n1, VTyEl n2 -> conv_neutral genv l (n1, n2)
   | _ -> false
 
-and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
+and conv_tm (genv : Global.t) (l : int) (tm1 : vtm) (tm2 : vtm) : bool =
   match (tm1, tm2) with
   | VTmNeutral n1, VTmNeutral n2 ->
       conv_neutral genv l (n1, n2)
@@ -99,7 +100,7 @@ and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
   | _ -> false
 
 and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
-    (other : vl_tm) : unit option =
+    (other : vtm) : unit option =
   let ( let* ) = Option.bind in
   let* ctor_name, sp =
     match ctor_app with

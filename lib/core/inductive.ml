@@ -1,6 +1,6 @@
 open Syntax
-open Frontend
 open Core_syntax
+open Frontend
 
 (* ========== Positivity Checking ========== *)
 
@@ -88,12 +88,10 @@ let check_inductive_param_positive (genv : Global.t) (f_name : Name.t) : bool =
             | TyPi (_, a, b) ->
                 if skip > 0 then
                   skip_and_check (skip - 1) (depth + 1) b
+                else if var_occurs_negatively_ty (depth - n_params) a then
+                  false
                 else
-                  let param_var = depth - n_params in
-                  if var_occurs_negatively_ty param_var a then
-                    false
-                  else
-                    skip_and_check 0 (depth + 1) b
+                  skip_and_check 0 (depth + 1) b
             | _ -> true
           in
           skip_and_check n_params 0 ctor_ty

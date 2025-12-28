@@ -1,5 +1,5 @@
 open Cst
-open Syntax
+open Source
 
 type parse_error = {
   msg : string;
@@ -21,7 +21,7 @@ type state = {
   idx : int;
 }
 
-let get_pos (st : state) : Syntax.position =
+let get_pos (st : state) : Source.position =
   if st.idx < Array.length st.dec then
     let r = st.dec.(st.idx) in
     { offset = st.idx; line = r.line; column = r.col }
@@ -41,7 +41,7 @@ let decode_source (s : string) : rune array =
       let dec = String.get_utf_8_uchar s byte_idx in
       let len_bytes = Uchar.utf_decode_length dec in
       let ch = Uchar.utf_decode_uchar dec in
-      let pos : Syntax.position = { offset = cp; line; column = col } in
+      let pos : Source.position = { offset = cp; line; column = col } in
       if not (Uchar.utf_decode_is_valid dec) then
         raise (Syntax_error { msg = "Invalid UTF-8 sequence"; pos })
       else
@@ -225,7 +225,7 @@ let read_ident : string Parser.t =
         in
         loop_aux ()
 
-let get_start_pos : Cst.t -> Syntax.position = function
+let get_start_pos : Cst.t -> Source.position = function
   | Missing src
   | U src
   | Sorry src -> (
@@ -309,7 +309,7 @@ let parse_nat : int Parser.t =
         loop_aux (cp - Char.code '0')
     | _ -> fail "expected numeral"
 
-let parse_ident : (Syntax.src * string) Parser.t =
+let parse_ident : (Source.src * string) Parser.t =
   let* () = ws in
   let+ start_pos = get_pos in
   let* name = read_ident in

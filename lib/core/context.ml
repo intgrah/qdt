@@ -1,8 +1,9 @@
 open Syntax
+open Semantics
 
 type entry = {
   name : string option;
-  ty : vl_ty;
+  ty : vty;
 }
 
 type t = {
