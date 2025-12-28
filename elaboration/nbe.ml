@@ -44,7 +44,7 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   in
   let* info = Global.find_recursor rec_name genv in
   let major_idx =
-    info.rec_num_params + 1 + info.rec_num_methods + info.rec_num_indices
+    info.rec_num_params + 1 + List.length info.rec_rules + info.rec_num_indices
   in
   let* major = List.nth_opt sp major_idx in
   let* ctor_name, ctor_sp =
@@ -59,7 +59,7 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   (* Vector.rec A nil_case cons_case n (Vector.cons A a (Vector.nil A)) *)
   (* cons_case n (Vector.cons A a (Vector.nil A)) *)
   let params_motives_methods =
-    List.take (info.rec_num_params + 1 + info.rec_num_methods) sp
+    List.take (info.rec_num_params + 1 + List.length info.rec_rules) sp
   in
   let fields = List.drop info.rec_num_params ctor_sp in
   let env = List.rev (params_motives_methods @ fields) in
@@ -107,14 +107,19 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
     | _ -> None
   in
   let* ctor_info = Global.find_constructor ctor_name genv in
+  let ind_name =
+    match ctor_name with
+    | [] -> failwith "empty constructor name"
+    | _ :: _ ->
+        let parent = List.take (List.length ctor_name - 1) ctor_name in
+        parent
+  in
   let* struct_info =
-    match Global.find_structure ctor_info.ind_name genv with
+    match Global.find_structure ind_name genv with
     | Some info -> Some info
     | None ->
         (* Also allow eta for unit-like types *)
-        let* rec_info =
-          Global.find_recursor (Name.child ctor_info.ind_name "rec") genv
-        in
+        let* rec_info = Global.find_recursor (Name.child ind_name "rec") genv in
         if
           rec_info.rec_num_indices = 0
           && List.length rec_info.rec_rules = 1
@@ -125,18 +130,18 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
           Some
             Global.
               {
-                struct_ind_name = ctor_info.ind_name;
+                ty = ctor_info.ty;
+                struct_ind_name = ind_name;
                 struct_ctor_name = ctor_name;
                 struct_num_params = rec_info.rec_num_params;
-                struct_num_fields = 0;
-                struct_field_names = [];
+                struct_fields = [];
               }
         else
           None
   in
   if
     List.length sp
-    = struct_info.struct_num_params + struct_info.struct_num_fields
+    = struct_info.struct_num_params + List.length struct_info.struct_fields
     &&
     let params = List.take struct_info.struct_num_params sp in
     let fields = List.drop struct_info.struct_num_params sp in
@@ -152,7 +157,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
           | None -> VTmNeutral (HConst proj_name, [])
         in
         conv_tm genv l field proj_result)
-      struct_info.struct_field_names fields
+      struct_info.struct_fields fields
   then
     Some ()
   else
