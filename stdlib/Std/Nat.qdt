@@ -2,7 +2,7 @@ import Std.Eq
 
 inductive Nat where
   | zero
-  | succ : Nat → Nat
+  | succ (n : Nat) : Nat
 
 def Nat.add (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) m (fun _ => Nat.succ)
 def Nat.mul (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) 0 (fun _ => Nat.add m)
