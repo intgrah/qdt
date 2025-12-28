@@ -30,10 +30,7 @@ let elab_definition (d : Ast.Command.definition) (st : st) : st =
   in
   let tm = Params.build_lambda param_tys tm in
   let ty = Params.build_pi param_tys ty in
-  {
-    st with
-    genv = Global.NameMap.add name (Global.Definition { ty; tm }) st.genv;
-  }
+  { st with genv = Global.add name (Global.Definition { ty; tm }) st.genv }
 
 let elab_example (e : Ast.Command.example) (st : st) : st =
   let param_ctx, _param_tys = Params.elab_params st.genv e.params in
@@ -56,7 +53,7 @@ let elab_axiom (a : Ast.Command.axiom) (st : st) : st =
   let ty =
     Params.build_pi param_tys (Quote.quote_ty st.genv param_ctx.lvl ty_val)
   in
-  { st with genv = Global.NameMap.add name (Global.Axiom { ty }) st.genv }
+  { st with genv = Global.add name (Global.Axiom { ty }) st.genv }
 
 let elab_inductive (info : Ast.Command.inductive) (st : st) : st =
   { st with genv = Inductive.elab_inductive st.genv info }
@@ -104,5 +101,5 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
   in
   let st : st = { genv = Global.empty; modules = ModuleNameMap.empty } in
   let st = elab_program ~filename:"<main>" prog st in
-  Format.printf "Elaborated %d definitions@." (Global.NameMap.cardinal st.genv);
+  Format.printf "Elaborated %d definitions@." (Global.cardinal st.genv);
   st.genv
