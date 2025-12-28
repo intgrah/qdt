@@ -1,7 +1,6 @@
 open Core_syntax
 open Quote
 open Frontend
-open Nbe
 
 (* ========== Program Elaboration ========== *)
 
@@ -26,7 +25,7 @@ let elab_definition (d : Ast.Command.definition) (st : st) : st =
         (tm, quote_ty st.genv param_ctx.lvl ty_val)
     | Some ty_raw ->
         let ty = Bidir.check_ty st.genv param_ctx ty_raw in
-        let ty_val = eval_ty st.genv param_ctx.env ty in
+        let ty_val = Nbe.eval_ty st.genv param_ctx.env ty in
         let tm = Bidir.check_tm st.genv param_ctx d.body ty_val in
         (tm, ty)
   in
@@ -40,7 +39,7 @@ let elab_example (e : Ast.Command.example) (st : st) : st =
     match e.ty_opt with
     | Some ty_raw ->
         let expected_ty = Bidir.check_ty st.genv param_ctx ty_raw in
-        let expected_ty_val = eval_ty st.genv param_ctx.env expected_ty in
+        let expected_ty_val = Nbe.eval_ty st.genv param_ctx.env expected_ty in
         let term = Bidir.check_tm st.genv param_ctx e.body expected_ty_val in
         (term, expected_ty_val)
     | None -> Bidir.infer_tm st.genv param_ctx e.body
@@ -51,7 +50,7 @@ let elab_axiom (a : Ast.Command.axiom) (st : st) : st =
   let name = Name.parse a.name in
   let param_ctx, param_tys = Params.elab_params st.genv a.params in
   let ty = Bidir.check_ty st.genv param_ctx a.ty in
-  let ty_val = eval_ty st.genv param_ctx.env ty in
+  let ty_val = Nbe.eval_ty st.genv param_ctx.env ty in
   let ty = param_tys @--> quote_ty st.genv param_ctx.lvl ty_val in
   { st with genv = Global.add name (Global.Axiom { ty }) st.genv }
 

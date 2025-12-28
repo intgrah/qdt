@@ -28,7 +28,7 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
       eq_ty
   | t ->
       let tm, ty_val = infer_tm genv ctx t in
-      if not (Nbe.conv_ty genv ctx.lvl ty_val Semantics.VTyU) then
+      if not (Nbe.conv_ty genv ctx.lvl ty_val VTyU) then
         Error.raise ~kind:Type_check
           (Format.asprintf "Expected Type, got %a"
              (Pretty.pp_ty_ctx (Context.names ctx))
@@ -52,7 +52,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vty = function
   | App (src, f, a) -> (
       let f', f_ty = infer_tm genv ctx f in
       match f_ty with
-      | Semantics.VTyPi (_, a_ty, Semantics.ClosTy (env, b_ty)) ->
+      | VTyPi (_, a_ty, ClosTy (env, b_ty)) ->
           let a' = check_tm genv ctx a a_ty in
           let a_val = Nbe.eval_tm genv ctx.env a' in
           (TmApp (f', a'), Nbe.eval_ty genv (a_val :: env) b_ty)
@@ -75,11 +75,8 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vty = function
           let ty_val = Nbe.eval_ty genv ctx.env ty' in
           let ctx' = Context.bind name_opt ty_val ctx in
           let body', body_ty = infer_tm genv ctx' body in
-          let clos =
-            Semantics.ClosTy (ctx.env, Quote.quote_ty genv ctx'.lvl body_ty)
-          in
-          ( TmLam (name_opt, ty', body'),
-            Semantics.VTyPi (name_opt, ty_val, clos) ))
+          let clos = ClosTy (ctx.env, Quote.quote_ty genv ctx'.lvl body_ty) in
+          (TmLam (name_opt, ty', body'), VTyPi (name_opt, ty_val, clos)))
   | Pi (_src, (_, name_opt, dom), cod) ->
       let dom, _ = infer_tm genv ctx dom in
       let dom_val = Nbe.do_el (Nbe.eval_tm genv ctx.env dom) in
@@ -103,8 +100,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vty = function
       let a_tm, a_ty = infer_tm genv ctx a in
       let b_tm, _ = infer_tm genv ctx b in
       let a_ty_tm = Quote.reify_ty genv ctx.lvl a_ty in
-      ( TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm),
-        Semantics.VTyU )
+      (TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm), VTyU)
   | Let (_src, name, ty_opt, rhs, body) ->
       let rhs', rhs_ty =
         match ty_opt with
@@ -125,14 +121,11 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vty = function
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t) (expected : vty)
     : tm =
   match (raw, expected) with
-  | ( Lam (_src, binder, body),
-      Semantics.VTyPi (_, a_ty, Semantics.ClosTy (env, b_ty)) ) -> (
+  | Lam (_src, binder, body), VTyPi (_, a_ty, ClosTy (env, b_ty)) -> (
       match binder with
       | Ast.Untyped (_, name) ->
           let ctx' = Context.bind name a_ty ctx in
-          let var =
-            Semantics.VTmNeutral (Semantics.HVar (Semantics.Lvl.Lvl ctx.lvl), [])
-          in
+          let var = VTmNeutral (HVar (Lvl ctx.lvl), []) in
           let b_ty_val = Nbe.eval_ty genv (var :: env) b_ty in
           let body' = check_tm genv ctx' body b_ty_val in
           TmLam (name, Quote.quote_ty genv ctx.lvl a_ty, body')
@@ -148,16 +141,13 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t) (expected : vty)
                  (Quote.quote_ty genv ctx.lvl ann_val))
               binder_src;
           let ctx' = Context.bind name_opt a_ty ctx in
-          let var =
-            Semantics.VTmNeutral (Semantics.HVar (Semantics.Lvl.Lvl ctx.lvl), [])
-          in
+          let var = VTmNeutral (HVar (Lvl ctx.lvl), []) in
           let b_ty_val = Nbe.eval_ty genv (var :: env) b_ty in
           let body' = check_tm genv ctx' body b_ty_val in
           TmLam (name_opt, Quote.quote_ty genv ctx.lvl a_ty, body'))
   | Lam (src, _, _), _ ->
       Error.raise ~kind:Type_check "Expected function type for lambda" src
-  | ( Pair (_src, a, b),
-      Semantics.VTyEl (Semantics.HConst [ "Prod" ], [ a_code_val; b_val ]) ) ->
+  | Pair (_src, a, b), VTyEl (HConst [ "Prod" ], [ a_code_val; b_val ]) ->
       let fst_ty = Nbe.do_el a_code_val in
       let snd_ty = Nbe.do_el b_val in
       let a' = check_tm genv ctx a fst_ty in
@@ -168,7 +158,7 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t) (expected : vty)
         ( TmApp
             (TmApp (TmApp (TmConst [ "Prod"; "mk" ], a_code_tm), b_code_tm), a'),
           b' )
-  | Pair (src, _, _), Semantics.VTyEl (Semantics.HConst [ _ ], [ _; _ ]) ->
+  | Pair (src, _, _), VTyEl (HConst [ _ ], [ _; _ ]) ->
       Error.raise ~kind:Type_check "Expected product type in pair" src
   | Let (_src, name, ty_opt, rhs, body), expected ->
       let rhs', rhs_ty =
@@ -188,13 +178,12 @@ and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t) (expected : vty)
       TmSorry (id, Quote.quote_ty genv ctx.lvl expected)
   | raw, expected ->
       let tm, inferred = infer_tm genv ctx raw in
-      (if not (Nbe.conv_ty genv ctx.lvl inferred expected) then
-         let names = Context.names ctx in
-         Error.raise ~kind:Type_check
-           (Format.asprintf "Type mismatch: expected %a, got %a"
-              (Pretty.pp_ty_ctx names)
-              (Quote.quote_ty genv ctx.lvl expected)
-              (Pretty.pp_ty_ctx names)
-              (Quote.quote_ty genv ctx.lvl inferred))
-           (Ast.get_src raw));
+      if not (Nbe.conv_ty genv ctx.lvl inferred expected) then
+        Error.raise ~kind:Type_check
+          (Format.asprintf "Type mismatch: expected %a, got %a"
+             (Pretty.pp_ty_ctx (Context.names ctx))
+             (Quote.quote_ty genv ctx.lvl expected)
+             (Pretty.pp_ty_ctx (Context.names ctx))
+             (Quote.quote_ty genv ctx.lvl inferred))
+          (Ast.get_src raw);
       tm
