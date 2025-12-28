@@ -1,5 +1,16 @@
 open Syntax
-module NameMap = Map.Make (Name)
+
+module NameMap : sig
+  type 'a t
+
+  val empty : 'a t
+  val add : Name.t -> 'a -> 'a t -> 'a t
+  val cardinal : 'a t -> int
+  val find_opt : Name.t -> 'a t -> 'a option
+end =
+  Map.Make (Name)
+
+include NameMap
 
 type inductive_info = {
   ty : ty;
@@ -9,7 +20,7 @@ type inductive_info = {
 type rec_rule = {
   rule_ctor_name : Name.t;
   rule_nfields : int;
-  rule_rec_rhs : tm;
+  rule_rec_rhs : tm; (* Has free variables *)
 }
 
 type recursor_info = {
@@ -52,10 +63,7 @@ type entry =
 
 type t = entry NameMap.t
 
-let empty : t = NameMap.empty
-let find_opt = NameMap.find_opt
-
-let find_tm name env =
+let find_definition name env =
   match find_opt name env with
   | Some (Definition { tm; _ }) -> Some tm
   | _ -> None
@@ -76,12 +84,12 @@ let find_inductive name env =
   | Some (Structure { ind; _ }) -> Some ind
   | _ -> None
 
-let find_structure name (env : t) =
+let find_structure name env =
   match find_opt name env with
   | Some (Structure { info; _ }) -> Some info
   | _ -> None
 
-let find_ty (name : Name.t) (env : t) : ty option =
+let find_ty name env : ty option =
   match find_opt name env with
   | Some (Definition { ty; _ })
   | Some (Opaque { ty })
