@@ -83,8 +83,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
     let name = Name.parse m.module_name in
     match ModuleNameMap.find_opt name st.modules with
     | Some Imported -> st
-    | Some Importing ->
-        Error.raise_with_src ~kind:Import "Circular import" m.src
+    | Some Importing -> Error.raise ~kind:Import "Circular import" m.src
     | None ->
         let st =
           { st with modules = ModuleNameMap.add name Importing st.modules }
@@ -92,7 +91,7 @@ let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
         let path = Filename.concat root (String.concat "/" name ^ ".qdt") in
         let content =
           try read_file path with
-          | _ -> Error.raise_with_src ~kind:Import "Import not found" m.src
+          | _ -> Error.raise ~kind:Import "Import not found" m.src
         in
         let imported_prog = Parser.parse content in
         let imported_prog = Desugar.desugar_program imported_prog in

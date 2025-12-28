@@ -19,6 +19,6 @@ and kind =
 exception Error of t
 
 val make : ?location:location option -> kind:kind -> string -> t
-val raise_with_src : kind:kind -> string -> Frontend.Syntax.src -> 'a
+val raise : kind:kind -> string -> Frontend.Syntax.src -> 'a
 val pp : filename:string -> Format.formatter -> t -> unit
 val to_string : filename:string -> t -> string

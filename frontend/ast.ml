@@ -87,3 +87,17 @@ module Command = struct
 end
 
 type program = Command.t list
+
+let get_src : t -> src = function
+  | Missing src
+  | Ident (src, _)
+  | App (src, _, _)
+  | Lam (src, _, _)
+  | Pi (src, _, _)
+  | Let (src, _, _, _, _)
+  | U src
+  | Pair (src, _, _)
+  | Eq (src, _, _)
+  | Ann (src, _, _)
+  | Sorry src ->
+      src

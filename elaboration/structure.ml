@@ -7,7 +7,9 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
     match info.ty_opt with
     | None -> ()
     | Some (U _) -> ()
-    | Some _ -> raise (Failure "Structure result type must be Type")
+    | Some t ->
+        Error.raise ~kind:Elaboration "Structure result type must be Type"
+          (Ast.get_src t)
   in
   let mk_field_ty (field : Command.structure_field) : t =
     List.fold_right
