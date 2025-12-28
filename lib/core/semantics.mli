@@ -1,8 +1,4 @@
-module Lvl : sig
-  type t = Lvl of int
-
-  val to_int : t -> int
-end
+type lvl = Lvl of int
 
 type vty =
   | VTyU
@@ -17,7 +13,7 @@ and vtm =
 and neutral = head * spine
 
 and head =
-  | HVar of Lvl.t
+  | HVar of lvl
   | HConst of Name.t
   | HSorry of int * vty
 

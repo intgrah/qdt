@@ -1,8 +1,4 @@
-module Lvl = struct
-  type t = Lvl of int
-
-  let to_int (Lvl l) = l
-end
+type lvl = Lvl of int
 
 type vty =
   | VTyU
@@ -17,7 +13,7 @@ and vtm =
 and neutral = head * spine
 
 and head =
-  | HVar of Lvl.t (* de Bruijn level *)
+  | HVar of lvl (* de Bruijn level *)
   | HConst of Name.t
   | HSorry of int * vty
 

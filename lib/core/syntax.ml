@@ -1,10 +1,4 @@
-(* ========== Core Syntax ========== *)
-
-module Idx = struct
-  type t = Idx of int
-
-  let to_int (Idx l) = l
-end
+type idx = Idx of int
 
 type ty =
   | TyU
@@ -12,7 +6,7 @@ type ty =
   | TyEl of tm
 
 and tm =
-  | TmVar of Idx.t
+  | TmVar of idx
   | TmConst of Name.t
   | TmLam of string option * ty * tm
   | TmApp of tm * tm

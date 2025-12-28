@@ -8,7 +8,7 @@ let ty_testable : ty Alcotest.testable = Alcotest.testable pp_ty ( = )
 
 module Test_quote = struct
   let variable () =
-    let v = VTmNeutral (HVar (Lvl.Lvl 0), []) in
+    let v = VTmNeutral (HVar (Lvl 0), []) in
     let tm = Quote.quote_tm Global.empty 1 v in
     match tm with
     | TmVar (Idx 0) -> ()

@@ -12,7 +12,7 @@ val pp_ast_command : Format.formatter -> Ast.Command.t -> unit
 val pp_ast_program : Format.formatter -> Ast.program -> unit
 
 (* Core Syntax *)
-val pp_ty_ctx : string list -> Format.formatter -> ty -> unit
+val pp_ty_ctx : string option list -> Format.formatter -> ty -> unit
 val pp_ty : Format.formatter -> ty -> unit
 val pp_tm : Format.formatter -> tm -> unit
 val pp_def : Format.formatter -> Name.t * tm * ty -> unit

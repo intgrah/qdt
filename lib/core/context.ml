@@ -29,7 +29,7 @@ let bind_def name ty value ctx =
     lvl = ctx.lvl + 1;
   }
 
-let lookup_idx ctx (Idx.Idx k) =
+let lookup_idx ctx (Idx k) =
   let e = List.nth ctx.entries k in
   e.ty
 
@@ -41,10 +41,4 @@ let lookup_name ctx name =
   in
   go 0 ctx.entries
 
-let names ctx =
-  List.map
-    (fun e ->
-      match e.name with
-      | Some n -> n
-      | None -> "_")
-    ctx.entries
+let names ctx = List.map (fun e -> e.name) ctx.entries
