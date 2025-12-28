@@ -47,11 +47,9 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
     }
   in
   let genv =
-    match Global.find_opt ind_name genv with
-    | Some (Global.Inductive ind) ->
-        Global.NameMap.add ind_name
-          (Global.Structure { ind; info = struct_info })
-          genv
+    match Global.find_inductive ind_name genv with
+    | Some ind ->
+        Global.add ind_name (Global.Structure { ind; info = struct_info }) genv
     | _ -> genv
   in
   let param_names = params in
@@ -164,7 +162,5 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
       in
       let tm, ty_val = Bidir.infer_tm genv Context.empty full_def in
       let ty_quoted = Quote.quote_ty genv 0 ty_val in
-      Global.NameMap.add proj_name
-        (Global.Definition { ty = ty_quoted; tm })
-        genv)
+      Global.add proj_name (Global.Definition { ty = ty_quoted; tm }) genv)
     genv info.fields

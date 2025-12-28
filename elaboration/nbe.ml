@@ -16,7 +16,7 @@ and do_el : vl_tm -> vl_ty = function
 and eval_tm (genv : Global.t) (env : env) : tm -> vl_tm = function
   | TmVar (Idx l) -> List.nth env l
   | TmConst name -> (
-      match Global.find_tm name genv with
+      match Global.find_definition name genv with
       | Some v -> eval_tm genv [] v
       | None -> VTmNeutral (HConst name, []))
   | TmLam (x, a, body) -> VTmLam (x, eval_ty genv env a, ClosTm (env, body))
@@ -56,13 +56,13 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vl_tm option =
   let* rule =
     List.find_opt (fun r -> r.Global.rule_ctor_name = ctor_name) info.rec_rules
   in
-  let params = List.take info.rec_num_params sp in
-  let motive = List.nth sp info.rec_num_params in
-  let methods =
-    List.drop (info.rec_num_params + 1) sp |> List.take info.rec_num_methods
+  (* Vector.rec A nil_case cons_case n (Vector.cons A a (Vector.nil A)) *)
+  (* cons_case n (Vector.cons A a (Vector.nil A)) *)
+  let params_motives_methods =
+    List.take (info.rec_num_params + 1 + info.rec_num_methods) sp
   in
   let fields = List.drop info.rec_num_params ctor_sp in
-  let env = List.rev (params @ [ motive ] @ methods @ fields) in
+  let env = List.rev (params_motives_methods @ fields) in
   Some (eval_tm genv env rule.rule_rec_rhs)
 
 let rec conv_ty (genv : Global.t) (l : int) (ty1 : vl_ty) (ty2 : vl_ty) : bool =
@@ -82,8 +82,8 @@ and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
   match (tm1, tm2) with
   | VTmNeutral n1, VTmNeutral n2 ->
       conv_neutral genv l (n1, n2)
-      || try_eta_struct genv l n1 (VTmNeutral n1)
-      || try_eta_struct genv l n2 (VTmNeutral n2)
+      || Option.is_some (try_eta_struct genv l n1 (VTmNeutral n1))
+      || Option.is_some (try_eta_struct genv l n2 (VTmNeutral n2))
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
@@ -99,65 +99,64 @@ and conv_tm (genv : Global.t) (l : int) (tm1 : vl_tm) (tm2 : vl_tm) : bool =
   | _ -> false
 
 and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
-    (other : vl_tm) : bool =
-  match ctor_app with
-  | HConst ctor_name, sp -> (
-      match Global.find_constructor ctor_name genv with
-      | None -> false
-      | Some info -> (
-          let info_opt : Global.structure_info option =
-            match Global.find_structure info.ind_name genv with
-            | Some info -> Some info
-            | None -> (
-                (* Also allow eta for unit-like types *)
-                match
-                  Global.find_recursor (Name.child info.ind_name "rec") genv
-                with
-                | Some rec_info
-                  when rec_info.rec_num_indices = 0
-                       && List.length rec_info.rec_rules = 1 ->
-                    let rule = List.hd rec_info.rec_rules in
-                    if rule.rule_nfields = 0 && rule.rule_ctor_name = ctor_name
-                    then
-                      Some
-                        {
-                          struct_ind_name = info.ind_name;
-                          struct_ctor_name = ctor_name;
-                          struct_num_params = rec_info.rec_num_params;
-                          struct_num_fields = 0;
-                          struct_field_names = [];
-                        }
-                    else
-                      None
-                | _ -> None)
-          in
-          match info_opt with
-          | None -> false
-          | Some info ->
-              if
-                List.length sp
-                <> info.struct_num_params + info.struct_num_fields
-              then
-                false
-              else
-                let params = List.take info.struct_num_params sp in
-                let fields = List.drop info.struct_num_params sp in
-                List.for_all2
-                  (fun fname field ->
-                    let proj_name = Name.child info.struct_ind_name fname in
-                    let proj_result =
-                      match Global.find_tm proj_name genv with
-                      | Some proj_fn ->
-                          let proj_fn = eval_tm genv [] proj_fn in
-                          let with_params =
-                            List.fold_left (do_app genv) proj_fn params
-                          in
-                          do_app genv with_params other
-                      | None -> VTmNeutral (HConst proj_name, [])
-                    in
-                    conv_tm genv l field proj_result)
-                  info.struct_field_names fields))
-  | _, _ -> false
+    (other : vl_tm) : unit option =
+  let ( let* ) = Option.bind in
+  let* ctor_name, sp =
+    match ctor_app with
+    | HConst ctor_name, sp -> Some (ctor_name, sp)
+    | _ -> None
+  in
+  let* ctor_info = Global.find_constructor ctor_name genv in
+  let* struct_info =
+    match Global.find_structure ctor_info.ind_name genv with
+    | Some info -> Some info
+    | None ->
+        (* Also allow eta for unit-like types *)
+        let* rec_info =
+          Global.find_recursor (Name.child ctor_info.ind_name "rec") genv
+        in
+        if
+          rec_info.rec_num_indices = 0
+          && List.length rec_info.rec_rules = 1
+          &&
+          let rule = List.hd rec_info.rec_rules in
+          rule.rule_nfields = 0 && rule.rule_ctor_name = ctor_name
+        then
+          Some
+            Global.
+              {
+                struct_ind_name = ctor_info.ind_name;
+                struct_ctor_name = ctor_name;
+                struct_num_params = rec_info.rec_num_params;
+                struct_num_fields = 0;
+                struct_field_names = [];
+              }
+        else
+          None
+  in
+  if
+    List.length sp
+    = struct_info.struct_num_params + struct_info.struct_num_fields
+    &&
+    let params = List.take struct_info.struct_num_params sp in
+    let fields = List.drop struct_info.struct_num_params sp in
+    List.for_all2
+      (fun fname field ->
+        let proj_name = Name.child struct_info.struct_ind_name fname in
+        let proj_result =
+          match Global.find_definition proj_name genv with
+          | Some proj_fn ->
+              let proj_fn = eval_tm genv [] proj_fn in
+              let with_params = List.fold_left (do_app genv) proj_fn params in
+              do_app genv with_params other
+          | None -> VTmNeutral (HConst proj_name, [])
+        in
+        conv_tm genv l field proj_result)
+      struct_info.struct_field_names fields
+  then
+    Some ()
+  else
+    None
 
 and conv_neutral (genv : Global.t) (l : int)
     (((h1, sp1), (h2, sp2)) : neutral * neutral) : bool =
