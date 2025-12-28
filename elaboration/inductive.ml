@@ -1,5 +1,6 @@
 open Syntax
 open Frontend
+open Core_syntax
 
 (* ========== Positivity Checking ========== *)
 
@@ -186,12 +187,6 @@ let check_return_params (ctor_name : Name.t) (ind : Name.t) (nparams : int)
 
 (* ========== Inductive Types ========== *)
 
-let ( |- ) fn arg = TmApp (fn, arg)
-let ( |-- ) = List.fold_left ( |- )
-let ( @-> ) (name, ty) body = TyPi (name, ty, body)
-let ( @--> ) = List.fold_right ( @-> ) (* Params.build_pi *)
-let vars n depth = List.init n (fun i -> TmVar (Idx (depth + n - 1 - i)))
-
 let fresh_name used =
   let used = List.sort_uniq String.compare used in
   let rec aux n acc =
@@ -267,31 +262,6 @@ let rec is_recursive_arg_ty (ind : Name.t) : ty -> bool = function
   | TyPi (_, _, b) -> is_recursive_arg_ty ind b
   | TyEl tm -> is_recursive_arg_tm ind tm
 
-let rec shift_ty (d : int) (cutoff : int) : ty -> ty = function
-  | TyU -> TyU
-  | TyPi (x, a, b) -> TyPi (x, shift_ty d cutoff a, shift_ty d (cutoff + 1) b)
-  | TyEl t -> TyEl (shift_tm d cutoff t)
-
-and shift_tm (d : int) (cutoff : int) : tm -> tm = function
-  | TmVar (Idx k) ->
-      if k < cutoff then
-        TmVar (Idx k)
-      else
-        TmVar (Idx (k + d))
-  | TmConst name -> TmConst name
-  | TmLam (x, a, body) ->
-      TmLam (x, shift_ty d cutoff a, shift_tm d (cutoff + 1) body)
-  | TmApp (f, a) -> TmApp (shift_tm d cutoff f, shift_tm d cutoff a)
-  | TmPiHat (x, a, b) ->
-      TmPiHat (x, shift_tm d cutoff a, shift_tm d (cutoff + 1) b)
-  | TmSorry (id, ty) -> TmSorry (id, shift_ty d cutoff ty)
-  | TmLet (x, ty, t, body) ->
-      TmLet
-        ( x,
-          shift_ty d cutoff ty,
-          shift_tm d cutoff t,
-          shift_tm d (cutoff + 1) body )
-
 let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
   (* Vector *)
   let ind_name = Name.parse ind.name in
@@ -308,6 +278,7 @@ let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
   (* (A : Type) -> Nat -> Type *)
   let ty = param_tys @--> result_ty in
   (* Vector : (A : Type) -> (n : Nat) -> Type *)
+  (* Temporarily add as opaque *)
   let genv = Global.add ind_name (Global.Opaque { ty }) genv in
   let ctor_infos =
     List.map (elab_ctor genv ind_name param_ctx param_tys nparams) ind.ctors

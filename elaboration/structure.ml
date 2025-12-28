@@ -1,5 +1,7 @@
+open Syntax
 open Frontend
 open Ast
+open Core_syntax
 
 let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
   let ind_name = Name.parse info.name in
@@ -16,14 +18,20 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
       (fun (_src, name, ty) body -> Pi (field.src, (field.src, name, ty), body))
       field.params field.ty
   in
-  let ctor_binders : typed_binder list =
-    List.map
-      (fun (field : Command.structure_field) ->
-        (field.src, Some field.name, mk_field_ty field))
-      info.fields
+  let rec code_of_ty : ty -> tm = function
+    | TyEl t -> t
+    | TyPi (x, a, b) -> TmPiHat (x, code_of_ty a, code_of_ty b)
+    | TyU -> failwith "cannot encode Type as a code"
   in
-  let ctors : Command.inductive_constructor list =
-    [ { src = info.src; name = "mk"; params = ctor_binders; ty_opt = None } ]
+  let rec drop_pis n (ty : ty) : ty =
+    match (n, ty) with
+    | 0, ty -> ty
+    | n, TyPi (_, _, b) -> drop_pis (n - 1) b
+    | _ -> failwith "expected function type"
+  in
+  let rec collect_pis acc : ty -> (string option * ty) list = function
+    | TyPi (x, a, b) -> collect_pis ((x, a) :: acc) b
+    | _ -> List.rev acc
   in
   let genv =
     Inductive.elab_inductive genv
@@ -32,11 +40,26 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
         name = info.name;
         params = info.params;
         ty_opt = info.ty_opt;
-        ctors;
+        ctors =
+          [
+            {
+              src = info.src;
+              name = "mk";
+              params =
+                List.map
+                  (fun (field : Command.structure_field) ->
+                    (field.src, Some field.name, mk_field_ty field))
+                  info.fields;
+              ty_opt = None;
+            };
+          ];
       }
   in
-  let params = List.map (fun (_src, name, _ty) -> name) info.params in
-  let genv =
+  let nparams = List.length info.params in
+  let struct_fields =
+    List.map (fun (field : Command.structure_field) -> field.name) info.fields
+  in
+  let genv, struct_info =
     match Global.find_inductive ind_name genv with
     | Some ind ->
         let struct_info : Global.structure_info =
@@ -44,125 +67,62 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
             ty = ind.ty;
             struct_ind_name = ind_name;
             struct_ctor_name = Name.child ind_name "mk";
-            struct_num_params = List.length info.params;
-            struct_fields =
-              List.map
-                (fun (field : Command.structure_field) -> field.name)
-                info.fields;
+            struct_num_params = nparams;
+            struct_fields;
           }
         in
-        Global.add ind_name (Global.Structure struct_info) genv
-    | _ -> genv
+        (Global.add ind_name (Global.Structure struct_info) genv, struct_info)
+    | None ->
+        ( genv,
+          {
+            ty = TyU;
+            struct_ind_name = ind_name;
+            struct_ctor_name = Name.child ind_name "mk";
+            struct_num_params = nparams;
+            struct_fields;
+          } )
   in
-  let param_names = params in
-  let make_proj_app fname : t =
-    let base =
-      List.fold_left
-        (fun acc -> function
-          | Some n -> App (None, acc, Ident (None, n))
-          | None -> acc)
-        (Ident (None, info.name ^ "." ^ fname))
-        param_names
-    in
-    App (None, base, Ident (None, "s"))
+  let _param_ctx, param_tys = Params.elab_params genv info.params in
+  let mk_ctor =
+    match Global.find_constructor struct_info.struct_ctor_name genv with
+    | Some info -> info
+    | None -> failwith "missing structure constructor"
   in
-  let rec subst_fields ef : t -> t = function
-    | Ident (_, x) -> (
-        match List.assoc_opt x ef with
-        | Some proj -> proj
-        | None -> Ident (None, x))
-    | App (_, f, a) -> App (None, subst_fields ef f, subst_fields ef a)
-    | Lam (_, binder, body) ->
-        let name =
-          match binder with
-          | Untyped (_, name)
-          | Typed (_, name, _) ->
-              name
-        in
-        let earlier_fields =
-          List.filter (fun (n, _) -> not (Some n = name)) ef
-        in
-        let binder' =
-          match binder with
-          | Untyped (src, name) -> Untyped (src, name)
-          | Typed (src, name, ty) -> Typed (src, name, subst_fields ef ty)
-        in
-        Lam (None, binder', subst_fields earlier_fields body)
-    | Pi (src, (src_binder, name, ty), body) ->
-        let earlier_fields =
-          List.filter (fun (n, _) -> not (Some n = name)) ef
-        in
-        Pi
-          ( src,
-            (src_binder, name, subst_fields ef ty),
-            subst_fields earlier_fields body )
-    | Pair (_, a, b) -> Pair (None, subst_fields ef a, subst_fields ef b)
-    | Eq (_, a, b) -> Eq (None, subst_fields ef a, subst_fields ef b)
-    | Ann (_, t, ty) -> Ann (None, subst_fields ef t, subst_fields ef ty)
-    | Let (_, n, ty_opt, t, b) ->
-        let earlier_fields = List.filter (fun (x, _) -> x <> n) ef in
-        Let
-          ( None,
-            n,
-            Option.map (subst_fields ef) ty_opt,
-            subst_fields ef t,
-            subst_fields earlier_fields b )
-    | tm -> tm
-  in
-  let rec_app =
+  let fields_ty = drop_pis nparams mk_ctor.ty in
+  let fields = collect_pis [] fields_ty in
+  let rec_name = Name.child ind_name "rec" in
+  let struct_ty_in_params : ty = TyEl (TmConst ind_name |-- vars nparams 0) in
+  let genv =
     List.fold_left
-      (fun acc -> function
-        | Some n -> App (None, acc, Ident (None, n))
-        | None -> acc)
-      (Ident (None, info.name ^ ".rec"))
-      param_names
+      (fun genv (field_idx, field_name, field_ty) ->
+        let proj_name = Name.child ind_name field_name in
+        let prev_fields = List.take field_idx fields in
+        let prev_proj_terms =
+          List.init field_idx (fun j ->
+              TmConst (Name.child ind_name (List.nth struct_fields j))
+              |-- vars nparams 1 |- TmVar (Idx 0))
+        in
+        let field_code_fn = prev_fields @==> code_of_ty field_ty in
+        let code_body = shift_tm 1 0 field_code_fn |-- prev_proj_terms in
+        let motive_tm = (Some "s", struct_ty_in_params) @=> code_body in
+        let method_tm =
+          fields @==> TmVar (Idx (List.length fields - 1 - field_idx))
+        in
+        let proj_tm =
+          param_tys
+          @==> (TmConst rec_name |-- vars nparams 0 |- motive_tm |- method_tm)
+        in
+        let proj_ty =
+          param_tys @--> (Some "s", struct_ty_in_params) @-> TyEl code_body
+        in
+        Global.add proj_name
+          (Global.Definition { ty = proj_ty; tm = proj_tm })
+          genv)
+      genv
+      (List.mapi
+         (fun i (field : Command.structure_field) ->
+           let _name_opt, ty = List.nth fields i in
+           (i, field.name, ty))
+         info.fields)
   in
-  let field_binders : binder list =
-    List.map
-      (fun (field : Command.structure_field) -> Untyped (None, Some field.name))
-      info.fields
-  in
-  let param_binders : binder list =
-    List.map (fun binder -> Typed binder) info.params
-  in
-  List.fold_left
-    (fun genv (field : Command.structure_field) ->
-      let proj_name = Name.child (Name.parse info.name) field.name in
-      let field_ty = mk_field_ty field in
-      let subst_fty =
-        subst_fields
-          (List.filter_map
-             (fun other_fname ->
-               if String.equal other_fname field.name then
-                 None
-               else
-                 Some (other_fname, make_proj_app other_fname))
-             (List.map
-                (fun (field : Command.structure_field) -> field.name)
-                info.fields))
-          field_ty
-      in
-      let body : t =
-        App
-          ( None,
-            App (None, rec_app, Lam (None, Untyped (None, Some "s"), subst_fty)),
-            Lam
-              ( None,
-                List.hd field_binders,
-                List.fold_right
-                  (fun binder acc -> Lam (None, binder, acc))
-                  (List.tl field_binders)
-                  (Ident (None, field.name)) ) )
-      in
-      let full_def =
-        match param_binders with
-        | [] -> body
-        | hd :: tl ->
-            List.fold_right
-              (fun binder acc -> Lam (None, binder, acc))
-              (hd :: tl) body
-      in
-      let tm, ty_val = Bidir.infer_tm genv Context.empty full_def in
-      let ty_quoted = Quote.quote_ty genv 0 ty_val in
-      Global.add proj_name (Global.Definition { ty = ty_quoted; tm }) genv)
-    genv info.fields
+  genv
