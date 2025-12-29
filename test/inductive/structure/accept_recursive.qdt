@@ -1,0 +1,14 @@
+structure Stream (A : Type) where
+  (head : A)
+  (tail : Stream A)
+
+example : (A : Type) → A → Stream A → Stream A := Stream.mk
+example : (A : Type) → Stream A → A := Stream.head
+example : (A : Type) → Stream A → Stream A := Stream.tail
+
+example :
+    (A : Type) →
+    (motive : Stream A → Type) →
+    ((head : A) → (tail : Stream A) → motive tail → motive (Stream.mk A head tail)) →
+    (s : Stream A) → motive s :=
+  Stream.rec

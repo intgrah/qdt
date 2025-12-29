@@ -1,0 +1,25 @@
+inductive Nat where
+  | zero
+  | succ (n : Nat)
+
+inductive Bool where
+  | false
+  | true
+
+structure Point where
+  (x : Nat)
+  (y : Nat)
+
+structure Config where
+  (enabled : Bool)
+  (count : Nat)
+
+example : (x y : Nat) → Point := Point.mk
+example : Point → Nat := Point.x
+example : Point → Nat := Point.y
+
+example :
+    (motive : Point → Type) →
+    ((x y : Nat) → motive (Point.mk x y)) →
+    (p : Point) → motive p :=
+  Point.rec

@@ -1,0 +1,5 @@
+import Std.Nat
+
+structure BadParamStruct (A : Type) (n : Nat) where
+  (val : BadParamStruct A Nat.zero)
+

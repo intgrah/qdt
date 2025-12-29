@@ -1,0 +1,2 @@
+Error: BadParamStruct.mk: parameter arguments must match exactly (expected idx0†, got Nat.zero)
+Elaborated 34 definitions

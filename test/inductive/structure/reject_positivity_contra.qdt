@@ -1,0 +1,9 @@
+inductive Nat where
+  | zero
+  | succ (n : Nat)
+
+inductive Contra (A : Type) where
+  | mk (f : A → Nat)
+
+structure Bad where
+  (c : Contra Bad)

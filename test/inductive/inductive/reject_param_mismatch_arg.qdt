@@ -1,0 +1,5 @@
+import Std.Bool
+
+inductive BadParamArg (A : Type) (n : Bool) : Type where
+  | mk : BadParamArg A Bool.true -> BadParamArg A n
+

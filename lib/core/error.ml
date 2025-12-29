@@ -13,14 +13,15 @@ and kind =
   | Elaboration
   | Type_check
   | Positivity
+  | Constructor
   | Import
   | Eval
 
 exception Error of t
 
-let make ?(location = None) ~kind message = { message; location; kind }
+let make ?(location = None) kind message = { message; location; kind }
 
-let make_with_src ~kind message (src : Source.src) : t =
+let make_with_src kind message (src : Source.src) : t =
   let location =
     match src with
     | None -> None
@@ -28,8 +29,8 @@ let make_with_src ~kind message (src : Source.src) : t =
   in
   { message; location; kind }
 
-let raise ~kind message (src : Source.src) =
-  raise (Error (make_with_src ~kind message src))
+let raise kind message (src : Source.src) =
+  raise (Error (make_with_src kind message src))
 
 let pp ~filename fmt err =
   match err.location with

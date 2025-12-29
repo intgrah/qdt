@@ -10,7 +10,7 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
     | None -> TyU
     | Some (U _) -> TyU
     | Some t ->
-        Error.raise ~kind:Elaboration "Structure result type must be Type"
+        Error.raise Elaboration "Structure result type must be Type"
           (Ast.get_src t)
   in
   let rec code_of_ty : ty -> tm = function

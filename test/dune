@@ -1,7 +1,21 @@
-(test
- (name tests)
- (libraries core alcotest)
+(executable
+ (name runner)
+ (libraries str unix))
+
+(rule
+ (alias runtest)
  (deps
-  ../stdlib/Std.qdt
-  (glob_files ../stdlib/Std/*.qdt)
-  (glob_files ../examples/*.qdt)))
+  (source_tree inductive)
+  (source_tree %{project_root}/stdlib)
+  %{bin:code})
+ (action
+  (run %{exe:runner.exe} %{bin:code} %{project_root}/stdlib inductive)))
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree parser)
+  (source_tree %{project_root}/stdlib)
+  %{bin:code})
+ (action
+  (run %{exe:runner.exe} %{bin:code} %{project_root}/stdlib parser)))

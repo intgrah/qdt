@@ -1,0 +1,12 @@
+inductive Eq3 (A : Type) (x : A) : A → A → Type where
+  | refl : Eq3 A x x x
+
+example :
+    (A : Type) →
+    (x : A) →
+    (motive : (y z : A) → Eq3 A x y z → Type) →
+    (refl : motive x x (Eq3.refl A x)) →
+    (y z : A) →
+    (t : Eq3 A x y z) →
+    motive y z t :=
+  Eq3.rec
