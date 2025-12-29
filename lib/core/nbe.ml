@@ -53,7 +53,6 @@ and try_iota_reduce (genv : Global.t) (ne : neutral) : vtm option =
     | VTmNeutral (HConst ctor_name, ctor_sp) -> Some (ctor_name, ctor_sp)
     | _ -> None
   in
-
   let* rule =
     List.find_opt (fun r -> r.Global.rule_ctor_name = ctor_name) info.rec_rules
   in

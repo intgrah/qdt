@@ -82,8 +82,8 @@ let check_inductive_param_positive (genv : Global.t) (f_name : Name.t) : bool =
       if n_params = 0 then
         true
       else
-        let check_ctor_positive =
-         fun ({ ty = ctor_ty; ctor_name = _ } : Global.constructor_info) ->
+        let check_ctor_positive
+            ({ ty; ctor_name = _ } : Global.constructor_info) =
           let rec skip_and_check skip depth = function
             | TyPi (_, a, b) ->
                 if skip > 0 then
@@ -94,7 +94,7 @@ let check_inductive_param_positive (genv : Global.t) (f_name : Name.t) : bool =
                   skip_and_check 0 (depth + 1) b
             | _ -> true
           in
-          skip_and_check n_params 0 ctor_ty
+          skip_and_check n_params 0 ty
         in
         List.for_all check_ctor_positive info.ind_ctors
 
@@ -307,7 +307,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
         | None -> (Some (Format.sprintf "a%d†" i), ty))
       index_tys
   in
-  let build_method_ty (ctor_name : Name.t) (ctor_fields_ty : ty) : ty =
+  let build_minor_ty (ctor_name : Name.t) (ctor_fields_ty : ty) : ty =
     let fields = ctor_fields ctor_fields_ty in
     let nfields = List.length fields in
     let rec_field_infos =
@@ -366,18 +366,23 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
                  |-- vars nfields 0)))
   in
   let rec_ty : ty =
-    param_tys (* parameters *)
+    (* parameters *)
+    param_tys
+    (* motive *)
     @--> ( Some "motive",
            index_tys
            @--> (None, TyEl (TmConst ind_name |-- vars (nparams + nindices) 0))
            @-> TyU )
+    (* minor premises *)
     @-> List.mapi
           (fun i ((info : Global.constructor_info), fields_ty) ->
-            (None, shift_ty i 0 (build_method_ty info.ctor_name fields_ty)))
+            (None, shift_ty i 0 (build_minor_ty info.ctor_name fields_ty)))
           ctor_infos
+    (* indices *)
     @--> List.mapi
            (fun i (name, idx_ty) -> (name, shift_ty (1 + nmethods) i idx_ty))
            index_tys
+    (* major premise *)
     @--> ( None,
            TyEl
              (TmConst ind_name

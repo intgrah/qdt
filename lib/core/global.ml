@@ -31,19 +31,19 @@ type rec_rule = {
 
 type recursor_info = {
   ty : ty;
-      (* (A : Type) ->
-         (motive : (n : Nat) -> Vector A n -> Type) ->
-         (nil_case : motive 0 (Vector.nil A)) ->
-         (cons_case :
-           (k : Nat) ->
-           (head : A) ->
-           (tail : Vector A k) ->
-           (ih_tail : motive k tail) ->
-           motive (Nat.succ k) (Vector.cons A k head tail)
-         (m : Nat) ->
-         (major : Vector A m) ->
-         motive m major
-         ) *)
+  (* (A : Type) ->
+     (motive : (n : Nat) -> Vector A n -> Type) ->
+     (nil_case : motive 0 (Vector.nil A)) ->
+     (cons_case :
+       (k : Nat) ->
+       (head : A) ->
+       (tail : Vector A k) ->
+       (ih_tail : motive k tail) ->
+       motive (Nat.succ k) (Vector.cons A k head tail)
+     (m : Nat) ->
+     (major : Vector A m) ->
+     motive m major
+     ) *)
   rec_name : Name.t; (* ["Vector"; "rec"] *)
   rec_num_params : int; (* 1 (A) *)
   rec_num_indices : int; (* 1 (n) *)
