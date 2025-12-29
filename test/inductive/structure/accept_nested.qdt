@@ -1,0 +1,21 @@
+inductive Nat where
+  | zero
+  | succ (n : Nat)
+
+structure Point where
+  (x : Nat)
+  (y : Nat)
+
+structure Rect where
+  (topLeft : Point)
+  (botRight : Point)
+
+example : Point → Point → Rect := Rect.mk
+example : Rect → Point := Rect.topLeft
+example : Rect → Point := Rect.botRight
+
+example :
+    (motive : Rect → Type) →
+    ((topLeft botRight : Point) → motive (Rect.mk topLeft botRight)) →
+    (r : Rect) → motive r :=
+  Rect.rec

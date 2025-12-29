@@ -13,6 +13,7 @@ type module_status =
 type st = {
   genv : Global.t;
   modules : module_status ModuleNameMap.t;
+  has_errors : bool;
 }
 
 let elab_definition (d : Ast.Command.definition) (st : st) : st =
@@ -64,40 +65,66 @@ let protect_unit ~filename (k : st -> st) (st : st) : st =
   try k st with
   | Error.Error err ->
       Format.eprintf "Error: %a@." (Error.pp ~filename) err;
-      st
+      { st with has_errors = true }
 
-let elab_program_with_imports ~(root : string) ~(read_file : string -> string)
-    (prog : Ast.program) : Global.t =
+let elab_program_with_imports ~(current_file : string)
+    ~(read_file : string -> string) (prog : Ast.program) :
+    (Global.t, Global.t) result =
   let rec elab_program ~filename (prog : Ast.program) : st -> st =
     List.fold_right
       (function
-        | Ast.Command.Import m -> process_import m
+        | Ast.Command.Import m ->
+            protect_unit ~filename (process_import filename m)
         | Definition def -> protect_unit ~filename (elab_definition def)
         | Example ex -> protect_unit ~filename (elab_example ex)
         | Axiom ax -> protect_unit ~filename (elab_axiom ax)
         | Inductive info -> protect_unit ~filename (elab_inductive info)
         | Structure info -> protect_unit ~filename (elab_structure info))
       (List.rev prog)
-  and process_import (m : Ast.Command.import) (st : st) : st =
+  and process_import filename (m : Ast.Command.import) (st : st) : st =
     let name = Name.parse m.module_name in
     match ModuleNameMap.find_opt name st.modules with
     | Some Imported -> st
-    | Some Importing -> Error.raise ~kind:Import "Circular import" m.src
+    | Some Importing -> Error.raise Import "Circular import" m.src
     | None ->
         let st =
           { st with modules = ModuleNameMap.add name Importing st.modules }
         in
-        let path = Filename.concat root (String.concat "/" name ^ ".qdt") in
+        let path =
+          match name with
+          | "Std" :: _ ->
+              let stdlib_path =
+                try Sys.getenv "QDT_PATH" with
+                | Not_found ->
+                    Error.raise Import "QDT_PATH environment variable not set"
+                      m.src
+              in
+              let stdlib_path =
+                if Filename.is_relative stdlib_path then
+                  Filename.concat (Sys.getcwd ()) stdlib_path
+                else
+                  stdlib_path
+              in
+              Filename.concat stdlib_path (String.concat "/" name ^ ".qdt")
+          | _ ->
+              let current_dir = Filename.dirname filename in
+              Filename.concat current_dir (String.concat "/" name ^ ".qdt")
+        in
         let content =
           try read_file path with
-          | _ -> Error.raise ~kind:Import "Import not found" m.src
+          | _ -> Error.raise Import "Import not found" m.src
         in
         let imported_prog = Parser.parse content in
         let imported_prog = Desugar.desugar_program imported_prog in
         let st = elab_program ~filename:path imported_prog st in
         { st with modules = ModuleNameMap.add name Imported st.modules }
   in
-  let st : st = { genv = Global.empty; modules = ModuleNameMap.empty } in
-  let st = elab_program ~filename:"<main>" prog st in
+  let st : st =
+    { genv = Global.empty; modules = ModuleNameMap.empty; has_errors = false }
+  in
+  let st = elab_program ~filename:current_file prog st in
   Format.printf "Elaborated %d definitions@." (Global.cardinal st.genv);
-  st.genv
+  if st.has_errors then
+    Error st.genv
+  else
+    Ok st.genv

@@ -1,0 +1,7 @@
+inductive Nat where
+  | zero
+  | succ (n : Nat)
+
+inductive Tree where
+  | leaf
+  | node (left : Tree) (val : Nat) (right : Tree)

@@ -1,5 +1,7 @@
 (executable
  (public_name code)
  (name main)
- (modules main incr cli)
- (libraries frontend core unix cmdliner))
+ (modules main cli)
+ (libraries frontend core unix cmdliner)
+ (instrumentation
+  (backend bisect_ppx)))

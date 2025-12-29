@@ -1,0 +1,17 @@
+structure Pair (A B : Type) where
+  (fst : A)
+  (snd : B)
+
+structure Box (A : Type) where
+  (val : A)
+
+example : (A B : Type) → A → B → Pair A B := Pair.mk
+example : (A B : Type) → Pair A B → A := Pair.fst
+example : (A B : Type) → Pair A B → B := Pair.snd
+
+example :
+    (A B : Type) →
+    (motive : Pair A B → Type) →
+    ((fst : A) → (snd : B) → motive (Pair.mk A B fst snd)) →
+    (p : Pair A B) → motive p :=
+  Pair.rec

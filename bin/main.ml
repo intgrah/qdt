@@ -1,6 +1,5 @@
+open Frontend
 open Core
-
-let poll_seconds = 0.1
 
 let read_file path =
   try Some (In_channel.with_open_text path In_channel.input_all) with
@@ -8,101 +7,97 @@ let read_file path =
       Format.eprintf "Failed to read %s: %s@." path msg;
       None
 
-let log_stage stage : 'a Incr.update -> unit = function
-  | Initialized _ -> Format.eprintf "[inc] %s@." stage
-  | Changed _ -> Format.eprintf "[inc] %s@." stage
-  | Invalidated -> Format.eprintf "[inc] %s@." stage
+let read_file_exn path = In_channel.with_open_text path In_channel.input_all
 
-let handle_stage_result ~show ~printer : 'a Incr.update -> unit = function
-  | Initialized (Ok value)
-  | Changed (_, Ok value) ->
-      if show then printer value
-  | Initialized (Error err)
-  | Changed (_, Error err) ->
-      Format.printf "%s@." err
-  | Invalidated -> ()
+let parse source =
+  match Parser.parse source with
+  | cst -> Ok (Desugar.desugar_program cst)
+  | exception Parser.Syntax_error { msg; pos } ->
+      Error
+        (Format.asprintf "Parse error: %s (at line %d, col %d)" msg pos.line
+           pos.column)
+  | exception exn ->
+      Error (Format.asprintf "Parse error: %s" (Printexc.to_string exn))
 
-let rec watch_loop file pipeline last_mtime =
-  Unix.sleepf poll_seconds;
-  let last_mtime =
-    match Unix.stat file with
-    | exception Unix.Unix_error (err, _, _) ->
-        Format.eprintf "Error: %s" (Unix.error_message err);
-        last_mtime
-    | stats ->
-        if stats.st_mtime > last_mtime then (
-          match read_file file with
-          | None -> last_mtime
-          | Some contents ->
-              Incr.set_source pipeline contents;
-              Incr.stabilize ();
-              stats.st_mtime
-        ) else
-          last_mtime
-  in
-  watch_loop file pipeline last_mtime
+let elaborate ~current_file program =
+  match program with
+  | Error e -> Error e
+  | Ok prog -> (
+      match
+        Elab.elab_program_with_imports ~current_file ~read_file:read_file_exn
+          prog
+      with
+      | Ok defs -> Ok defs
+      | Error _defs -> Error ""
+      | exception Parser.Syntax_error { Parser.msg; _ } ->
+          Error (Format.asprintf "Parse error in import: %s" msg)
+      | exception exn ->
+          Error (Format.asprintf "Error: %s" (Printexc.to_string exn)))
 
-let main () =
-  let args = Cli.parse_args () in
-  let pipeline = Incr.create ~root_dir:args.root_dir () in
+let print_entry genv (name : Name.t) (entry : Global.entry) =
+  match Global.find_ty name genv with
+  | None -> ()
+  | Some ty -> (
+      match entry with
+      | Global.Definition { tm; _ } ->
+          Format.printf "%a@.@." Pretty.pp_def (name, tm, ty)
+      | _ ->
+          Format.printf "@[<hov 2>%a :@;<1 4>%a@]@.@." Name.pp name Pretty.pp_ty
+            ty)
 
-  (* Attach debug handlers *)
-  Incr.on_program_update pipeline ~f:(fun update ->
-      log_stage "program" update;
-      handle_stage_result ~show:args.Cli.show_parse
-        ~printer:(Format.printf "%a@." Pretty.pp_ast_program)
-        update);
-  Incr.on_elaborated_update pipeline ~f:(fun update ->
-      log_stage "elaborated" update;
-      let show = args.Cli.show_elab <> [] in
-      handle_stage_result ~show
-        ~printer:(fun genv ->
-          let print_entry (name : Name.t) (entry : Global.entry) =
-            match Global.find_ty name genv with
-            | None -> ()
-            | Some ty -> (
-                match entry with
-                | Global.Definition { tm; _ } ->
-                    Format.printf "%a@.@." Pretty.pp_def (name, tm, ty)
-                | Global.Opaque _ ->
-                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
-                      name Pretty.pp_ty ty
-                | Global.Axiom _ ->
-                    Format.printf "@[<hov 2>axiom %a :@;<1 4>%a@]@.@." Name.pp
-                      name Pretty.pp_ty ty
-                | Global.Inductive _ ->
-                    Format.printf "@[<hov 2>inductive %a :@;<1 4>%a@]@.@."
-                      Name.pp name Pretty.pp_ty ty
-                | Global.Structure _ ->
-                    Format.printf "@[<hov 2>structure %a :@;<1 4>%a@]@.@."
-                      Name.pp name Pretty.pp_ty ty
-                | Global.Recursor _ ->
-                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
-                      name Pretty.pp_ty ty
-                | Global.Constructor _ ->
-                    Format.printf "@[<hov 2>opaque %a :@;<1 4>%a@]@.@." Name.pp
-                      name Pretty.pp_ty ty)
-          in
+let run_once (args : Cli.options) =
+  match read_file args.input_file with
+  | None -> exit 1
+  | Some source -> (
+      let program = parse source in
+      let elaborated = elaborate ~current_file:args.input_file program in
+      (if args.show_parse then
+         match program with
+         | Ok prog -> Format.printf "%a@." Pretty.pp_ast_program prog
+         | Error _ -> ());
+      (match elaborated with
+      | Ok genv ->
           List.iter
             (fun name_str ->
               let name = Name.parse name_str in
               match Global.find_opt name genv with
               | None -> Format.printf "Unknown constant: %s@." name_str
-              | Some entry -> print_entry name entry)
-            args.show_elab)
-        update);
+              | Some entry -> print_entry genv name entry)
+            args.show_elab
+      | Error msg -> if msg <> "" then Format.eprintf "%s@." msg);
+      match elaborated with
+      | Error _ -> exit 1
+      | Ok _ -> ())
 
-  Incr.set_source pipeline (Option.get (read_file args.input_file));
-  Incr.stabilize ();
+let poll_seconds = 0.1
+
+let rec watch_loop (args : Cli.options) last_mtime =
+  Unix.sleepf poll_seconds;
+  let last_mtime =
+    match Unix.stat args.input_file with
+    | exception Unix.Unix_error (err, _, _) ->
+        Format.eprintf "Error: %s@." (Unix.error_message err);
+        last_mtime
+    | stats ->
+        if stats.st_mtime > last_mtime then (
+          run_once args;
+          stats.st_mtime
+        ) else
+          last_mtime
+  in
+  watch_loop args last_mtime
+
+let main () =
+  let args = Cli.parse_args () in
+  run_once args;
   if args.watch then (
     let initial_mtime =
       match Unix.stat args.input_file with
       | exception Unix.Unix_error _ -> 0.0
       | stats -> stats.st_mtime
     in
-    Format.eprintf "[inc] watching %s (poll %.1fs)…@." args.input_file
-      poll_seconds;
-    watch_loop args.input_file pipeline initial_mtime
+    Format.eprintf "[watch] %s (poll %.1fs)@." args.input_file poll_seconds;
+    watch_loop args initial_mtime
   )
 
 let () = main ()

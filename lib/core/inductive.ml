@@ -27,6 +27,7 @@ let rec is_valid_ind_app (ind : Name.t) : tm -> bool = function
 let rec get_app_head : tm -> Name.t option = function
   | TmConst name -> Some name
   | TmApp (f, _) -> get_app_head f
+  | TmLam (_, _, body) -> get_app_head body
   | _ -> None
 
 let rec has_var_ty (var_idx : int) : ty -> bool = function
@@ -79,11 +80,8 @@ let check_inductive_param_positive (genv : Global.t) (f_name : Name.t) : bool =
         | _ -> 0
       in
       let n_params = count_params info.ty in
-      if n_params = 0 then
-        true
-      else
-        let check_ctor_positive
-            ({ ty; ctor_name = _ } : Global.constructor_info) =
+      List.for_all
+        (fun ({ ty; ctor_name = _ } : Global.constructor_info) ->
           let rec skip_and_check skip depth = function
             | TyPi (_, a, b) ->
                 if skip > 0 then
@@ -94,16 +92,15 @@ let check_inductive_param_positive (genv : Global.t) (f_name : Name.t) : bool =
                   skip_and_check 0 (depth + 1) b
             | _ -> true
           in
-          skip_and_check n_params 0 ty
-        in
-        List.for_all check_ctor_positive info.ind_ctors
+          skip_and_check n_params 0 ty)
+        info.ind_ctors
 
 let rec check_positivity_ty (genv : Global.t) (ind : Name.t) : ty -> unit =
   function
   | TyU -> ()
   | TyPi (_, a, b) ->
       if has_ind_occ_ty ind a then
-        Error.raise ~kind:Positivity
+        Error.raise Positivity
           (Format.asprintf "%a has a non-positive occurrence (in domain)"
              Name.pp ind)
           None;
@@ -117,7 +114,7 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
     | TmConst _ -> ()
     | TmPiHat (_, a, b) ->
         if has_ind_occ_tm ind a then
-          Error.raise ~kind:Positivity
+          Error.raise Positivity
             (Format.asprintf "%a has a non-positive occurrence (in domain)"
                Name.pp ind)
             None;
@@ -126,21 +123,22 @@ and check_positivity_tm (genv : Global.t) (ind : Name.t) (tm : tm) : unit =
         match get_app_head tm with
         | Some f_name when Option.is_some (Global.find_inductive f_name genv) ->
             if not (check_inductive_param_positive genv f_name) then
-              Error.raise ~kind:Positivity
+              Error.raise Positivity
                 (Format.asprintf
                    "%a has a non-positive occurrence (nested in %a)" Name.pp ind
                    Name.pp f_name)
                 None
         | _ ->
-            Error.raise ~kind:Positivity
+            Error.raise Positivity
               (Format.asprintf "%a has a non-valid occurrence (nested)" Name.pp
                  ind)
               None)
     | TmLam (_, a, body) ->
         check_positivity_ty genv ind a;
         check_positivity_tm genv ind body
-    | _ ->
-        Error.raise ~kind:Positivity
+    | TmSorry _
+    | TmLet _ ->
+        Error.raise Positivity
           (Format.asprintf "%a has a non-valid occurrence" Name.pp ind)
           None
 
@@ -162,26 +160,39 @@ let rec check_returns_inductive (ind : Name.t) : ty -> bool = function
   | TyPi (_, _, b) -> check_returns_inductive ind b
   | TyU -> false
 
-let check_return_params (ctor_name : Name.t) (ind : Name.t) (nparams : int)
+let check_param_consistency (ctor_name : Name.t) (ind : Name.t) (nparams : int)
     (ty : ty) : unit =
-  let rec get_return_head = function
-    | TyPi (_, _, b) -> get_return_head b
-    | TyEl t -> Some t
-    | _ -> None
+  let get_app_args tm =
+    let rec go acc = function
+      | TmApp (f, a) -> go (a :: acc) f
+      | t -> (t, acc)
+    in
+    go [] tm
   in
-  match get_return_head ty with
-  | None -> ()
-  | Some ret_tm ->
-      let rec get_app_args acc = function
-        | TmApp (f, a) -> get_app_args (a :: acc) f
-        | t -> (t, acc)
-      in
-      let head, args = get_app_args [] ret_tm in
-      if head = TmConst ind && List.length args < nparams then
-        Error.raise ~kind:Positivity
-          (Format.asprintf "%a: return type must apply %a to all parameters"
-             Name.pp ctor_name Name.pp ind)
-          None
+  let check_tm depth tm =
+    let head, args = get_app_args tm in
+    if head = TmConst ind && List.length args >= nparams then
+      let expected_params = vars nparams depth in
+      let actual_params = List.filteri (fun i _ -> i < nparams) args in
+      List.iter2
+        (fun expected actual ->
+          if expected <> actual then
+            Error.raise Constructor
+              (Format.asprintf
+                 "%a: parameter arguments must match exactly (expected %a, got \
+                  %a)"
+                 Name.pp ctor_name Pretty.pp_tm expected Pretty.pp_tm actual)
+              None)
+        expected_params actual_params
+  in
+  let rec check_ty depth = function
+    | TyU -> ()
+    | TyPi (_, a, b) ->
+        check_ty depth a;
+        check_ty (depth + 1) b
+    | TyEl t -> check_tm depth t
+  in
+  check_ty 0 ty
 
 (* ========== Inductive Types ========== *)
 
@@ -216,7 +227,8 @@ let assign_fresh_names : ty -> ty =
   go []
 
 let elab_ctor (genv : Global.t) (ind_name : Name.t) (param_ctx : Context.t)
-    (nparams : int) (ctor : Ast.Command.inductive_constructor) : Name.t * ty =
+    (nparams : int) (nindices : int) (ctor : Ast.Command.inductive_constructor)
+    : Name.t * ty =
   let ctor_name = Name.child ind_name ctor.name in
   let field_ctx, field_tys =
     Params.elab_params_from param_ctx genv ctor.params
@@ -224,7 +236,15 @@ let elab_ctor (genv : Global.t) (ind_name : Name.t) (param_ctx : Context.t)
   let ret_ty : ty =
     match ctor.ty_opt with
     | Some ret_raw -> Bidir.check_ty genv field_ctx ret_raw
-    | None -> TyEl (TmConst ind_name |-- vars nparams (List.length ctor.params))
+    | None ->
+        if nindices > 0 then
+          Error.raise Constructor
+            (Format.asprintf
+               "%a: constructor must specify return type for indexed type"
+               Name.pp ctor_name)
+            None
+        else
+          TyEl (TmConst ind_name |-- vars nparams (List.length ctor.params))
   in
   (ctor_name, field_tys @--> assign_fresh_names ret_ty)
 
@@ -249,11 +269,11 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
     List.map
       (fun (ctor_name, ctor_fields_ty) ->
         if not (check_returns_inductive ind_name ctor_fields_ty) then
-          Error.raise ~kind:Positivity
+          Error.raise Constructor
             (Format.asprintf "%a must return %a" Name.pp ctor_name Name.pp
                ind_name)
             None;
-        check_return_params ctor_name ind_name nparams ctor_fields_ty;
+        check_param_consistency ctor_name ind_name nparams ctor_fields_ty;
         let ctor_ty = param_tys @--> ctor_fields_ty in
         check_strict_positivity genv ind_name ctor_ty;
         ({ Global.ctor_name; ty = ctor_ty }, ctor_fields_ty))
@@ -298,7 +318,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
     | TyEl tm -> extract_index_args tm
     | _ -> []
   in
-  let nmethods = List.length ctor_infos in
+  let nminors = List.length ctor_infos in
   let index_tys =
     List.mapi
       (fun i (name_opt, ty) ->
@@ -307,7 +327,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
         | None -> (Some (Format.sprintf "a%d†" i), ty))
       index_tys
   in
-  let build_minor_ty (ctor_name : Name.t) (ctor_fields_ty : ty) : ty =
+  let build_minor_ty k (ctor_name : Name.t) (ctor_fields_ty : ty) : ty =
     let fields = ctor_fields ctor_fields_ty in
     let nfields = List.length fields in
     let rec_field_infos =
@@ -319,7 +339,6 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
             None)
         (List.mapi (fun i x -> (i, x)) fields)
     in
-    let nrec_fields = List.length rec_field_infos in
     let ih_infos =
       List.mapi
         (fun nth_rec_field (nth_field, name, field_ty) ->
@@ -353,17 +372,20 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
             shift_ty nth_rec_field 0 ih_ty_base ))
         rec_field_infos
     in
-    List.mapi
-      (fun i (name, field_ty, _is_rec) -> (name, shift_ty 1 i field_ty))
-      fields
-    @--> ih_infos
-    @--> shift_ty nrec_fields 0
-           (TyEl
-              (TmVar (Idx nfields)
-              |-- List.map (shift_tm 1 nfields) (indices_in_ty ctor_fields_ty)
-              |- (TmConst ctor_name
-                 |-- vars nparams (nfields + 1)
-                 |-- vars nfields 0)))
+    shift_ty k 0
+      (List.mapi
+         (fun i (name, field_ty, _is_rec) -> (name, shift_ty 1 i field_ty))
+         fields
+      @--> ih_infos
+      @--> shift_ty
+             (List.length rec_field_infos)
+             0
+             (TyEl
+                (TmVar (Idx nfields)
+                |-- List.map (shift_tm 1 nfields) (indices_in_ty ctor_fields_ty)
+                |- (TmConst ctor_name
+                   |-- vars nparams (nfields + 1)
+                   |-- vars nfields 0))))
   in
   let rec_ty : ty =
     (* parameters *)
@@ -376,23 +398,23 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
     (* minor premises *)
     @-> List.mapi
           (fun i ((info : Global.constructor_info), fields_ty) ->
-            (None, shift_ty i 0 (build_minor_ty info.ctor_name fields_ty)))
+            (None, build_minor_ty i info.ctor_name fields_ty))
           ctor_infos
     (* indices *)
     @--> List.mapi
-           (fun i (name, idx_ty) -> (name, shift_ty (1 + nmethods) i idx_ty))
+           (fun i (name, idx_ty) -> (name, shift_ty (1 + nminors) i idx_ty))
            index_tys
     (* major premise *)
     @--> ( None,
            TyEl
              (TmConst ind_name
-             |-- vars nparams (nindices + 1 + nmethods)
+             |-- vars nparams (nindices + 1 + nminors)
              |-- vars nindices 0) )
-    @-> TyEl (TmVar (Idx (1 + nindices + nmethods)) |-- vars (nindices + 1) 0)
+    @-> TyEl (TmVar (Idx (1 + nindices + nminors)) |-- vars (nindices + 1) 0)
   in
   let rec_rules =
     List.mapi
-      (fun method_idx ((info : Global.constructor_info), fields_ty) ->
+      (fun minor_idx ((info : Global.constructor_info), fields_ty) ->
         let fields = ctor_fields fields_ty in
         let nfields = List.length fields in
         let rec_args =
@@ -422,10 +444,10 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
             rec_args
         in
         let rec_head =
-          TmConst rec_name |-- vars (nparams + nmethods + 1) nfields
+          TmConst rec_name |-- vars (nparams + nminors + 1) nfields
         in
         let rule_rec_rhs =
-          TmVar (Idx (nfields + nmethods - 1 - method_idx))
+          TmVar (Idx (nfields + nminors - 1 - minor_idx))
           |-- vars nfields 0
           |-- List.map
                 (fun (rec_arg_idx, index_patterns) ->
@@ -456,22 +478,22 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
   Global.add rec_name (Global.Recursor rec_info) genv
 
 let elab_inductive (genv : Global.t) (ind : Ast.Command.inductive) : Global.t =
-  (* Vector *)
   let ind_name = Name.parse ind.name in
-  (* [A : Type], [("a", Type)] *)
   let param_ctx, param_tys = Params.elab_params genv ind.params in
-  (* 1 *)
   let nparams = List.length param_tys in
-  (* A : Type |- (Nat -> Type) is a well formed type *)
   let result_ty =
     match ind.ty_opt with
-    | None -> TyU (* Default to Type *)
+    | None -> TyU
     | Some ty_raw -> Bidir.check_ty genv param_ctx ty_raw
   in
-  (* (A : Type) -> Nat -> Type *)
+  let nindices =
+    let rec count_pis = function
+      | TyPi (_, _, b) -> 1 + count_pis b
+      | _ -> 0
+    in
+    count_pis result_ty
+  in
   let ty = param_tys @--> result_ty in
-  (* Vector : (A : Type) -> (n : Nat) -> Type *)
-  (* Temporarily add as opaque *)
   let genv = Global.add ind_name (Global.Opaque { ty }) genv in
   declare_inductive genv ind_name param_tys result_ty
-    (List.map (elab_ctor genv ind_name param_ctx nparams) ind.ctors)
+    (List.map (elab_ctor genv ind_name param_ctx nparams nindices) ind.ctors)

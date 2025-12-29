@@ -13,12 +13,13 @@ and kind =
   | Elaboration
   | Type_check
   | Positivity
+  | Constructor
   | Import
   | Eval
 
 exception Error of t
 
-val make : ?location:location option -> kind:kind -> string -> t
-val raise : kind:kind -> string -> Source.src -> 'a
+val make : ?location:location option -> kind -> string -> t
+val raise : kind -> string -> Source.src -> 'a
 val pp : filename:string -> Format.formatter -> t -> unit
 val to_string : filename:string -> t -> string

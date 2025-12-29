@@ -1,0 +1,2 @@
+Error: inductive/inductive/reject_type_mismatch.qdt:4:37: Type mismatch: expected Eq Nat a b, got Eq Nat a a
+Elaborated 34 definitions

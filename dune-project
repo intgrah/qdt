@@ -16,9 +16,9 @@
  (synopsis "Query-based Dependent Type Elaborator")
  (description "Query-based Dependent Type Elaborator")
  (depends
-  ocaml
+  (ocaml
+   (>= 5.3.0))
   incremental
   base
   ppx_compare
-  (alcotest :with-test)
   (bisect_ppx :with-test)))

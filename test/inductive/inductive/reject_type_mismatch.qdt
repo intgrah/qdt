@@ -1,0 +1,4 @@
+import Std.Eq
+import Std.Nat
+
+def bad (a b : Nat) : Eq Nat a b := Eq.refl Nat a
