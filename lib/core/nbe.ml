@@ -119,7 +119,6 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
     match Global.find_structure ind_name genv with
     | Some info -> Some info
     | None ->
-        (* Also allow eta for unit-like types *)
         let* rec_info = Global.find_recursor (Name.child ind_name "rec") genv in
         if
           rec_info.rec_num_indices = 0
@@ -153,8 +152,7 @@ and try_eta_struct (genv : Global.t) (l : int) (ctor_app : neutral)
           match Global.find_definition proj_name genv with
           | Some proj_fn ->
               let proj_fn = eval_tm genv [] proj_fn in
-              let with_params = List.fold_left (do_app genv) proj_fn params in
-              do_app genv with_params other
+              do_app genv (List.fold_left (do_app genv) proj_fn params) other
           | None -> VTmNeutral (HConst proj_name, [])
         in
         conv_tm genv l field proj_result)
