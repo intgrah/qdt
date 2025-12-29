@@ -90,7 +90,13 @@ let find_constructor name env =
 let find_inductive name env =
   match find_opt name env with
   | Some (Inductive info) -> Some info
-  | Some (Structure info) -> Some { ty = info.ty; ind_ctors = [] }
+  | Some (Structure info) ->
+      let ind_ctors =
+        match find_opt info.struct_ctor_name env with
+        | Some (Constructor info) -> [ info ]
+        | _ -> []
+      in
+      Some { ty = info.ty; ind_ctors }
   | _ -> None
 
 let find_structure name env =

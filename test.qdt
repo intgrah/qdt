@@ -52,3 +52,7 @@ inductive Foo where
 
 inductive Test2 : Nat → Type where
   | mk (m : Nat) : ((n : Nat) → Test2 (Nat.add m n)) → Test2 m
+
+structure Rec : Type where
+  (fst : Nat)
+  (snd : Rec)

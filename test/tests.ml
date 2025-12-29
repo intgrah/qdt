@@ -197,17 +197,17 @@ module Qdt_files = struct
   (* Tests that should fail with generic error checking *)
   let failing =
     [
-      "examples/reject_negative_contra.qdt";
-      "examples/reject_negative_direct.qdt";
-      "examples/reject_negative_nested.qdt";
-      "examples/reject_nested_def.qdt";
-      "examples/reject_wrong_return.qdt";
+      "test/reject/reject_negative_contra.qdt";
+      "test/reject/reject_negative_direct.qdt";
+      "test/reject/reject_negative_nested.qdt";
+      "test/reject/reject_nested_def.qdt";
+      "test/reject/reject_wrong_return.qdt";
     ]
 
   (* Tests that should fail with specific error messages *)
   let failing_with_specific_errors =
     [
-      ("examples/reject_nat_ext.qdt", "Type mismatch");
+      ("test/reject/reject_nat_ext.qdt", "Type mismatch");
       (* Add more specific error tests here *)
     ]
 
