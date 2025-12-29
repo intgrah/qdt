@@ -59,15 +59,14 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
   let genv = Global.add ind_name (Global.Structure struct_info) genv in
   let rec_name = Name.child ind_name "rec" in
   let struct_ty : ty = TyEl (TmConst ind_name |-- vars nparams 0) in
-  let ih_binders : (string option * ty) list =
-    List.filter_map
-      (fun (name_opt, field_ty) ->
-        if Inductive.is_recursive_arg_ty ind_name field_ty then
-          Some (Option.map (Format.sprintf "%s_ih") name_opt, TyU)
-        else
-          None)
-      fields
+  let rec_fields : (int * (string option * ty)) list =
+    fields
+    |> List.mapi (fun i x -> (i, x))
+    |> List.filter (fun (_i, (_name_opt, field_ty)) ->
+        Inductive.is_recursive_arg_ty ind_name field_ty)
   in
+  let nfields = List.length fields in
+  let nihs = List.length rec_fields in
   let rec subst_ty (j : int) (s : tm) : ty -> ty = function
     | TyU -> TyU
     | TyPi (x, a, b) ->
@@ -93,6 +92,9 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
             subst_tm j s t,
             subst_tm (j + 1) (shift_tm 1 0 s) body )
   in
+  let subst_top_tm (s : tm) (body : tm) : tm =
+    shift_tm (-1) 0 (subst_tm 0 (shift_tm 1 0 s) body)
+  in
   List.fold_left
     (fun genv (field_idx, field_name, field_ty) ->
       let code_body =
@@ -105,20 +107,44 @@ let elab_structure (genv : Global.t) (info : Command.structure) : Global.t =
                 (TmConst (Name.child ind_name (List.nth struct_fields k))
                 |-- vars nparams 1 |- TmVar (Idx 0))
             in
-            go (k - 1) (shift_tm (-1) 0 (subst_tm 0 (shift_tm 1 0 arg) acc))
+            go (k - 1) (subst_top_tm arg acc)
         in
         let base = shift_tm 1 field_idx (code_of_ty field_ty) in
         go (field_idx - 1) base
+      in
+      let ih_binders : (string option * ty) list =
+        List.map
+          (fun (rec_field_idx, (rec_field_name_opt, rec_field_ty)) ->
+            let nested_binders =
+              let rec go acc = function
+                | TyPi (name, a, b) -> go ((name, a) :: acc) b
+                | _ -> List.rev acc
+              in
+              go [] rec_field_ty
+            in
+            let nb = List.length nested_binders in
+            let added_fields = nfields - rec_field_idx in
+            let nested_binders =
+              List.mapi
+                (fun i (name, ty) -> (name, shift_ty added_fields i ty))
+                nested_binders
+            in
+            let rec_arg_tm =
+              TmVar (Idx (nb + nfields - 1 - rec_field_idx)) |-- vars nb 0
+            in
+            let ih_code =
+              subst_top_tm rec_arg_tm (shift_tm (nfields + nb) 1 code_body)
+            in
+            ( Option.map (Format.sprintf "%s_ih") rec_field_name_opt,
+              nested_binders @--> TyEl ih_code ))
+          rec_fields
       in
       let proj_tm =
         param_tys
         @==> (TmConst rec_name |-- vars nparams 0
              |- (Some "s", struct_ty) @=> code_body
              |- fields @==> ih_binders
-                @==> TmVar
-                       (Idx
-                          (List.length ih_binders + List.length fields - 1
-                         - field_idx)))
+                @==> TmVar (Idx (nihs + nfields - 1 - field_idx)))
       in
       let proj_ty = param_tys @--> (Some "s", struct_ty) @-> TyEl code_body in
       Global.add
