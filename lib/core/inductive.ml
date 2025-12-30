@@ -265,7 +265,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
     (ctors : (Name.t * ty) list) : Global.t =
   let nparams = List.length param_tys in
   let ty = param_tys @--> result_ty in
-  let ctor_infos : (Global.constructor_info * ty) list =
+  let ind_ctors : Global.constructor_info list =
     List.map
       (fun (ctor_name, ctor_fields_ty) ->
         if not (check_returns_inductive ind_name ctor_fields_ty) then
@@ -276,10 +276,9 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
         check_param_consistency ctor_name ind_name nparams ctor_fields_ty;
         let ctor_ty = param_tys @--> ctor_fields_ty in
         check_strict_positivity genv ind_name ctor_ty;
-        ({ Global.ctor_name; ty = ctor_ty }, ctor_fields_ty))
+        { Global.ctor_name; ty = ctor_ty })
       ctors
   in
-  let ind_ctors = List.map fst ctor_infos in
   let genv =
     List.fold_left
       (fun g (info : Global.constructor_info) ->
@@ -318,7 +317,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
     | TyEl tm -> extract_index_args tm
     | _ -> []
   in
-  let nminors = List.length ctor_infos in
+  let nminors = List.length ind_ctors in
   let index_tys =
     List.mapi
       (fun i (name_opt, ty) ->
@@ -397,9 +396,8 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
            @-> TyU )
     (* minor premises *)
     @-> List.mapi
-          (fun i ((info : Global.constructor_info), fields_ty) ->
-            (None, build_minor_ty i info.ctor_name fields_ty))
-          ctor_infos
+          (fun i (name, fields_ty) -> (None, build_minor_ty i name fields_ty))
+          ctors
     (* indices *)
     @--> List.mapi
            (fun i (name, idx_ty) -> (name, shift_ty (1 + nminors) i idx_ty))
@@ -414,7 +412,7 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
   in
   let rec_rules =
     List.mapi
-      (fun minor_idx ((info : Global.constructor_info), fields_ty) ->
+      (fun minor_idx (name, fields_ty) ->
         let fields = ctor_fields fields_ty in
         let nfields = List.length fields in
         let rec_args =
@@ -458,13 +456,8 @@ let declare_inductive (genv : Global.t) (ind_name : Name.t)
                   |- TmVar (Idx (nfields - 1 - rec_arg_idx)))
                 rec_index_patterns
         in
-        Global.
-          {
-            rule_ctor_name = info.ctor_name;
-            rule_nfields = nfields;
-            rule_rec_rhs;
-          })
-      ctor_infos
+        Global.{ rule_ctor_name = name; rule_nfields = nfields; rule_rec_rhs })
+      ctors
   in
   let rec_info : Global.recursor_info =
     {
