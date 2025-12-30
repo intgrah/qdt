@@ -119,6 +119,7 @@ and infer_tm (genv : Global.t) (ctx : Context.t) : Ast.t -> tm * vty = function
 and check_tm (genv : Global.t) (ctx : Context.t) (raw : Ast.t) (expected : vty)
     : tm =
   match (raw, expected) with
+  | Missing src, _ -> Error.raise Type_check "Missing term" src
   | Lam (_src, binder, body), VTyPi (_, a_ty, ClosTy (env, b_ty)) -> (
       match binder with
       | Ast.Untyped (_, name) ->
