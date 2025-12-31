@@ -51,8 +51,7 @@ let elab_axiom (a : Ast.Command.axiom) (st : st) : st =
   let name = Name.parse a.name in
   let param_ctx, param_tys = Params.elab_params st.genv a.params in
   let ty = Bidir.check_ty st.genv param_ctx a.ty in
-  let ty_val = Nbe.eval_ty st.genv param_ctx.env ty in
-  let ty = param_tys @--> quote_ty st.genv param_ctx.lvl ty_val in
+  let ty = param_tys @--> ty in
   { st with genv = Global.add name (Global.Axiom { ty }) st.genv }
 
 let elab_inductive (info : Ast.Command.inductive) (st : st) : st =
