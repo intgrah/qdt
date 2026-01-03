@@ -82,8 +82,8 @@ and conv_tm (genv : Global.t) (l : int) (tm1 : vtm) (tm2 : vtm) : bool =
   match (tm1, tm2) with
   | VTmNeutral n1, VTmNeutral n2 ->
       conv_neutral genv l (n1, n2)
-      || Option.is_some (try_eta_struct genv l n1 (VTmNeutral n1))
-      || Option.is_some (try_eta_struct genv l n2 (VTmNeutral n2))
+      || Option.is_some (try_eta_struct genv l n1 (VTmNeutral n2))
+      || Option.is_some (try_eta_struct genv l n2 (VTmNeutral n1))
   | VTmLam (_, _, ClosTm (env1, body1)), VTmLam (_, _, ClosTm (env2, body2)) ->
       let var = VTmNeutral (HVar (Lvl l), []) in
       conv_tm genv (l + 1)
