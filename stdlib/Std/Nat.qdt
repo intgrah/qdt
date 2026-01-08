@@ -4,15 +4,15 @@ inductive Nat where
   | zero
   | succ (n : Nat) : Nat
 
-def Nat.add (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) m (fun _ => Nat.succ)
-def Nat.mul (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) 0 (fun _ => Nat.add m)
-def Nat.pow (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) 1 (fun _ => Nat.mul m)
+def Nat.add (m : Nat) := Nat.rec (fun _ => Nat) m (fun _ => Nat.succ)
+def Nat.mul (m : Nat) := Nat.rec (fun _ => Nat) 0 (fun _ => Nat.add m)
+def Nat.pow (m : Nat) := Nat.rec (fun _ => Nat) 1 (fun _ => Nat.mul m)
 
-def Nat.triangle : Nat → Nat := Nat.rec (fun _ => Nat) 0 (fun k => Nat.add (Nat.succ k))
-def Nat.factorial : Nat → Nat := Nat.rec (fun _ => Nat) 1 (fun k => Nat.mul (Nat.succ k))
+def Nat.triangle := Nat.rec (fun _ => Nat) 0 (fun k => Nat.add (Nat.succ k))
+def Nat.factorial := Nat.rec (fun _ => Nat) 1 (fun k => Nat.mul (Nat.succ k))
 
-def Nat.pred (n : Nat) : Nat := Nat.rec (fun _ => Nat) 0 (fun k _ => k) n
-def Nat.sub (m : Nat) : Nat → Nat := Nat.rec (fun _ => Nat) m (fun _ => Nat.pred)
+def Nat.pred := Nat.rec (fun _ => Nat) 0 (fun k _ => k)
+def Nat.sub (m : Nat) := Nat.rec (fun _ => Nat) m (fun _ => Nat.pred)
 
 example : Nat.add 2 3 = 5 := Eq.refl Nat 5
 example : Nat.mul 2 3 = 6 := Eq.refl Nat 6
