@@ -45,7 +45,7 @@ theorem append_nil
     {T : Nat → Type u}
     {a b : Nat}
     (tele : Tele T a b) :
-    tele.append nil = tele :=
+    tele ++ (Tele.nil : Tele T b b) = tele :=
   rfl
 
 @[simp]
@@ -53,10 +53,10 @@ theorem nil_append
     {T : Nat → Type u}
     {a b : Nat}
     (tele : Tele T a b) :
-    nil.append tele = tele := by
+    (Tele.nil : Tele T a a) ++ tele = tele := by
   induction tele with
   | nil => rfl
-  | snoc ts t ih => rw [append, ih]
+  | snoc ts t ih => simp [ih]
 
 theorem append_assoc
     {T : Nat → Type u}
