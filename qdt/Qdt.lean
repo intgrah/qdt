@@ -1,4 +1,4 @@
-import Qdt.MLTT.Syntax
+import Qdt.MLTT
 import Qdt.Semantics
 import Qdt.Error
 import Qdt.Global
