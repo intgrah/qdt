@@ -7,110 +7,96 @@ open Lean (Name)
 
 section Definitions
 
+inductive Judgement (n : Nat) : Type
+  | Ctx.WF : Judgement n
+  | Ty.WF : Ty n → Judgement n
+  | Tm.HasType : Tm n → Ty n → Judgement n
+  | Tm.Eq : Tm n → Tm n → Ty n → Judgement n
+  | Ty.Eq : Ty n → Ty n → Judgement n
+
+def Judgement.shiftAfter {n} (m s : Nat) : Judgement n → Judgement (n + s)
+  | Ctx.WF => Ctx.WF
+  | Ty.WF A => Ty.WF (A.shiftAfter m s)
+  | Tm.HasType a A => Tm.HasType (a.shiftAfter m s) (A.shiftAfter m s)
+  | Tm.Eq a b A => Tm.Eq (a.shiftAfter m s) (b.shiftAfter m s) (A.shiftAfter m s)
+  | Ty.Eq A B => Ty.Eq (A.shiftAfter m s) (B.shiftAfter m s)
+
 set_option hygiene false
 
-notation:50 Γ " ⊢" => Ctx.WF Γ
-notation:50 Γ " ⊢ " A " type" => Ty.WF Γ A
-notation:50 Γ " ⊢ " e " : " A => Tm.HasType Γ e A
-notation:50 Γ " ⊢ " a " ≡ " b " : " C => Tm.Eq Γ a b C
-notation:50 Γ " ⊢ " A " ≡ " B " type" => Ty.Eq Γ A B
+notation:50 Γ " ⊢ " 𝒿 => Derives Γ 𝒿
+notation:50 Γ " ⊢ " => Derives Γ (Judgement.Ctx.WF)
+notation:50 Γ " ⊢ " A "type" => Derives Γ (Judgement.Ty.WF A)
+notation:50 Γ " ⊢ " a " : " A => Derives Γ (Judgement.Tm.HasType a A)
+notation:50 Γ " ⊢ " A "≡ " B " : " C => Derives Γ (Judgement.Tm.Eq A B C)
+notation:50 Γ " ⊢ " A "≡" B "type" => Derives Γ (Judgement.Ty.Eq A B)
 
-mutual
-
-/-- Well-formedness of contexts -/
-inductive Ctx.WF : {n : Nat} → Ctx 0 n → Prop
-  /-- HoTT book A.2.1, ctx-emp -/
+inductive Derives : ∀ {n}, Ctx 0 n → Judgement n → Prop
+  -- ## Context well-formedness
   | empty :
       (Tele.nil ⊢)
-  /-- HoTT book A.2.1, ctx-ext -/
   | extend {Γ x A} :
       (Γ ⊢ A type) →
       (Γ.snoc ⟨x, A⟩ ⊢)
-
-/-- Well-formedness of types -/
-inductive Ty.WF : {n : Nat} → Ctx 0 n → Ty n → Prop
-  /-- HoTT book A.2.3, 𝑢-intro -/
+  -- ## Type well-formedness
   | u_form {Γ} :
       (Γ ⊢) →
       (Γ ⊢ 𝑢 type)
-  /-- Because of Tarski universes -/
   | el_form {Γ t} :
       (Γ ⊢ t : 𝑢) →
       (Γ ⊢ .el t type)
-  /-- HoTT book A.2.4, Π-form -/
   | pi_form {Γ x A B} :
       (Γ ⊢ A type) →
       (Γ.snoc ⟨x, A⟩ ⊢ B type) →
       (Γ ⊢ .pi ⟨x, A⟩ B type)
-
-/-- Judgmental equality of types -/
-inductive Ty.Eq : {n : Nat} → Ctx 0 n → Ty n → Ty n → Prop
-  /-- HoTT book A.2.2, reflexivity -/
-  | refl {n Γ} {A : Ty n} :
+  -- ## Definitional equality of types
+  | refl_eq_ty {Γ A} :
       (Γ ⊢ A type) →
       (Γ ⊢ A ≡ A type)
-  /-- HoTT book A.2.2, symmetry -/
-  | symm {n Γ} {A B : Ty n} :
+  | symm_eq_ty {Γ A B} :
       (Γ ⊢ A ≡ B type) →
       (Γ ⊢ B ≡ A type)
-  /-- HoTT book A.2.2, transitivity -/
-  | trans {n Γ} {A B C : Ty n} :
+  | trans_eq_ty {Γ A B C} :
       (Γ ⊢ A ≡ B type) →
       (Γ ⊢ B ≡ C type) →
       (Γ ⊢ A ≡ C type)
-  /-- HoTT book A.2.2, Π-form-eq -/
-  | pi_form_eq {n Γ} {A₁ A₂ : Ty n} {x : Name} {B₁ B₂ : Ty (n + 1)} :
+  -- ## Definitional equality of terms
+  | el_form_eq {Γ t₁ t₂} :
+      (Γ ⊢ t₁ ≡ t₂ : .u) →
+      (Γ ⊢ .el t₁ ≡ .el t₂ type)
+  | pi_form_eq {Γ x A₁ A₂ B₁ B₂} :
       (Γ ⊢ A₁ ≡ A₂ type) →
       (Γ.snoc ⟨x, A₁⟩ ⊢ B₁ ≡ B₂ type) →
       (Γ ⊢ .pi ⟨x, A₁⟩ B₁ ≡ .pi ⟨x, A₂⟩ B₂ type)
-  /-- Because of Tarski universes -/
-  | el_form_eq {n Γ} {t₁ t₂ : Tm n} :
-      (Γ ⊢ t₁ ≡ t₂ : 𝑢) →
-      (Γ ⊢ .el t₁ ≡ .el t₂ type)
-
-/-- Judgmental equality of terms -/
-inductive Tm.Eq : {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n → Prop
-  /-- HoTT book A.2.2, reflexivity -/
-  | refl {n Γ} {a : Tm n}{A : Ty n} :
+  | refl_eq_tm {Γ a A} :
       (Γ ⊢ a : A) →
       (Γ ⊢ a ≡ a : A)
-  /-- HoTT book A.2.2, symmetry -/
-  | symm {n Γ} {a b : Tm n} {A : Ty n} :
+  | symm_eq_tm {Γ a b A} :
       (Γ ⊢ a ≡ b : A) →
       (Γ ⊢ b ≡ a : A)
-  /-- HoTT book A.2.2, transitivity -/
-  | trans {n Γ} {a b c : Tm n} {A : Ty n} :
+  | trans_eq_tm {Γ a b c A} :
       (Γ ⊢ a ≡ b : A) →
       (Γ ⊢ b ≡ c : A) →
       (Γ ⊢ a ≡ c : A)
-  /-- HoTT book A.2.2, Π-intro-eq -/
-  | pi_intro_eq {n Γ} {x : Name} {b₁ b₂ : Tm (n + 1)} {A₁ A₂ : Ty n} {B : Ty (n + 1)} :
+  | pi_intro_eq {Γ x b₁ b₂ A₁ A₂ B} :
       (Γ ⊢ A₁ ≡ A₂ type) →
       (Γ.snoc ⟨x, A₁⟩ ⊢ b₁ ≡ b₂ : B) →
       (Γ ⊢ .lam ⟨x, A₁⟩ b₁ ≡ .lam ⟨x, A₂⟩ b₂ : .pi ⟨x, A₁⟩ B)
-  /-- HoTT book A.2.2, Π-elim-eq -/
-  | pi_elim_eq {n Γ} {x : Name} {f₁ f₂ a₁ a₂ : Tm n} {A : Ty n} {B : Ty (n + 1)} :
+  | pi_elim_eq {Γ x f₁ f₂ a₁ a₂ A B} :
       (Γ ⊢ f₁ ≡ f₂ : .pi ⟨x, A⟩ B) →
       (Γ ⊢ a₁ ≡ a₂ : A) →
       (Γ ⊢ f₁.app a₁ ≡ f₂.app a₂ : B[a₁])
-  /-- HoTT book A.2.4, Π-comp (β-reduction) -/
-  | pi_comp {n Γ} {x : Name} {a : Tm n} {b : Tm (n + 1)} {A : Ty n} {B : Ty (n + 1)} :
+  | pi_comp {Γ x a b A B} :
       (Γ.snoc ⟨x, A⟩ ⊢ b : B) →
       (Γ ⊢ a : A) →
       (Γ ⊢ (Tm.lam ⟨x, A⟩ b).app a ≡ b[a] : B[a])
-  /-- HoTT book A.2.4, Π-uniq (η-conversion) -/
-  | pi_uniq {n Γ} {x : Name} {A : Ty n} {B : Ty (n + 1)} {f : Tm n} :
+  | pi_uniq {Γ x A B f} :
       (Γ ⊢ f : .pi ⟨x, A⟩ B) →
-      (Γ ⊢ f ≡ .lam ⟨x, A⟩ ((↑f).app (.var ⟨0, Nat.zero_lt_succ n⟩)) : .pi ⟨x, A⟩ B)
-  /-- HoTT book A.1.1, conversion -/
-  | conv {n Γ} {A B : Ty n} {a b : Tm n} :
+      (Γ ⊢ f ≡ .lam ⟨x, A⟩ ((↑f).app (.var 0)) : .pi ⟨x, A⟩ B)
+  | conv_eq_tm {Γ A B a b} :
       (Γ ⊢ a ≡ b : A) →
       (Γ ⊢ A ≡ B type) →
       (Γ ⊢ a ≡ b : B)
-
-/-- Typing judgment -/
-inductive Tm.HasType : {n : Nat} → Ctx 0 n → Tm n → Ty n → Prop
-  /-- HoTT book A.2.2, vble -/
+  -- ## Typing
   | var {n Γ} :
       (Γ ⊢) →
       (i : Idx n) →
@@ -118,49 +104,44 @@ inductive Tm.HasType : {n : Nat} → Ctx 0 n → Tm n → Ty n → Prop
   | const {Γ x} :
       (Γ ⊢) →
       (Γ ⊢ .const x : 𝑢) -- TODO: add support for global constants
-  /-- HoTT book A.2.4, Π-intro -/
   | pi_intro {Γ x A body B} :
       (Γ ⊢ A type) →
       (Γ.snoc ⟨x, A⟩ ⊢ body : B) →
       (Γ ⊢ .lam ⟨x, A⟩ body : .pi ⟨x, A⟩ B)
-  /-- HoTT book A.2.4, Π-elim -/
   | pi_elim {Γ f a x A B} :
       (Γ ⊢ f : .pi ⟨x, A⟩ B) →
       (Γ ⊢ a : A) →
       (Γ ⊢ f.app a : B[a])
-  /-- HoTT book A.2.2, conversion -/
-  | conv {Γ e A B} :
+  | conv_has_type {Γ e A B} :
       (Γ ⊢ e : A) →
       (Γ ⊢ A ≡ B type) →
       (Γ ⊢ e : B)
 
-end
-
 end Definitions
 
-@[app_unexpander Ctx.WF]
-def Ctx.WF.unexpand : Lean.PrettyPrinter.Unexpander
-  | `($_ $Γ) => `($Γ ⊢)
-  | _ => throw ()
+-- @[app_unexpander Ctx.WF]
+-- def Ctx.WF.unexpand : Lean.PrettyPrinter.Unexpander
+--   | `($_ $Γ) => `($Γ ⊢)
+--   | _ => throw ()
 
-@[app_unexpander Ty.WF]
-def Ty.WF.unexpand : Lean.PrettyPrinter.Unexpander
-  | `($_ $Γ $A) => `($Γ ⊢ $A type)
-  | _ => throw ()
+-- @[app_unexpander Ty.WF]
+-- def Ty.WF.unexpand : Lean.PrettyPrinter.Unexpander
+--   | `($_ $Γ $A) => `($Γ ⊢ $A type)
+--   | _ => throw ()
 
-@[app_unexpander Ty.Eq]
-def Ty.Eq.unexpand : Lean.PrettyPrinter.Unexpander
-  | `($_ $Γ $A $B) => `($Γ ⊢ $A ≡ $B type)
-  | _ => throw ()
+-- @[app_unexpander Ty.Eq]
+-- def Ty.Eq.unexpand : Lean.PrettyPrinter.Unexpander
+--   | `($_ $Γ $A $B) => `($Γ ⊢ $A ≡ $B type)
+--   | _ => throw ()
 
-@[app_unexpander Tm.Eq]
-def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
-  | `($_ $Γ $e₁ $e₂ $A) => `($Γ ⊢ $e₁ ≡ $e₂ : $A)
-  | _ => throw ()
+-- @[app_unexpander Tm.Eq]
+-- def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
+--   | `($_ $Γ $e₁ $e₂ $A) => `($Γ ⊢ $e₁ ≡ $e₂ : $A)
+--   | _ => throw ()
 
-@[app_unexpander Tm.HasType]
-def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
-  | `($_ $Γ $e $A) => `($Γ ⊢ $e : $A)
-  | _ => throw ()
+-- @[app_unexpander Tm.HasType]
+-- def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
+--   | `($_ $Γ $e $A) => `($Γ ⊢ $e : $A)
+--   | _ => throw ()
 
 end Qdt
