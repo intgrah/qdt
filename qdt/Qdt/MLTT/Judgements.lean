@@ -123,6 +123,7 @@ def Derives.unexpand : Lean.PrettyPrinter.Unexpander
   | _ => throw ()
 
 open Lean Elab Tactic Meta in
+/-- Try to guess the correct constructor and apply a closing tactic -/
 elab "derives_constructor" closing:tacticSeq : tactic => do
   let ctors := #[
     `Derives.empty,
