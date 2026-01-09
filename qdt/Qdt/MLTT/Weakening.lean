@@ -46,7 +46,7 @@ theorem Derives.weaken {n m}
   induction h𝒿 generalizing Γ₁ x C with
   -- Context well-formedness
   | empty => cases Γ₂ with | nil => exact .extend hC
-  | @extend _ _ _ _ hA ih =>
+  | extend hA ih =>
       cases Γ₂ with
       | nil => cases hΓ with | refl => exact .extend hC
       | snoc =>
@@ -60,7 +60,7 @@ theorem Derives.weaken {n m}
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
   -- Type equality
   | trans_eq_ty _ _ ihAB ihBC => exact .trans_eq_ty (ihAB hΓ hC) (ihBC hΓ hC)
-  | @pi_form_eq _ Γ' y D _ _ _ hA hB ihA ihB =>
+  | @pi_form_eq _ Γ' y D _ _ _ _ _ ihA ihB =>
       apply Derives.pi_form_eq (ihA hΓ hC)
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
       have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
@@ -73,54 +73,40 @@ theorem Derives.weaken {n m}
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
       have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  | @pi_elim_eq n' Γ' y _ _ a' _ D E _ _ ihf iha =>
-      let k := n' - m
-      have ihf' : Γ'' ⊢ _ ≡ _ : .pi ⟨y, D.shiftAfter k 1⟩ (E.shiftAfter (k + 1) 1) := ihf hΓ hC
-      have h := Derives.pi_elim_eq ihf' (iha hΓ hC)
+  | pi_elim_eq _ _ ihf iha =>
+      have h := Derives.pi_elim_eq (Γ := Γ'') (ihf hΓ hC) (iha hΓ hC)
       rw [Ty.shift_subst_comm] at h
       exact h
   | @pi_comp n' Γ' y a' b' D E _ _ ihB iha =>
       let k := n' - m
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
       have ihB' : Γ''.snoc ⟨y, D.shiftAfter k 1⟩ ⊢ b'.shiftAfter (k + 1) 1 : E.shiftAfter (k + 1) 1 := by
-        simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
+        simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB hΓ' hC
       have h := Derives.pi_comp ihB' (iha hΓ hC)
       rw [Ty.shift_subst_comm, Tm.shift_subst_comm] at h
       exact h
-  | @pi_uniq n' Γ' y D E f' hf ih =>
+  | pi_uniq _ ih =>
       have ihf := @ih Γ₁ Γ₂ x C hΓ hC
-      have h := Derives.pi_uniq ihf
-      have idx_shift :
-          Idx.shiftAfter (n' - m + 1) 1 ⟨0, Nat.zero_lt_succ n'⟩ = ⟨0, Nat.zero_lt_succ (n' + 1)⟩ := by
-        simp [Idx.shiftAfter]
       simp [Tm.shiftAfter, Tm.shift_shift_comm]
-      exact h
+      exact Derives.pi_uniq ihf
   | conv_eq_tm _ _ ihheq ihhAB => exact .conv_eq_tm (ihheq hΓ hC) (ihhAB hΓ hC)
   -- Typing
   | @var n' Γ' _ i ih =>
       simp only [Tm.shiftAfter]
-      subst hΓ
-      have hget := @Ctx.get_weaken m n' Γ₁ Γ₂ x C i
-      rw [← hget]
-      exact .var (ih rfl hC) (i.shiftAfter (n' - m) 1)
+      rw [hΓ, ← Ctx.get_weaken]
+      exact .var (ih hΓ hC) (i.shiftAfter (n' - m) 1)
   | @pi_intro _ Γ' y D body B hA hB ihA ihB =>
       apply Derives.pi_intro (ihA hΓ hC)
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
       have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  | @pi_elim n' Γ' f a' y D E _ _ ihf iha =>
-      let k := n' - m
-      have ihf' : Γ'' ⊢ _ : .pi ⟨y, D.shiftAfter k 1⟩ (E.shiftAfter (k + 1) 1) := ihf hΓ hC
-      have iha' : Γ'' ⊢ _ : D.shiftAfter k 1 := iha hΓ hC
-      have h := Derives.pi_elim ihf' iha'
-      have eq : (E.shiftAfter (k + 1) 1)[a'.shiftAfter k 1] = E[a'].shiftAfter k 1 := E.shift_subst_comm k a'
-      rw [eq] at h
+  | pi_elim _ _ ihf iha =>
+      have h := Derives.pi_elim (Γ := Γ'') (ihf hΓ hC) (iha hΓ hC)
+      rw [Ty.shift_subst_comm] at h
       exact h
-  | _ => constructor <;> apply_rules
+  | _ => constructor <;> apply_rules -- easy inductive cases
 
-theorem Derives.presup {n}
-    {Γ : Ctx 0 n}
-    {𝒿 : Judgement n}
+theorem Derives.presup {n} {Γ : Ctx 0 n} {𝒿}
     (h𝒿 : Γ ⊢ 𝒿) :
     (Γ ⊢) := by
   induction h𝒿 with
@@ -128,8 +114,7 @@ theorem Derives.presup {n}
   | extend => constructor; assumption
   | _ => assumption
 
-theorem Ctx.WF.drop {n}
-    {Γ : Ctx 0 n} {x A} :
+theorem Ctx.WF.drop {n} {Γ : Ctx 0 n} {x A} :
     (Γ.snoc ⟨x, A⟩ ⊢) →
     (Γ ⊢)
   | .extend hA => hA.presup
