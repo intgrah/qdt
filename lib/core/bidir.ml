@@ -20,7 +20,7 @@ let rec check_ty (genv : Global.t) (ctx : Context.t) : Ast.t -> ty = function
       TyPi (name, dom, cod)
   | Eq (_src, a, b) ->
       let a_tm, a_ty = infer_tm genv ctx a in
-      let b_tm, _ = infer_tm genv ctx b in
+      let b_tm = check_tm genv ctx b a_ty in
       let a_ty_tm = Quote.reify_ty genv ctx.lvl a_ty in
       let eq_ty =
         TyEl (TmApp (TmApp (TmApp (TmConst [ "Eq" ], a_ty_tm), a_tm), b_tm))
