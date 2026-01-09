@@ -25,13 +25,13 @@ theorem Ctx.get_weaken {m n}
       match i_val with
       | 0 =>
         rw [Nat.succ_sub Γ₂.le]
-        exact (Ty.shift_shift_comm (n' - m) B).symm
+        exact (Ty.shift_shiftAfter (n' - m) B).symm
       | j + 1 =>
         have ih_spec := ih ⟨j, by omega⟩
         simp only [Idx.shiftAfter] at ih_spec
         show Ctx.get (if _ then _ else _) _ = _
         simp [Ctx.get]
-        rw [Nat.succ_sub hle, Ty.shift_shift_comm]
+        rw [Nat.succ_sub hle, Ty.shift_shiftAfter]
         split
         · have h2 : n' - m ≤ j := by omega
           simp only [h2] at ih_spec
@@ -40,10 +40,10 @@ theorem Ctx.get_weaken {m n}
           simp only [h2] at ih_spec
           exact congrArg (Ty.shift 1) ih_spec
 
-/-- Unified weakening theorem for all judgments. HoTT book A.2.2, wkg₁ and wkg₂. -/
-theorem Derives.weaken {n m}
+/-- HoTT book A.2.2, wkg₁ and wkg₂. -/
+theorem Derives.weaken' {n m}
     {Γ : Ctx 0 n} {Γ₁ : Ctx 0 m} {Γ₂ : Ctx m n}
-    {𝒿 : Judgement n} {x C}
+    {𝒿 x C}
     (hΓ : Γ = Γ₁ ++ Γ₂)
     (hC : Γ₁ ⊢ C type)
     (h𝒿 : Γ ⊢ 𝒿) :
@@ -53,7 +53,7 @@ theorem Derives.weaken {n m}
   induction h𝒿 generalizing Γ₁ x C
   -- Easy inductive cases
   all_goals
-    simp only [Tm.shiftAfter, Tm.shift_shift_comm]
+    simp only [Tm.shiftAfter, Tm.shift_shiftAfter]
     try derives_constructor apply_rules
 
   case empty => cases Γ₂ with | nil => exact .extend hC
@@ -99,6 +99,14 @@ theorem Derives.weaken {n m}
       have h := Derives.pi_elim (Γ := Γ'') (ihf hΓ hC) (iha hΓ hC)
       rw [Ty.shift_subst_comm] at h
       exact h
+
+theorem Derives.weaken {n m}
+    {Γ₁ : Ctx 0 m} {Γ₂ : Ctx m n}
+    {𝒿 x C} :
+    (Γ₁ ⊢ C type) →
+    (Γ₁ ++ Γ₂ ⊢ 𝒿) →
+    (Γ₁.snoc ⟨x, C⟩ ++ Γ₂.shift 1 ⊢ 𝒿.shiftAfter (n - m) 1) :=
+  Derives.weaken' (Γ := Γ₁ ++ Γ₂) (hΓ := rfl)
 
 theorem Derives.presup {n} {Γ : Ctx 0 n} {𝒿}
     (h𝒿 : Γ ⊢ 𝒿) :
