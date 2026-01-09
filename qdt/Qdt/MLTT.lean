@@ -4,6 +4,7 @@ import Qdt.MLTT.Context
 import Qdt.MLTT.Judgements
 import Qdt.MLTT.Plausible
 import Qdt.MLTT.Shift
-import Qdt.MLTT.Substitution
+import Qdt.MLTT.Substitution.Basic
+import Qdt.MLTT.Substitution.Theorem
 import Qdt.MLTT.Syntax
 import Qdt.MLTT.Weakening
