@@ -1,0 +1,24 @@
+name = "qdt"
+version = "0.1.0"
+defaultTargets = ["qdt"]
+license = "Apache-2.0"
+description = "Query-based Dependent Type Elaborator"
+
+[leanOptions]
+autoImplicit = false
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.27.0-rc1"
+
+[[lean_lib]]
+name = "Qdt"
+
+[[lean_exe]]
+name = "qdt"
+root = "Main"
+
+[[lean_exe]]
+name = "parse"
+root = "Qdt.Frontend.ParserStdlibTest"
