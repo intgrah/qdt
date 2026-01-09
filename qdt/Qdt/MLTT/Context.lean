@@ -1,4 +1,4 @@
-import Qdt.MLTT.Substitution
+import Qdt.MLTT.Substitution.Basic
 import Qdt.Tele
 
 namespace Qdt

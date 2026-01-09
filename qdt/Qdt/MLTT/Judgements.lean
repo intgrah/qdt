@@ -1,5 +1,6 @@
 import Qdt.MLTT.Context
-import Qdt.MLTT.Substitution
+import Qdt.MLTT.Substitution.Basic
+import Lean.Elab.Tactic
 
 namespace Qdt
 
@@ -13,13 +14,6 @@ inductive Judgement (n : Nat) : Type
   | Tm.HasType : Tm n → Ty n → Judgement n
   | Tm.Eq : Tm n → Tm n → Ty n → Judgement n
   | Ty.Eq : Ty n → Ty n → Judgement n
-
-def Judgement.shiftAfter {n} (m s : Nat) : Judgement n → Judgement (n + s)
-  | Ctx.WF => Ctx.WF
-  | Ty.WF A => Ty.WF (A.shiftAfter m s)
-  | Tm.HasType a A => Tm.HasType (a.shiftAfter m s) (A.shiftAfter m s)
-  | Tm.Eq a b A => Tm.Eq (a.shiftAfter m s) (b.shiftAfter m s) (A.shiftAfter m s)
-  | Ty.Eq A B => Ty.Eq (A.shiftAfter m s) (B.shiftAfter m s)
 
 set_option hygiene false
 
@@ -127,5 +121,43 @@ def Derives.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Γ (Judgement.Tm.Eq $a $b $A)) => `($Γ ⊢ $a ≡ $b : $A)
   | `($_ $Γ (Judgement.Ty.Eq $A $B)) => `($Γ ⊢ $A ≡ $B type)
   | _ => throw ()
+
+open Lean Elab Tactic Meta in
+elab "derives_constructor" closing:tacticSeq : tactic => do
+  let ctors := #[
+    `Derives.empty,
+    `Derives.extend,
+    `Derives.u_form,
+    `Derives.el_form,
+    `Derives.pi_form,
+    `Derives.refl_eq_ty,
+    `Derives.symm_eq_ty,
+    `Derives.trans_eq_ty,
+    `Derives.el_form_eq,
+    `Derives.pi_form_eq,
+    `Derives.refl_eq_tm,
+    `Derives.symm_eq_tm,
+    `Derives.trans_eq_tm,
+    `Derives.pi_intro_eq,
+    `Derives.pi_elim_eq,
+    `Derives.pi_comp,
+    `Derives.pi_uniq,
+    `Derives.conv_eq_tm,
+    `Derives.var,
+    `Derives.const,
+    `Derives.pi_intro,
+    `Derives.pi_elim,
+    `Derives.conv_has_type,
+  ]
+  for ctor in ctors do
+    let s ← saveState
+    try
+      evalTactic (← `(tactic| apply $(mkIdent ctor)))
+      evalTactic (← `(tactic| all_goals $closing))
+      return
+    catch _ =>
+      restoreState s
+      continue
+  throwError "derives_constructor: no Derives constructor applies"
 
 end Qdt
