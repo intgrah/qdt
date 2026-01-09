@@ -1,4 +1,4 @@
-import Qdt.MLTT.Substitution
+import Qdt.MLTT.Substitution.Basic
 import Qdt.Tele
 
 namespace Qdt
@@ -32,5 +32,9 @@ def Ctx.subst {m} (a : Tm m) : {n : Nat} → Ctx (m + 1) (n + 1) → Ctx m n
 
 instance {m n} : GetElem (Ctx (m + 1) (n + 1)) (Tm m) (Ctx m n) fun _ _ => True where
   getElem Γ s _ := Ctx.subst s Γ
+
+@[simp]
+theorem Ctx.subst_nil {n} {a : Tm n} : Ctx.subst a Tele.nil = Tele.nil := by
+  simp only [Ctx.subst]
 
 end Qdt

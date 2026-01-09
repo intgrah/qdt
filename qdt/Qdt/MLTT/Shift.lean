@@ -51,75 +51,89 @@ theorem Idx.shift_shift_comm_gen {n} (m k : Nat) :
 
 mutual
 
-theorem Ty.shift_shift_comm_gen {n} (m k : Nat) :
+theorem Ty.shiftAfter_shiftAfter {n} (m k : Nat) :
     ∀ t : Ty n,
     (t.shiftAfter m 1).shiftAfter (k + m + 1) 1 = (t.shiftAfter (k + m) 1).shiftAfter m 1
   | 𝑢 => rfl
-  | .pi ⟨x, a⟩ b => by
+  | .pi ⟨_, _⟩ b => by
       simp only [Ty.shiftAfter]
-      have ha := Ty.shift_shift_comm_gen m k a
       have hb :
           (b.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
           (b.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
-        Ty.shift_shift_comm_gen (m + 1) k b
-      simp only [ha, hb]
-  | .el e => by
-      simp only [Ty.shiftAfter]
-      exact congrArg Ty.el (Tm.shift_shift_comm_gen m k e)
-termination_by structural t => t
+        Ty.shiftAfter_shiftAfter (m + 1) k b
+      simp only [Ty.shiftAfter_shiftAfter, hb]
+  | .el e => congrArg Ty.el (Tm.shiftAfter_shiftAfter m k e)
 
-theorem Tm.shift_shift_comm_gen {n} (m k : Nat) :
+theorem Tm.shiftAfter_shiftAfter {n} (m k : Nat) :
     ∀ t : Tm n,
     (t.shiftAfter m 1).shiftAfter (k + m + 1) 1 = (t.shiftAfter (k + m) 1).shiftAfter m 1
-  | .var i => by
-      simp only [Tm.shiftAfter]
-      exact congrArg Tm.var (Idx.shift_shift_comm_gen m k i)
+  | .var i => congrArg Tm.var (Idx.shift_shift_comm_gen m k i)
   | .const .. => rfl
-  | .lam ⟨x, a⟩ body => by
+  | .lam ⟨_, _⟩ b => by
       simp only [Tm.shiftAfter]
-      have ha := Ty.shift_shift_comm_gen m k a
-      have hb :
-          (body.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
-          (body.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
-        Tm.shift_shift_comm_gen (m + 1) k body
-      simp only [ha, hb]
-  | .app f a => by
-      simp only [Tm.shiftAfter]
-      have hf := Tm.shift_shift_comm_gen m k f
-      have ha := Tm.shift_shift_comm_gen m k a
-      simp only [hf, ha]
-  | .piHat x a b => by
-      simp only [Tm.shiftAfter]
-      have ha := Tm.shift_shift_comm_gen m k a
       have hb :
           (b.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
           (b.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
-        Tm.shift_shift_comm_gen (m + 1) k b
-      simp only [ha, hb]
-  | .proj i t => by
+        Tm.shiftAfter_shiftAfter (m + 1) k b
+      simp only [Ty.shiftAfter_shiftAfter, hb]
+  | .app .. => by simp only [Tm.shiftAfter, Tm.shiftAfter_shiftAfter]
+  | .piHat _ _ b => by
       simp only [Tm.shiftAfter]
-      exact congrArg (Tm.proj i) (Tm.shift_shift_comm_gen m k t)
-  | .letE x ty t body => by
+      have hb :
+          (b.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
+          (b.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
+        Tm.shiftAfter_shiftAfter (m + 1) k b
+      simp only [Tm.shiftAfter_shiftAfter, hb]
+  | .proj i t => congrArg (Tm.proj i) (Tm.shiftAfter_shiftAfter m k t)
+  | .letE _ _ _ b => by
       simp only [Tm.shiftAfter]
-      have hty := Ty.shift_shift_comm_gen m k ty
-      have ht := Tm.shift_shift_comm_gen m k t
-      have hbody :
-          (body.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
-          (body.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
-        Tm.shift_shift_comm_gen (m + 1) k body
-      simp only [hty, ht, hbody]
-termination_by structural t => t
+      have hb :
+          (b.shiftAfter (m + 1) 1).shiftAfter (k + m + 2) 1 =
+          (b.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
+        Tm.shiftAfter_shiftAfter (m + 1) k b
+      simp only [Ty.shiftAfter_shiftAfter, Tm.shiftAfter_shiftAfter, hb]
 
 end
 
-theorem Ty.shift_shift_comm {n} :
+theorem Ty.shift_shiftAfter {n} :
     ∀ k (t : Ty n),
     (t.shift 1).shiftAfter (k + 1) 1 = (t.shiftAfter k 1).shift 1 :=
-  Ty.shift_shift_comm_gen 0
+  Ty.shiftAfter_shiftAfter 0
 
-theorem Tm.shift_shift_comm {n} :
+theorem Tm.shift_shiftAfter {n} :
     ∀ k (t : Tm n),
     (t.shift 1).shiftAfter (k + 1) 1 = (t.shiftAfter k 1).shift 1 :=
-  Tm.shift_shift_comm_gen 0
+  Tm.shiftAfter_shiftAfter 0
+
+@[simp]
+theorem Idx.shiftAfter_zero {n} (c : Nat) (i : Idx n) : Idx.shiftAfter c 0 i = i := by
+  simp only [Idx.shiftAfter, Nat.add_zero]
+  split <;> rfl
+
+mutual
+
+@[simp]
+theorem Ty.shiftAfter_zero {n} (c : Nat) : ∀ A : Ty n, Ty.shiftAfter c 0 A = A
+  | .u => rfl
+  | .pi ⟨_, _⟩ _ => by simp only [Ty.shiftAfter, Ty.shiftAfter_zero]
+  | .el .. => by simp [Ty.shiftAfter, Tm.shiftAfter_zero]
+
+@[simp]
+theorem Tm.shiftAfter_zero {n} (c : Nat) : ∀ a : Tm n, Tm.shiftAfter c 0 a = a
+  | .var .. => by simp [Tm.shiftAfter]
+  | .const .. => rfl
+  | .lam ⟨_, _⟩ _ => by simp only [Tm.shiftAfter, Ty.shiftAfter_zero, Tm.shiftAfter_zero]
+  | .app .. => by simp [Tm.shiftAfter, Tm.shiftAfter_zero]
+  | .proj .. => by simp [Tm.shiftAfter, Tm.shiftAfter_zero]
+  | .piHat .. => by simp only [Tm.shiftAfter, Tm.shiftAfter_zero]
+  | .letE .. => by simp only [Tm.shiftAfter, Ty.shiftAfter_zero, Tm.shiftAfter_zero]
+
+end
+
+@[simp]
+theorem Ty.shift_zero {n} : ∀ A : Ty n, A.shift 0 = A := Ty.shiftAfter_zero 0
+
+@[simp]
+theorem Tm.shift_zero {n} : ∀ a : Tm n, a.shift 0 = a := Tm.shiftAfter_zero 0
 
 end Qdt
