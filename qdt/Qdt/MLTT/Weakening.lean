@@ -2,6 +2,13 @@ import Qdt.MLTT.Judgements
 
 namespace Qdt
 
+def Judgement.shiftAfter {n} (m s : Nat) : Judgement n → Judgement (n + s)
+  | Ctx.WF => Ctx.WF
+  | Ty.WF A => Ty.WF (A.shiftAfter m s)
+  | Tm.HasType a A => Tm.HasType (a.shiftAfter m s) (A.shiftAfter m s)
+  | Tm.Eq a b A => Tm.Eq (a.shiftAfter m s) (b.shiftAfter m s) (A.shiftAfter m s)
+  | Ty.Eq A B => Ty.Eq (A.shiftAfter m s) (B.shiftAfter m s)
+
 theorem Ctx.get_weaken {m n}
     {Γ₁ : Ctx 0 m} {Γ₂ : Ctx m n}
     {x C}
@@ -43,75 +50,61 @@ theorem Derives.weaken {n m}
     (Γ₁.snoc ⟨x, C⟩ ++ Γ₂.shift 1 ⊢ 𝒿.shiftAfter (n - m) 1) := by
   unfold Judgement.shiftAfter
   let Γ'' := Γ₁.snoc ⟨x, C⟩ ++ Γ₂.shift 1
-  induction h𝒿 generalizing Γ₁ x C with
-  -- Context well-formedness
-  | empty => cases Γ₂ with | nil => exact .extend hC
-  | extend hA ih =>
+  induction h𝒿 generalizing Γ₁ x C
+  -- Easy inductive cases
+  all_goals
+    simp only [Tm.shiftAfter, Tm.shift_shift_comm]
+    try derives_constructor apply_rules
+
+  case empty => cases Γ₂ with | nil => exact .extend hC
+  case extend hA ih =>
       cases Γ₂ with
       | nil => cases hΓ with | refl => exact .extend hC
       | snoc =>
           obtain ⟨hΓ', rfl⟩ := Tele.snoc.inj hΓ
           exact .extend (ih hΓ' hC)
-  -- Type well-formedness
-  | @pi_form _ Γ' y D _ _ _ ihA ihB =>
+  case pi_form _ Γ' y D _ _ _ ihA ihB =>
       apply Derives.pi_form (ihA hΓ hC)
-      have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
-      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
+      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C (by rw [hΓ]; rfl) hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  -- Type equality
-  | trans_eq_ty _ _ ihAB ihBC => exact .trans_eq_ty (ihAB hΓ hC) (ihBC hΓ hC)
-  | @pi_form_eq _ Γ' y D _ _ _ _ _ ihA ihB =>
+  case pi_form_eq _ Γ' y D _ _ _ _ _ ihA ihB =>
       apply Derives.pi_form_eq (ihA hΓ hC)
-      have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
-      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
+      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C (by rw [hΓ]; rfl) hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  | el_form_eq _ ih => exact .el_form_eq (ih hΓ hC)
-  -- Term equality
-  | trans_eq_tm _ _ ihab ihbc => exact .trans_eq_tm (ihab hΓ hC) (ihbc hΓ hC)
-  | @pi_intro_eq _ Γ' y _ _ D _ _ hA hB ihA ihB =>
+  case pi_intro_eq _ Γ' y _ _ D _ _ hA hB ihA ihB =>
       apply Derives.pi_intro_eq (ihA hΓ hC)
-      have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
-      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
+      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C (by rw [hΓ]; rfl) hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  | pi_elim_eq _ _ ihf iha =>
+  case pi_elim_eq _ _ ihf iha =>
       have h := Derives.pi_elim_eq (Γ := Γ'') (ihf hΓ hC) (iha hΓ hC)
       rw [Ty.shift_subst_comm] at h
       exact h
-  | @pi_comp n' Γ' y a' b' D E _ _ ihB iha =>
+  case pi_comp n' Γ' y a' b' D E _ _ ihB iha =>
       let k := n' - m
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
-      have ihB' : Γ''.snoc ⟨y, D.shiftAfter k 1⟩ ⊢ b'.shiftAfter (k + 1) 1 : E.shiftAfter (k + 1) 1 := by
-        simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB hΓ' hC
+      have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C (by rw [hΓ]; rfl) hC
+      simp [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] at ihB'
       have h := Derives.pi_comp ihB' (iha hΓ hC)
       rw [Ty.shift_subst_comm, Tm.shift_subst_comm] at h
       exact h
-  | pi_uniq _ ih =>
-      have ihf := @ih Γ₁ Γ₂ x C hΓ hC
-      simp [Tm.shiftAfter, Tm.shift_shift_comm]
-      exact Derives.pi_uniq ihf
-  | conv_eq_tm _ _ ihheq ihhAB => exact .conv_eq_tm (ihheq hΓ hC) (ihhAB hΓ hC)
-  -- Typing
-  | @var n' Γ' _ i ih =>
-      simp only [Tm.shiftAfter]
+  case var _ i ih =>
       rw [hΓ, ← Ctx.get_weaken]
-      exact .var (ih hΓ hC) (i.shiftAfter (n' - m) 1)
-  | @pi_intro _ Γ' y D body B hA hB ihA ihB =>
+      exact .var (ih hΓ hC) _
+  case pi_intro _ Γ' y D body B hA hB ihA ihB =>
       apply Derives.pi_intro (ihA hΓ hC)
       have hΓ' : Γ'.snoc ⟨y, D⟩ = Γ₁ ++ Γ₂.snoc ⟨y, D⟩ := by rw [hΓ]; rfl
       have ihB' := @ihB Γ₁ (Γ₂.snoc ⟨y, D⟩) x C hΓ' hC
       simpa [Ctx.shift_snoc, Nat.succ_sub Γ₂.le] using ihB'
-  | pi_elim _ _ ihf iha =>
+  case pi_elim _ _ ihf iha =>
       have h := Derives.pi_elim (Γ := Γ'') (ihf hΓ hC) (iha hΓ hC)
       rw [Ty.shift_subst_comm] at h
       exact h
-  | _ => constructor <;> apply_rules -- easy inductive cases
 
 theorem Derives.presup {n} {Γ : Ctx 0 n} {𝒿}
     (h𝒿 : Γ ⊢ 𝒿) :
     (Γ ⊢) := by
-  induction h𝒿 with
-  | empty => constructor
-  | extend => constructor; assumption
+  induction h𝒿 with try constructor
+  | extend => assumption
   | _ => assumption
 
 theorem Ctx.WF.drop {n} {Γ : Ctx 0 n} {x A} :
@@ -126,10 +119,12 @@ theorem Ctx.subst_snoc {m n x B} (a : Tm m) (Γ : Ctx (m + 1) (n + 1)) :
 
 private theorem addrc {n k : Nat} : n + 1 + k = n + k + 1 := Nat.add_right_comm n 1 k
 
+@[simp]
 theorem Tm.cast_shiftAfter {n₁ n₂ : Nat} (h : n₁ = n₂) (m s : Nat) (t : Tm n₁) :
-    (h ▸ t).shiftAfter m s = (congrArg (· + s) h ▸ t.shiftAfter m s) := by cases h; rfl
+    (h ▸ t).shiftAfter m s = congrArg (· + s) h ▸ t.shiftAfter m s := by cases h; rfl
+@[simp]
 theorem Ty.cast_shiftAfter {n₁ n₂ : Nat} (h : n₁ = n₂) (m s : Nat) (T : Ty n₁) :
-    (h ▸ T).shiftAfter m s = (congrArg (· + s) h ▸ T.shiftAfter m s) := by cases h; rfl
+    (h ▸ T).shiftAfter m s = congrArg (· + s) h ▸ T.shiftAfter m s := by cases h; rfl
 
 mutual
 
@@ -138,41 +133,26 @@ theorem Ty.shiftAfter_succ {n : Nat} (m k : Nat) :
   | 𝑢 => rfl
   | .el t => congrArg Ty.el (Tm.shiftAfter_succ m k t)
   | .pi ⟨x, A⟩ B => by
-      simp only [Ty.shiftAfter]
-      have ihA := Ty.shiftAfter_succ m k A
-      have ihB := Ty.shiftAfter_succ (m + 1) k B
-      simp only [ihA, Ty.cast_shiftAfter addrc (m + 1) 1, ihB]
-termination_by structural T => T
+      simp [Ty.shiftAfter, Ty.shiftAfter_succ m k, Ty.shiftAfter_succ (m + 1) k]
 
 theorem Tm.shiftAfter_succ {n : Nat} (m k : Nat) :
     (t : Tm n) → t.shiftAfter m (k + 1) = (t.shiftAfter m k).shiftAfter m 1
   | .var ⟨i, hi⟩ => by
       simp only [Tm.shiftAfter, Idx.shiftAfter]
       by_cases h : m ≤ i
-      · have h' : m ≤ i + k := Nat.le_add_right_of_le h
-        simp only [h, h', ↓reduceIte, Nat.add_assoc]
-      · simp only [h, ↓reduceIte]
+      · have h' : m ≤ i + k := by omega
+        simp [h, h', Nat.add_assoc]
+      · simp [h]
   | .const _ => rfl
   | .lam ⟨x, A⟩ body => by
-      simp only [Tm.shiftAfter]
-      have ihA := Ty.shiftAfter_succ m k A
-      have ihBody := Tm.shiftAfter_succ (m + 1) k body
-      simp only [ihA, Tm.cast_shiftAfter addrc (m + 1) 1, ihBody]
+      simp [Tm.shiftAfter, Ty.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
   | .app f a => by
-      simp only [Tm.shiftAfter, Tm.shiftAfter_succ m k f, Tm.shiftAfter_succ m k a]
+      simp only [Tm.shiftAfter, Tm.shiftAfter_succ m k]
   | .piHat x a b => by
-      simp only [Tm.shiftAfter]
-      have iha := Tm.shiftAfter_succ m k a
-      have ihb := Tm.shiftAfter_succ (m + 1) k b
-      simp only [iha, Tm.cast_shiftAfter addrc (m + 1) 1, ihb]
+      simp [Tm.shiftAfter, Tm.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
   | .proj i t => congrArg (Tm.proj i) (Tm.shiftAfter_succ m k t)
   | .letE x ty t body => by
-      simp only [Tm.shiftAfter]
-      have ihty := Ty.shiftAfter_succ m k ty
-      have iht := Tm.shiftAfter_succ m k t
-      have ihbody := Tm.shiftAfter_succ (m + 1) k body
-      simp only [ihty, iht, Tm.cast_shiftAfter addrc (m + 1) 1, ihbody]
-termination_by structural t => t
+      simp [Tm.shiftAfter, Ty.shiftAfter_succ m k, Tm.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
 
 end
 

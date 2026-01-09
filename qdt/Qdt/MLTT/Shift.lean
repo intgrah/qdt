@@ -66,7 +66,6 @@ theorem Ty.shift_shift_comm_gen {n} (m k : Nat) :
   | .el e => by
       simp only [Ty.shiftAfter]
       exact congrArg Ty.el (Tm.shift_shift_comm_gen m k e)
-termination_by structural t => t
 
 theorem Tm.shift_shift_comm_gen {n} (m k : Nat) :
     ∀ t : Tm n,
@@ -108,7 +107,6 @@ theorem Tm.shift_shift_comm_gen {n} (m k : Nat) :
           (body.shiftAfter (k + m + 1) 1).shiftAfter (m + 1) 1 :=
         Tm.shift_shift_comm_gen (m + 1) k body
       simp only [hty, ht, hbody]
-termination_by structural t => t
 
 end
 
