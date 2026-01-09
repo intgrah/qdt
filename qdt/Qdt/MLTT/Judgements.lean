@@ -119,29 +119,13 @@ inductive Derives : ∀ {n}, Ctx 0 n → Judgement n → Prop
 
 end Definitions
 
--- @[app_unexpander Ctx.WF]
--- def Ctx.WF.unexpand : Lean.PrettyPrinter.Unexpander
---   | `($_ $Γ) => `($Γ ⊢)
---   | _ => throw ()
-
--- @[app_unexpander Ty.WF]
--- def Ty.WF.unexpand : Lean.PrettyPrinter.Unexpander
---   | `($_ $Γ $A) => `($Γ ⊢ $A type)
---   | _ => throw ()
-
--- @[app_unexpander Ty.Eq]
--- def Ty.Eq.unexpand : Lean.PrettyPrinter.Unexpander
---   | `($_ $Γ $A $B) => `($Γ ⊢ $A ≡ $B type)
---   | _ => throw ()
-
--- @[app_unexpander Tm.Eq]
--- def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
---   | `($_ $Γ $e₁ $e₂ $A) => `($Γ ⊢ $e₁ ≡ $e₂ : $A)
---   | _ => throw ()
-
--- @[app_unexpander Tm.HasType]
--- def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
---   | `($_ $Γ $e $A) => `($Γ ⊢ $e : $A)
---   | _ => throw ()
+@[app_unexpander Derives]
+def Derives.unexpand : Lean.PrettyPrinter.Unexpander
+  | `($_ $Γ Judgement.Ctx.WF) => `($Γ ⊢)
+  | `($_ $Γ (Judgement.Ty.WF $A)) => `($Γ ⊢ $A type)
+  | `($_ $Γ (Judgement.Tm.HasType $a $A)) => `($Γ ⊢ $a : $A)
+  | `($_ $Γ (Judgement.Tm.Eq $a $b $A)) => `($Γ ⊢ $a ≡ $b : $A)
+  | `($_ $Γ (Judgement.Ty.Eq $A $B)) => `($Γ ⊢ $A ≡ $B type)
+  | _ => throw ()
 
 end Qdt
