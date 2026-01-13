@@ -22,11 +22,11 @@ partial def VTm.quote {n} : VTm n → MetaM (Tm n)
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
       return .lam ⟨x, a⟩ b
-  | .piHat x a ⟨env, b⟩ => do
+  | .pi' x a ⟨env, b⟩ => do
       let a ← a.quote
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
-      return .piHat x a b
+      return .pi' x a b
 
 partial def Head.quote {n} : Head n → MetaM (Tm n)
   | .var i => return .var i.rev
@@ -46,7 +46,7 @@ partial def VTy.reify {n} : VTy n → MetaM (Tm n)
       let a ← a.reify
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.reify
-      return .piHat x a b
+      return .pi' x a b
   | .el n => n.quote
 
 end

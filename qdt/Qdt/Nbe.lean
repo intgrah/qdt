@@ -17,7 +17,7 @@ partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
   | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → MetaM (VTy n)
-  | .piHat x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
+  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
   | .neutral ne => return .el ne
   | .lam .. => throw (.msg "doEl: expected type code or neutral")
 
@@ -26,7 +26,7 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .const name => deltaReduction name
   | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
   | .app f a => do (← f.eval).app (← a.eval)
-  | .piHat x a b => return .piHat x (← a.eval) ⟨← read, b⟩
+  | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
@@ -37,7 +37,7 @@ partial def VTm.app {n} (f a : VTm n) : MetaM (VTm n) :=
     match ← iotaReduction ne a with
     | some result => return result
     | none => return .neutral (ne.app a)
-  | .piHat .. => throw (.msg "doApp: expected lambda or neutral")
+  | .pi' .. => throw (.msg "doApp: expected lambda or neutral")
 
 partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
   | .lam .. => throw (.msg "VTm.proj: expected neutral")
@@ -45,7 +45,7 @@ partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
     match ← projReduction ne i with
     | some result => return result
     | none => return .neutral (ne.proj i)
-  | .piHat .. => throw (.msg s!"VTm.proj: expected neutral, got piHat")
+  | .pi' .. => throw (.msg s!"VTm.proj: expected neutral, got pi'")
 
 /-- δ-reduction definition unfolding -/
 @[inline]

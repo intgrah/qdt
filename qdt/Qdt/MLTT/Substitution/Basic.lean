@@ -28,7 +28,7 @@ private def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
   | .const x => .const x
   | .lam ⟨x, a⟩ body => .lam ⟨x, a.ren ξ⟩ (body.ren ξ.up)
   | .app f a => .app (f.ren ξ) (a.ren ξ)
-  | .piHat x a b => .piHat x (a.ren ξ) (b.ren ξ.up)
+  | .pi' x a b => .pi' x (a.ren ξ) (b.ren ξ.up)
   | .proj i t => .proj i (t.ren ξ)
   | .letE x ty t body => .letE x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
 end
@@ -55,7 +55,7 @@ private theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
   | .app .. => by simp only [Tm.ren, Tm.ren_id]
-  | .piHat .. => by simp [Tm.ren, Tm.ren_id]
+  | .pi' .. => by simp [Tm.ren, Tm.ren_id]
   | .proj .. => by simp only [Tm.ren, Tm.ren_id]
   | .letE .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
 end
@@ -77,7 +77,7 @@ private theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
   | .app .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .piHat .. => by simp [Tm.ren, Tm.comp_ren]
+  | .pi' .. => by simp [Tm.ren, Tm.comp_ren]
   | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
   | .letE .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
 end
@@ -108,7 +108,7 @@ def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .const name => .const name
   | .lam ⟨x, a⟩ body => .lam ⟨x, a.subst σ⟩ (body.subst σ.up)
   | .app f a => .app (f.subst σ) (a.subst σ)
-  | .piHat x a b => .piHat x (a.subst σ) (b.subst σ.up)
+  | .pi' x a b => .pi' x (a.subst σ) (b.subst σ.up)
   | .proj i t => .proj i (t.subst σ)
   | .letE x ty t body => .letE x (ty.subst σ) (t.subst σ) (body.subst σ.up)
 end
@@ -138,7 +138,7 @@ theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
   | .lam ⟨_, _⟩ _ => by
       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
-  | .piHat .. => by
+  | .pi' .. => by
       simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
   | .letE .. => by
@@ -159,7 +159,7 @@ theorem Tm.subst_id {n} : ∀ t : Tm n, t.subst (Subst.id n) = t
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
   | .app .. => by simp [Tm.subst, Tm.subst_id]
-  | .piHat .. => by simp [Tm.subst, Tm.subst_id]
+  | .pi' .. => by simp [Tm.subst, Tm.subst_id]
   | .proj .. => by simp only [Tm.subst, Tm.subst_id]
   | .letE .. => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
 end
@@ -200,7 +200,7 @@ private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp only [Tm.ren, Tm.subst, Ty.ren_subst, Tm.ren_subst, Subst.comp_ren_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
-  | .piHat .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
+  | .pi' .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
   | .letE .. => by simp only [Tm.ren, Tm.subst, Ty.ren_subst, Tm.ren_subst, Subst.comp_ren_up]
 end
@@ -224,7 +224,7 @@ private theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
   | .app .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
-  | .piHat .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .pi' .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
   | .proj .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
   | .letE .. => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
 end
@@ -261,7 +261,7 @@ theorem Tm.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
   | .const .. => rfl
   | .lam ⟨_, _⟩ _ => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
   | .app .. => by simp only [Tm.subst, Tm.comp_subst]
-  | .piHat .. => by simp only [Tm.subst, Tm.comp_subst, Subst.up_comp]
+  | .pi' .. => by simp only [Tm.subst, Tm.comp_subst, Subst.up_comp]
   | .proj .. => by simp only [Tm.subst, Tm.comp_subst]
   | .letE .. => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
 end

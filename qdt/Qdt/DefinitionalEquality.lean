@@ -27,7 +27,7 @@ partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
           let oVal ← (VTm.neutral ne).app var
           oVal.defEq bVal
       | _ => return false
-  | .piHat _ a₁ ⟨env₁, b₁⟩, .piHat _ a₂ ⟨env₂, b₂⟩ => do
+  | .pi' _ a₁ ⟨env₁, b₁⟩, .pi' _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.defEq a₂) then return false
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← b₁.eval (env₁.weaken.cons var)

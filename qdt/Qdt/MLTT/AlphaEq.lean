@@ -46,7 +46,7 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
   | congrPiHat {n} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .piHat x₁ a₁ b₁ ≡α .piHat x₂ a₂ b₂
+      .pi' x₁ a₁ b₁ ≡α .pi' x₂ a₂ b₂
   | congrLam {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →

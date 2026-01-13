@@ -56,7 +56,7 @@ private partial def checkPi {n} : Frontend.Ast.TypedBinder → Frontend.Ast.Term
       let domVal ← (Ty.el domTm).eval ctx.env
       let ctx := ctx.bind x domVal
       let codTm ← checkTm .u cod ctx
-      return .piHat x domTm codTm
+      return .pi' x domTm codTm
 
 partial def checkTy {n} : Frontend.Ast.Term → TermM n (Ty n)
   | .missing src => throw (.typecheckMissing src)

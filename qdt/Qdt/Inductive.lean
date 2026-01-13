@@ -44,7 +44,7 @@ private def Tm.hasIndOcc {n} (ind : Name) : Tm n → Bool
   | .const name => name == ind
   | .lam ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
   | .app a b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .piHat _ a b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .pi' _ a b => a.hasIndOcc ind || b.hasIndOcc ind
   | .proj _ a => a.hasIndOcc ind
   | .letE _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
 

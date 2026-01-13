@@ -27,7 +27,7 @@ inductive Tm : Nat → Type
   | const {n} : Name → Tm n
   | lam {n} : Param n → Tm (n + 1) → Tm n
   | app {n} : Tm n → Tm n → Tm n
-  | piHat {n} : Name → Tm n → Tm (n + 1) → Tm n
+  | pi' {n} : Name → Tm n → Tm (n + 1) → Tm n
   | proj {n} : Nat → Tm n → Tm n
   | letE {n} : Name → Ty n → Tm n → Tm (n + 1) → Tm n
 deriving Repr, Hashable, DecidableEq, BEq

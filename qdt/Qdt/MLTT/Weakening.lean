@@ -279,7 +279,7 @@
 --       simp [Tm.shiftAfter, Ty.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
 --   | .app f a => by
 --       simp only [Tm.shiftAfter, Tm.shiftAfter_succ m k]
---   | .piHat x a b => by
+--   | .pi' x a b => by
 --       simp [Tm.shiftAfter, Tm.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
 --   | .proj i t => congrArg (Tm.proj i) (Tm.shiftAfter_succ m k t)
 --   | .letE x ty t body => by

@@ -93,7 +93,7 @@ partial def Tm.fmt {c : Nat} (prec : Prec) (ctx : List Name) : Tm c → Format
       let aFmt := a.fmt .max ctx
       parenIf (prec.needsParens .app) (fFmt ++ " " ++ aFmt)
 
-  | .piHat name dom cod =>
+  | .pi' name dom cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt .app ctx
       let codFmt := cod.fmt .arrow (x :: ctx)
