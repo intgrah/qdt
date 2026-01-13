@@ -1,7 +1,7 @@
 import Lean.Data.Name
 
 import Qdt.Control
-import Qdt.Global
+import Qdt.MLTT.Global
 import Qdt.Semantics
 import Qdt.MLTT.Syntax
 

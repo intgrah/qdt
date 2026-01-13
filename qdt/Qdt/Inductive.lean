@@ -1,4 +1,4 @@
-import Qdt.MLTT.Shift
+import Qdt.MLTT.Substitution.Basic
 import Qdt.Control
 import Qdt.Frontend.Ast
 import Qdt.Params

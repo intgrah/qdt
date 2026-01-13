@@ -1,7 +1,6 @@
 import Qdt.MLTT
 import Qdt.Semantics
 import Qdt.Error
-import Qdt.Global
 import Qdt.TermContext
 import Qdt.Nbe
 import Qdt.DefinitionalEquality

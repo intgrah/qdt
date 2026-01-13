@@ -1,6 +1,6 @@
 import Std.Data.HashMap
 
-import Qdt.Global
+import Qdt.MLTT.Global
 import Qdt.Frontend.Ast
 
 namespace Qdt.Incremental

@@ -3,7 +3,7 @@ import Std.Data.HashMap
 import Qdt.Bidirectional
 import Qdt.Error
 import Qdt.Frontend.Ast
-import Qdt.Global
+import Qdt.MLTT.Global
 import Qdt.Nbe
 import Qdt.Params
 import Qdt.Quote

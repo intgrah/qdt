@@ -2,7 +2,7 @@ import Std.Data.HashMap
 
 import Qdt.Frontend.Source
 import Qdt.Error
-import Qdt.Global
+import Qdt.MLTT.Global
 import Qdt.TermContext
 import Qdt.Incremental
 import Qdt.IncrementalElab.Query
