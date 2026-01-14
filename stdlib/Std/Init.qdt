@@ -10,4 +10,4 @@ def comp_assoc.{u, v, w, x}
     comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h = comp.{u, w, x} A C D f (comp.{u, v, w} A B C g h) :=
   Eq.refl.{max u x} (A → D) (comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h)
 
-axiom funext.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (h : (x : A) → f x = g x) : f = g
+axiom funext.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (h : (x : A) → Eq.{v} (B x) (f x) (g x)) : Eq.{max u v} ((x : A) → B x) f g
