@@ -23,9 +23,9 @@ inductive Error
   | typeFamilyCtorReturnTypeRequired (src : Src) (ctorName : Name)
   | structureResultTypeMustBeTypeUniverse (src : Src) (structName : Name)
   | universeArgCountMismatch (src : Src) (name : Name) (expected : Nat) (got : Nat)
-  | nonPositiveOccurrence (indName : Name)
-  | ctorMustReturnInductive (ctorName : Name) (indName : Name)
-  | ctorParamMismatch (ctorName : Name)
+  | nonPositiveOccurrence (src : Src) (indName : Name)
+  | ctorMustReturnInductive (src : Src) (ctorName : Name) (indName : Name)
+  | ctorParamMismatch (src : Src) (ctorName : Name)
 deriving Inhabited
 
 instance : ToString Error where toString
@@ -45,8 +45,8 @@ instance : ToString Error where toString
   | .typeFamilyCtorReturnTypeRequired src ctorName => s!"{repr src}: {ctorName}: constructor must specify return type for inductive type family"
   | .structureResultTypeMustBeTypeUniverse src structName => s!"{repr src}: {structName}: structure result type must be of the form Type u"
   | .universeArgCountMismatch src name expected got => s!"{repr src}: {name}: expected {expected} universe arguments, got {got}"
-  | .nonPositiveOccurrence indName => s!"{indName} has a non-positive occurrence"
-  | .ctorMustReturnInductive ctorName indName => s!"{ctorName} must return {indName}"
-  | .ctorParamMismatch ctorName => s!"{ctorName}: inductive type parameters must be constant throughout the definition"
+  | .nonPositiveOccurrence src indName => s!"{repr src}: {indName} has a non-positive occurrence"
+  | .ctorMustReturnInductive src ctorName indName => s!"{repr src}: {ctorName} must return {indName}"
+  | .ctorParamMismatch src ctorName => s!"{repr src}: {ctorName}: inductive type parameters must be constant throughout the definition"
 
 end Qdt
