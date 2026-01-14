@@ -90,24 +90,26 @@ Given a recursive occurrence of the inductive type, check that:
 Returns the indices.
 -/
 private def indConsistency {n}
+    (src : Frontend.Src)
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (args : List (Tm n)) :
     CoreM (List (Tm n)) := do
   if args.length != numParams + numIndices then
-    throw (.nonPositiveOccurrence indName)
+    throw (.nonPositiveOccurrence src indName)
   let (params, indices) := args.splitAt numParams
   for (ithParam, param) in params.mapIdx Prod.mk do
     let .var j := param
-      | throw (.ctorParamMismatch ctorName)
+      | throw (.ctorParamMismatch src ctorName)
     if ithParam + j.val + 1 != n then
-      throw (.ctorParamMismatch ctorName)
+      throw (.ctorParamMismatch src ctorName)
   for index in indices do
     if index.hasIndOcc indName then
-      throw (.nonPositiveOccurrence indName)
+      throw (.nonPositiveOccurrence src indName)
   return indices
 
 private def analyseRecField
+    (fieldSrc : Frontend.Src)
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (jthFieldCtx : Nat)
@@ -115,23 +117,23 @@ private def analyseRecField
     CoreM (Option (RecFieldInfo jthFieldCtx)) := do
   let ⟨nb, nestedTele, endTy⟩ := fty.getTele
   if nestedTele.any (fun ⟨_, t⟩ => t.hasIndOcc indName) then
-    throw (.nonPositiveOccurrence indName)
+    throw (.nonPositiveOccurrence fieldSrc indName)
   match endTy with
   | .u _ => return none
   | .el tm => do
       let (head, args) := tm.getAppArgs
       if let .const name _ := head then
         if name == indName then
-          let indices ← indConsistency numParams numIndices indName ctorName args
+          let indices ← indConsistency fieldSrc numParams numIndices indName ctorName args
           return some { nestedEnd := nb, nestedTele, indices : RecFieldInfo _ }
         else
           for arg in args do
             if arg.hasIndOcc indName then
-              throw (.nonPositiveOccurrence indName)
+              throw (.nonPositiveOccurrence fieldSrc indName)
           return none
       else
         if tm.hasIndOcc indName then
-          throw (.nonPositiveOccurrence indName)
+          throw (.nonPositiveOccurrence fieldSrc indName)
         return none
   | .pi .. => throw (.msg "Internal error")
 
@@ -227,6 +229,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
   let recName := ind.name.str "rec"
 
   let buildMinorTy
+      (astCtor : Frontend.Ast.Command.InductiveConstructor)
       (ctorName : Name)
       (ithMinor : Nat)
       (him : ithMinor ≤ numMinors)
@@ -241,7 +244,9 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
 
     let fieldTeleRec : Tele ParamRec numParamsMotivesIthMinor numParamsMotivesIthMinorFields ←
       fieldTele.mapM fun {jf} ⟨name, ty⟩ => do
-        let recOpt ← analyseRecField numParams numIndices ind.name ctorName jf ty
+        let fieldIdx := jf - numParamsMotivesIthMinor
+        let fieldSrc := astCtor.fields[fieldIdx]?.map (·.src) |>.getD none
+        let recOpt ← analyseRecField fieldSrc numParams numIndices ind.name ctorName jf ty
         return ⟨name, ty, recOpt⟩
 
     let rhsCtx := numParamsMotivesMinors + numFields
@@ -331,11 +336,11 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
       | .el tm =>
           let (head, args) := tm.getAppArgs
           let .const name _ := head
-            | throw (.ctorMustReturnInductive ctorName ind.name)
+            | throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
           if name != ind.name then
-            throw (.ctorMustReturnInductive ctorName ind.name)
-          indConsistency numParams numIndices ind.name ctorName args
-      | .u _ => throw (.ctorMustReturnInductive ctorName ind.name)
+            throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
+          indConsistency astCtor.src numParams numIndices ind.name ctorName args
+      | .u _ => throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
       | .pi .. => throw (.msg "Internal error")
     let ctorIdxVals ← ctorIdxVals.mapM (·.eval Env.infer)
     let ctorIdxVals := ctorIdxVals.map VTm.weaken
@@ -356,8 +361,9 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
       (seeds : Vector (RuleSeed numParamsMotivesMinors) ithMinor) :
       MetaM (Tele Param numParamsMotives numParamsMotivesMinors × Vector (RuleSeed numParamsMotivesMinors) numMinors) := do
     if h' : ithMinor < numMinors then
+      let astCtor := ind.ctors[ithMinor]
       let (ctorName, ctorFieldsTy) := ctors[ithMinor]'h'
-      let (p, seed) ← buildMinorTy ctorName ithMinor (Nat.le_of_lt h') ctorFieldsTy
+      let (p, seed) ← buildMinorTy astCtor ctorName ithMinor (Nat.le_of_lt h') ctorFieldsTy
       let acc := acc.snoc p
       goMinors (ithMinor + 1) (by omega) acc (seeds.push seed)
     else
