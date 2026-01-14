@@ -1,4 +1,0 @@
-profile = default
-type-decl = sparse
-break-cases = all
-if-then-else = k-r

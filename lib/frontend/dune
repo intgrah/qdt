@@ -1,8 +1,0 @@
-(library
- (name frontend)
- (modules ast cst desugar parser source)
- (modules_without_implementation source)
- (preprocess
-  (pps ppx_compare))
- (instrumentation
-  (backend bisect_ppx)))

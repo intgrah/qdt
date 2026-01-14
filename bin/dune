@@ -1,7 +1,0 @@
-(executable
- (public_name code)
- (name main)
- (modules main cli)
- (libraries frontend core unix cmdliner)
- (instrumentation
-  (backend bisect_ppx)))
