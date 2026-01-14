@@ -1,0 +1,13 @@
+inductive Acc (A : Type) (r : A → A → Type) : A → Type where
+  | intro (x : A) (h : (y : A) → r y x → Acc A r y) : Acc A r x
+
+example :
+    (A : Type) →
+    (r : A → A → Type) →
+    (motive : (a : A) → Acc A r a → Type) →
+    ((x : A) → (h : (y : A) → r y x → Acc A r y) → ((y : A) → (a : r y x) → motive y (h y a)) → motive x (Acc.intro A r x h)) →
+    (a : A) →
+    (t : Acc A r a) →
+    motive a t :=
+  Acc.rec
+

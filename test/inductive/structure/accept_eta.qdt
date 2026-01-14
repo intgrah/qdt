@@ -1,0 +1,11 @@
+import Std.Nat
+import Std.Eq
+
+structure Pair where
+  (fst : Nat)
+  (snd : Nat)
+
+def Pair.eta (p : Pair) :
+    p = Pair.mk (Pair.fst p) (Pair.snd p) :=
+  Eq.refl Pair p
+

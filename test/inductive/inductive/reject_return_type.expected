@@ -1,0 +1,3 @@
+Error: inductive/inductive/reject_return_type.qdt:4:10: Expected Type, got Nat →
+Type
+Elaborated 34 definitions
