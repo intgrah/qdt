@@ -1,7 +1,0 @@
-import Std.Nat
-import Std.Eq
-
-def add_add (a b c : Nat) : a + b + c = (a + b) + c := Eq.refl Nat (a + b + c)
-def sub_sub (a b c : Nat) : a - b - c = (a - b) - c := Eq.refl Nat (a - b - c)
-def mul_mul (a b c : Nat) : a * b * c = (a * b) * c := Eq.refl Nat (a * b * c)
-def arr_arr (f : Nat → Nat → Nat) : Nat → (Nat → Nat) := f

@@ -1,3 +1,0 @@
-structure T (A : Type) where
-  (val : T)
-

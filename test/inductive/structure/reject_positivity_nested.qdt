@@ -1,5 +1,0 @@
-inductive Endo (A : Type) where
-  | mk (f : A → A)
-
-structure Bad where
-  (e : Endo Bad)

@@ -1,9 +1,0 @@
--- REJECT: Nested negative via non-positive container
--- Endo A = (A → A), so Endo Bad = (Bad → Bad)
-
-inductive Endo (A : Type) : Type where
-  | mk (f : A → A) : Endo A
-
-inductive Bad : Type where
-  | mk (e : Endo Bad) : Bad
-

@@ -1,6 +1,0 @@
--- REJECT: Direct negative occurrence
--- Bad appears in the domain of an arrow (left of ->)
-
-inductive Bad : Type where
-  | mk (f : Bad → Bad) : Bad
-

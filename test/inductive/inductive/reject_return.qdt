@@ -1,4 +1,0 @@
-import Std.Nat
-
-inductive Foo : Type where
-  | bar : Nat

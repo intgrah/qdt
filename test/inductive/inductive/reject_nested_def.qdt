@@ -1,4 +1,0 @@
-def Endo (A : Type) := A → A
-
-inductive Bad : Type where
-  | mk : Endo Bad → Bad
