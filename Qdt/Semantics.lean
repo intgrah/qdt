@@ -100,7 +100,7 @@ def Env.ofList {n} : (xs : List (VTm n)) → Env n xs.length
 section Weakening
 
 /-!
-Since castLE is an irrelevant function (since proofs are erased at runtime),
+Since `Fin.castLE` is an irrelevant function (since proofs are erased at runtime),
 we use unsafe casts to implement the weakenings with no runtime overhead.
 -/
 
