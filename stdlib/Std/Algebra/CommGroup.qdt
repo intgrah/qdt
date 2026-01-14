@@ -1,6 +1,7 @@
+import Std.Eq
 import Std.Algebra.Group
 
-structure CommGroup (A : Type) where
+structure CommGroup.{u} (A : Type u) : Type u where
   (mul : A → A → A)
   (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
   (one : A)
@@ -10,12 +11,12 @@ structure CommGroup (A : Type) where
   (inv_mul_cancel (x : A) : mul (inv x) x = one)
   (mul_comm (x y : A) : mul x y = mul y x)
 
-def CommGroup.toGroup (A : Type) (inst : CommGroup A) : Group A :=
-  Group.mk A
-    (CommGroup.mul A inst)
-    (CommGroup.mul_assoc A inst)
-    (CommGroup.one A inst)
-    (CommGroup.mul_one A inst)
-    (CommGroup.one_mul A inst)
-    (CommGroup.inv A inst)
-    (CommGroup.inv_mul_cancel A inst)
+def CommGroup.toGroup.{u} (A : Type u) (inst : CommGroup.{u} A) : Group.{u} A :=
+  Group.mk.{u} A
+    (CommGroup.mul.{u} A inst)
+    (CommGroup.mul_assoc.{u} A inst)
+    (CommGroup.one.{u} A inst)
+    (CommGroup.mul_one.{u} A inst)
+    (CommGroup.one_mul.{u} A inst)
+    (CommGroup.inv.{u} A inst)
+    (CommGroup.inv_mul_cancel.{u} A inst)

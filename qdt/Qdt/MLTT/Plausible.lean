@@ -13,52 +13,53 @@ instance {n} : Shrinkable (Idx (n + 1)) where
 instance {n} : Arbitrary (Idx (n + 1)) where
   arbitrary := SampleableExt.interpSample (Fin (n + 1))
 
+instance : Shrinkable Universe where
+  shrink _ := []
+
 instance {n} : Shrinkable (Ty n) where
   shrink _ := []
 
 instance {n} : Shrinkable (Tm n) where
   shrink _ := []
 
-mutual
-partial def Ty.sample (n : Nat) (fuel : Nat) : Gen (Ty n) := do
-  if fuel = 0 then return 𝑢
-  else
-    let choice ← SampleableExt.interpSample (Fin 3)
-    match choice.val with
-    | 0 => return 𝑢
-    | 1 =>
-      let a ← Ty.sample n (fuel - 1)
-      let b ← Ty.sample (n + 1) (fuel - 1)
-      return a.arrow b
-    | _ =>
-      let t ← Tm.sample n (fuel - 1)
-      return .el t
+def Universe.sample : Nat → Gen Universe
+  | 0 => return .zero
+  | fuel + 1 => do
+      match ← SampleableExt.interpSample (Fin 4) with
+      | 0 => return .zero
+      | 1 => return .level #[`u, `v, `w, `x][← SampleableExt.interpSample (Fin 4)]
+      | 2 => return .succ (← sample fuel)
+      | 3 => return .max (← sample fuel) (← sample fuel)
 
-partial def Tm.sample (n : Nat) (fuel : Nat) : Gen (Tm n) := do
-  if fuel = 0 then
-    if h : 0 < n then
-      let i ← SampleableExt.interpSample Nat
-      return .var ⟨i % n, Nat.mod_lt i h⟩
-    else
-      return .const `x
-  else
-    let choice ← SampleableExt.interpSample (Fin 4)
-    match choice.val with
-    | 0 =>
+instance : Arbitrary Universe where
+  arbitrary := Universe.sample 3
+
+mutual
+def Ty.sample (n : Nat) : Nat → Gen (Ty n)
+  | 0 => return 𝑢 (← Universe.sample 2)
+  | fuel + 1 => do
+      match ← SampleableExt.interpSample (Fin 3) with
+      | 0 => return .u (← Universe.sample 2)
+      | 1 => return Ty.arrow (← Ty.sample n fuel) (← Ty.sample (n + 1) fuel)
+      | 2 => return .el (← Tm.sample n fuel)
+
+def Tm.sample (n : Nat) : Nat → Gen (Tm n)
+  | 0 => do
       if h : 0 < n then
         let i ← SampleableExt.interpSample Nat
         return .var ⟨i % n, Nat.mod_lt i h⟩
-      else
-        return .const `x
-    | 1 => return .const `c
-    | 2 =>
-      let a ← Ty.sample n (fuel - 1)
-      let body ← Tm.sample (n + 1) (fuel - 1)
-      return .lam ⟨.anonymous, a⟩ body
-    | _ =>
-      let f ← Tm.sample n (fuel - 1)
-      let a ← Tm.sample n (fuel - 1)
-      return .app f a
+      else return .const `x []
+  | fuel + 1 => do
+      match ← SampleableExt.interpSample (Fin 4) with
+      | 0 =>
+          if h : 0 < n then
+            let i ← SampleableExt.interpSample Nat
+            return .var ⟨i % n, Nat.mod_lt i h⟩
+          else
+            return .const `x []
+      | 1 => return .const `c []
+      | 2 => return .lam ⟨.anonymous, ← Ty.sample n fuel⟩ (← Tm.sample (n + 1) fuel)
+      | 3 => return .app (← Tm.sample n fuel) (← Tm.sample n fuel)
 end
 
 instance {n} : Arbitrary (Ty n) where

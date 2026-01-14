@@ -1,23 +1,23 @@
 import Std.False
 
-inductive Relation.ReflGen (A : Type) (r : A → A → Type) : A → A → Type where
+inductive Relation.ReflGen.{u, v} (A : Type u) (r : A → A → Type v) : A → A → Type (max u v) where
   | refl (a : A) : Relation.ReflGen A r a a
   | single (a b : A) : r a b → Relation.ReflGen A r a b
   
-inductive Relation.TransGen (A : Type) (r : A → A → Type) : A → A → Type where
+inductive Relation.TransGen.{u, v} (A : Type u) (r : A → A → Type v) : A → A → Type (max u v) where
   | single (a b : A) : r a b → Relation.TransGen A r a b
   | tail (a b c : A) : Relation.TransGen A r a b → r b c → Relation.TransGen A r a c
 
-inductive Relation.ReflTransGen (A : Type) (r : A → A → Type) : A → A → Type where
+inductive Relation.ReflTransGen.{u, v} (A : Type u) (r : A → A → Type v) : A → A → Type (max u v) where
   | refl (a : A) : Relation.ReflTransGen A r a a
   | tail (a b c : A) : Relation.ReflTransGen A r a b → r b c → Relation.ReflTransGen A r a c
 
-inductive Relation.EqvGen (A : Type) (r : A → A → Type) : A → A → Type where
+inductive Relation.EqvGen.{u, v} (A : Type u) (r : A → A → Type v) : A → A → Type (max u v) where
   | rel (x y : A) : r x y → Relation.EqvGen A r x y
   | refl (x : A) : Relation.EqvGen A r x x
   | symm (x y : A) : Relation.EqvGen A r x y → Relation.EqvGen A r y x
   | trans (x y z : A) : Relation.EqvGen A r x y → Relation.EqvGen A r y z → Relation.EqvGen A r x z
 
-def Relation.empty (A : Type) : A → A → Type := fun _ _ => False
+def Relation.empty.{u} (A : Type u) : A → A → Type := fun _ _ => False
 
-def Subrelation (A : Type) (r q : A → A → Type) := (x y : A) → q x y → r x y
+def Subrelation.{u, v} (A : Type u) (r q : A → A → Type v) := (x y : A) → q x y → r x y

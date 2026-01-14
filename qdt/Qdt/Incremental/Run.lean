@@ -2,7 +2,7 @@ import Qdt.Incremental.Trace
 
 namespace Qdt.Incremental
 
-open Std (DHashMap HashMap)
+open Std (DHashMap HashMap HashSet)
 
 variable {ε α Q : Type} {R : Q → Type} [BEq Q] [LawfulBEq Q] [Hashable Q]
 
@@ -27,6 +27,13 @@ def runWithEngine
 
     let rulesIO (q : Q) : BaseM ε R (R q) := do
       let st ← get
+
+      match st.stack.head? with
+      | some dependent =>
+          modify fun st =>
+            { st with engine := st.engine.addReverseDep q dependent }
+      | none => pure ()
+
       match st.started.get? q with
       | some memo => pure memo.value
       | none =>

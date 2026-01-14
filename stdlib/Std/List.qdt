@@ -1,80 +1,142 @@
-import Std.Bool
 import Std.Eq
+import Std.Bool
 import Std.Nat
 import Std.Option
 
-inductive List (A : Type) where
+inductive List.{u} (A : Type u) : Type u where
   | nil
   | cons (head : A) (tail : List A)
 
-def List.append (A : Type) (xs ys : List A) : List A := List.rec A (fun _ => List A) ys (fun h _ => List.cons A h) xs
-def List.map (A B : Type) (f : A → B) : List A → List B := List.rec A (fun _ => List B) (List.nil B) (fun h _ => List.cons B (f h))
-def List.all (A : Type) (p : A → Bool) : List A → Bool := List.rec A (fun _ => Bool) Bool.true (fun h _ => Bool.and (p h))
-def List.any (A : Type) (p : A → Bool) : List A → Bool := List.rec A (fun _ => Bool) Bool.false (fun h _ => Bool.or (p h))
+def List.append.{u} (A : Type u) (xs ys : List.{u} A) : List.{u} A := List.rec.{u, u} A (fun _ => List.{u} A) ys (fun h _ => List.cons.{u} A h) xs
+def List.map.{u, v} (A : Type u) (B : Type v) (f : A → B) : List.{u} A → List.{v} B := List.rec.{v, u} A (fun _ => List.{v} B) (List.nil.{v} B) (fun h _ => List.cons.{v} B (f h))
+def List.all.{u} (A : Type u) (p : A → Bool) : List.{u} A → Bool := List.rec.{0, u} A (fun _ => Bool) Bool.true (fun h _ => Bool.and (p h))
+def List.any.{u} (A : Type u) (p : A → Bool) : List.{u} A → Bool := List.rec.{0, u} A (fun _ => Bool) Bool.false (fun h _ => Bool.or (p h))
 
-def List.foldr (A B : Type) (f : A → B → B) (z : B) : List A → B := List.rec A (fun _ => B) z (fun h _ => f h)
-def List.foldl (A B : Type) (f : B → A → B) (z : B) (xs : List A) : B := List.rec A (fun _ => B → B) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
-def List.filter (A : Type) (p : A → Bool) : List A → List A := List.rec A (fun _ => List A) (List.nil A) (fun h t ih => Bool.ite (List A) (p h) (List.cons A h ih) ih)
-def List.filterMap (A B : Type) (f : A → Option B) : List A → List B := List.rec A (fun _ => List B) (List.nil B) (fun h t ih => Option.rec B (fun _ => List B) (List.nil B) (fun b => List.cons B b ih) (f h))
+def List.foldr.{u, v} (A : Type u) (B : Type v) (f : A → B → B) (z : B) : List.{u} A → B := List.rec.{v, u} A (fun _ => B) z (fun h _ => f h)
+def List.foldl.{u, v} (A : Type u) (B : Type v) (f : B → A → B) (z : B) (xs : List.{u} A) : B := List.rec.{v, u} A (fun _ => B → B) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
+def List.filter.{u} (A : Type u) (p : A → Bool) : List.{u} A → List.{u} A := List.rec.{u, u} A (fun _ => List.{u} A) (List.nil.{u} A) (fun h t ih => Bool.ite.{u} (List.{u} A) (p h) (List.cons.{u} A h ih) ih)
+def List.filterMap.{u, v} (A : Type u) (B : Type v) (f : A → Option.{v} B) : List.{u} A → List.{v} B := List.rec.{v, u} A (fun _ => List.{v} B) (List.nil.{v} B) (fun h t ih => Option.rec.{v, v} B (fun _ => List.{v} B) ih (fun b => List.cons.{v} B b ih) (f h))
 
-def List.flatten (A : Type) : List (List A) → List A := List.rec (List A) (fun _ => List A) (List.nil A) (fun xs _ => List.append A xs)
-def List.flatMap (A B : Type) (f : A → List B) (xs : List A) : List B := List.flatten B (List.map A (List B) f xs)
+def List.flatten.{u} (A : Type u) : List.{u} (List.{u} A) → List.{u} A := List.rec.{u, u} (List.{u} A) (fun _ => List.{u} A) (List.nil.{u} A) (fun xs _ => List.append.{u} A xs)
+def List.flatMap.{u, v} (A : Type u) (B : Type v) (f : A → List.{v} B) (xs : List.{u} A) : List.{v} B := List.flatten.{v} B (List.map.{u, v} A (List.{v} B) f xs)
 
-def List.length (A : Type) : List A → Nat := List.rec A (fun _ => Nat) Nat.zero (fun _ _ => Nat.succ)
+def List.length.{u} (A : Type u) : List.{u} A → Nat := List.rec.{0, u} A (fun _ => Nat) Nat.zero (fun _ _ => Nat.succ)
 
-def List.length_append (A : Type) (xs ys : List A)
-    : List.length A (List.append A xs ys) = Nat.add (List.length A xs) (List.length A ys) :=
-  List.rec A
-    (fun zs => List.length A (List.append A zs ys) = Nat.add (List.length A zs) (List.length A ys))
-    (Eq.symm Nat (Nat.add Nat.zero (List.length A ys)) (List.length A ys) (Nat.zero_add (List.length A ys)))
+def List.length_append.{u} (A : Type u) (xs ys : List.{u} A)
+    : List.length.{u} A (List.append.{u} A xs ys) = Nat.add (List.length.{u} A xs) (List.length.{u} A ys) :=
+  List.rec.{0, u} A
+    (fun zs => List.length.{u} A (List.append.{u} A zs ys) = Nat.add (List.length.{u} A zs) (List.length.{u} A ys))
+    (Eq.symm.{0} Nat (Nat.add Nat.zero (List.length.{u} A ys)) (List.length.{u} A ys) (Nat.zero_add (List.length.{u} A ys)))
     (fun h t ih =>
-      Eq.trans Nat
-        (Nat.succ (List.length A (List.append A t ys)))
-        (Nat.succ (Nat.add (List.length A t) (List.length A ys)))
-        (Nat.add (Nat.succ (List.length A t)) (List.length A ys))
-        (congrArg Nat Nat Nat.succ (List.length A (List.append A t ys)) (Nat.add (List.length A t) (List.length A ys)) ih)
-        (Eq.symm Nat (Nat.add (Nat.succ (List.length A t)) (List.length A ys)) (Nat.succ (Nat.add (List.length A t) (List.length A ys))) (Nat.succ_add (List.length A t) (List.length A ys))))
+      Eq.trans.{0} Nat
+        (Nat.succ (List.length.{u} A (List.append.{u} A t ys)))
+        (Nat.succ (Nat.add (List.length.{u} A t) (List.length.{u} A ys)))
+        (Nat.add (Nat.succ (List.length.{u} A t)) (List.length.{u} A ys))
+        (congrArg.{0, 0} Nat Nat Nat.succ (List.length.{u} A (List.append.{u} A t ys)) (Nat.add (List.length.{u} A t) (List.length.{u} A ys)) ih)
+        (Eq.symm.{0} Nat (Nat.add (Nat.succ (List.length.{u} A t)) (List.length.{u} A ys)) (Nat.succ (Nat.add (List.length.{u} A t) (List.length.{u} A ys))) (Nat.succ_add (List.length.{u} A t) (List.length.{u} A ys))))
     xs
 
-def List.nil_append (A : Type) (xs : List A) : List.append A (List.nil A) xs = xs := Eq.refl (List A) xs
+def List.nil_append.{u} (A : Type u) (xs : List.{u} A) : List.append.{u} A (List.nil.{u} A) xs = xs := Eq.refl.{u} (List.{u} A) xs
 
-def List.append_nil (A : Type) (xs : List A) : List.append A xs (List.nil A) = xs :=
-  List.rec A
-    (fun ys => List.append A ys (List.nil A) = ys)
-    (Eq.refl (List A) (List.nil A))
-    (fun h t => congrArg (List A) (List A) (List.cons A h) (List.append A t (List.nil A)) t)
+def List.append_nil.{u} (A : Type u) (xs : List.{u} A) : List.append.{u} A xs (List.nil.{u} A) = xs :=
+  List.rec.{u, u} A
+    (fun ys => List.append.{u} A ys (List.nil.{u} A) = ys)
+    (Eq.refl.{u} (List.{u} A) (List.nil.{u} A))
+    (fun h t => congrArg.{u, u} (List.{u} A) (List.{u} A) (List.cons.{u} A h) (List.append.{u} A t (List.nil.{u} A)) t)
     xs
 
-def List.append_assoc (A : Type) (xs ys zs : List A) : List.append A (List.append A xs ys) zs = List.append A xs (List.append A ys zs) :=
-  List.rec A
-    (fun xs => List.append A (List.append A xs ys) zs = List.append A xs (List.append A ys zs))
-    (Eq.refl (List A) (List.append A ys zs))
+def List.append_assoc.{u} (A : Type u) (xs ys zs : List.{u} A) : List.append.{u} A (List.append.{u} A xs ys) zs = List.append.{u} A xs (List.append.{u} A ys zs) :=
+  List.rec.{u, u} A
+    (fun xs => List.append.{u} A (List.append.{u} A xs ys) zs = List.append.{u} A xs (List.append.{u} A ys zs))
+    (Eq.refl.{u} (List.{u} A) (List.append.{u} A ys zs))
     (fun h t =>
-      congrArg (List A) (List A) (List.cons A h)
-        (List.append A (List.append A t ys) zs)
-        (List.append A t (List.append A ys zs)))
+      congrArg.{u, u} (List.{u} A) (List.{u} A) (List.cons.{u} A h)
+        (List.append.{u} A (List.append.{u} A t ys) zs)
+        (List.append.{u} A t (List.append.{u} A ys zs)))
     xs
 
-inductive List.Mem (A : Type) (a : A) : List A → Type where
-  | head (as : List A) : List.Mem A a (List.cons A a as)
-  | tail (b : A) (as : List A) : List.Mem A a as → List.Mem A a (List.cons A b as)
+def List.map_append.{u, v} (A : Type u) (B : Type v) (f : A → B) (xs ys : List.{u} A)
+    : Eq.{v} (List.{v} B) (List.map.{u, v} A B f (List.append.{u} A xs ys)) (List.append.{v} B (List.map.{u, v} A B f xs) (List.map.{u, v} A B f ys)) :=
+  List.rec.{v, u} A
+    (fun zs => Eq.{v} (List.{v} B) (List.map.{u, v} A B f (List.append.{u} A zs ys)) (List.append.{v} B (List.map.{u, v} A B f zs) (List.map.{u, v} A B f ys)))
+    (Eq.refl.{v} (List.{v} B) (List.map.{u, v} A B f ys))
+    (fun (h : A) (t : List.{u} A) (ih : Eq.{v} (List.{v} B) (List.map.{u, v} A B f (List.append.{u} A t ys)) (List.append.{v} B (List.map.{u, v} A B f t) (List.map.{u, v} A B f ys))) =>
+      congrArg.{v, v} (List.{v} B) (List.{v} B) (List.cons.{v} B (f h))
+        (List.map.{u, v} A B f (List.append.{u} A t ys))
+        (List.append.{v} B (List.map.{u, v} A B f t) (List.map.{u, v} A B f ys))
+        ih)
+    xs
 
-inductive List.Perm (A : Type) : List A → List A → Type where
-  | nil : List.Perm A (List.nil A) (List.nil A)
-  | cons (x : A) (l1 l2 : List A) : List.Perm A l1 l2 → List.Perm A (List.cons A x l1) (List.cons A x l2)
-  | swap (x y : A) (l : List A) : List.Perm A (List.cons A y (List.cons A x l)) (List.cons A x (List.cons A y l))
-  | trans (l1 l2 l3 : List A) : List.Perm A l1 l2 → List.Perm A l2 l3 → List.Perm A l1 l3
+def List.flatten_append.{u} (A : Type u) (xss yss : List.{u} (List.{u} A))
+    : Eq.{u} (List.{u} A) (List.flatten.{u} A (List.append.{u} (List.{u} A) xss yss)) (List.append.{u} A (List.flatten.{u} A xss) (List.flatten.{u} A yss)) :=
+  List.rec.{u, u} (List.{u} A)
+    (fun zss => Eq.{u} (List.{u} A) (List.flatten.{u} A (List.append.{u} (List.{u} A) zss yss)) (List.append.{u} A (List.flatten.{u} A zss) (List.flatten.{u} A yss)))
+    (Eq.refl.{u} (List.{u} A) (List.flatten.{u} A yss))
+    (fun (xs : List.{u} A) (xss' : List.{u} (List.{u} A)) (ih : Eq.{u} (List.{u} A) (List.flatten.{u} A (List.append.{u} (List.{u} A) xss' yss)) (List.append.{u} A (List.flatten.{u} A xss') (List.flatten.{u} A yss))) =>
+      Eq.trans.{u} (List.{u} A)
+        (List.append.{u} A xs (List.flatten.{u} A (List.append.{u} (List.{u} A) xss' yss)))
+        (List.append.{u} A xs (List.append.{u} A (List.flatten.{u} A xss') (List.flatten.{u} A yss)))
+        (List.append.{u} A (List.append.{u} A xs (List.flatten.{u} A xss')) (List.flatten.{u} A yss))
+        (congrArg.{u, u} (List.{u} A) (List.{u} A) (List.append.{u} A xs)
+          (List.flatten.{u} A (List.append.{u} (List.{u} A) xss' yss))
+          (List.append.{u} A (List.flatten.{u} A xss') (List.flatten.{u} A yss))
+          ih)
+        (Eq.symm.{u} (List.{u} A)
+          (List.append.{u} A (List.append.{u} A xs (List.flatten.{u} A xss')) (List.flatten.{u} A yss))
+          (List.append.{u} A xs (List.append.{u} A (List.flatten.{u} A xss') (List.flatten.{u} A yss)))
+          (List.append_assoc.{u} A xs (List.flatten.{u} A xss') (List.flatten.{u} A yss))))
+    xss
 
-inductive List.Sublist (A : Type) : List A → List A → Type where
-  | slnil : List.Sublist A (List.nil A) (List.nil A)
-  | cons (a : A) (l1 l2 : List A) : List.Sublist A l1 l2 → List.Sublist A l1 (List.cons A a l2)
-  | cons2 (a : A) (l1 l2 : List A) : List.Sublist A l1 l2 → List.Sublist A (List.cons A a l1) (List.cons A a l2)
+def List.flatMap_assoc.{u} (A B C : Type u) (xs : List.{u} A) (f : A → List.{u} B) (g : B → List.{u} C)
+    : Eq.{u} (List.{u} C) (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f xs)) (List.flatMap.{u, u} A C (fun (x : A) => List.flatMap.{u, u} B C g (f x)) xs) :=
+  List.rec.{u, u} A
+    (fun zs => Eq.{u} (List.{u} C) (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f zs)) (List.flatMap.{u, u} A C (fun (x : A) => List.flatMap.{u, u} B C g (f x)) zs))
+    (Eq.refl.{u} (List.{u} C) (List.nil.{u} C))
+    (fun (h : A) (t : List.{u} A) (ih : Eq.{u} (List.{u} C) (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f t)) (List.flatMap.{u, u} A C (fun (x : A) => List.flatMap.{u, u} B C g (f x)) t)) =>
+      Eq.trans.{u} (List.{u} C)
+        (List.flatten.{u} C (List.map.{u, u} B (List.{u} C) g (List.append.{u} B (f h) (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t)))))
+        (List.append.{u} C (List.flatMap.{u, u} B C g (f h)) (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f t)))
+        (List.append.{u} C (List.flatMap.{u, u} B C g (f h)) (List.flatMap.{u, u} A C (fun (x : A) => List.flatMap.{u, u} B C g (f x)) t))
+        (Eq.trans.{u} (List.{u} C)
+          (List.flatten.{u} C (List.map.{u, u} B (List.{u} C) g (List.append.{u} B (f h) (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t)))))
+          (List.flatten.{u} C (List.append.{u} (List.{u} C) (List.map.{u, u} B (List.{u} C) g (f h)) (List.map.{u, u} B (List.{u} C) g (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t)))))
+          (List.append.{u} C (List.flatMap.{u, u} B C g (f h)) (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f t)))
+          (congrArg.{u, u} (List.{u} (List.{u} C)) (List.{u} C) (List.flatten.{u} C)
+            (List.map.{u, u} B (List.{u} C) g (List.append.{u} B (f h) (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t))))
+            (List.append.{u} (List.{u} C) (List.map.{u, u} B (List.{u} C) g (f h)) (List.map.{u, u} B (List.{u} C) g (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t))))
+            (List.map_append.{u, u} B (List.{u} C) g (f h) (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t))))
+          (List.flatten_append.{u} C (List.map.{u, u} B (List.{u} C) g (f h)) (List.map.{u, u} B (List.{u} C) g (List.flatten.{u} B (List.map.{u, u} A (List.{u} B) f t)))))
+        (congrArg.{u, u} (List.{u} C) (List.{u} C) (List.append.{u} C (List.flatMap.{u, u} B C g (f h)))
+          (List.flatMap.{u, u} B C g (List.flatMap.{u, u} A B f t))
+          (List.flatMap.{u, u} A C (fun (x : A) => List.flatMap.{u, u} B C g (f x)) t)
+          ih))
+    xs
 
-inductive Forall2 (A B : Type) (R : A → B → Type) : List A → List B → Type where
-  | nil : Forall2 A B R (List.nil A) (List.nil B)
-  | cons (a : A) (b : B) (as : List A) (bs : List B) : R a b → Forall2 A B R as bs → Forall2 A B R (List.cons A a as) (List.cons B b bs)
+inductive List.Mem.{u} (A : Type u) (a : A) : List.{u} A → Type u where
+  | head (as : List.{u} A) : List.Mem A a (List.cons.{u} A a as)
+  | tail (b : A) (as : List.{u} A) : List.Mem A a as → List.Mem A a (List.cons.{u} A b as)
 
-inductive SublistForall2 (A B : Type) (R : A → B → Type) : List A → List B → Type where
-  | nil (l : List B) : SublistForall2 A B R (List.nil A) l
-  | cons (a : A) (b : B) (l1 : List A) (l2 : List B) : R a b → SublistForall2 A B R l1 l2 → SublistForall2 A B R (List.cons A a l1) (List.cons B b l2)
-  | cons_right (b : B) (l1 : List A) (l2 : List B) : SublistForall2 A B R l1 l2 → SublistForall2 A B R l1 (List.cons B b l2)
+inductive List.Perm.{u} (A : Type u) : List.{u} A → List.{u} A → Type u where
+  | nil : List.Perm A (List.nil.{u} A) (List.nil.{u} A)
+  | cons (x : A) (l1 l2 : List.{u} A) : List.Perm A l1 l2 → List.Perm A (List.cons.{u} A x l1) (List.cons.{u} A x l2)
+  | swap (x y : A) (l : List.{u} A) : List.Perm A (List.cons.{u} A y (List.cons.{u} A x l)) (List.cons.{u} A x (List.cons.{u} A y l))
+  | trans (l1 l2 l3 : List.{u} A) : List.Perm A l1 l2 → List.Perm A l2 l3 → List.Perm A l1 l3
+
+inductive List.Sublist.{u} (A : Type u) : List.{u} A → List.{u} A → Type u where
+  | slnil : List.Sublist A (List.nil.{u} A) (List.nil.{u} A)
+  | cons (a : A) (l1 l2 : List.{u} A) : List.Sublist A l1 l2 → List.Sublist A l1 (List.cons.{u} A a l2)
+  | cons2 (a : A) (l1 l2 : List.{u} A) : List.Sublist A l1 l2 → List.Sublist A (List.cons.{u} A a l1) (List.cons.{u} A a l2)
+
+inductive Forall2.{u, v, w} (A : Type u) (B : Type v) (R : A → B → Type w) : List.{u} A → List.{v} B → Type (max u (max v w)) where
+  | nil : Forall2 A B R (List.nil.{u} A) (List.nil.{v} B)
+  | cons (a : A) (b : B) (as : List.{u} A) (bs : List.{v} B) : R a b → Forall2 A B R as bs → Forall2 A B R (List.cons.{u} A a as) (List.cons.{v} B b bs)
+
+inductive SublistForall2.{u, v, w} (A : Type u) (B : Type v) (R : A → B → Type w) : List.{u} A → List.{v} B → Type (max u (max v w)) where
+  | nil (l : List.{v} B) : SublistForall2 A B R (List.nil.{u} A) l
+  | cons (a : A) (b : B) (l1 : List.{u} A) (l2 : List.{v} B) : R a b → SublistForall2 A B R l1 l2 → SublistForall2 A B R (List.cons.{u} A a l1) (List.cons.{v} B b l2)
+  | cons_right (b : B) (l1 : List.{u} A) (l2 : List.{v} B) : SublistForall2 A B R l1 l2 → SublistForall2 A B R l1 (List.cons.{v} B b l2)
+
+def List.pure.{u} (A : Type u) (a : A) : List.{u} A := List.cons.{u} A a (List.nil.{u} A)
+
+def List.bind.{u} (A B : Type u) (xs : List.{u} A) (f : A → List.{u} B) : List.{u} B :=
+  List.flatMap.{u, u} A B f xs

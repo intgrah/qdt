@@ -1,0 +1,121 @@
+import Std.Eq
+import Std.Init
+import Std.Option
+import Std.List
+
+structure Functor.{u, v} (F : Type u → Type v) : Type (max (u + 1) v) where
+  (map (A B : Type u) : (A → B) → F A → F B)
+  (map_id (A : Type u) (x : F A) : Eq.{v} (F A) (map A A (id.{u} A) x) x)
+  (map_comp (A B C : Type u) (f : B → C) (g : A → B) (x : F A) : Eq.{v} (F C) (map A C (comp.{u, u, u} A B C f g) x) (map B C f (map A B g x)))
+
+structure Applicative.{u, v} (F : Type u → Type v) : Type (max (u + 1) v) where
+  (pure (A : Type u) : A → F A)
+  (ap (A B : Type u) : F (A → B) → F A → F B)
+  (ap_id (A : Type u) (v : F A) : Eq.{v} (F A) (ap A A (pure (A → A) (id.{u} A)) v) v)
+  (ap_homo (A B : Type u) (f : A → B) (x : A) : Eq.{v} (F B) (ap A B (pure (A → B) f) (pure A x)) (pure B (f x)))
+  (ap_interchange (A B : Type u) (u : F (A → B)) (y : A) : Eq.{v} (F B) (ap A B u (pure A y)) (ap (A → B) B (pure ((A → B) → B) (fun (f : A → B) => f y)) u))
+  (ap_comp (A B C : Type u) (u : F (B → C)) (v : F (A → B)) (w : F A) : Eq.{v} (F C) (ap A C (ap (A → B) (A → C) (ap (B → C) ((A → B) → A → C) (pure ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) u) v) w) (ap B C u (ap A B v w)))
+
+structure Monad.{u, v} (F : Type u → Type v) : Type (max (u + 1) v) where
+  (pure (A : Type u) : A → F A)
+  (bind (A B : Type u) : F A → (A → F B) → F B)
+  (bind_pure_left (A B : Type u) (a : A) (f : A → F B) : Eq.{v} (F B) (bind A B (pure A a) f) (f a))
+  (bind_pure_right (A : Type u) (m : F A) : Eq.{v} (F A) (bind A A m (pure A)) m)
+  (bind_assoc (A B C : Type u) (m : F A) (f : A → F B) (g : B → F C) : Eq.{v} (F C) (bind B C (bind A B m f) g) (bind A C m (fun (x : A) => bind B C (f x) g)))
+
+def Monad.map.{u, v} (F : Type u → Type v) (m : Monad.{u, v} F) (A B : Type u) (f : A → B) (x : F A) : F B :=
+  Monad.bind.{u, v} F m A B x (fun (a : A) => Monad.pure.{u, v} F m B (f a))
+
+def Monad.ap.{u, v} (F : Type u → Type v) (m : Monad.{u, v} F) (A B : Type u) (mf : F (A → B)) (ma : F A) : F B :=
+  Monad.bind.{u, v} F m (A → B) B mf (fun (f : A → B) => Monad.bind.{u, v} F m A B ma (fun (a : A) => Monad.pure.{u, v} F m B (f a)))
+
+def Applicative.map.{u, v} (F : Type u → Type v) (a : Applicative.{u, v} F) (A B : Type u) (f : A → B) (x : F A) : F B :=
+  Applicative.ap.{u, v} F a A B (Applicative.pure.{u, v} F a (A → B) f) x
+
+def Applicative.toFunctor.{u, v} (F : Type u → Type v) (a : Applicative.{u, v} F) : Functor.{u, v} F :=
+  Functor.mk.{u, v} F
+    (Applicative.map.{u, v} F a)
+    (fun (A : Type u) (x : F A) => Applicative.ap_id.{u, v} F a A x)
+    (fun (A B C : Type u) (f : B → C) (g : A → B) (x : F A) =>
+      Eq.symm.{v} (F C)
+        (Applicative.ap.{u, v} F a B C (Applicative.pure.{u, v} F a (B → C) f) (Applicative.ap.{u, v} F a A B (Applicative.pure.{u, v} F a (A → B) g) x))
+        (Applicative.ap.{u, v} F a A C (Applicative.pure.{u, v} F a (A → C) (comp.{u, u, u} A B C f g)) x)
+        (Eq.trans.{v} (F C)
+          (Applicative.ap.{u, v} F a B C (Applicative.pure.{u, v} F a (B → C) f) (Applicative.ap.{u, v} F a A B (Applicative.pure.{u, v} F a (A → B) g) x))
+          (Applicative.ap.{u, v} F a A C (Applicative.ap.{u, v} F a (A → B) (A → C) (Applicative.ap.{u, v} F a (B → C) ((A → B) → A → C) (Applicative.pure.{u, v} F a ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) (Applicative.pure.{u, v} F a (B → C) f)) (Applicative.pure.{u, v} F a (A → B) g)) x)
+          (Applicative.ap.{u, v} F a A C (Applicative.pure.{u, v} F a (A → C) (comp.{u, u, u} A B C f g)) x)
+          (Eq.symm.{v} (F C)
+            (Applicative.ap.{u, v} F a A C (Applicative.ap.{u, v} F a (A → B) (A → C) (Applicative.ap.{u, v} F a (B → C) ((A → B) → A → C) (Applicative.pure.{u, v} F a ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) (Applicative.pure.{u, v} F a (B → C) f)) (Applicative.pure.{u, v} F a (A → B) g)) x)
+            (Applicative.ap.{u, v} F a B C (Applicative.pure.{u, v} F a (B → C) f) (Applicative.ap.{u, v} F a A B (Applicative.pure.{u, v} F a (A → B) g) x))
+            (Applicative.ap_comp.{u, v} F a A B C (Applicative.pure.{u, v} F a (B → C) f) (Applicative.pure.{u, v} F a (A → B) g) x))
+          (congrArg.{v, v} (F (A → C)) (F C)
+            (fun (h : F (A → C)) => Applicative.ap.{u, v} F a A C h x)
+            (Applicative.ap.{u, v} F a (A → B) (A → C) (Applicative.ap.{u, v} F a (B → C) ((A → B) → A → C) (Applicative.pure.{u, v} F a ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) (Applicative.pure.{u, v} F a (B → C) f)) (Applicative.pure.{u, v} F a (A → B) g))
+            (Applicative.pure.{u, v} F a (A → C) (comp.{u, u, u} A B C f g))
+            (Eq.trans.{v} (F (A → C))
+              (Applicative.ap.{u, v} F a (A → B) (A → C) (Applicative.ap.{u, v} F a (B → C) ((A → B) → A → C) (Applicative.pure.{u, v} F a ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) (Applicative.pure.{u, v} F a (B → C) f)) (Applicative.pure.{u, v} F a (A → B) g))
+              (Applicative.ap.{u, v} F a (A → B) (A → C) (Applicative.pure.{u, v} F a ((A → B) → A → C) (comp.{u, u, u} A B C f)) (Applicative.pure.{u, v} F a (A → B) g))
+              (Applicative.pure.{u, v} F a (A → C) (comp.{u, u, u} A B C f g))
+              (congrArg.{v, v} (F ((A → B) → A → C)) (F (A → C))
+                (fun (h : F ((A → B) → A → C)) => Applicative.ap.{u, v} F a (A → B) (A → C) h (Applicative.pure.{u, v} F a (A → B) g))
+                (Applicative.ap.{u, v} F a (B → C) ((A → B) → A → C) (Applicative.pure.{u, v} F a ((B → C) → (A → B) → A → C) (comp.{u, u, u} A B C)) (Applicative.pure.{u, v} F a (B → C) f))
+                (Applicative.pure.{u, v} F a ((A → B) → A → C) (comp.{u, u, u} A B C f))
+                (Applicative.ap_homo.{u, v} F a (B → C) ((A → B) → A → C) (comp.{u, u, u} A B C) f))
+              (Applicative.ap_homo.{u, v} F a (A → B) (A → C) (comp.{u, u, u} A B C f) g)))))
+
+def Monad.toApplicative.{u, v} (F : Type u → Type v) (m : Monad.{u, v} F) : Applicative.{u, v} F :=
+  Applicative.mk.{u, v} F
+    (Monad.pure.{u, v} F m)
+    (Monad.ap.{u, v} F m)
+    (fun (A : Type u) (v : F A) =>
+      Eq.trans.{v} (F A)
+        (Monad.ap.{u, v} F m A A (Monad.pure.{u, v} F m (A → A) (id.{u} A)) v)
+        (Monad.bind.{u, v} F m A A v (fun (a : A) => Monad.pure.{u, v} F m A a))
+        v
+        (Monad.bind_pure_left.{u, v} F m (A → A) A (id.{u} A) (fun (f : A → A) => Monad.bind.{u, v} F m A A v (fun (a : A) => Monad.pure.{u, v} F m A (f a))))
+        (Monad.bind_pure_right.{u, v} F m A v))
+    (fun (A B : Type u) (f : A → B) (x : A) =>
+      Eq.trans.{v} (F B)
+        (Monad.ap.{u, v} F m A B (Monad.pure.{u, v} F m (A → B) f) (Monad.pure.{u, v} F m A x))
+        (Monad.bind.{u, v} F m A B (Monad.pure.{u, v} F m A x) (fun (a : A) => Monad.pure.{u, v} F m B (f a)))
+        (Monad.pure.{u, v} F m B (f x))
+        (Monad.bind_pure_left.{u, v} F m (A → B) B f (fun (g : A → B) => Monad.bind.{u, v} F m A B (Monad.pure.{u, v} F m A x) (fun (a : A) => Monad.pure.{u, v} F m B (g a))))
+        (Monad.bind_pure_left.{u, v} F m A B x (fun (a : A) => Monad.pure.{u, v} F m B (f a))))
+    (fun (A B : Type u) (u : F (A → B)) (y : A) => sorry)
+    (fun (A B C : Type u) (u : F (B → C)) (v : F (A → B)) (w : F A) => sorry)
+
+def Monad.toFunctor.{u, v} (F : Type u → Type v) (m : Monad.{u, v} F) : Functor.{u, v} F :=
+  Applicative.toFunctor.{u, v} F (Monad.toApplicative.{u, v} F m)
+
+def Option.pure.{u} (A : Type u) (a : A) : Option.{u} A := Option.some.{u} A a
+
+def Option.Monad.{u} : Monad.{u, u} Option.{u} :=
+  Monad.mk.{u, u} Option.{u}
+    Option.pure.{u}
+    Option.bind.{u, u}
+    (fun (A B : Type u) (a : A) (f : A → Option.{u} B) => Eq.refl.{u} (Option.{u} B) (f a))
+    (fun (A : Type u) (m : Option.{u} A) =>
+      Option.rec.{u, u} A (fun (o : Option.{u} A) => Eq.{u} (Option.{u} A) (Option.bind.{u, u} A A o (Option.pure.{u} A)) o)
+        (Eq.refl.{u} (Option.{u} A) (Option.none.{u} A))
+        (fun (a : A) => Eq.refl.{u} (Option.{u} A) (Option.some.{u} A a))
+        m)
+    (fun (A B C : Type u) (m :  Option.{u} A) (f : A → Option.{u} B) (g : B → Option.{u} C) =>
+      Option.rec.{u, u} A (fun (o : Option.{u} A) => Eq.{u} (Option.{u} C) (Option.bind.{u, u} B C (Option.bind.{u, u} A B o f) g) (Option.bind.{u, u} A C o (fun (x : A) => Option.bind.{u, u} B C (f x) g)))
+        (Eq.refl.{u} (Option.{u} C) (Option.none.{u} C))
+        (fun (a : A) => Eq.refl.{u} (Option.{u} C) (Option.bind.{u, u} B C (f a) g))
+        m)
+
+def List.Monad.{u} : Monad.{u, u} List.{u} :=
+  Monad.mk.{u, u} List.{u}
+    List.pure.{u}
+    List.bind.{u}
+    (fun (A B : Type u) (a : A) (f : A → List.{u} B) =>
+      List.append_nil.{u} B (f a))
+    (fun (A : Type u) (m : List.{u} A) =>
+      List.rec.{u, u} A (fun (xs : List.{u} A) => Eq.{u} (List.{u} A) (List.bind.{u} A A xs (List.pure.{u} A)) xs)
+        (Eq.refl.{u} (List.{u} A) (List.nil.{u} A))
+        (fun (h : A) (t : List.{u} A) (ih : Eq.{u} (List.{u} A) (List.bind.{u} A A t (List.pure.{u} A)) t) =>
+          congrArg.{u, u} (List.{u} A) (List.{u} A) (List.cons.{u} A h) (List.bind.{u} A A t (List.pure.{u} A)) t ih)
+        m)
+    (fun (A B C : Type u) (m : List.{u} A) (f : A → List.{u} B) (g : B → List.{u} C) =>
+      List.flatMap_assoc.{u} A B C m f g)

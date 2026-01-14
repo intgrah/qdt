@@ -5,6 +5,7 @@ namespace Qdt
 mutual
 
 partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
+  | .u' i₁, .u' i₂ => return i₁.normalise == i₂.normalise
   | .neutral n₁, .neutral n₂ => n₁.defEq n₂
   | .lam _ ⟨env₁, body₁⟩, .lam _ ⟨env₂, body₂⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
@@ -36,7 +37,7 @@ partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
   | _, _ => return false
 
 private partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : MetaM Bool := do
-  let ⟨.const ctorName, sp⟩ := ne
+  let ⟨.const ctorName _us, sp⟩ := ne
     | return false
   let some ctorInfo ← fetchConstructor ctorName
     | return false
@@ -59,15 +60,17 @@ partial def Neutral.defEq {n} : Neutral n → Neutral n → MetaM Bool
       match h₁, h₂ with
       | .var v₁, .var v₂ =>
           if v₁ == v₂ then sp₁.defEq sp₂ else return false
-      | .const n₁, .const n₂ =>
-          if n₁ == n₂ then
+      | .const n₁ us₁, .const n₂ us₂ =>
+          let us₁Norm := us₁.map Universe.normalise
+          let us₂Norm := us₂.map Universe.normalise
+          if n₁ == n₂ && us₁Norm == us₂Norm then
             sp₁.defEq sp₂
           else
-            let eta1 ← etaDefEq ⟨.const n₁, sp₁⟩ (.neutral ne₂)
-            let eta2 ← etaDefEq ⟨.const n₂, sp₂⟩ (.neutral ne₁)
+            let eta1 ← etaDefEq ⟨.const n₁ us₁, sp₁⟩ (.neutral ne₂)
+            let eta2 ← etaDefEq ⟨.const n₂ us₂, sp₂⟩ (.neutral ne₁)
             return eta1 || eta2
-      | .const _, .var _ => etaDefEq ne₁ (.neutral ne₂)
-      | .var _, .const _ => etaDefEq ne₂ (.neutral ne₁)
+      | .const _ _, .var _ => etaDefEq ne₁ (.neutral ne₂)
+      | .var _, .const _ _ => etaDefEq ne₂ (.neutral ne₁)
 
 partial def Spine.defEq {n} : Spine n → Spine n → MetaM Bool
   | .nil, .nil => return true
@@ -78,7 +81,7 @@ partial def Spine.defEq {n} : Spine n → Spine n → MetaM Bool
 end
 
 partial def VTy.defEq {n} : VTy n → VTy n → MetaM Bool
-  | .u, .u => return true
+  | .u i₁, .u i₂ => return i₁.normalise == i₂.normalise
   | .pi ⟨_, a₁⟩ ⟨env₁, b₁⟩, .pi ⟨_, a₂⟩ ⟨env₂, b₂⟩ => do
       if !(← a₁.defEq a₂) then return false
       let var : VTm (n + 1) := VTm.varAt n

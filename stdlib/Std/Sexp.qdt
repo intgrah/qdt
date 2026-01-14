@@ -1,5 +1,0 @@
-import Std.List
-
-inductive Sexp (A : Type) : Type where
-  | atom : A → Sexp A
-  | list : List (Sexp A) → Sexp A

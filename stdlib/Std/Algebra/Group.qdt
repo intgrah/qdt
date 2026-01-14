@@ -1,7 +1,7 @@
-import Std.Algebra.Monoid
 import Std.Eq
+import Std.Algebra.Monoid
 
-structure Group (A : Type) where
+structure Group.{u} (A : Type u) : Type u where
   (mul : A → A → A)
   (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
   (one : A)
@@ -10,48 +10,48 @@ structure Group (A : Type) where
   (inv : A → A)
   (inv_mul_cancel (x : A) : mul (inv x) x = one)
 
-def Group.inv_inv (A : Type) (inst : Group A) (x : A) : Group.inv A inst (Group.inv A inst x) = x :=
-  let mul : A → A → A := Group.mul A inst;
-  let mul_assoc := Group.mul_assoc A inst;
-  let one : A := Group.one A inst;
-  let mul_one := Group.mul_one A inst;
-  let one_mul := Group.one_mul A inst;
-  let inv : A → A := Group.inv A inst;
-  let inv_mul_cancel := Group.inv_mul_cancel A inst;
+def Group.inv_inv.{u} (A : Type u) (inst : Group.{u} A) (x : A) : Group.inv.{u} A inst (Group.inv.{u} A inst x) = x :=
+  let mul : A → A → A := Group.mul.{u} A inst;
+  let mul_assoc := Group.mul_assoc.{u} A inst;
+  let one : A := Group.one.{u} A inst;
+  let mul_one := Group.mul_one.{u} A inst;
+  let one_mul := Group.one_mul.{u} A inst;
+  let inv : A → A := Group.inv.{u} A inst;
+  let inv_mul_cancel := Group.inv_mul_cancel.{u} A inst;
 
   let x' := inv x;
   let x'' := inv x';
 
-  let h1 : x'' = mul x'' one := Eq.symm A (mul x'' one) x'' (mul_one x'');
-  let h2 : mul x'' one = mul x'' (mul x' x) := congrArg A A (fun z => mul x'' z) one (mul x' x) (Eq.symm A (mul x' x) one (inv_mul_cancel x));
-  let h3 : mul x'' (mul x' x) = mul (mul x'' x') x := Eq.symm A (mul (mul x'' x') x) (mul x'' (mul x' x)) (mul_assoc x'' x' x);
-  let h4 : mul (mul x'' x') x = mul one x := congrArg A A (fun z => mul z x) (mul x'' x') one (inv_mul_cancel x');
+  let h1 : x'' = mul x'' one := Eq.symm.{u} A (mul x'' one) x'' (mul_one x'');
+  let h2 : mul x'' one = mul x'' (mul x' x) := congrArg.{u, u} A A (fun z => mul x'' z) one (mul x' x) (Eq.symm.{u} A (mul x' x) one (inv_mul_cancel x));
+  let h3 : mul x'' (mul x' x) = mul (mul x'' x') x := Eq.symm.{u} A (mul (mul x'' x') x) (mul x'' (mul x' x)) (mul_assoc x'' x' x);
+  let h4 : mul (mul x'' x') x = mul one x := congrArg.{u, u} A A (fun z => mul z x) (mul x'' x') one (inv_mul_cancel x');
   let h5 : mul one x = x := one_mul x;
 
-  let h12 : x'' = mul x'' (mul x' x) := Eq.trans A x'' (mul x'' one) (mul x'' (mul x' x)) h1 h2;
-  let h123 : x'' = mul (mul x'' x') x := Eq.trans A x'' (mul x'' (mul x' x)) (mul (mul x'' x') x) h12 h3;
-  let h1234 : x'' = mul one x := Eq.trans A x'' (mul (mul x'' x') x) (mul one x) h123 h4;
-  Eq.trans A x'' (mul one x) x h1234 h5
+  let h12 : x'' = mul x'' (mul x' x) := Eq.trans.{u} A x'' (mul x'' one) (mul x'' (mul x' x)) h1 h2;
+  let h123 : x'' = mul (mul x'' x') x := Eq.trans.{u} A x'' (mul x'' (mul x' x)) (mul (mul x'' x') x) h12 h3;
+  let h1234 : x'' = mul one x := Eq.trans.{u} A x'' (mul (mul x'' x') x) (mul one x) h123 h4;
+  Eq.trans.{u} A x'' (mul one x) x h1234 h5
 
 
-def Group.mul_inv_cancel (A : Type) (inst : Group A) (x : A) : Group.mul A inst x (Group.inv A inst x) = Group.one A inst :=
-  let mul : A → A → A := Group.mul A inst;
-  let one : A := Group.one A inst;
-  let inv : A → A := Group.inv A inst;
-  let inv_mul_cancel := Group.inv_mul_cancel A inst;
+def Group.mul_inv_cancel.{u} (A : Type u) (inst : Group.{u} A) (x : A) : Group.mul.{u} A inst x (Group.inv.{u} A inst x) = Group.one.{u} A inst :=
+  let mul : A → A → A := Group.mul.{u} A inst;
+  let one : A := Group.one.{u} A inst;
+  let inv : A → A := Group.inv.{u} A inst;
+  let inv_mul_cancel := Group.inv_mul_cancel.{u} A inst;
   
   let x' := inv x;
   let x'' := inv x';
 
   let step_rewrite : mul x x' = mul x'' x' :=
-    congrArg A A (fun z => mul z x') x x'' (Eq.symm A x'' x (Group.inv_inv A inst x));
+    congrArg.{u, u} A A (fun z => mul z x') x x'' (Eq.symm.{u} A x'' x (Group.inv_inv.{u} A inst x));
 
-  Eq.trans A (mul x x') (mul x'' x') one step_rewrite (inv_mul_cancel x')
+  Eq.trans.{u} A (mul x x') (mul x'' x') one step_rewrite (inv_mul_cancel x')
 
-def Group.toMonoid (A : Type) (inst : Group A) : Monoid A :=
-  Monoid.mk A
-    (Group.mul A inst)
-    (Group.mul_assoc A inst)
-    (Group.one A inst)
-    (Group.mul_one A inst)
-    (Group.one_mul A inst)
+def Group.toMonoid.{u} (A : Type u) (inst : Group.{u} A) : Monoid.{u} A :=
+  Monoid.mk.{u} A
+    (Group.mul.{u} A inst)
+    (Group.mul_assoc.{u} A inst)
+    (Group.one.{u} A inst)
+    (Group.mul_one.{u} A inst)
+    (Group.one_mul.{u} A inst)

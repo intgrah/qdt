@@ -33,6 +33,83 @@ private def nameFromBinder : Syntax → MacroM Name
   | .node _ `Lean.Parser.Term.hole _ => return Name.anonymous
   | stx => Macro.throwErrorAt stx s!"expected binder name, got kind {stx.getKind}"
 
+partial def level : Syntax → MacroM Term
+  | .node _ `Lean.Parser.Level.paren #[_, l, _] => level l
+  | .node _ `null #[l] => level l
+  | .ident _ _ n _ => `(Universe.level $(quote n))
+  | .node _ `num #[.atom _ raw] =>
+      match raw.toNat? with
+      | some 0 => `(Universe.zero)
+      | some n => `($(mkNatLit n).repeat Universe.succ Universe.zero)
+      | none => Macro.throwError s!"invalid level literal {raw}"
+  | .node _ `Lean.Parser.Level.num #[.node _ `num #[.atom _ raw]] =>
+      match raw.toNat? with
+      | some 0 => `(Universe.zero)
+      | some n => `($(mkNatLit n).repeat Universe.succ Universe.zero)
+      | none => Macro.throwError s!"invalid level literal {raw}"
+  | .node _ `Lean.Parser.Level.ident #[.ident _ _ n _] =>
+      `(Universe.level $(quote n))
+  | .node _ `Lean.Parser.Level.succ #[_, l] => do
+      let l ← level l
+      `(Universe.succ $l)
+  | .node _ `Lean.Parser.Level.max #[_, .node _ `null #[l1, l2]] => do
+      let l1 ← level l1
+      let l2 ← level l2
+      `(Universe.max $l1 $l2)
+  | .node _ `Lean.Parser.Level.addLit #[l, _, .node _ `num #[.atom _ raw]] => do
+      let l ← level l
+      match raw.toNat? with
+      | some n => `($(mkNatLit n).repeat Universe.succ $l)
+      | none => Macro.throwError s!"invalid level offset {raw}"
+  | stx => Macro.throwErrorAt stx s!"unsupported level syntax, kind {stx.getKind}"
+
+private def levelListExpr (xs : List Term) : MacroM Term := do
+  let xsArray := xs.toArray
+  `([$[$xsArray],*])
+
+private def parseUnivParams : Syntax → MacroM (List Name)
+  | .node _ `null #[] => return []
+  | .node _ `null #[.node _ `Lean.Parser.Command.declId #[_, univDecl]] =>
+      parseUnivDeclPart univDecl
+  | .node _ `Lean.Parser.Command.univDeclSpec #[_, .node _ `null ids, _] =>
+      ids.toList.mapM fun
+        | .ident _ _ n _ => pure n
+        | stx => Macro.throwErrorAt stx s!"expected universe name"
+  | stx => Macro.throwErrorAt stx s!"unsupported univParams syntax, kind {stx.getKind}"
+where
+  parseUnivDeclPart : Syntax → MacroM (List Name)
+    | .node _ `null #[] => return []
+    | .node _ `null #[.node _ `Lean.Parser.Command.univDeclSpec #[_, .node _ `null ids, _]] =>
+        ids.toList.mapM fun
+          | .ident _ _ n _ => pure n
+          | stx => Macro.throwErrorAt stx s!"expected universe name"
+    | stx => Macro.throwErrorAt stx s!"unsupported univDecl syntax, kind {stx.getKind}"
+
+private def parseDeclIdUnivParams : Syntax → MacroM (List Name)
+  | .node _ `Lean.Parser.Command.declId #[_, univDecl] =>
+      match univDecl with
+      | .node _ `null #[] => return []
+      | .node _ `null #[.atom _ ".{", .node _ `null ids, .atom _ "}"] =>
+          ids.toList.filterMapM fun
+            | .ident _ _ n _ => pure (some n)
+            | .atom _ "," => pure none
+            | stx => Macro.throwErrorAt stx s!"expected universe name, got {stx.getKind}"
+      | .node _ `null #[.node _ `Lean.Parser.Command.univDeclSpec #[_, .node _ `null ids, _]] =>
+          ids.toList.filterMapM fun
+            | .ident _ _ n _ => pure (some n)
+            | .atom _ "," => pure none
+            | stx => Macro.throwErrorAt stx s!"expected universe name, got {stx.getKind}"
+      | stx => Macro.throwErrorAt stx s!"unsupported univDecl syntax, kind {stx.getKind}"
+  | stx => Macro.throwErrorAt stx s!"expected declId, got kind {stx.getKind}"
+
+private def parseExplicitUniv : Syntax → MacroM (List Term)
+  | .node _ `null #[] => return []
+  | .node _ `null #[.node _ `Lean.Parser.Term.explicitUniv #[_, .node _ `null levels, _]] =>
+      levels.toList.filterMapM fun
+        | .atom _ "," => pure none
+        | l => some <$> level l
+  | stx => Macro.throwErrorAt stx s!"unsupported explicitUniv syntax, kind {stx.getKind}"
+
 private def typedBinderGroupExpr (groupSrc : Term) (names : List Name) (ty : Term) :
     MacroM Term :=
   `(Cst.TypedBinderGroup.mk $groupSrc $(quote names) $ty)
@@ -51,7 +128,13 @@ partial def term : Syntax → MacroM Term
       | .node _ `Lean.Parser.Term.paren #[_, t, _] =>
           term t
       | .ident _ _ id _ =>
-          `(Cst.Term.ident $src $(quote id))
+          `(Cst.Term.ident $src $(quote id) [])
+      | .node _ `Lean.Parser.Term.explicitUniv #[.ident _ _ id _, _, .node _ `null levels, _] => do
+          let levels ← levels.toList.filterMapM fun
+            | .atom _ "," => pure none
+            | l => some <$> level l
+          let levels ← levelListExpr levels
+          `(Cst.Term.ident $src $(quote id) $levels)
       | .node _ `num #[.atom _ raw] =>
           match raw.toNat? with
           | some n =>
@@ -141,9 +224,10 @@ partial def term : Syntax → MacroM Term
           `(Cst.Term.ann $src $e $ty)
 
       | .node _ `Lean.Parser.Term.type #[_, .node _ `null #[]] =>
-          `(Cst.Term.u $src)
-      | .node _ `Lean.Parser.Term.type #[_, .node _ `null _] =>
-          Macro.throwErrorAt stx "QDT only supports `Type` with no universe levels"
+          `(Cst.Term.u $src Universe.zero)
+      | .node _ `Lean.Parser.Term.type #[_, .node _ `null #[l]] => do
+          let l ← level l
+          `(Cst.Term.u $src $l)
 
       | .node _ `Lean.Parser.Term.sorry _ =>
           `(Cst.Term.sorry $src)
@@ -269,6 +353,7 @@ partial def cmd : Syntax → MacroM Term
 
       | .node _ `Lean.Parser.Command.definition #[_, declId, optDeclSig, declVal, _] => do
           let name ← declIdName declId
+          let univParams ← parseDeclIdUnivParams declId
           let (params, tyOpt?) ← optDeclSigInfo term optDeclSig
           let params ← termListExpr params
           let tyOpt ← optTermExpr tyOpt?
@@ -277,7 +362,7 @@ partial def cmd : Syntax → MacroM Term
             | .node _ `Lean.Parser.Command.declValSimple #[_, rhs, _, _] => pure rhs
             | _ => Macro.throwErrorAt declVal s!"unsupported def body, kind {declVal.getKind}"
           let body ← term rhs
-          `(Cst.Command.Cmd.definition { src := $src, name := $(quote name), params := $params, tyOpt := $tyOpt, body := $body })
+          `(Cst.Command.Cmd.definition { src := $src, name := $(quote name), univParams := $(quote univParams), params := $params, tyOpt := $tyOpt, body := $body })
 
       | .node _ `Lean.Parser.Command.example #[_, optDeclSig, declVal] => do
           let (params, tyOpt?) ← optDeclSigInfo term optDeclSig
@@ -288,16 +373,18 @@ partial def cmd : Syntax → MacroM Term
             | .node _ `Lean.Parser.Command.declValSimple #[_, rhs, _, _] => pure rhs
             | _ => Macro.throwErrorAt declVal s!"unsupported example body, kind {declVal.getKind}"
           let body ← term rhs
-          `(Cst.Command.Cmd.example { src := $src, params := $params, tyOpt := $tyOpt, body := $body })
+          `(Cst.Command.Cmd.example { src := $src, univParams := [], params := $params, tyOpt := $tyOpt, body := $body })
 
       | .node _ `Lean.Parser.Command.axiom #[_, declId, declSig] => do
           let name ← declIdName declId
+          let univParams ← parseDeclIdUnivParams declId
           let (params, ty) ← declSigInfo term declSig
           let params ← termListExpr params
-          `(Cst.Command.Cmd.axiom { src := $src, name := $(quote name), params := $params, ty := $ty })
+          `(Cst.Command.Cmd.axiom { src := $src, name := $(quote name), univParams := $(quote univParams), params := $params, ty := $ty })
 
       | .node _ `Lean.Parser.Command.inductive #[_, declId, optDeclSig, _, .node _ `null ctors, _, _] => do
           let name ← declIdName declId
+          let univParams ← parseDeclIdUnivParams declId
           let (params, tyOpt?) ← optDeclSigInfo term optDeclSig
           let params ← termListExpr params
           let tyOpt ← optTermExpr tyOpt?
@@ -312,10 +399,11 @@ partial def cmd : Syntax → MacroM Term
             | _ =>
                 Macro.throwErrorAt ctorStx s!"unsupported constructor syntax, kind {ctorStx.getKind}"
           let ctors ← termListExpr ctors.toList
-          `(Cst.Command.Cmd.inductive { src := $src, name := $(quote name), params := $params, tyOpt := $tyOpt, ctors := $ctors })
+          `(Cst.Command.Cmd.inductive { src := $src, name := $(quote name), univParams := $(quote univParams), params := $params, tyOpt := $tyOpt, ctors := $ctors })
 
       | .node _ `Lean.Parser.Command.structure #[_, declId, optDeclSig, _, whereFields, _] => do
           let name ← declIdName declId
+          let univParams ← parseDeclIdUnivParams declId
           let (params, tyOpt?) ← optDeclSigInfo term optDeclSig
           let params ← termListExpr params
           let tyOpt ← optTermExpr tyOpt?
@@ -344,27 +432,9 @@ partial def cmd : Syntax → MacroM Term
                 termListExpr fieldsArray.toList
             | _ =>
                 Macro.throwErrorAt fieldsStx s!"unsupported structure fields, kind {fieldsStx.getKind}"
-          `(Cst.Command.Cmd.structure { src := $src, name := $(quote name), params := $params, tyOpt := $tyOpt, fields := $fields })
+          `(Cst.Command.Cmd.structure { src := $src, name := $(quote name), univParams := $(quote univParams), params := $params, tyOpt := $tyOpt, fields := $fields })
 
       | _ =>
           Macro.throwErrorAt stx s!"unsupported command syntax, kind {stx.getKind}"
-
-syntax "qdt_cst!" term : term
-
-macro_rules
-  | `(qdt_cst! $t:term) => term t.raw
-
-syntax "qdt_cmd!" "(" command ")" : term
-
-macro_rules
-  | `(qdt_cmd! ($c:command)) => cmd c.raw
-
-syntax "qdt_prog!" "(" command* ")" : term
-
-macro_rules
-  | `(qdt_prog! ($[$cs:command]*)) => do
-      let cmdTerms ← cs.mapM fun c => cmd c.raw
-      let prog ← termListExpr cmdTerms.toList
-      `(($prog : Qdt.Frontend.Cst.Program))
 
 end Qdt.Frontend.Macro

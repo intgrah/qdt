@@ -1,15 +1,15 @@
 import Std.Eq
 
-inductive Sum (A B : Type) where
+inductive Sum.{u, v} (A : Type u) (B : Type v) : Type (max u v) where
   | inl (a : A)
   | inr (b : B)
 
-def Sum.elim (A B C : Type) (f : A → C) (g : B → C) (s : Sum A B) : C :=
-  Sum.rec A B (fun _ => C) (fun a => f a) (fun b => g b) s
+def Sum.elim.{u, v, w} (A : Type u) (B : Type v) (C : Type w) (f : A → C) (g : B → C) (s : Sum.{u, v} A B) : C :=
+  Sum.rec.{w, u, v} A B (fun _ => C) (fun a => f a) (fun b => g b) s
 
-def Sum.eta (A B : Type) (s : Sum A B) : Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) s = s :=
-  Sum.rec A B
-    (fun x => Sum.elim A B (Sum A B) (Sum.inl A B) (Sum.inr A B) x = x)
-    (fun a => Eq.refl (Sum A B) (Sum.inl A B a))
-    (fun b => Eq.refl (Sum A B) (Sum.inr A B b))
-    s
+def Sum.eta.{u, v} (A : Type u) (B : Type v) (s : Sum.{u, v} A B) : Eq.{max u v} (Sum.{u, v} A B) (Sum.elim.{u, v, max u v} A B (Sum.{u, v} A B) (Sum.inl.{u, v} A B) (Sum.inr.{u, v} A B) s) s :=
+  Sum.rec.{max u v, u, v} A B
+    (fun x => Eq.{max u v} (Sum.{u, v} A B) (Sum.elim.{u, v, max u v} A B (Sum.{u, v} A B) (Sum.inl.{u, v} A B) (Sum.inr.{u, v} A B) x) x)
+    (fun a => Eq.refl.{max u v} (Sum.{u, v} A B) (Sum.inl.{u, v} A B a))
+    (fun b => Eq.refl.{max u v} (Sum.{u, v} A B) (Sum.inr.{u, v} A B b))
+  s

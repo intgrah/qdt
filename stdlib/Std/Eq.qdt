@@ -1,23 +1,23 @@
-inductive Eq (A : Type) (a : A) : A → Type where
+inductive Eq.{u} (A : Type u) (a : A) : A → Type u where
   | refl : Eq A a a
 
 -- UIP
-axiom Eq.ext (A : Type) (x y : A) (p q : x = y) : p = q
+axiom Eq.ext.{u} (A : Type u) (x y : A) (p q : x = y) : p = q
 
-def Eq.ndrec (A : Type) (a : A) (motive : A → Type) (h : motive a) (b : A) (p : a = b) : motive b :=
-  Eq.rec A a (fun x _ => motive x) h b p
+def Eq.ndrec.{u_1, u} (A : Type u) (a : A) (motive : A → Type u_1) (h : motive a) (b : A) (p : a = b) : motive b :=
+  Eq.rec.{u_1, u} A a (fun x _ => motive x) h b p
 
-def Eq.subst (A : Type) (P : A → Type) (a b : A) (p : a = b) (h : P a) : P b :=
-  Eq.ndrec A a P h b p
+def Eq.subst.{u_1, u} (A : Type u) (P : A → Type u_1) (a b : A) (p : a = b) (h : P a) : P b :=
+  Eq.ndrec.{u_1, u} A a P h b p
 
-def Eq.symm (A : Type) (a b : A) (p : a = b) : b = a :=
-  Eq.subst A (fun y => y = a) a b p (Eq.refl A a)
+def Eq.symm.{u} (A : Type u) (a b : A) (p : Eq.{u} A a b) : Eq.{u} A b a :=
+  Eq.subst.{u, u} A (fun y => Eq.{u} A y a) a b p (Eq.refl.{u} A a)
 
-def Eq.trans (A : Type) (a b c : A) (p : a = b) (q : b = c) : a = c :=
-  Eq.subst A (fun z => a = z) b c q p
+def Eq.trans.{u} (A : Type u) (a b c : A) (p : Eq.{u} A a b) (q : Eq.{u} A b c) : Eq.{u} A a c :=
+  Eq.subst.{u, u} A (fun z => Eq.{u} A a z) b c q p
 
-def congrArg (A B : Type) (f : A → B) (x y : A) (p : x = y) : f x = f y :=
-  Eq.subst A (fun z => f x = f z) x y p (Eq.refl B (f x))
+def congrArg.{u, v} (A : Type u) (B : Type v) (f : A → B) (x y : A) (p : Eq.{u} A x y) : Eq.{v} B (f x) (f y) :=
+  Eq.subst.{v, u} A (fun z => Eq.{v} B (f x) (f z)) x y p (Eq.refl.{v} B (f x))
 
-def congrFun (A B : Type) (f g : A → B) (p : f = g) (x : A) : f x = g x :=
-  Eq.subst (A → B) (fun h => f x = h x) f g p (Eq.refl B (f x))
+def congrFun.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (p : Eq.{max u v} ((x : A) → B x) f g) (x : A) : Eq.{v} (B x) (f x) (g x) :=
+  Eq.subst.{v, max u v} ((x : A) → B x) (fun h => Eq.{v} (B x) (f x) (h x)) f g p (Eq.refl.{v} (B x) (f x))

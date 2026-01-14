@@ -24,6 +24,13 @@ def TermContext.define {n} (name : Name) (ty : VTy n) (value : VTm n) (tctx : Te
   ctx := tctx.ctx.snoc ⟨name, ty⟩
   env := tctx.env.weaken.cons value.weaken
 
+def Tele.lookup {n} : Idx n → Tele VParam 0 n → VTy n
+  | ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.weaken
+  | ⟨i + 1, _⟩, .snoc ctx' _ => (lookup ⟨i, by omega⟩ ctx').weaken
+
+def TermContext.lookup {n} (i : Idx n) (tctx : TermContext n) : VTy n :=
+  tctx.ctx.lookup i
+
 def TermContext.findName? {n} (name : Name) (tctx : TermContext n) : Option (Idx n × VTy n) :=
   let rec go {n} : Tele VParam 0 n → Option (Idx n × VTy n)
     | .nil => none

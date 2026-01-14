@@ -1,9 +1,9 @@
 import Std.Init
 
-inductive Option (A : Type) where
+inductive Option.{u} (A : Type u) : Type u where
   | none : Option A
   | some : A → Option A
 
-def Option.map (A B : Type) (f : A → B) : Option A → Option B := Option.rec A (fun _ => Option B) (Option.none B) (fun a => Option.some B (f a))
-def Option.bind (A B : Type) (o : Option A) (f : A → Option B) : Option B := Option.rec A (fun _ => Option B) (Option.none B) f o
-def Option.getD (A : Type) (o : Option A) (dflt : A) : A := Option.rec A (fun _ => A) dflt (id A) o
+def Option.map.{u, v} (A : Type u) (B : Type v) (f : A → B) : Option.{u} A → Option.{v} B := Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) (fun a => Option.some.{v} B (f a))
+def Option.bind.{u, v} (A : Type u) (B : Type v) (o : Option.{u} A) (f : A → Option.{v} B) : Option.{v} B := Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) f o
+def Option.getD.{u} (A : Type u) (o : Option.{u} A) (dflt : A) : A := Option.rec.{u, u} A (fun _ => A) dflt (id.{u} A) o

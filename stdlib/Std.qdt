@@ -1,14 +1,15 @@
 import Std.Algebra
 import Std.Bool
 import Std.Category
-import Std.Eq
 import Std.Empty
+import Std.Eq
 import Std.False
 import Std.Fin
+import Std.HEq
 import Std.Init
 import Std.Iso
-import Std.HEq
 import Std.List
+import Std.Monad
 import Std.Nat
 import Std.Option
 import Std.Prod

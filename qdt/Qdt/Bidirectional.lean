@@ -7,12 +7,31 @@ namespace Qdt
 
 open Lean (Name)
 
-private def inferIdent {n} (src : Frontend.Src) (name : Name) : TermM n (Tm n × VTy n) := do
+private def checkUniverseLevel (src : Frontend.Src) (level : Universe) : MetaM Unit := do
+  let metaState ← getThe MetaState
+  let univParams := metaState.univParams
+  for name in level.levelNames do
+    if !univParams.contains name then
+      throw (.unboundUniverseVariable src name)
+
+private def instantiateLevels {n} (src : Frontend.Src) (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
+    TermM n (Ty 0) := do
+  if univs.length != declParams.length then
+    throw (.universeArgCountMismatch src name declParams.length univs.length)
+  return ty.substLevels (declParams.zip univs)
+
+private def inferIdent {n} (src : Frontend.Src) (name : Name) (univs : List Universe) :
+    TermM n (Tm n × VTy n) := do
   let ctx ← read
   if let some (i, ty) := ctx.findName? name then
     return (.var i, ty)
-  else if let some ty := (← fetchTy name) then
-    return (.const name, ← ty.eval .nil)
+  else if let some info := (← fetchConstantInfo name) then
+    for univ in univs do
+      checkUniverseLevel src univ
+    let ty ←
+      if univs.isEmpty && info.univParams.isEmpty then pure info.ty
+      else instantiateLevels src name info.univParams info.ty univs
+    return (.const name univs, ← ty.eval .nil)
   else throw (.unboundVariable src name)
 
 mutual
@@ -43,37 +62,53 @@ private partial def inferAnn {n} (e ann : Frontend.Ast.Term) : TermM n (Tm n × 
   let annVal ← ann.eval ctx.env
   return (← checkTm annVal e, annVal)
 
-private partial def checkEq {n} (a b : Frontend.Ast.Term) : TermM n (Tm n) := do
+private partial def checkEq {n} (a b : Frontend.Ast.Term) : TermM n (Tm n × Universe) := do
   let (aTm, ty) ← inferTm a
   let bTm ← checkTm ty b
   let tyTm ← ty.reify
-  return Tm.const `Eq |>.apps [tyTm, aTm, bTm]
+  let ctx ← read
+  let level ← ty.inferLevel ctx.ctx
+  return (Tm.const `Eq [level] |>.apps [tyTm, aTm, bTm], level)
 
-private partial def checkPi {n} : Frontend.Ast.TypedBinder → Frontend.Ast.Term → TermM n (Tm n)
+private partial def inferPi {n} : Frontend.Ast.TypedBinder → Frontend.Ast.Term → TermM n (Tm n × Universe)
   | ⟨_src, x, dom⟩, cod => do
-      let domTm ← checkTm .u dom
+      let (domTm, domTy) ← inferTm dom
+      let .u domLevel := domTy
+        | throw (.expectedType (dom.src) (← read).names (← domTy.quote))
       let ctx ← read
       let domVal ← (Ty.el domTm).eval ctx.env
       let ctx := ctx.bind x domVal
-      let codTm ← checkTm .u cod ctx
-      return .pi' x domTm codTm
+      let (codTm, codTy) ← inferTm cod ctx
+      let .u codLevel := codTy
+        | throw (.expectedType (cod.src) (← read).names (← codTy.quote))
+      return (.pi' x domTm codTm, .max domLevel codLevel)
 
-partial def checkTy {n} : Frontend.Ast.Term → TermM n (Ty n)
+partial def checkTyWithLevel {n} : Frontend.Ast.Term → TermM n (Ty n × Universe)
   | .missing src => throw (.typecheckMissing src)
-  | .u _src => return .u
+  | .u src level => do
+      checkUniverseLevel src level
+      return (.u level, level.succ)
   | .pi _src ⟨_annSrc, x, dom⟩ cod => do
-      let dom ← checkTy dom
+      let (dom, domLevel) ← checkTyWithLevel dom
       let ctx ← read
       let domVal ← dom.eval ctx.env
       let ctx' := ctx.bind x domVal
-      let cod ← checkTy cod ctx'
-      return .pi ⟨x, dom⟩ cod
-  | .eq _src a b => return .el (← checkEq a b)
-  | t => return .el (← checkTm .u t)
+      let (cod, codLevel) ← checkTyWithLevel cod ctx'
+      return (.pi ⟨x, dom⟩ cod, .max domLevel codLevel)
+  | .eq _src a b => do
+      let (tm, level) ← checkEq a b
+      return (.el tm, level)
+  | t => do
+      let (tm, ty) ← inferTm t
+      let .u level := ty | throw (.expectedType (t.src) (← read).names (← ty.quote))
+      return (.el tm, level)
+
+partial def checkTy {n} (term : Frontend.Ast.Term) : TermM n (Ty n) :=
+  return (← checkTyWithLevel term).fst
 
 partial def inferTm {n} : Frontend.Ast.Term → TermM n (Tm n × VTy n)
   | .missing src => throw (.typecheckMissing src)
-  | .ident src x => inferIdent src x
+  | .ident src x univs => inferIdent src x univs
   | .app src f a => do
       let (fTm, fTy) ← inferTm f
       let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy
@@ -84,7 +119,7 @@ partial def inferTm {n} : Frontend.Ast.Term → TermM n (Tm n × VTy n)
       let aVal ← aTm.eval ctx.env
       let bTyVal ← bTy.eval (env.cons aVal)
       return (fTm.app aTm, bTyVal)
-  | .u src => throw (.higherUniverse src)
+  | .u _src level => return (.u' level, .u level.succ)
   | .lam src binder body => do
       let .typed ⟨_src, x, ty⟩ := binder
         | throw (.inferUnannotatedLambda src)
@@ -95,16 +130,22 @@ partial def inferTm {n} : Frontend.Ast.Term → TermM n (Tm n × VTy n)
       let (bodyTm, bodyTy) ← inferTm body ctx'
       let clos := ⟨ctx.env, ← bodyTy.quote⟩
       return (.lam ⟨x, aTy⟩ bodyTm, .pi ⟨x, aTyVal⟩ clos)
-  | .pi _src binder cod => return (← checkPi binder cod, .u)
-  | .eq _src a b => return (← checkEq a b, .u)
+  | .pi _src binder cod => do
+      let (tm, level) ← inferPi binder cod
+      return (tm, .u level)
+  | .eq _src a b => do
+      let (tm, level) ← checkEq a b
+      return (tm, .u level)
   | .pair _src a b => do
       let (aTm, aTy) ← inferTm a
       let (bTm, bTy) ← inferTm b
       let aCode ← aTy.reify
       let bCode ← bTy.reify
-      let prodCode := Tm.const `Prod |>.apps [aCode, bCode]
-      let pairTm := Tm.const `Prod.mk |>.apps [aCode, bCode, aTm, bTm]
       let ctx ← read
+      let aLevel ← aTy.inferLevel ctx.ctx
+      let bLevel ← bTy.inferLevel ctx.ctx
+      let prodCode := Tm.const `Prod [aLevel, bLevel] |>.apps [aCode, bCode]
+      let pairTm := Tm.const `Prod.mk [aLevel, bLevel] |>.apps [aCode, bCode, aTm, bTm]
       let pairTy ← (Ty.el prodCode).eval ctx.env
       return (pairTm, pairTy)
   | .letE _src name tyOpt rhs body => do
@@ -119,8 +160,8 @@ partial def inferTm {n} : Frontend.Ast.Term → TermM n (Tm n × VTy n)
 
 partial def checkTm {n} (expected : VTy n) : Frontend.Ast.Term → TermM n (Tm n)
   | .missing src => throw (.typecheckMissing src)
-  | .ident _src name => do
-      let (tm, ty) ← inferIdent _src name
+  | .ident _src name univs => do
+      let (tm, ty) ← inferIdent _src name univs
       if !(← ty.defEq expected) then
         let ctx ← read
         throw (.typeMismatch _src ctx.names (← expected.quote) (← ty.quote))
@@ -147,11 +188,15 @@ partial def checkTm {n} (expected : VTy n) : Frontend.Ast.Term → TermM n (Tm n
           let body ← checkTm b body ctx'
           return .lam ⟨x, ← a.quote⟩ body
   | .pair src a b => do
-      let .el (Head.apps (.const `Prod) [aCodeVal, bCodeVal]) := expected
-        | let aCode ← (← inferTm a).snd.reify
-          let bCode ← (← inferTm b).snd.reify
-          let prodCode := Ty.el (Tm.const `Prod |>.apps [aCode, bCode])
+      let .el (Head.apps (.const `Prod us) [aCodeVal, bCodeVal]) := expected
+        | let (_, aTy) ← inferTm a
+          let (_, bTy) ← inferTm b
+          let aCode ← aTy.reify
+          let bCode ← bTy.reify
           let ctx ← read
+          let aLevel ← aTy.inferLevel ctx.ctx
+          let bLevel ← bTy.inferLevel ctx.ctx
+          let prodCode := Ty.el (Tm.const `Prod [aLevel, bLevel] |>.apps [aCode, bCode])
           throw (.typeMismatch src ctx.names (← expected.quote) (← (← prodCode.eval ctx.env).quote))
       let fstTy ← doEl aCodeVal
       let sndTy ← doEl bCodeVal
@@ -159,7 +204,7 @@ partial def checkTm {n} (expected : VTy n) : Frontend.Ast.Term → TermM n (Tm n
       let bTm ← checkTm sndTy b
       let aCodeTm ← aCodeVal.quote
       let bCodeTm ← bCodeVal.quote
-      return Tm.const `Prod.mk |>.apps [aCodeTm, bCodeTm, aTm, bTm]
+      return Tm.const `Prod.mk us |>.apps [aCodeTm, bCodeTm, aTm, bTm]
   | .letE _src name tyOpt rhs body => do
       let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs name tyOpt rhs
       let body ← checkTm expected.weaken body ctx'
@@ -172,26 +217,34 @@ partial def checkTm {n} (expected : VTy n) : Frontend.Ast.Term → TermM n (Tm n
       let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote⟩
       let ty ← expected.quote
       let ty := Ty.pis locals ty
-      Global.addEntry sorryName (.axiom ⟨ty⟩)
-      let args := List.finRange n |>.map (fun i => .var i.rev)
-      return Tm.const sorryName |>.apps args
+      let univParams := metaState.univParams
+      Global.addEntry sorryName (.axiom { univParams, ty })
+      let args := List.finRange n |>.map (fun i => Tm.var i.rev)
+      let sorryUnivs := univParams.map Universe.level
+      return Tm.const sorryName sorryUnivs |>.apps args
   | .pi src binder cod => do
-      if !(← expected.defEq .u) then
+      let (tm, level) ← inferPi binder cod
+      if !(← expected.defEq (.u level)) then
         let ctx ← read
-        throw (.typeMismatch src ctx.names (← expected.quote) .u)
-      checkPi binder cod
+        throw (.typeMismatch src ctx.names (← expected.quote) (.u level))
+      return tm
   | .eq _src a b => do
-      if !(← expected.defEq .u) then
+      let (tm, level) ← checkEq a b
+      if !(← expected.defEq (.u level)) then
         let ctx ← read
-        throw (.typeMismatch _src ctx.names (← expected.quote) .u)
-      checkEq a b
+        throw (.typeMismatch _src ctx.names (← expected.quote) (.u level))
+      return tm
   | .ann _src e ty => do
       let (tm, ty) ← inferAnn e ty
       if !(← expected.defEq ty) then
         let ctx ← read
         throw (.typeMismatch _src ctx.names (← expected.quote) (← ty.quote))
       return tm
-  | .u src => throw (.higherUniverse src)
+  | .u src level => do
+      if !(← expected.defEq (.u level.succ)) then
+        let ctx ← read
+        throw (.typeMismatch src ctx.names (← expected.quote) (.u level.succ))
+      return .u' level
   | .app src f a => do
       let (fTm, fTy) ← inferTm f
       let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy

@@ -9,26 +9,26 @@ namespace Qdt
 
 open Lean (Name)
 
-structure DefinitionInfo where
+structure ConstantInfo where
+  univParams : List Name
   ty : Ty 0
+deriving Repr, Hashable
+
+structure DefinitionInfo extends ConstantInfo where
   tm : Tm 0
 deriving Repr, Hashable
 
-structure OpaqueInfo where
-  ty : Ty 0
+structure OpaqueInfo extends ConstantInfo where
 deriving Repr, Hashable
 
-structure AxiomInfo where
-  ty : Ty 0
+structure AxiomInfo extends ConstantInfo where
 deriving Repr, Hashable
 
-structure ConstructorInfo where
-  ty : Ty 0
+structure ConstructorInfo extends ConstantInfo where
   indName : Name
 deriving Repr, Hashable
 
-structure InductiveInfo where
-  ty : Ty 0
+structure InductiveInfo extends ConstantInfo where
   numParams : Nat
   numIndices : Nat
   numMinors : Nat
@@ -41,8 +41,7 @@ structure RecursorRule (numParamsMotivesMinors : Nat) where
   rhs : Tm (numParamsMotivesMinors + numFields)
 deriving Repr, Hashable
 
-structure RecursorInfo where
-  ty : Ty 0
+structure RecursorInfo extends ConstantInfo where
   recName : Name
   numParams : Nat
   numMotives : Nat
@@ -79,6 +78,16 @@ def findConstructor (name : Name) (g : Global) : Option ConstructorInfo := do
 def findInductive (name : Name) (g : Global) : Option InductiveInfo := do
   let .inductive info ← g[name]? | none
   return info
+
+def findConstantInfo (name : Name) (g : Global) : Option ConstantInfo := do
+  match ← g[name]? with
+  | .definition info
+  | .opaque info
+  | .axiom info
+  | .recursor info
+  | .constructor info
+  | .inductive info =>
+      return info.toConstantInfo
 
 def findTy (name : Name) (g : Global) : Option (Ty 0) := do
   match ← g[name]? with

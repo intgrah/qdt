@@ -1,75 +1,83 @@
 import Std.Eq
+import Std.True
+import Std.False
 
 inductive Nat where
   | zero
   | succ (n : Nat) : Nat
 
-def Nat.add (m : Nat) := Nat.rec (fun _ => Nat) m (fun _ => Nat.succ)
-def Nat.mul (m : Nat) := Nat.rec (fun _ => Nat) 0 (fun _ => Nat.add m)
-def Nat.pow (m : Nat) := Nat.rec (fun _ => Nat) 1 (fun _ => Nat.mul m)
+def Nat.add (m : Nat) : Nat → Nat := Nat.rec.{0} (fun _ => Nat) m (fun _ => Nat.succ)
+def Nat.mul (m : Nat) : Nat → Nat := Nat.rec.{0} (fun _ => Nat) 0 (fun _ => Nat.add m)
+def Nat.pow (m : Nat) : Nat → Nat := Nat.rec.{0} (fun _ => Nat) 1 (fun _ => Nat.mul m)
 
-def Nat.triangle := Nat.rec (fun _ => Nat) 0 (fun k => Nat.add (Nat.succ k))
-def Nat.factorial := Nat.rec (fun _ => Nat) 1 (fun k => Nat.mul (Nat.succ k))
+def Nat.triangle : Nat → Nat := Nat.rec.{0} (fun _ => Nat) 0 (fun k => Nat.add (Nat.succ k))
+def Nat.factorial : Nat → Nat := Nat.rec.{0} (fun _ => Nat) 1 (fun k => Nat.mul (Nat.succ k))
 
-def Nat.pred := Nat.rec (fun _ => Nat) 0 (fun k _ => k)
-def Nat.sub (m : Nat) := Nat.rec (fun _ => Nat) m (fun _ => Nat.pred)
+def Nat.pred (n : Nat) : Nat := Nat.rec.{0} (fun _ => Nat) 0 (fun k _ => k) n
+def Nat.sub (m : Nat) : Nat → Nat := Nat.rec.{0} (fun _ => Nat) m (fun _ => Nat.pred)
 
-example : Nat.add 2 3 = 5 := Eq.refl Nat 5
-example : Nat.mul 2 3 = 6 := Eq.refl Nat 6
-example : Nat.pow 3 2 = 9 := Eq.refl Nat 9
-example : Nat.triangle 3 = 6 := Eq.refl Nat 6
-example : Nat.factorial 3 = 6 := Eq.refl Nat 6
+example : Nat.add 2 3 = 5 := Eq.refl.{0} Nat 5
+example : Nat.mul 2 3 = 6 := Eq.refl.{0} Nat 6
+example : Nat.pow 3 2 = 9 := Eq.refl.{0} Nat 9
+example : Nat.triangle 3 = 6 := Eq.refl.{0} Nat 6
+example : Nat.factorial 3 = 6 := Eq.refl.{0} Nat 6
 
-example : Nat.pred 3 = 2 := Eq.refl Nat 2
-example : Nat.pred 0 = 0 := Eq.refl Nat 0
-example : Nat.sub 3 2 = 1 := Eq.refl Nat 1
-example : Nat.sub 0 1 = 0 := Eq.refl Nat 0
+example : Nat.pred 3 = 2 := Eq.refl.{0} Nat 2
+example : Nat.pred 0 = 0 := Eq.refl.{0} Nat 0
+example : Nat.sub 3 2 = 1 := Eq.refl.{0} Nat 1
+example : Nat.sub 0 1 = 0 := Eq.refl.{0} Nat 0
 
 inductive Nat.le (n : Nat) : Nat → Type where
   | refl : Nat.le n n
   | step (m : Nat) (p : Nat.le n m) : Nat.le n (Nat.succ m)
 
-def Nat.zero_le (n : Nat) : Nat.le 0 n := Nat.rec (Nat.le 0) (Nat.le.refl 0) (Nat.le.step 0) n
+def Nat.zero_le (n : Nat) : Nat.le 0 n := Nat.rec.{0} (Nat.le 0) (Nat.le.refl 0) (Nat.le.step 0) n
 
 def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
 
 
 def Nat.zero_add : (n : Nat) → 0 + n = n :=
-  Nat.rec (fun k => 0 + k = k)
-    (Eq.refl Nat 0)
-    (fun k ih => congrArg Nat Nat Nat.succ (0 + k) k ih)
+  Nat.rec.{0} (fun k => 0 + k = k)
+    (Eq.refl.{0} Nat 0)
+    (fun k ih => congrArg.{0, 0} Nat Nat Nat.succ (0 + k) k ih)
 
 def Nat.succ_add (m n : Nat) : Nat.succ m + n = Nat.succ (m + n) :=
-  Nat.rec (fun k => Nat.succ m + k = Nat.succ (m + k))
-    (Eq.refl Nat (Nat.succ m))
-    (fun k ih => congrArg Nat Nat Nat.succ (Nat.succ m + k) (Nat.succ (m + k)) ih)
+  Nat.rec.{0} (fun k => Nat.succ m + k = Nat.succ (m + k))
+    (Eq.refl.{0} Nat (Nat.succ m))
+    (fun k ih => congrArg.{0, 0} Nat Nat Nat.succ (Nat.succ m + k) (Nat.succ (m + k)) ih)
     n
 
 def Nat.add_comm (m n : Nat) : m + n = n + m :=
-  Nat.rec (fun k => m + k = k + m)
-    (Eq.symm Nat (0 + m) m (Nat.zero_add m))
+  Nat.rec.{0} (fun k => m + k = k + m)
+    (Eq.symm.{0} Nat (0 + m) m (Nat.zero_add m))
     (fun k ih =>
-      Eq.trans Nat
+      Eq.trans.{0} Nat
         (Nat.succ (m + k))
         (Nat.succ (k + m))
         (Nat.succ k + m)
-        (congrArg Nat Nat Nat.succ (m + k) (k + m) ih)
-        (Eq.symm Nat (Nat.succ k + m) (Nat.succ (k + m)) (Nat.succ_add k m)))
+        (congrArg.{0, 0} Nat Nat Nat.succ (m + k) (k + m) ih)
+        (Eq.symm.{0} Nat (Nat.succ k + m) (Nat.succ (k + m)) (Nat.succ_add k m)))
     n
 
 def Nat.add_assoc (a b c : Nat) : a + b + c = a + (b + c) :=
-  Nat.rec (fun k => a + b + k = a + (b + k))
-    (Eq.refl Nat (a + b))
-    (fun k => congrArg Nat Nat Nat.succ (a + b + k) (a + (b + k)))
+  Nat.rec.{0} (fun k => a + b + k = a + (b + k))
+    (Eq.refl.{0} Nat (a + b))
+    (fun k => congrArg.{0, 0} Nat Nat Nat.succ (a + b + k) (a + (b + k)))
     c
 
-def Nat.succ_inj (m n : Nat) : Nat.succ m = Nat.succ n → m = n := congrArg Nat Nat Nat.pred (Nat.succ m) (Nat.succ n)
+def Nat.succ_inj (m n : Nat) : Nat.succ m = Nat.succ n → m = n := congrArg.{0, 0} Nat Nat Nat.pred (Nat.succ m) (Nat.succ n)
 
 def Nat.le_succ (n : Nat) : Nat.le n (Nat.succ n) := Nat.le.step n n (Nat.le.refl n)
 
 def Nat.le_trans (a b c : Nat) (hab : Nat.le a b) (hbc : Nat.le b c) : Nat.le a c :=
-  Nat.le.rec b
+  Nat.le.rec.{0} b
     (fun k _ => Nat.le a k)
     hab
     (fun m _ => Nat.le.step a m)
     c hbc
+
+def Nat.zero_ne_succ (n : Nat) : Not (Nat.zero = Nat.succ n) :=
+  fun h =>
+    Eq.subst.{0, 0} Nat
+      (Nat.rec.{1} (fun _ => Type) True (fun _ _ => False))
+      Nat.zero (Nat.succ n) h True.intro

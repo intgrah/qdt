@@ -1,121 +1,119 @@
+import Cli
+import FSWatch
 import Qdt
 import Qdt.IncrementalElab
-import Lake.Util.Cli
 
+open Cli
 open Qdt
-open Incremental (Engine TaskM TopDecl Key Val)
+open Incremental (Engine TaskM Key Val GlobalEnv)
+open System (FilePath)
 
-private def topDecls : Frontend.Ast.Program → List TopDecl :=
-  List.filterMap
-    (fun
-      | .definition d => some ⟨.definition, d.name⟩
-      | .axiom a => some ⟨.axiom, a.name⟩
-      | .inductive i => some ⟨.inductive, i.name⟩
-      | .structure s => some ⟨.structure, s.name⟩
-      | .example _ => none
-      | .import _ => none)
+private def countModuleEntries (file : FilePath) :
+    TaskM Error Val Nat := do
+  let env : GlobalEnv ← TaskM.fetch (Key.elabModule file)
+  return env.size
 
-structure EntryCounts where
-  definitions : Nat
-  axioms : Nat
-  inductives : Nat
-  recursors : Nat
-  constructors : Nat
-  opaques : Nat
-  total : Nat
-
-private def countEntries (file : System.FilePath) :
-    TaskM Error Val EntryCounts := do
-  let mut definitions := 0
-  let mut opaques := 0
-  let mut axioms := 0
-  let mut inductives := 0
-  let mut recursors := 0
-  let mut constructors := 0
-  let mut total := 0
-
-  let prog : Frontend.Ast.Program ←
-    TaskM.fetch (Key.astProgram file)
-
-  for decl in topDecls prog do
-    try
-      let env : Std.HashMap Lean.Name Entry ←
-        TaskM.fetch (Key.elabTop file decl)
-      total := total + env.size
-
-      for entry in env.values do
-        match entry with
-        | .definition .. => definitions := definitions + 1
-        | .opaque .. => opaques := opaques + 1
-        | .axiom .. => axioms := axioms + 1
-        | .inductive .. => inductives := inductives + 1
-        | .recursor .. => recursors := recursors + 1
-        | .constructor .. => constructors := constructors + 1
-
-    catch err =>
-      IO.toEIO Error.ioError <|
-        IO.println s!"[error] {decl.name}: {err}"
-      break
-
-  return {
-    definitions,
-    axioms,
-    inductives,
-    recursors,
-    constructors,
-    opaques,
-    total,
-  }
-
-private def runOnce (engine : Engine Error Val) (file : System.FilePath) : IO (Engine Error Val) := do
-  let res ← (Incremental.run engine (countEntries file)).toIO'
-  match res with
-  | .ok (counts, engine') =>
-      IO.println s!"Definitions: {counts.definitions}"
-      IO.println s!"Axioms: {counts.axioms}"
-      IO.println s!"Inductives: {counts.inductives}"
-      IO.println s!"Recursors: {counts.recursors}"
-      IO.println s!"Constructors: {counts.constructors}"
-      IO.println s!"Opaques: {counts.opaques}"
-      IO.println s!"Total entries: {counts.total}"
+private def runModuleOnce (config : Config) (engine : Engine Error Val) (file : FilePath) : IO (Engine Error Val) := do
+  let t0 ← IO.monoMsNow
+  match ← Incremental.run config engine (countModuleEntries file) with
+  | .ok (count, engine') =>
+      let t1 ← IO.monoMsNow
+      println!"{count} entries, {t1 - t0}ms"
       pure engine'
   | .error err =>
-      IO.println s!"[error] {err}"
+      let t1 ← IO.monoMsNow
+      println!"[error] {err}"
+      println!"{t1 - t0}ms"
       pure engine
 
-partial def watchLoop (engine : Engine Error Val) (file : System.FilePath) : IO Unit := do
-  let mut last : Option UInt64 := none
-  let mut engine := engine
-  while true do
-    let content ← IO.FS.readFile file
-    let h := hash content
-    if last != some h then
-      last := some h
-      IO.println s!"\n=== change detected ==="
-      engine ← runOnce engine file
-    IO.sleep 200
+partial def watchLoop (config : Config) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
+  let engineRef ← IO.mkRef engine
+  let pendingRef ← IO.mkRef ([] : List FilePath)
 
-def main (args : List String) : IO Unit := do
-  let watch := args.contains "--watch"
-  let twice := args.contains "--twice"
-  let args := args.filter (fun s => s != "--watch" && s != "--twice")
-  let filePath : System.FilePath :=
-    match args with
-    | path :: _ => path
-    | [] => "../stdlib/stdlib.qdt"
-  let engine : Engine Error Val := Incremental.newEngine
-  if watch then
-    IO.println s!"Watching {filePath} (poll)"
-    watchLoop engine filePath
-  else
-    if twice then
-      let t0 ← IO.monoMsNow
-      let engine ← runOnce engine filePath
-      let t1 ← IO.monoMsNow
-      IO.println s!"[time] run1 {t1 - t0}ms"
-      let t2 ← IO.monoMsNow
-      let _engine ← runOnce engine filePath
-      let t3 ← IO.monoMsNow
-      IO.println s!"[time] run2 {t3 - t2}ms"
+  let engine' ← runModuleOnce config engine entryFile
+  engineRef.set engine'
+
+  FSWatch.Manager.withManager fun m => do
+    for dir in config.watchDirs do
+      let _ ← m.watchTree dir (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
+        pendingRef.modify (e.path :: ·)
+
+    while true do
+      IO.sleep 50
+      let pending ← pendingRef.modifyGet (·, [])
+      if !pending.isEmpty then
+        let eng ← engineRef.get
+        let eng' ← runModuleOnce config eng entryFile
+        engineRef.set eng'
+
+def resolveEntryFile (config : Config) (cliArg : Option String) : IO FilePath := do
+  let projectRoot := config.projectRoot.getD "."
+
+  if let some arg := cliArg then
+    if arg.endsWith ".qdt" then
+      return arg
     else
-      let _engine ← runOnce engine filePath
+      return projectRoot / Config.moduleToPath arg
+
+  if let some entry := config.entry then
+    return projectRoot / Config.moduleToPath entry
+
+  throw (IO.userError "No entry point specified. Use 'qdt <module>' or set 'entry' in qdt.toml")
+
+def runQdt (parsed : Parsed) : IO UInt32 := do
+  let sourceDir := parsed.flag? "source" |>.map (·.as! String)
+  let stdlibPath := parsed.flag? "stdlib" |>.map (·.as! String)
+  let noStdlib := parsed.hasFlag "no-stdlib"
+  let watchMode := parsed.hasFlag "watch"
+  let watchDir := parsed.flag? "watch-dir" |>.map (·.as! String)
+
+  let cliArg := parsed.variableArgsAs? String |>.bind (·[0]?)
+
+  let mut config ← Config.load
+
+  if let some dir := sourceDir then
+    config := { config with sourceDirectories := [⟨dir⟩] }
+  if let some path := stdlibPath then
+    config := { config with
+      dependencies := config.dependencies.filter (·.name != "std") ++ [{ name := "std", path }]
+    }
+  if noStdlib then
+    config := { config with dependencies := config.dependencies.filter (·.name != "std") }
+  if watchMode then
+    config := { config with watchMode := true }
+  if let some dir := watchDir then
+    config := { config with watchDirs := [⟨dir⟩] }
+
+  let filePath ← resolveEntryFile config cliArg
+
+  println!"[config] Entry: {filePath}"
+  println!"[config] Source directories: {config.sourceDirectories}"
+  if !config.dependencies.isEmpty then
+    println!"[config] Dependencies: {config.dependencies.map (·.name)}"
+
+  let engine : Engine Error Val := Incremental.newEngine
+
+  if config.watchMode then
+    println!"[watch] Watching {config.watchDirs}"
+    watchLoop config engine filePath
+  else
+    let _ ← runModuleOnce config engine filePath
+  return 0
+
+def qdtCmd : Cmd :=
+  Cmd.mk
+    (name := "qdt")
+    (version? := none)
+    (description := "QDT - Query-based Dependent Types compiler")
+    (flags := #[
+      ⟨some "s", "source", "source directory", String⟩,
+      ⟨none, "stdlib", "stdlib path", String⟩,
+      Flag.paramless (longName := "no-stdlib") (description := "Do not include stdlib"),
+      Flag.paramless (longName := "watch") (description := "Enable watch mode"),
+      ⟨none, "watch-dir", "Add directory to watch", String⟩
+    ])
+    (positionalArgs := #[])
+    (run := runQdt)
+
+def main (args : List String) : IO UInt32 :=
+  qdtCmd.validate args

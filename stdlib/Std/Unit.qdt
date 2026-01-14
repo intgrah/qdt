@@ -4,7 +4,7 @@ inductive Unit where
   | unit
 
 def Unit.eta (t : Unit) : () = t :=
-  Eq.refl Unit ()
+  Eq.refl.{0} Unit ()
 
 def Unit.ext (a b : Unit) : a = b :=
-  Eq.trans Unit a Unit.unit b (Eq.symm Unit Unit.unit a (Unit.eta a)) (Unit.eta b)
+  Eq.trans.{0} Unit a Unit.unit b (Eq.symm.{0} Unit Unit.unit a (Unit.eta a)) (Unit.eta b)

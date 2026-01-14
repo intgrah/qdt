@@ -1,20 +1,21 @@
+import Std.Eq
 import Std.Nat
 import Std.List
 
-inductive Vector (A : Type) : Nat → Type where
+inductive Vector.{u} (A : Type u) : Nat → Type u where
   | nil : Vector A Nat.zero
   | cons (n : Nat) (head : A) (tail : Vector A n) : Vector A (Nat.succ n)
 
-def Vector.toList (A : Type) : (n : Nat) → Vector A n → List A :=
-  Vector.rec A (fun _ _ => List A) (List.nil A) (fun m h _ => List.cons A h)
+def Vector.toList.{u} (A : Type u) : (n : Nat) → Vector.{u} A n → List.{u} A :=
+  Vector.rec.{u, u} A (fun _ _ => List.{u} A) (List.nil.{u} A) (fun m h _ => List.cons.{u} A h)
 
-def Vector.ofList (A : Type) (xs : List A) : Vector A (List.length A xs) :=
-  List.rec A (fun xs => Vector A (List.length A xs)) (Vector.nil A) (fun h t ih => Vector.cons A (List.length A t) h ih) xs
+def Vector.ofList.{u} (A : Type u) (xs : List.{u} A) : Vector.{u} A (List.length.{u} A xs) :=
+  List.rec.{u, u} A (fun xs => Vector.{u} A (List.length.{u} A xs)) (Vector.nil.{u} A) (fun h t ih => Vector.cons.{u} A (List.length.{u} A t) h ih) xs
 
-def Vector.map (A B : Type) (n : Nat) (f : A → B) : Vector A n → Vector B n :=
-  Vector.rec A (fun k _ => Vector B k) (Vector.nil B) (fun m h _ => Vector.cons B m (f h)) n
+def Vector.map.{u, v} (A : Type u) (B : Type v) (n : Nat) (f : A → B) : Vector.{u} A n → Vector.{v} B n :=
+  Vector.rec.{v, u} A (fun k _ => Vector.{v} B k) (Vector.nil.{v} B) (fun m h _ => Vector.cons.{v} B m (f h)) n
 
-def Vector.append (A : Type) (m n : Nat) (xs : Vector A m) (ys : Vector A n) : Vector A (m + n) :=
-  Eq.subst Nat (Vector A) (n + m) (m + n) (Nat.add_comm n m)
-    (Vector.rec A (fun m _ => Vector A (n + m)) ys
-      (fun m h _ ih => Vector.cons A (n + m) h ih) m xs)
+def Vector.append.{u} (A : Type u) (m n : Nat) (xs : Vector.{u} A m) (ys : Vector.{u} A n) : Vector.{u} A (m + n) :=
+  Eq.subst.{u, 0} Nat (Vector.{u} A) (n + m) (m + n) (Nat.add_comm n m)
+    (Vector.rec.{u, u} A (fun m _ => Vector.{u} A (n + m)) ys
+      (fun m h _ ih => Vector.cons.{u} A (n + m) h ih) m xs)

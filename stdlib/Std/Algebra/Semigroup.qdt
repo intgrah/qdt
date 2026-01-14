@@ -1,3 +1,5 @@
-structure Semigroup (A : Type) where
+import Std.Eq
+
+structure Semigroup.{u} (A : Type u) : Type u where
   (mul : A → A → A)
   (mul_assoc (a b c : A) : mul (mul a b) c = mul a (mul b c))

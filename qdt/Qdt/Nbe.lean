@@ -12,18 +12,20 @@ open Lean (Name)
 mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
-  | .u => return .u
+  | .u i => return .u i
   | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → MetaM (VTy n)
+  | .u' i => return .u i
   | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
   | .neutral ne => return .el ne
   | .lam .. => throw (.msg "doEl: expected type code or neutral")
 
 partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
+  | .u' i => return .u' i
   | .var i => return (← read).get i
-  | .const name => deltaReduction name
+  | .const name us => deltaReduction name us
   | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
   | .app f a => do (← f.eval).app (← a.eval)
   | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
@@ -32,27 +34,31 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
 
 partial def VTm.app {n} (f a : VTm n) : MetaM (VTm n) :=
   match f with
+  | .u' .. => throw (.msg "VTm.app: expected lambda or neutral")
   | .lam _param clos => betaReduction clos a
   | .neutral ne => do
     match ← iotaReduction ne a with
     | some result => return result
     | none => return .neutral (ne.app a)
-  | .pi' .. => throw (.msg "doApp: expected lambda or neutral")
+  | .pi' .. => throw (.msg "VTm.app: expected lambda or neutral")
 
 partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
+  | .u' .. => throw (.msg "VTm.proj: expected neutral")
   | .lam .. => throw (.msg "VTm.proj: expected neutral")
   | .neutral ne => do
     match ← projReduction ne i with
     | some result => return result
     | none => return .neutral (ne.proj i)
-  | .pi' .. => throw (.msg s!"VTm.proj: expected neutral, got pi'")
+  | .pi' .. => throw (.msg s!"VTm.proj: expected neutral")
 
 /-- δ-reduction definition unfolding -/
 @[inline]
-partial def deltaReduction {n} (name : Name) : MetaM (VTm n) := do
-  match ← fetchDefinition name with
-  | some tm => tm.eval .nil
-  | none => return .neutral ⟨.const name, .nil⟩
+partial def deltaReduction {n} (name : Name) (us : List Universe) : MetaM (VTm n) := do
+  match ← fetchDefinition name, ← fetchConstantInfo name with
+  | some tm, some info =>
+    let subst := info.univParams.zip us
+    tm.substLevels subst |>.eval .nil
+  | _, _ => return .neutral ⟨.const name us, .nil⟩
 
 /-- β-reduction taken with a pinch of salt. Substitution is delayed because we have closures. -/
 @[inline]
@@ -78,22 +84,22 @@ partial def iotaReduction {n}
     (ne : Neutral n)
     (a : VTm n) : -- possible major premise
     MetaM (Option (VTm n)) := do
-  let ⟨.const recName, sp⟩ := ne
+  let ⟨.const recName recUs, sp⟩ := ne
     | return none
   let some info ← fetchRecursor recName
     | return none
   let some spList := sp.toAppList
     | return none
-  let numParamsMotivesMinorsIndices :=
-    info.numParams + info.numMotives + info.numMinors + info.numIndices
+  let numParamsMotivesMinors := info.numParams + info.numMotives + info.numMinors
+  let numParamsMotivesMinorsIndices := numParamsMotivesMinors + info.numIndices
   if spList.length < numParamsMotivesMinorsIndices then
     return none
-  let .neutral ⟨.const ctorName, ctorSp⟩ := a
+  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ := a
     | return none
   let some rule := info.recRules.find? (fun r => r.ctorName == ctorName)
     | return none
   let paramsMotivesMethods :=
-    spList.take (info.numParams + info.numMotives + info.numMinors)
+    spList.take numParamsMotivesMinors
   let some ctorArgs := ctorSp.toAppList
     | return none
   let fields := ctorArgs.drop info.numParams
@@ -101,9 +107,10 @@ partial def iotaReduction {n}
   let envList := args.reverse
   let env := Env.ofList envList
   let nf := rule.numFields
-  let rhs := rule.rhs
-  if h : envList.length = info.numParams + info.numMotives + info.numMinors + nf then
-    let env' : Env n (info.numParams + info.numMotives + info.numMinors + nf) := h ▸ env
+  let univSubst := info.univParams.zip recUs
+  let rhs := rule.rhs.substLevels univSubst
+  if h : envList.length = numParamsMotivesMinors + nf then
+    let env' : Env n (numParamsMotivesMinors + nf) := h ▸ env
     rhs.eval env'
   else
     return none
@@ -118,7 +125,7 @@ partial def projReduction {n}
     (ne : Neutral n)
     (i : Nat) :
     MetaM (Option (VTm n)) := do
-  let ⟨.const ctor, sp⟩ := ne
+  let ⟨.const ctor _us, sp⟩ := ne
     | return none
   let some ctorInfo ← fetchConstructor ctor
     | return none

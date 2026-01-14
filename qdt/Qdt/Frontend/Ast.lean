@@ -1,4 +1,5 @@
 import Qdt.Frontend.Source
+import Qdt.MLTT.Universe
 
 namespace Qdt.Frontend.Ast
 
@@ -7,12 +8,12 @@ open Lean (Name)
 mutual
 inductive Term : Type
   | missing : Src → Term
-  | ident : Src → Name → Term
+  | ident : Src → Name → List Universe → Term
   | app : Src → Term → Term → Term
   | lam : Src → Binder → Term → Term
   | pi : Src → TypedBinder → Term → Term
   | letE : Src → Name → Option Term → Term → Term → Term
-  | u : Src → Term
+  | u : Src → Universe → Term
   | pair : Src → Term → Term → Term
   | eq : Src → Term → Term → Term
   | ann : Src → Term → Term → Term
@@ -34,12 +35,12 @@ end
 
 def Term.src : Term → Src
   | .missing src
-  | .ident src _
+  | .ident src _ _
   | .app src _ _
   | .lam src _ _
   | .pi src _ _
   | .letE src _ _ _ _
-  | .u src
+  | .u src _
   | .pair src _ _
   | .eq src _ _
   | .ann src _ _
@@ -56,6 +57,7 @@ deriving Repr, Inhabited, Hashable
 structure Definition where
   src : Src
   name : Name
+  univParams : List Name
   params : List TypedBinder
   tyOpt : Option Term
   body : Term
@@ -63,6 +65,7 @@ deriving Repr, Inhabited, Hashable
 
 structure Example where
   src : Src
+  univParams : List Name
   params : List TypedBinder
   tyOpt : Option Term
   body : Term
@@ -71,6 +74,7 @@ deriving Repr, Inhabited, Hashable
 structure Axiom where
   src : Src
   name : Name
+  univParams : List Name
   params : List TypedBinder
   ty : Term
 deriving Repr, Inhabited, Hashable
@@ -85,6 +89,7 @@ deriving Repr, Inhabited, Hashable
 structure Inductive where
   src : Src
   name : Name
+  univParams : List Name
   params : List TypedBinder
   tyOpt : Option Term
   ctors : List InductiveConstructor
@@ -100,6 +105,7 @@ deriving Repr, Inhabited, Hashable
 structure Structure where
   src : Src
   name : Name
+  univParams : List Name
   params : List TypedBinder
   tyOpt : Option Term
   fields : List StructureField

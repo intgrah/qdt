@@ -24,15 +24,16 @@ private def mkParamEnv : (numParams : Nat) → Env (numParams + 1) numParams
 private def mkPrevEnv
     (structName : Name)
     (numParams : Nat)
+    (univs : List Universe)
     (params : List (VTm (numParams + 1)))
     (x : VTm (numParams + 1)) :
     {b : Nat} → Tele Param numParams b → MetaM (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
   | _, .snoc fs ⟨name, _⟩ => do
-      let envTail ← mkPrevEnv structName numParams params x fs
+      let envTail ← mkPrevEnv structName numParams univs params x fs
       let fname ← getAtomicFieldString structName name
       let projName := structName.str fname
-      let proj : VTm (numParams + 1) := VTm.const projName
+      let proj : VTm (numParams + 1) := VTm.const projName univs
       let proj ← proj.apps params
       let proj ← proj.app x
       return Env.cons proj envTail
@@ -43,9 +44,9 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
   let (paramCtx, paramTys) ← elabParams info.params
   let resultTy : Ty numParams ←
     match info.tyOpt with
-    | none => pure (Ty.u : Ty numParams)
-    | some (.u _) => pure Ty.u
-    | some _ => throw (.structureResultTypeMustBeType info.src info.name)
+    | none => pure (Ty.u .zero)
+    | some (.u _ level) => pure (Ty.u level : Ty numParams)
+    | some _ => throw (.structureResultTypeMustBeTypeUniverse info.src info.name)
 
   let structFieldStrs ← info.fields.mapM fun f => getAtomicFieldString info.name f.name
   let ctorFieldBinders : List Frontend.Ast.TypedBinder :=
@@ -55,6 +56,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
     {
       src := info.src
       name := info.name
+      univParams := info.univParams
       params := info.params
       tyOpt := info.tyOpt
       ctors :=
@@ -80,7 +82,9 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
 
   let x : VTm np1 := VTm.varAt numParams
 
-  let majorTy : VTm numParams := VTm.const info.name
+  let univParams := (← getThe MetaState).univParams
+  let structUnivs := univParams.map Universe.level
+  let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps paramsVal
   let majorTy ← majorTy.quote
   let majorTy : Ty numParams := Ty.el majorTy
@@ -97,7 +101,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
         let fname ← getAtomicFieldString info.name name
         let projName := info.name.str fname
 
-        let envPrev ← mkPrevEnv info.name numParams (weaken paramsVal) x fs
+        let envPrev ← mkPrevEnv info.name numParams structUnivs (weaken paramsVal) x fs
         let fty : Ty idx := ty
         let ftyVal ← fty.eval envPrev
         let ftyTy ← ftyVal.quote
@@ -112,7 +116,8 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
           Tm.lams paramTys <|
           Tm.lam ⟨`p, majorTy⟩ projBody
 
-        Global.addEntry projName (.definition ⟨projTy, projTm⟩)
+        let univParams := (← getThe MetaState).univParams
+        Global.addEntry projName (.definition { univParams, ty := projTy, tm := projTm })
 
   goProj (Nat.le_refl numParamsFields) fieldTele
 

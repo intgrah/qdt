@@ -11,12 +11,13 @@ deriving Repr, BEq
 mutual
 
 inductive VTy : Nat → Type
-  | u {n} : VTy n
+  | u {n} : Universe → VTy n
   | pi {n} : VParam n → ClosTy n → VTy n
   | el {n} : Neutral n → VTy n
 deriving Repr
 
 inductive VTm : Nat → Type
+  | u' {n} : Universe → VTm n
   | neutral {n} : Neutral n → VTm n
   | lam {n} : VParam n → ClosTm n → VTm n
   | pi' {n} : Name → VTm n → ClosTm n → VTm n
@@ -28,7 +29,7 @@ deriving Repr
 
 inductive Head : Nat → Type
   | var {n} : Lvl n → Head n
-  | const {n} : Name → Head n
+  | const {n} : Name → List Universe → Head n
 deriving Repr
 
 inductive Spine : Nat → Type
@@ -61,7 +62,7 @@ end
 
 def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
 def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
-def VTm.const {n} (name : Name) : VTm n := .neutral ⟨.const name, .nil⟩
+def VTm.const {n} (name : Name) (us : List Universe := []) : VTm n := .neutral ⟨.const name us, .nil⟩
 
 def Neutral.head {n} : Neutral n → Head n | ⟨h, _⟩ => h
 def Neutral.spine {n} : Neutral n → Spine n | ⟨_, sp⟩ => sp
@@ -118,12 +119,13 @@ mutual
 
 @[implemented_by VTy.weaken_impl]
 private def VTy.weaken' (h : n ≤ m) : VTy n → VTy m
-  | .u => .u
+  | .u i => .u i
   | .pi ⟨x, dom⟩ codom => .pi ⟨x, dom.weaken' h⟩ (codom.weaken' h)
   | .el ne => .el (ne.weaken' h)
 
 @[implemented_by VTm.weaken_impl]
 private def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
+  | .u' i => .u' i
   | .neutral ne => .neutral (ne.weaken' h)
   | .lam ⟨x, ty⟩ body => .lam ⟨x, ty.weaken' h⟩ (body.weaken' h)
   | .pi' name dom codom => .pi' name (dom.weaken' h) (codom.weaken' h)
@@ -131,7 +133,7 @@ private def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
 @[implemented_by Head.weaken_impl]
 private def Head.weaken' (h : n ≤ m) : Head n → Head m
   | .var lvl => .var (lvl.castLE h)
-  | .const name => .const name
+  | .const name us => .const name us
 
 @[implemented_by Neutral.weaken_impl]
 private def Neutral.weaken' (h : n ≤ m) : Neutral n → Neutral m

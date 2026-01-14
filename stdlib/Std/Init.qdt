@@ -1,13 +1,13 @@
 import Std.Eq
 
-def id (A : Type) (x : A) : A := x
-def const (A B : Type) (a : A) (b : B) := a
-def comp (A B C : Type) (f : B → C) (g : A → B) (x : A) : C := f (g x)
+def id.{u} (A : Type u) (x : A) : A := x
+def const.{u, v} (A : Type u) (B : Type v) (a : A) (b : B) := a
+def comp.{u, v, w} (A : Type u) (B : Type v) (C : Type w) (f : B → C) (g : A → B) (x : A) : C := f (g x)
 
-def comp_assoc
-  (A B C D : Type)
+def comp_assoc.{u, v, w, x}
+  (A : Type u) (B : Type v) (C : Type w) (D : Type x)
   (f : C → D) (g : B → C) (h : A → B) :
-    comp A B D (comp B C D f g) h = comp A C D f (comp A B C g h) :=
-  Eq.refl (A → D) (comp A B D (comp B C D f g) h)
+    comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h = comp.{u, w, x} A C D f (comp.{u, v, w} A B C g h) :=
+  Eq.refl.{max u x} (A → D) (comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h)
 
-axiom funext (A B : Type) (f g : A → B) (h : (x : A) → f x = g x) : f = g
+axiom funext.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (h : (x : A) → f x = g x) : f = g

@@ -51,12 +51,12 @@ inductive Ctx.WF : Global → {n : Nat} → Ctx 0 n → Prop
 /-- Well-formedness of types -/
 inductive Ty.WF : Global → {n : Nat} → Ctx 0 n → Ty n → Prop
   /-- HoTT book A.2.3, 𝑢-intro -/
-  | u_form {Δ Γ} :
+  | u_form {Δ Γ i} :
       (Δ; Γ ⊢) →
-      (Δ; Γ ⊢ 𝑢 type)
-  /-- Because of Tarski universes -/
-  | el_form {Δ Γ t} :
-      (Δ; Γ ⊢ t : 𝑢) →
+      (Δ; Γ ⊢ 𝑢 i type)
+  /-- Tarski universe: if t : 𝑢 i then El(t) type -/
+  | el_form {Δ Γ i t} :
+      (Δ; Γ ⊢ t : 𝑢 i) →
       (Δ; Γ ⊢ .el t type)
   /-- HoTT book A.2.4, Π-form -/
   | pi_form {Δ Γ x A B} :
@@ -84,9 +84,8 @@ inductive Ty.Eq : Global → {n : Nat} → Ctx 0 n → Ty n → Ty n → Prop
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
       (Δ; Γ.snoc ⟨x, A₁⟩ ⊢ B₁ ≡ B₂ type) →
       (Δ; Γ ⊢ .pi ⟨x, A₁⟩ B₁ ≡ .pi ⟨x, A₂⟩ B₂ type)
-  /-- Because of Tarski universes -/
-  | el_form_eq {Δ Γ t₁ t₂} :
-      (Δ; Γ ⊢ t₁ ≡ t₂ : 𝑢) →
+  | el_form_eq {Δ Γ i t₁ t₂} :
+      (Δ; Γ ⊢ t₁ ≡ t₂ : 𝑢 i) →
       (Δ; Γ ⊢ .el t₁ ≡ .el t₂ type)
 
 /-- Judgmental equality of terms -/
@@ -110,10 +109,10 @@ inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n �
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ a ≡ b : B)
   /-- Definition unfolding (δ-reduction) -/
-  | delta {Δ Γ name info} :
+  | delta {Δ Γ name us info} :
       (Δ; Γ ⊢) →
       Δ.findDefinition name = some info →
-      (Δ; Γ ⊢ .const name ≡ info.tm.wkClosed : info.ty.wkClosed)
+      (Δ; Γ ⊢ .const name us ≡ info.tm.wkClosed : info.ty.wkClosed)
   /-- HoTT book A.2.2, Π-intro-eq -/
   | pi_intro_eq {Δ Γ x b₁ b₂ A₁ A₂ B} :
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
@@ -148,11 +147,11 @@ inductive Tm.HasType : Global → {n : Nat} → Ctx 0 n → Tm n → Ty n → Pr
       (Δ; Γ ⊢) →
       (i : Idx n) →
       (Δ; Γ ⊢ .var i : Γ.get i)
-  /-- Global constant: lookup type in Δ -/
-  | const {Δ Γ name ty} :
+  /-- Global constant -/
+  | const {Δ Γ name us ty} :
       (Δ; Γ ⊢) →
       Δ.findTy name = some ty →
-      (Δ; Γ ⊢ .const name : ty.wkClosed)
+      (Δ; Γ ⊢ .const name us : ty.wkClosed)
   /-- HoTT book A.2.4, Π-intro -/
   | pi_intro {Δ Γ x A body B} :
       (Δ; Γ ⊢ A type) →

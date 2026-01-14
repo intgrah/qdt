@@ -11,3 +11,4 @@ import Qdt.Inductive
 import Qdt.Pretty
 import Qdt.Elab
 import Qdt.Frontend
+import Qdt.Config

@@ -1,24 +1,22 @@
-import Std.Init
 import Std.Eq
+import Std.Init
 import Std.Nat
 
-structure Iso (A B : Type) where
+structure Iso.{u, v} (A : Type u) (B : Type v) : Type (max u v) where
   (hom : A → B)
   (inv : B → A)
-  (hom_inv_id : comp A B A inv hom = id A)
-  (inv_hom_id : comp B A B hom inv = id B)
+  (hom_inv_id : comp.{u, v, u} A B A inv hom = id.{u} A)
+  (inv_hom_id : comp.{v, u, v} B A B hom inv = id.{v} B)
 
-def Iso.refl (A : Type) : Iso A A :=
-  Iso.mk A A (id A) (id A) (Eq.refl (A → A) (id A)) (Eq.refl (A → A) (id A))
+def Iso.refl.{u} (A : Type u) : Iso.{u, u} A A :=
+  Iso.mk.{u, u} A A (id.{u} A) (id.{u} A) (Eq.refl.{u} (A → A) (id.{u} A)) (Eq.refl.{u} (A → A) (id.{u} A))
 
-def Iso.symm (A B : Type) (iso : Iso A B) : Iso B A :=
-  Iso.mk B A
-    (Iso.inv A B iso)
-    (Iso.hom A B iso)
-    (Iso.inv_hom_id A B iso)
-    (Iso.hom_inv_id A B iso)
-
--- ========== Iso Nat Even ==========
+def Iso.symm.{u, v} (A : Type u) (B : Type v) (iso : Iso.{u, v} A B) : Iso.{v, u} B A :=
+  Iso.mk.{v, u} B A
+    (Iso.inv.{u, v} A B iso)
+    (Iso.hom.{u, v} A B iso)
+    (Iso.inv_hom_id.{u, v} A B iso)
+    (Iso.hom_inv_id.{u, v} A B iso)
 
 structure Even where
   (val : Nat)
@@ -26,35 +24,35 @@ structure Even where
   (half_spec : val = half + half)
 
 def Nat.toEven (half : Nat) : Even :=
-  Even.mk (half + half) half (Eq.refl Nat (half + half))
+  Even.mk (half + half) half (Eq.refl.{0} Nat (half + half))
 
-def left_inv : comp Nat Even Nat Even.half Nat.toEven = id Nat :=
-  Eq.refl (Nat → Nat) (id Nat)
+def left_inv : comp.{0, 0, 0} Nat Even Nat Even.half Nat.toEven = id.{0} Nat :=
+  Eq.refl.{0} (Nat → Nat) (id.{0} Nat)
 
 def right_inv_pointwise (e : Even) : Nat.toEven (Even.half e) = e :=
   let n := Even.val e;
   let half := Even.half e;
   let double := half + half;
   let half_spec := Even.half_spec e;
-  let double_eq_n := Eq.symm Nat n double half_spec;
+  let double_eq_n := Eq.symm.{0} Nat n double half_spec;
   let mkEven :=
     fun (y : Nat) (p : double = y) =>
-      Even.mk y half (Eq.symm Nat double y p);
+      Even.mk y half (Eq.symm.{0} Nat double y p);
   let step1 : Nat.toEven half = mkEven n double_eq_n :=
-    Eq.rec Nat double
+    Eq.rec.{0, 0} Nat double
       (fun (y : Nat) (p : double = y) => Nat.toEven half = mkEven y p)
-      (Eq.refl Even (Nat.toEven half))
+      (Eq.refl.{0} Even (Nat.toEven half))
       n double_eq_n;
   let step2 : mkEven n double_eq_n = e :=
-    congrArg (n = double) Even
+    congrArg.{0, 0} (n = double) Even
       (fun (p : n = double) => Even.mk n half p)
-      (Eq.symm Nat double n double_eq_n)
+      (Eq.symm.{0} Nat double n double_eq_n)
       half_spec
-      (Eq.ext Nat n double (Eq.symm Nat double n double_eq_n) half_spec);
-  Eq.trans Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
+      (Eq.ext.{0} Nat n double (Eq.symm.{0} Nat double n double_eq_n) half_spec);
+  Eq.trans.{0} Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
 
-def right_inv : comp Even Nat Even Nat.toEven Even.half = id Even :=
-  funext Even Even (comp Even Nat Even Nat.toEven Even.half) (id Even) right_inv_pointwise
+def right_inv : comp.{0, 0, 0} Even Nat Even Nat.toEven Even.half = id.{0} Even :=
+  funext.{0, 0} Even (fun _ => Even) (comp.{0, 0, 0} Even Nat Even Nat.toEven Even.half) (id.{0} Even) right_inv_pointwise
 
-def iso_nat_even : Iso Nat Even :=
-  Iso.mk Nat Even Nat.toEven Even.half left_inv right_inv
+def iso_nat_even : Iso.{0, 0} Nat Even :=
+  Iso.mk.{0, 0} Nat Even Nat.toEven Even.half left_inv right_inv

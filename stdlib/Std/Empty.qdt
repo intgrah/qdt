@@ -1,5 +1,3 @@
-import Std.Init
-
 inductive Empty where
 
-def Empty.elim (A : Type) (e : Empty) : A := Empty.rec (fun _ => A) e
+def Empty.elim.{u} (A : Type u) (e : Empty) : A := Empty.rec.{u} (fun _ => A) e

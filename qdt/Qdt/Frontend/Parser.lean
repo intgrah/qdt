@@ -1,4 +1,5 @@
 import Qdt.Frontend.Cst
+import Qdt.MLTT.Universe
 
 namespace Qdt.Frontend.Parser
 
@@ -142,6 +143,14 @@ private partial def readIdent : ParserM String := do
     advanceChar
     while true do
       match ← peekChar? with
+      | some '.' =>
+          let st ← get
+          advanceChar
+          match ← peekChar? with
+          | some '{' =>
+              set st
+              break
+          | _ => acc := acc.push '.'
       | some c' =>
           if isIdentChar c' then
             acc := acc.push c'
@@ -195,6 +204,10 @@ private def parseNat : ParserM Nat := do
           break
     return acc
 
+private def natToUniverse : Nat → Universe
+  | 0 => .zero
+  | n + 1 => .succ (natToUniverse n)
+
 private def parseIdentStr : ParserM (Src × String) := do
   ws
   let startPos ← getPos
@@ -224,24 +237,38 @@ private def srcStartPos (src : Src) : String.Pos.Raw :=
   src.map (·.startPos) |>.getD (String.Pos.Raw.mk 0)
 
 private def termStartPos : Term → String.Pos.Raw
-  | .missing src => srcStartPos src
-  | .ident src _ => srcStartPos src
-  | .app src _ _ => srcStartPos src
-  | .lam src _ _ => srcStartPos src
-  | .pi src _ _ => srcStartPos src
-  | .arrow src _ _ => srcStartPos src
-  | .letE src _ _ _ _ => srcStartPos src
-  | .u src => srcStartPos src
-  | .sigma src _ _ => srcStartPos src
-  | .prod src _ _ => srcStartPos src
-  | .pair src _ _ => srcStartPos src
-  | .eq src _ _ => srcStartPos src
-  | .natLit src _ => srcStartPos src
-  | .add src _ _ => srcStartPos src
-  | .sub src _ _ => srcStartPos src
-  | .mul src _ _ => srcStartPos src
-  | .ann src _ _ => srcStartPos src
-  | .sorry src => srcStartPos src
+  | .missing src
+  | .ident src _ _
+  | .app src _ _
+  | .lam src _ _
+  | .pi src _ _
+  | .arrow src _ _
+  | .letE src _ _ _ _
+  | .u src _
+  | .sigma src _ _
+  | .prod src _ _
+  | .pair src _ _
+  | .eq src _ _
+  | .natLit src _
+  | .add src _ _
+  | .sub src _ _
+  | .mul src _ _
+  | .ann src _ _
+  | .sorry src =>
+     srcStartPos src
+
+private def levelKeywords : List String :=
+  ["fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import", "sorry"]
+
+private def peekIdent : ParserM (Option String) := do
+  let st ← get
+  let startPos := st.pos
+  if let some c ← peekChar? then
+    if isIdentStart c then
+      let name ← readIdent
+      set { st with pos := startPos }
+      return some name
+  return none
 
 mutual
 
@@ -262,6 +289,85 @@ private partial def parseBinderName : ParserM Name := do
     pure Name.anonymous
   else
     pure (Name.ofString name)
+
+private partial def parseUniverseAtom : ParserM Universe := do
+  ws
+  let some c ← peekChar? | fail "expected universe level"
+  if c == '(' then
+    advanceChar
+    let u ← parseUniverseLevel
+    str ")"
+    return u
+  else if c.isDigit then
+    let n ← parseNat
+    return natToUniverse n
+  else if let some name ← peekIdent then
+    if name == "max" then
+      let _ ← readIdent
+      let u₁ ← parseUniverseAtom
+      let u₂ ← parseUniverseAtom
+      let rest ← many parseUniverseAtom
+      return rest.foldl Universe.max (.max u₁ u₂)
+    else if !levelKeywords.contains name then
+      let _ ← readIdent
+      return .level (Name.ofString name)
+    else
+      fail "expected universe level"
+  else
+    fail "expected universe level"
+
+private partial def parseUniverseLevel : ParserM Universe := do
+  let base ← parseUniverseAtom
+  ws
+  match ← peekChar? with
+  | some '+' =>
+      advanceChar
+      let n ← parseNat
+      if n == 0 then
+        fail "successor offset must be > 0"
+      let mut u := base
+      for _ in List.range n do
+        u := .succ u
+      return u
+  | _ => return base
+
+private partial def parseUnivParams : ParserM (List Name) := do
+  ws
+  match ← peekChar? with
+  | some '.' =>
+      advanceChar
+      match ← peekChar? with
+      | some '{' =>
+          advanceChar
+          ws
+          match ← peekChar? with
+          | some '}' => fail "universe parameter list cannot be empty"
+          | _ =>
+              let first ← parseBinderName
+              let rest ← many (str "," *> parseBinderName)
+              str "}"
+              return first :: rest
+      | _ => fail "expected '{' after '.'"
+  | _ => return []
+
+private partial def parseUnivArgs : ParserM (List Universe) := do
+  ws
+  match ← peekChar? with
+  | some '.' =>
+      advanceChar
+      match ← peekChar? with
+      | some '{' =>
+          advanceChar
+          ws
+          match ← peekChar? with
+          | some '}' => fail "universe argument list cannot be empty"
+          | _ =>
+              let first ← parseUniverseLevel
+              let rest ← many (str "," *> parseUniverseLevel)
+              str "}"
+              return first :: rest
+      | _ => fail "expected '{' after '.'"
+  | _ => return []
 
 private partial def parseBinderGroup : ParserM BinderGroup :=
   (do
@@ -324,7 +430,7 @@ private partial def parseUnit : ParserM Term := do
   | some ')' =>
       advanceChar
       let endPos ← getPos
-      return .ident (Src.mk startPos endPos) (Name.ofString "Unit.unit")
+      return .ident (Src.mk startPos endPos) (Name.ofString "Unit.unit") []
   | _ =>
       fail "expected unit"
 
@@ -363,7 +469,7 @@ private partial def parseType : ParserM Term := do
   let startPos ← getPos
   keyword "Type"
   let endPos ← getPos
-  return .u (Src.mk startPos endPos)
+  return .u (Src.mk startPos endPos) .zero
 
 private partial def parseNatLit : ParserM Term := do
   ws
@@ -376,7 +482,6 @@ private partial def parseIdentAtom : ParserM Term := do
   ws
   let startPos ← getPos
   let nameStr ← readIdent
-  let endPos ← getPos
   let kw :=
     [
       "fun",
@@ -392,7 +497,9 @@ private partial def parseIdentAtom : ParserM Term := do
   if kw.contains nameStr then
     fail "keyword in expression"
   else
-    return .ident (Src.mk startPos endPos) (Name.ofString nameStr)
+    let univs ← parseUnivArgs
+    let endPos ← getPos
+    return .ident (Src.mk startPos endPos) (Name.ofString nameStr) univs
 
 private partial def parseAtomLeading : ParserM Term := do
   if ← isEof then
@@ -421,6 +528,7 @@ private partial def prattParser (minPrec : Prec) : ParserM Term := do
 
   let trailingParsers : List (Prec × Prec × (Prec → Term → ParserM Term)) :=
     [
+      (.app, .app, parseTypeLevelTrailing),
       (.app, .app, parseAppTrailing),
       (.mulL, .mulR, parseMulTrailing),
       (.addL, .addR, parseAddTrailing),
@@ -455,6 +563,35 @@ private partial def prattParser (minPrec : Prec) : ParserM Term := do
 
 private partial def parsePreterm : ParserM Term :=
   prattParser .min
+
+private partial def parseTypeLevelTrailing (_rightPrec : Prec) (left : Term) : ParserM Term := do
+  ws
+  match left with
+  | .u src .zero =>
+      let some c ← peekChar? | fail "no universe level"
+      if c == '(' then
+        let lvl ← parseUniverseLevel
+        let endPos ← getPos
+        let startPos := srcStartPos src
+        return .u (Src.mk startPos endPos) lvl
+      else
+        let st ← get
+        let lvl? ←
+          (try
+            let lvl ← parseUniverseLevel
+            pure (some lvl)
+          catch _ =>
+            pure none)
+        match lvl? with
+        | none =>
+            set st
+            fail "no universe level"
+        | some lvl =>
+            let endPos ← getPos
+            let startPos := srcStartPos src
+            return .u (Src.mk startPos endPos) lvl
+  | _ =>
+      fail "not Type"
 
 private partial def parseAppTrailing (_rightPrec : Prec) (left : Term) : ParserM Term :=
   (do
@@ -555,6 +692,7 @@ private def parseInductive : ParserM Command.Cmd := do
   let startPos ← getPos
   keyword "inductive"
   let (_src, name) ← parseIdent
+  let univParams ← parseUnivParams
   let params ← parseParams
   let tyOpt ← optional (str ":" *> parsePreterm)
   keyword "where"
@@ -564,6 +702,7 @@ private def parseInductive : ParserM Command.Cmd := do
       {
         src := Src.mk startPos endPos
         name
+        univParams
         params
         tyOpt
         ctors
@@ -596,6 +735,7 @@ private def parseStructure : ParserM Command.Cmd := do
   let startPos ← getPos
   keyword "structure"
   let (_src, name) ← parseIdent
+  let univParams ← parseUnivParams
   let params ← parseParams
   let tyOpt ←
     optional (do
@@ -608,6 +748,7 @@ private def parseStructure : ParserM Command.Cmd := do
       {
         src := Src.mk startPos endPos
         name
+        univParams
         params
         tyOpt
         fields
@@ -628,12 +769,14 @@ private def parseDef : ParserM Command.Cmd := do
   let startPos ← getPos
   keyword "def"
   let (_src, name) ← parseIdent
+  let univParams ← parseUnivParams
   let (params, tyOpt, body) ← parseDefBody
   let endPos ← getPos
   return .definition
       {
         src := Src.mk startPos endPos
         name
+        univParams
         params
         tyOpt
         body
@@ -643,11 +786,13 @@ private def parseExample : ParserM Command.Cmd := do
   ws
   let startPos ← getPos
   keyword "example"
+  let univParams ← parseUnivParams
   let (params, tyOpt, body) ← parseDefBody
   let endPos ← getPos
   return .example
       {
         src := Src.mk startPos endPos
+        univParams
         params
         tyOpt
         body
@@ -658,6 +803,7 @@ private def parseAxiom : ParserM Command.Cmd := do
   let startPos ← getPos
   keyword "axiom"
   let (_src, name) ← parseIdent
+  let univParams ← parseUnivParams
   let params ← parseParams
   str ":"
   let ty ← parsePreterm
@@ -666,6 +812,7 @@ private def parseAxiom : ParserM Command.Cmd := do
       {
         src := Src.mk startPos endPos
         name
+        univParams
         params
         ty
       }

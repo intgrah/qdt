@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 
 import Qdt.Bidirectional
 import Qdt.Error
@@ -21,7 +22,19 @@ def findModule? (name : Name) : CoreM (Option ModuleStatus) := do
 def addModule (name : Name) (status : ModuleStatus) : CoreM Unit := do
   modify fun st => { st with modules := st.modules.insert name status }
 
+private def checkDuplicateUnivParams (src : Frontend.Src) (params : List Name) :
+    CoreM Unit := do
+  let rec loop (seen : Std.HashSet Name) : List Name → CoreM Unit
+    | [] => pure ()
+    | n :: ns =>
+        if seen.contains n then
+          throw (.duplicateUniverseParam src n)
+        else
+          loop (seen.insert n) ns
+  loop {} params
+
 def elabDefinition (d : Frontend.Ast.Command.Definition) : CoreM Unit := do
+  checkDuplicateUnivParams d.src d.univParams
   let metaAction : MetaM (Tm 0 × Ty 0) := do
     let (paramCtx, paramTys) ← elabParams d.params
     let (tm, ty) ←
@@ -39,10 +52,11 @@ def elabDefinition (d : Frontend.Ast.Command.Definition) : CoreM Unit := do
     let ty := Ty.pis paramTys ty
     return (tm, ty)
   let mctx : MetaContext := { MetaContext.empty with currentDecl := d.name }
-  let (tm, ty) ← (metaAction mctx).run' MetaState.empty
-  Global.addEntry d.name (.definition ⟨ty, tm⟩)
+  let (tm, ty) ← (metaAction mctx).run' { univParams := d.univParams }
+  Global.addEntry d.name (.definition { univParams := d.univParams, ty, tm })
 
 def elabExample (e : Frontend.Ast.Command.Example) : CoreM Unit := do
+  checkDuplicateUnivParams e.src e.univParams
   let metaAction : MetaM Unit := do
     let (paramCtx, _paramTys) ← elabParams e.params
     match e.tyOpt with
@@ -52,24 +66,27 @@ def elabExample (e : Frontend.Ast.Command.Example) : CoreM Unit := do
         let _term ← checkTm expected e.body paramCtx
     | none =>
         let (_term, _tyVal) ← inferTm e.body paramCtx
-  (metaAction MetaContext.empty).run' MetaState.empty
+  (metaAction MetaContext.empty).run' { univParams := e.univParams }
 
 def elabAxiom (a : Frontend.Ast.Command.Axiom) : CoreM Unit := do
+  checkDuplicateUnivParams a.src a.univParams
   let metaAction : MetaM Unit := do
     let (paramCtx, paramTys) ← elabParams a.params
     let ty ← checkTy a.ty paramCtx
     let ty := Ty.pis paramTys ty
-    Global.addEntry a.name (.axiom ⟨ty⟩)
+    Global.addEntry a.name (.axiom { univParams := a.univParams, ty })
   let mctx : MetaContext := { MetaContext.empty with currentDecl := a.name }
-  (metaAction mctx).run' MetaState.empty
+  (metaAction mctx).run' { univParams := a.univParams }
 
 def elabInductiveCmd (info : Frontend.Ast.Command.Inductive) : CoreM Unit := do
+  checkDuplicateUnivParams info.src info.univParams
   let mctx : MetaContext := { MetaContext.empty with currentDecl := info.name }
-  (elabInductive info mctx).run' MetaState.empty
+  (elabInductive info mctx).run' { univParams := info.univParams }
 
 def elabStructureCmd (info : Frontend.Ast.Command.Structure) : CoreM Unit := do
+  checkDuplicateUnivParams info.src info.univParams
   let mctx : MetaContext := { MetaContext.empty with currentDecl := info.name }
-  (elabStructure info mctx).run' MetaState.empty
+  (elabStructure info mctx).run' { univParams := info.univParams }
 
 def protectUnit
     (k : CoreM Unit) :
@@ -109,7 +126,5 @@ def elabProgramWithImports
       | .axiom ax => elabAxiom ax
       | .inductive info => elabInductiveCmd info
       | .structure info => elabStructureCmd info)
-  -- let st ← geexet
-  -- EIO.catchExceptions (println!"{repr st.globalEnv}") (fun _ => return)
 
 end Qdt
