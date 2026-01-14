@@ -1,6 +1,0 @@
-import Std.Unit
-import Std.Eq
-
-def Unit.eta (t : Unit) : () = t :=
-  Eq.refl Unit ()
-

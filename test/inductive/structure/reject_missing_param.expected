@@ -1,2 +1,0 @@
-Error: inductive/structure/reject_missing_param.qdt:2:10: Expected Type, got (A : Type) → Type
-Elaborated 0 definitions

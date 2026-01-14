@@ -1,4 +1,0 @@
-import Std.Nat
-
-inductive T1 : Nat → Type where
-  | z1 : T1

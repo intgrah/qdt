@@ -1,2 +1,0 @@
-inductive T (A : Type) where
-  | mk : T → T A

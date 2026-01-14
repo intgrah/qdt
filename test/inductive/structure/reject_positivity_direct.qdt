@@ -1,2 +1,0 @@
-structure Bad where
-  (f : Bad → Bad)
