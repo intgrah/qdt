@@ -86,7 +86,7 @@ protected instance {n} : MonadLiftT (SemM n n) (TermM n) where
   monadLift m := fun e => m e.env
 
 def getLocalEnv : CoreM Global := do
-  let genv ← get
+  let genv ← getThe CoreState
   return genv.localEnv
 
 /-!
@@ -95,7 +95,7 @@ incrementalise without treating the whole global environment as a dependency.
 -/
 
 def fetchEntry (name : Name) : CoreM (Option Entry) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some e := st.localEnv[name]? then
     return some e
   if let some e := st.importedEnv[name]? then
@@ -108,7 +108,7 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
   | some file => (TaskM.fetch (Key.entry file name) : QueryM _)
 
 def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some ty := st.localEnv.findTy name then
     return some ty
   if let some ty := st.importedEnv.findTy name then
@@ -121,7 +121,7 @@ def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
   | some file => (TaskM.fetch (Key.constTy file name) : QueryM _)
 
 def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some result := st.localEnv.findConstantInfo name then
     return some result
   if let some result := st.importedEnv.findConstantInfo name then
@@ -134,7 +134,7 @@ def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
   | some file => (TaskM.fetch (Key.constantInfo file name) : QueryM _)
 
 def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some info := st.localEnv.findDefinition name then
     return some info.tm
   if let some info := st.importedEnv.findDefinition name then
@@ -147,7 +147,7 @@ def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
   | some file => (TaskM.fetch (Key.constDef file name) : QueryM _)
 
 def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some info := st.localEnv.findInductive name then
     return some info
   if let some info := st.importedEnv.findInductive name then
@@ -160,7 +160,7 @@ def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
   | some file => (TaskM.fetch (Key.inductiveInfo file name) : QueryM _)
 
 def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some info := st.localEnv.findRecursor name then
     return some info
   if let some info := st.importedEnv.findRecursor name then
@@ -173,7 +173,7 @@ def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
   | some file => (TaskM.fetch (Key.recursorInfo file name) : QueryM _)
 
 def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
-  let st ← get
+  let st ← getThe CoreState
   if let some info := st.localEnv.findConstructor name then
     return some info
   if let some info := st.importedEnv.findConstructor name then

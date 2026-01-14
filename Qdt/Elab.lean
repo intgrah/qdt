@@ -17,10 +17,10 @@ namespace Qdt
 open Lean (Name)
 
 def findModule? (name : Name) : CoreM (Option ModuleStatus) := do
-  return (← get).modules[name]?
+  return (← getThe CoreState).modules[name]?
 
 def addModule (name : Name) (status : ModuleStatus) : CoreM Unit := do
-  modify fun st => { st with modules := st.modules.insert name status }
+  modifyThe CoreState fun st => { st with modules := st.modules.insert name status }
 
 private def checkDuplicateUnivParams (src : Frontend.Src) (params : List Name) :
     CoreM Unit := do

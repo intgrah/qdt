@@ -1,0 +1,22 @@
+{
+  "files.exclude": {
+    "**/*.vo": true,
+    "**/*.vok": true,
+    "**/*.vos": true,
+    "**/*.aux": true,
+    "**/*.glob": true,
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "_build": true,
+    ".claude": true,
+    "_opam": true,
+    "_coverage": true
+  },
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.qdt": "lean"
+  }
+}
