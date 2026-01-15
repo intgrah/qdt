@@ -189,10 +189,16 @@ def Global.addEntry (name : Name) (entry : Entry) : CoreM Unit := do
   let st ← getThe CoreState
   if st.localEnv.contains name then
     throw (.msg s!"{name} is already defined")
+  let ctx ← read
+  let file := ctx.file.map toString
+  let entry := entry.setFile file
   set { st with localEnv := st.localEnv.insert name entry }
 
 def Global.replaceEntry (name : Name) (entry : Entry) : CoreM Unit := do
   let st ← getThe CoreState
+  let ctx ← read
+  let file := ctx.file.map toString
+  let entry := entry.setFile file
   set { st with localEnv := st.localEnv.insert name entry }
 
 end Qdt

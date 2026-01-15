@@ -44,25 +44,25 @@ inductive Ctx.WF : Global → {n : Nat} → Ctx 0 n → Prop
       (⊢ Δ) →
       (Δ; Tele.nil ⊢)
   /-- HoTT book A.2.1, ctx-ext -/
-  | extend {Δ Γ x A} :
+  | extend {Δ Γ src x A} :
       (Δ; Γ ⊢ A type) →
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢)
+      (Δ; Γ.snoc ⟨src, x, A⟩ ⊢)
 
 /-- Well-formedness of types -/
 inductive Ty.WF : Global → {n : Nat} → Ctx 0 n → Ty n → Prop
   /-- HoTT book A.2.3, 𝑢-intro -/
-  | u_form {Δ Γ i} :
+  | u_form {Δ Γ s i} :
       (Δ; Γ ⊢) →
-      (Δ; Γ ⊢ 𝑢 i type)
+      (Δ; Γ ⊢ .u s i type)
   /-- Tarski universe: if t : 𝑢 i then El(t) type -/
-  | el_form {Δ Γ i t} :
-      (Δ; Γ ⊢ t : 𝑢 i) →
-      (Δ; Γ ⊢ .el t type)
+  | el_form {Δ Γ s i t} :
+      (Δ; Γ ⊢ t : .u s i) →
+      (Δ; Γ ⊢ .el s t type)
   /-- HoTT book A.2.4, Π-form -/
-  | pi_form {Δ Γ x A B} :
+  | pi_form {Δ Γ s ps x A B} :
       (Δ; Γ ⊢ A type) →
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢ B type) →
-      (Δ; Γ ⊢ .pi ⟨x, A⟩ B type)
+      (Δ; Γ.snoc ⟨ps, x, A⟩ ⊢ B type) →
+      (Δ; Γ ⊢ .pi s ⟨ps, x, A⟩ B type)
 
 /-- Judgmental equality of types -/
 inductive Ty.Eq : Global → {n : Nat} → Ctx 0 n → Ty n → Ty n → Prop
@@ -80,13 +80,13 @@ inductive Ty.Eq : Global → {n : Nat} → Ctx 0 n → Ty n → Ty n → Prop
       (Δ; Γ ⊢ B ≡ C type) →
       (Δ; Γ ⊢ A ≡ C type)
   /-- HoTT book A.2.2, Π-form-eq -/
-  | pi_form_eq {Δ Γ A₁ A₂ x B₁ B₂} :
+  | pi_form_eq {Δ Γ s₁ s₂ ps₁ ps₂ A₁ A₂ x B₁ B₂} :
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
-      (Δ; Γ.snoc ⟨x, A₁⟩ ⊢ B₁ ≡ B₂ type) →
-      (Δ; Γ ⊢ .pi ⟨x, A₁⟩ B₁ ≡ .pi ⟨x, A₂⟩ B₂ type)
-  | el_form_eq {Δ Γ i t₁ t₂} :
-      (Δ; Γ ⊢ t₁ ≡ t₂ : 𝑢 i) →
-      (Δ; Γ ⊢ .el t₁ ≡ .el t₂ type)
+      (Δ; Γ.snoc ⟨ps₁, x, A₁⟩ ⊢ B₁ ≡ B₂ type) →
+      (Δ; Γ ⊢ .pi s₁ ⟨ps₁, x, A₁⟩ B₁ ≡ .pi s₂ ⟨ps₂, x, A₂⟩ B₂ type)
+  | el_form_eq {Δ Γ s₁ s₂ su i t₁ t₂} :
+      (Δ; Γ ⊢ t₁ ≡ t₂ : .u su i) →
+      (Δ; Γ ⊢ .el s₁ t₁ ≡ .el s₂ t₂ type)
 
 /-- Judgmental equality of terms -/
 inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n → Prop
@@ -109,64 +109,64 @@ inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n �
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ a ≡ b : B)
   /-- Definition unfolding (δ-reduction) -/
-  | delta {Δ Γ name us info} :
+  | delta {Δ Γ sc name us info} :
       (Δ; Γ ⊢) →
       Δ.findDefinition name = some info →
-      (Δ; Γ ⊢ .const name us ≡ info.tm.wkClosed : info.ty.wkClosed)
+      (Δ; Γ ⊢ .const sc name us ≡ info.tm.wkClosed : info.ty.wkClosed)
   /-- HoTT book A.2.2, Π-intro-eq -/
-  | pi_intro_eq {Δ Γ x b₁ b₂ A₁ A₂ B} :
+  | pi_intro_eq {Δ Γ sl₁ sl₂ sp ps₁ ps₂ x b₁ b₂ A₁ A₂ B} :
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
-      (Δ; Γ.snoc ⟨x, A₁⟩ ⊢ b₁ ≡ b₂ : B) →
-      (Δ; Γ ⊢ .lam ⟨x, A₁⟩ b₁ ≡ .lam ⟨x, A₂⟩ b₂ : .pi ⟨x, A₁⟩ B)
+      (Δ; Γ.snoc ⟨ps₁, x, A₁⟩ ⊢ b₁ ≡ b₂ : B) →
+      (Δ; Γ ⊢ .lam sl₁ ⟨ps₁, x, A₁⟩ b₁ ≡ .lam sl₂ ⟨ps₂, x, A₂⟩ b₂ : .pi sp ⟨ps₁, x, A₁⟩ B)
   /-- HoTT book A.2.2, Π-elim-eq -/
-  | pi_elim_eq {Δ Γ x f₁ f₂ a₁ a₂ A B} :
-      (Δ; Γ ⊢ f₁ ≡ f₂ : .pi ⟨x, A⟩ B) →
+  | pi_elim_eq {Δ Γ sp ps sa₁ sa₂ x f₁ f₂ a₁ a₂ A B} :
+      (Δ; Γ ⊢ f₁ ≡ f₂ : .pi sp ⟨ps, x, A⟩ B) →
       (Δ; Γ ⊢ a₁ ≡ a₂ : A) →
-      (Δ; Γ ⊢ f₁.app a₁ ≡ f₂.app a₂ : B[a₁])
+      (Δ; Γ ⊢ .app sa₁ f₁ a₁ ≡ .app sa₂ f₂ a₂ : B[a₁])
   /-- HoTT book A.2.4, Π-comp (β-reduction) -/
-  | pi_comp {Δ Γ x a b A B} :
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢ b : B) →
+  | pi_comp {Δ Γ sl sa sp ps x a b A B} :
+      (Δ; Γ.snoc ⟨ps, x, A⟩ ⊢ b : B) →
       (Δ; Γ ⊢ a : A) →
-      (Δ; Γ ⊢ (Tm.lam ⟨x, A⟩ b).app a ≡ b[a] : B[a])
+      (Δ; Γ ⊢ .app sa (Tm.lam sl ⟨ps, x, A⟩ b) a ≡ b[a] : B[a])
   /-- HoTT book A.2.4, Π-uniq (η-conversion) -/
-  | pi_uniq {Δ Γ x A B f} :
-      (Δ; Γ ⊢ f : .pi ⟨x, A⟩ B) →
-      (Δ; Γ ⊢ f ≡ .lam ⟨x, A⟩ ((↑f).app (.var 0)) : .pi ⟨x, A⟩ B)
+  | pi_uniq {Δ Γ sl sa sp ps x A B f} :
+      (Δ; Γ ⊢ f : .pi sp ⟨ps, x, A⟩ B) →
+      (Δ; Γ ⊢ f ≡ .lam sl ⟨ps, x, A⟩ (.app sa (↑f) (.var none 0)) : .pi sp ⟨ps, x, A⟩ B)
   /-- Let reduction (ζ-reduction) -/
-  | zeta {Δ Γ x A e body B} :
+  | zeta {Δ Γ slet ps x A e body B} :
       (Δ; Γ ⊢ e : A) →
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢ body : B) →
-      (Δ; Γ ⊢ .letE x A e body ≡ body[e] : B[e])
+      (Δ; Γ.snoc ⟨ps, x, A⟩ ⊢ body : B) →
+      (Δ; Γ ⊢ .letE slet x A e body ≡ body[e] : B[e])
   -- TODO: proj reduction
   -- TODO: ι-reduction
 
 /-- Typing judgment -/
 inductive Tm.HasType : Global → {n : Nat} → Ctx 0 n → Tm n → Ty n → Prop
   /-- HoTT book A.2.2, vble -/
-  | var {Δ n Γ} :
+  | var {Δ n Γ sv} :
       (Δ; Γ ⊢) →
       (i : Idx n) →
-      (Δ; Γ ⊢ .var i : Γ.get i)
+      (Δ; Γ ⊢ .var sv i : Γ.get i)
   /-- Global constant -/
-  | const {Δ Γ name us ty} :
+  | const {Δ Γ sc name us ty} :
       (Δ; Γ ⊢) →
       Δ.findTy name = some ty →
-      (Δ; Γ ⊢ .const name us : ty.wkClosed)
+      (Δ; Γ ⊢ .const sc name us : ty.wkClosed)
   /-- HoTT book A.2.4, Π-intro -/
-  | pi_intro {Δ Γ x A body B} :
+  | pi_intro {Δ Γ sl sp ps x A body B} :
       (Δ; Γ ⊢ A type) →
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢ body : B) →
-      (Δ; Γ ⊢ .lam ⟨x, A⟩ body : .pi ⟨x, A⟩ B)
+      (Δ; Γ.snoc ⟨ps, x, A⟩ ⊢ body : B) →
+      (Δ; Γ ⊢ .lam sl ⟨ps, x, A⟩ body : .pi sp ⟨ps, x, A⟩ B)
   /-- HoTT book A.2.4, Π-elim -/
-  | pi_elim {Δ Γ f a x A B} :
-      (Δ; Γ ⊢ f : .pi ⟨x, A⟩ B) →
+  | pi_elim {Δ Γ sp sa ps f a x A B} :
+      (Δ; Γ ⊢ f : .pi sp ⟨ps, x, A⟩ B) →
       (Δ; Γ ⊢ a : A) →
-      (Δ; Γ ⊢ f.app a : B[a])
+      (Δ; Γ ⊢ .app sa f a : B[a])
   /-- Let introduction -/
-  | let_intro {Δ Γ x A a b B} :
+  | let_intro {Δ Γ slet ps x A a b B} :
       (Δ; Γ ⊢ a : A) →
-      (Δ; Γ.snoc ⟨x, A⟩ ⊢ b : B) →
-      (Δ; Γ ⊢ .letE x A a b : B[a])
+      (Δ; Γ.snoc ⟨ps, x, A⟩ ⊢ b : B) →
+      (Δ; Γ ⊢ .letE slet x A a b : B[a])
   /-- HoTT book A.2.2, conversion -/
   | conv {Δ Γ e A B} :
       (Δ; Γ ⊢ e : A) →

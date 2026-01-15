@@ -5,7 +5,8 @@ structure Prod.{u, v} (A : Type u) (B : Type v) : Type (max u v) where
   (snd : B)
 
 def Prod.swap.{u, v} (A : Type u) (B : Type v) (p : Prod.{u, v} A B) : Prod.{v, u} B A :=
-  (Prod.snd.{u, v} A B p, Prod.fst.{u, v} A B p)
+  Prod.mk.{v, u} B A (Prod.snd.{u, v} A B p) (Prod.fst.{u, v} A B p)
 
-def Prod.eta.{u, v} (A : Type u) (B : Type v) (p : Prod.{u, v} A B) : (Prod.fst.{u, v} A B p, Prod.snd.{u, v} A B p) = p :=
+def Prod.eta.{u, v} (A : Type u) (B : Type v) (p : Prod.{u, v} A B) :
+    Prod.mk.{u, v} A B (Prod.fst.{u, v} A B p) (Prod.snd.{u, v} A B p) = p :=
   Eq.refl.{max u v} (Prod.{u, v} A B) p

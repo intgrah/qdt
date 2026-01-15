@@ -28,3 +28,7 @@ globs = ["QdtTest.+"]
 [[lean_exe]]
 name = "qdt"
 root = "Main"
+
+[[lean_exe]]
+name = "qdt-lsp"
+root = "Qdt.Lsp.Main"

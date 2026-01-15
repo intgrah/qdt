@@ -23,11 +23,11 @@ inductive Ty.AlphaEq : ∀ {n}, Ty n → Ty n → Prop
       t₁ ≡α t₂ →
       t₂ ≡α t₃ →
       t₁ ≡α t₃
-  | congrPi {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Ty (n + 1)} :
+  | congrPi {n} {s₁ s₂ ps₁ ps₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Ty (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .pi ⟨x₁, a₁⟩ b₁ ≡α .pi ⟨x₂, a₂⟩ b₂
-  | congrEl {n} (t₁ t₂ : Tm n) : t₁ ≡α t₂ → Ty.el t₁ ≡α Ty.el t₂
+      .pi s₁ ⟨ps₁, x₁, a₁⟩ b₁ ≡α .pi s₂ ⟨ps₂, x₂, a₂⟩ b₂
+  | congrEl {n} {s₁ s₂ : Frontend.Src} (t₁ t₂ : Tm n) : t₁ ≡α t₂ → Ty.el s₁ t₁ ≡α Ty.el s₂ t₂
 
 inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
   | refl {n} (t : Tm n) :
@@ -39,23 +39,23 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
       t₁ ≡α t₂ →
       t₂ ≡α t₃ →
       t₁ ≡α t₃
-  | congrApp {n} {a₁ a₂ b₁ b₂ : Tm n} :
+  | congrApp {n} {s₁ s₂ : Frontend.Src} {a₁ a₂ b₁ b₂ : Tm n} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      a₁.app b₁ ≡α a₂.app b₂
-  | congrPiHat {n} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
+      Tm.app s₁ a₁ b₁ ≡α Tm.app s₂ a₂ b₂
+  | congrPiHat {n} {s₁ s₂ ps₁ ps₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .pi' x₁ a₁ b₁ ≡α .pi' x₂ a₂ b₂
-  | congrLam {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
+      .pi' s₁ ps₁ x₁ a₁ b₁ ≡α .pi' s₂ ps₂ x₂ a₂ b₂
+  | congrLam {n} {s₁ s₂ ps₁ ps₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .lam ⟨x₁, a₁⟩ b₁ ≡α .lam ⟨x₂, a₂⟩ b₂
-  | congrLetE {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm n} {c₁ c₂ : Tm (n + 1)} :
+      .lam s₁ ⟨ps₁, x₁, a₁⟩ b₁ ≡α .lam s₂ ⟨ps₂, x₂, a₂⟩ b₂
+  | congrLetE {n} {s₁ s₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm n} {c₁ c₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
       c₁ ≡α c₂ →
-      .letE x₁ a₁ b₁ c₁ ≡α .letE x₂ a₂ b₂ c₂
+      .letE s₁ x₁ a₁ b₁ c₁ ≡α .letE s₂ x₂ a₂ b₂ c₂
 end
 
 end Definitions

@@ -6,7 +6,7 @@ open Qdt
 open Incremental (Engine Key Val TaskM)
 open Lean (Term MacroM)
 
-def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Incremental.GlobalEnv) := do
+private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Incremental.GlobalEnv) := do
   let config : Config := Config.empty
   let engine : Engine Error Val := Incremental.newEngine
   let task : TaskM Error Val Incremental.GlobalEnv := do
@@ -37,12 +37,12 @@ def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Incremental.Global
   | .ok (env, _) => pure (.ok env)
   | .error e => pure (.error e)
 
-def shouldPass (prog : Frontend.Cst.Program) : IO Unit := do
+private def shouldPass (prog : Frontend.Cst.Program) : IO Unit := do
   match ← elabProg prog with
   | .ok _ => pure ()
   | .error e => throw (IO.userError s!"expected success, got: {e}")
 
-def shouldFail (check : Error → Bool) (prog : Frontend.Cst.Program) : IO Unit := do
+private def shouldFail (check : Error → Bool) (prog : Frontend.Cst.Program) : IO Unit := do
   match ← elabProg prog with
   | .ok _ => throw (IO.userError "expected error, got success")
   | .error e =>
@@ -53,6 +53,9 @@ private def termListExpr (xs : List Term) : MacroM Term := do
   let xsArray := xs.toArray
   `([$[$xsArray],*])
 
+/--
+`#pass (prog)` expects `prog` to elaborate successfully.
+-/
 syntax "#pass" "(" command* ")" : command
 
 macro_rules
@@ -61,6 +64,10 @@ macro_rules
       let prog ← termListExpr cmdTerms.toList
       `(command| #eval shouldPass $prog)
 
+/--
+`#fail (prog) with pat` expects `prog` to fail with
+an error matching `pat`.
+-/
 syntax "#fail" "(" command* ")" "with" term : command
 
 macro_rules

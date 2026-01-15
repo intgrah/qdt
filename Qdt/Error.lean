@@ -49,4 +49,27 @@ instance : ToString Error where toString
   | .ctorMustReturnInductive src ctorName indName => s!"{repr src}: {ctorName} must return {indName}"
   | .ctorParamMismatch src ctorName => s!"{repr src}: {ctorName}: inductive type parameters must be constant throughout the definition"
 
+def Error.src : Error → Src
+  | .msg ..
+  | .ioError ..
+  | .notImplemented .. =>
+      none
+  | .expectedType src ..
+  | .typecheckMissing src
+  | .duplicateUniverseParam src _
+  | .higherUniverse src
+  | .inferUnannotatedLambda src
+  | .inferSorry src
+  | .expectedFunctionType src ..
+  | .typeMismatch src ..
+  | .unboundVariable src _
+  | .unboundUniverseVariable src _
+  | .typeFamilyCtorReturnTypeRequired src _
+  | .structureResultTypeMustBeTypeUniverse src _
+  | .universeArgCountMismatch src ..
+  | .nonPositiveOccurrence src _
+  | .ctorMustReturnInductive src ..
+  | .ctorParamMismatch src _ =>
+      src
+
 end Qdt

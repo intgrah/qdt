@@ -7,17 +7,11 @@ deriving Repr, Inhabited
 
 abbrev Src := Option Span
 
-/-!
-Hashing source spans:
-
-For incremental elaboration, source locations should not affect semantic results.
-We therefore hash spans/source locations as a constant.
--/
-
 instance : Hashable Span where
-  hash _ := 0
+  hash s := mixHash (hash s.startPos.byteIdx) (hash s.endPos.byteIdx)
 
-instance : Hashable Src where
-  hash _ := 0
+instance : Hashable Src where hash
+  | none => 0
+  | some s => hash s
 
 end Qdt.Frontend

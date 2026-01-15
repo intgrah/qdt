@@ -29,6 +29,7 @@ inductive Key : Type
   | inputFiles
   | moduleFile (modName : Name)
   | moduleImports (file : FilePath)
+  | importedEnv (file : FilePath)
   | elabModule (file : FilePath)
 
   | fileText (file : FilePath)
@@ -49,6 +50,7 @@ def Val : Key → Type
   | .inputFiles => HashSet FilePath
   | .moduleFile _ => Option FilePath
   | .moduleImports _ => List Name
+  | .importedEnv _ => GlobalEnv
   | .elabModule _ => GlobalEnv
 
   | .fileText _ => String

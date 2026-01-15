@@ -111,7 +111,7 @@ def load : IO Config := do
         findToml parent fuel
   match ← findToml cwd 100 with
   | some tomlPath =>
-      println!"[config] Loading {tomlPath}"
+      IO.eprintln s!"[config] Loading {tomlPath}"
       fromTomlFile tomlPath
   | none => pure Config.empty
 

@@ -4,11 +4,11 @@ inductive Eq.{u} (A : Type u) (a : A) : A → Type u where
 -- UIP
 axiom Eq.ext.{u} (A : Type u) (x y : A) (p q : x = y) : p = q
 
-def Eq.ndrec.{u_1, u} (A : Type u) (a : A) (motive : A → Type u_1) (h : motive a) (b : A) (p : a = b) : motive b :=
-  Eq.rec.{u_1, u} A a (fun x _ => motive x) h b p
+def Eq.ndrec.{v, u} (A : Type u) (a : A) (motive : A → Type v) (h : motive a) (b : A) (p : a = b) : motive b :=
+  Eq.rec.{v, u} A a (fun x _ => motive x) h b p
 
-def Eq.subst.{u_1, u} (A : Type u) (P : A → Type u_1) (a b : A) (p : a = b) (h : P a) : P b :=
-  Eq.ndrec.{u_1, u} A a P h b p
+def Eq.subst.{v, u} (A : Type u) (P : A → Type v) (a b : A) (p : a = b) (h : P a) : P b :=
+  Eq.ndrec.{v, u} A a P h b p
 
 def Eq.symm.{u} (A : Type u) (a b : A) (p : Eq.{u} A a b) : Eq.{u} A b a :=
   Eq.subst.{u, u} A (fun y => Eq.{u} A y a) a b p (Eq.refl.{u} A a)

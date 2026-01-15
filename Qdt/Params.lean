@@ -15,14 +15,14 @@ def elabParamsWithLevels {n} (params : List Frontend.Ast.TypedBinder) :
         (params : List Frontend.Ast.TypedBinder) →
         TermM b (TermContext (b + params.length) × Tele Param a (b + params.length) × List Universe)
     | [] => return (← read, acc, levels.reverse)
-    | ⟨_src, name, ty⟩ :: bs => do
+    | ⟨src, name, ty⟩ :: bs => do
         let (ty, level) ← checkTyWithLevel ty
         let ctx ← read
         let tyVal ← ty.eval ctx.env
         let ctx := ctx.bind name tyVal
         return by
           simpa only [List.length_cons, Nat.add_comm bs.length, ← Nat.add_assoc b]
-          using ← go (b + 1) (acc.snoc ⟨name, ty⟩) (level :: levels) bs ctx
+          using ← go (b + 1) (acc.snoc ⟨src, name, ty⟩) (level :: levels) bs ctx
 
 def elabParamsFrom {n} (params : List Frontend.Ast.TypedBinder) :
     TermM n (TermContext (n + params.length) × Tele Param n (n + params.length)) := do
