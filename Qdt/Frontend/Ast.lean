@@ -14,7 +14,6 @@ inductive Term : Type
   | pi : Src → TypedBinder → Term → Term
   | letE : Src → Name → Option Term → Term → Term → Term
   | u : Src → Universe → Term
-  | pair : Src → Term → Term → Term
   | eq : Src → Term → Term → Term
   | ann : Src → Term → Term → Term
   | sorry : Src → Term
@@ -41,7 +40,6 @@ def Term.src : Term → Src
   | .pi src _ _
   | .letE src _ _ _ _
   | .u src _
-  | .pair src _ _
   | .eq src _ _
   | .ann src _ _
   | .sorry src
@@ -97,6 +95,7 @@ deriving Repr, Inhabited, Hashable
 
 structure StructureField where
   src : Src
+  nameSrc : Src  -- Span of just the field name
   name : Name
   params : List TypedBinder
   ty : Term

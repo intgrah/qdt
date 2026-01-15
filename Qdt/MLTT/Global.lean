@@ -10,6 +10,7 @@ namespace Qdt
 open Lean (Name)
 
 structure ConstantInfo where
+  file : Option String := none
   univParams : List Name
   ty : Ty 0
 deriving Repr, Hashable
@@ -58,6 +59,22 @@ inductive Entry : Type
   | recursor (info : RecursorInfo)
   | constructor (info : ConstructorInfo)
 deriving Repr, Hashable
+
+def Entry.setFile (file : Option String) : Entry → Entry
+  | .definition info => .definition { info with file }
+  | .opaque info => .opaque { info with file }
+  | .axiom info => .axiom { info with file }
+  | .inductive info => .inductive { info with file }
+  | .recursor info => .recursor { info with file }
+  | .constructor info => .constructor { info with file }
+
+def Entry.file : Entry → Option String
+  | .definition info
+  | .opaque info
+  | .axiom info
+  | .inductive info
+  | .recursor info
+  | .constructor info => info.file
 
 abbrev Global := Std.HashMap Name Entry
 

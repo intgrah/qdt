@@ -15,9 +15,6 @@ inductive Term : Type
   | arrow : Src → Term → Term → Term
   | letE : Src → Name → Option Term → Term → Term → Term
   | u : Src → Universe → Term
-  | sigma : Src → TypedBinderGroup → Term → Term
-  | prod : Src → Term → Term → Term
-  | pair : Src → Term → Term → Term
   | eq : Src → Term → Term → Term
   | natLit : Src → Nat → Term
   | add : Src → Term → Term → Term
@@ -32,8 +29,9 @@ inductive BinderGroup : Type
   | typed : TypedBinderGroup → BinderGroup
 deriving Repr, Inhabited
 
+/-- A typed binder group like `(x y : T)` stores per-name source info -/
 inductive TypedBinderGroup : Type
-  | mk : Src → List Name → Term → TypedBinderGroup
+  | mk : Src → List (Src × Name) → Term → TypedBinderGroup
 deriving Repr, Inhabited
 end
 
@@ -87,6 +85,7 @@ deriving Repr, Inhabited
 
 structure StructureField where
   src : Src
+  nameSrc : Src  -- Span of just the field name
   name : Name
   params : List TypedBinderGroup
   ty : Term

@@ -61,9 +61,7 @@ partial def Neutral.defEq {n} : Neutral n → Neutral n → MetaM Bool
       | .var v₁, .var v₂ =>
           if v₁ == v₂ then sp₁.defEq sp₂ else return false
       | .const n₁ us₁, .const n₂ us₂ =>
-          let us₁Norm := us₁.map Universe.normalise
-          let us₂Norm := us₂.map Universe.normalise
-          if n₁ == n₂ && us₁Norm == us₂Norm then
+          if n₁ == n₂ && us₁ == us₂ then
             sp₁.defEq sp₂
           else
             let eta1 ← etaDefEq ⟨.const n₁ us₁, sp₁⟩ (.neutral ne₂)

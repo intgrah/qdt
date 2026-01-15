@@ -31,16 +31,16 @@ def lookupName (ctx : List Name) (i : Nat) : Format :=
   | some n => if n.isAnonymous then "_" else format n
   | none   => f!"?{i}"
 
-def parenIf (cond : Bool) (f : Format) : Format :=
-  if cond then paren f else f
+def parenIf (cond : Bool) : Format → Format :=
+  if cond then paren else id
 
 mutual
 
 def Ty.fmt {c : Nat} (ctx : List Name) (ty : Ty c) (prec : Nat) : Format :=
   match ty with
-  | .u .zero => "Type"
-  | .u i => f!"Type {Universe.reprPrec i Prec.max}"
-  | .pi ⟨name, dom⟩ cod =>
+  | .u _ .zero => "Type"
+  | .u _ i => f!"Type {Universe.reprPrec i Prec.max}"
+  | .pi _ ⟨_, name, dom⟩ cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.app
       let codFmt := cod.fmt (x :: ctx) Prec.arrow
@@ -48,29 +48,29 @@ def Ty.fmt {c : Nat} (ctx : List Name) (ty : Ty c) (prec : Nat) : Format :=
         if name.isAnonymous then f!"{domFmt} → {codFmt}"
         else group f!"({x} : {domFmt}) → {codFmt}"
       parenIf (prec > Prec.arrow) body
-  | .el t => t.fmt ctx prec
+  | .el _ t => t.fmt ctx prec
 
 def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
   match tm with
-  | .u' .zero => "Type"
-  | .u' i => f!"Type {Universe.reprPrec i Prec.max}"
-  | .var ⟨i, _⟩ => lookupName ctx i
-  | .const name us =>
+  | .u' _ .zero => "Type"
+  | .u' _ i => f!"Type {Universe.reprPrec i Prec.max}"
+  | .var _ ⟨i, _⟩ => lookupName ctx i
+  | .const _ name us =>
       if us.isEmpty then format name
       else
         let usStrs := us.map (fun u => toString (Universe.reprPrec u Prec.min))
         toString name ++ ".{" ++ ", ".intercalate usStrs ++ "}"
-  | .lam ⟨name, dom⟩ body =>
+  | .lam _ ⟨_, name, dom⟩ body =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.arrow
       let bodyFmt := body.fmt (x :: ctx) Prec.min
       let lamFmt := group (nest 2 f!"fun {x} : {domFmt} =>{line}{bodyFmt}")
       parenIf (prec > Prec.arrow) lamFmt
-  | .app f a =>
+  | .app _ f a =>
       let fFmt := f.fmt ctx Prec.app
       let aFmt := a.fmt ctx Prec.max
       parenIf (prec > Prec.app) f!"{fFmt} {aFmt}"
-  | .pi' name dom cod =>
+  | .pi' _ _ name dom cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.app
       let codFmt := cod.fmt (x :: ctx) Prec.arrow
@@ -78,8 +78,8 @@ def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
         if name.isAnonymous then f!"{domFmt} → {codFmt}"
         else group f!"({x} : {domFmt}) → {codFmt}"
       parenIf (prec > Prec.arrow) body
-  | .proj i t => f!"{t.fmt ctx Prec.proj}.{i}"
-  | .letE x ty val body =>
+  | .proj _ i t => f!"{t.fmt ctx Prec.proj}.{i}"
+  | .letE _ x ty val body =>
       let xFresh := freshName ctx x
       let tyFmt := ty.fmt ctx Prec.min
       let valFmt := val.fmt ctx Prec.min

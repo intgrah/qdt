@@ -28,6 +28,23 @@ deriving Inhabited
 
 initialize rulesContextRef : IO.Ref RulesContext ← IO.mkRef default
 
+initialize fileTextOverridesRef : IO.Ref (Std.HashMap FilePath String) ←
+  IO.mkRef (Std.HashMap.emptyWithCapacity 32)
+
+def setFileTextOverride (file : FilePath) (text : String) : IO Unit := do
+  fileTextOverridesRef.modify (·.insert file text)
+
+def eraseFileTextOverride (file : FilePath) : IO Unit := do
+  fileTextOverridesRef.modify (·.erase file)
+
+def getFileTextOverride? (file : FilePath) : IO (Option String) := do
+  return (← fileTextOverridesRef.get)[file]?
+
+def getFileText (file : FilePath) : IO String := do
+  match ← getFileTextOverride? file with
+  | some text => return text
+  | none => IO.FS.readFile file
+
 private def getRulesContext : IO RulesContext :=
   rulesContextRef.get
 
@@ -120,6 +137,7 @@ def fingerprint : ∀ k, Val k → UInt64
   | .inputFiles, (s : HashSet FilePath) => hashFilePaths s
   | .moduleFile _, (p : Option FilePath) => hash (p.map (·.toString))
   | .moduleImports _, (ns : List Name) => hashNames ns
+  | .importedEnv _, (env : GlobalEnv) => hashNameEntryPairs env
   | .elabModule _, (env : GlobalEnv) => hashNameEntryPairs env
 
   | .fileText _, (s : String) => hash s
@@ -137,7 +155,7 @@ def fingerprint : ∀ k, Val k → UInt64
 
 private def logElab (decl : TopDecl) : IT PUnit :=
   IO.toEIO Error.ioError <|
-    println!"[elab] {repr decl.kind} {decl.name}"
+    IO.eprintln s!"[elab] {repr decl.kind} {decl.name}"
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []
@@ -205,9 +223,8 @@ def rules : ∀ k, TaskM Error Val (Val k)
       let prog ← fetchQ (.astProgram file)
       return extractImports prog
 
-  | .elabModule file => do
+  | .importedEnv file => do
       let imports ← fetchQ (.moduleImports file)
-      -- Build up environment from all imports
       let mut globalEnv : GlobalEnv := Std.HashMap.emptyWithCapacity 4096
       for modName in imports.toArray do
         match ← fetchQ (.moduleFile modName) with
@@ -217,17 +234,25 @@ def rules : ∀ k, TaskM Error Val (Val k)
             let depEnv ← fetchQ (.elabModule depFile)
             for (name, entry) in depEnv.toList.toArray do
               globalEnv := globalEnv.insert name entry
+      return globalEnv
+
+  | .elabModule file => do
+      let mut globalEnv ← fetchQ (.importedEnv file)
+      -- Set up the imported env for elabTop to use via getImportedEnv
       IO.toEIO Error.ioError (setImportedEnv globalEnv)
       let owners ← fetchQ (.declOwner file)
       for (_, owner) in owners.toList.toArray do
         let localEnv ← fetchQ (.elabTop file owner)
         for (n, e) in localEnv.toList.toArray do
           globalEnv := globalEnv.insert n e
+        -- Update so next declaration can see prior ones
         IO.toEIO Error.ioError (setImportedEnv globalEnv)
       return globalEnv
 
-  | .fileText file =>
-      IO.toEIO Error.ioError <| IO.FS.readFile file
+  | .fileText file => do
+      match ← IO.toEIO Error.ioError (getFileTextOverride? file) with
+      | some text => return text
+      | none => IO.toEIO Error.ioError <| IO.FS.readFile file
   | .astProgram file => do
       let content ← fetchQ (.fileText file)
       match Frontend.Parser.parse content with

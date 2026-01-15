@@ -12,25 +12,25 @@ open Lean (Name)
 mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
-  | .u i => return .u i
-  | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
-  | .el t => do doEl (← t.eval)
+  | .u _ i => return .u i.normalise
+  | .pi _ ⟨_, x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
+  | .el _ t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → MetaM (VTy n)
-  | .u' i => return .u i
-  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
+  | .u' i => return .u i.normalise
+  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el none b⟩
   | .neutral ne => return .el ne
   | .lam .. => throw (.msg "doEl: expected type code or neutral")
 
 partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
-  | .u' i => return .u' i
-  | .var i => return (← read).get i
-  | .const name us => deltaReduction name us
-  | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
-  | .app f a => do (← f.eval).app (← a.eval)
-  | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
-  | .proj i t => do (← t.eval).proj i
-  | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
+  | .u' _ i => return .u' i.normalise
+  | .var _ i => return (← read).get i
+  | .const _ name us => deltaReduction name (us.map Universe.normalise)
+  | .lam _ ⟨_, x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
+  | .app _ f a => do (← f.eval).app (← a.eval)
+  | .pi' _ _ x a b => return .pi' x (← a.eval) ⟨← read, b⟩
+  | .proj _ i t => do (← t.eval).proj i
+  | .letE _ _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
 partial def VTm.app {n} (f a : VTm n) : MetaM (VTm n) :=
   match f with

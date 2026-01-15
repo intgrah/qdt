@@ -9,30 +9,28 @@ private partial def Term.desugar : Term → Ast.Term
   | .ident src name univs => .ident src name univs
   | .app src f a => .app src f.desugar a.desugar
   | .lam src binders body =>
-      binders.foldr fun
-        | .untyped bSrc name => .lam src (.untyped bSrc name)
-        | .typed ⟨groupSrc, names, ty⟩ =>
+      let expandedBinders : List Ast.Binder := binders.flatMap fun
+        | .untyped bSrc name => [.untyped bSrc name]
+        | .typed ⟨_groupSrc, names, ty⟩ =>
             let ty := ty.desugar
-            names.foldr (fun name => .lam src (.typed ⟨groupSrc, name, ty⟩))
-        body.desugar
-  | .pi src ⟨groupSrc, names, ty⟩ body =>
+            names.map fun (nameSrc, name) => .typed ⟨nameSrc, name, ty⟩
+      match expandedBinders with
+      | [] => body.desugar
+      | first :: rest =>
+          let inner := rest.foldr (fun b acc => .lam none b acc) body.desugar
+          .lam src first inner
+  | .pi src ⟨_groupSrc, names, ty⟩ body =>
       let ty := ty.desugar
-      names.foldr (fun name => .pi src ⟨groupSrc, name, ty⟩) body.desugar
+      match names with
+      | [] => body.desugar
+      | (firstSrc, firstName) :: rest =>
+          let inner := rest.foldr (fun (nSrc, n) acc => .pi none ⟨nSrc, n, ty⟩ acc) body.desugar
+          .pi src ⟨firstSrc, firstName, ty⟩ inner
   | .arrow src a b =>
       .pi src ⟨src, .anonymous, a.desugar⟩ b.desugar
   | .letE src name tyOpt rhs body =>
       .letE src name (tyOpt.map Term.desugar) rhs.desugar body.desugar
   | .u src level => .u src level
-  | .sigma src ⟨groupSrc, names, ty⟩ body =>
-      let ty := ty.desugar
-      names.foldr
-        (fun name acc =>
-          .app src
-            (.app src (.ident src `Sigma []) ty)
-            (.lam src (.typed ⟨groupSrc, name, ty⟩) acc))
-        body.desugar
-  | .prod src a b => .app src (.app src (.ident src `Prod []) a.desugar) b.desugar
-  | .pair src a b => .pair src a.desugar b.desugar
   | .eq src a b => .eq src a.desugar b.desugar
   | .natLit src n => n.repeat (.app src (.ident src `Nat.succ [])) (.ident src `Nat.zero [])
   | .add src a b => .app src (.app src (.ident src `Nat.add []) a.desugar) b.desugar
@@ -42,8 +40,8 @@ private partial def Term.desugar : Term → Ast.Term
   | .sorry src => .sorry src
 
 private def TypedBinderGroup.desugar : TypedBinderGroup → List Ast.TypedBinder
-  | ⟨groupSrc, names, ty⟩ =>
-    names.map fun name => ⟨groupSrc, name, ty.desugar⟩
+  | ⟨_groupSrc, names, ty⟩ =>
+    names.map fun (nameSrc, name) => ⟨nameSrc, name, ty.desugar⟩
 
 private def desugarTypedBinderGroupList : List TypedBinderGroup → List Ast.TypedBinder :=
   List.flatMap TypedBinderGroup.desugar
@@ -92,6 +90,7 @@ private def Inductive.desugar (ind : Inductive) : Ast.Command.Inductive where
 
 private def StructureField.desugar (field : StructureField) : Ast.Command.StructureField where
   src := field.src
+  nameSrc := field.nameSrc
   name := field.name
   params := desugarTypedBinderGroupList field.params
   ty := field.ty.desugar

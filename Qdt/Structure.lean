@@ -29,7 +29,7 @@ private def mkPrevEnv
     (x : VTm (numParams + 1)) :
     {b : Nat} → Tele Param numParams b → MetaM (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
-  | _, .snoc fs ⟨name, _⟩ => do
+  | _, .snoc fs ⟨_, name, _⟩ => do
       let envTail ← mkPrevEnv structName numParams univs params x fs
       let fname ← getAtomicFieldString structName name
       let projName := structName.str fname
@@ -38,19 +38,21 @@ private def mkPrevEnv
       let proj ← proj.app x
       return Env.cons proj envTail
 
+open Qdt.Error
+
 def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
   let numParams := info.params.length
 
   let (paramCtx, paramTys) ← elabParams info.params
   let resultTy : Ty numParams ←
     match info.tyOpt with
-    | none => pure (Ty.u .zero)
-    | some (.u _ level) => pure (Ty.u level : Ty numParams)
-    | some _ => throw (.structureResultTypeMustBeTypeUniverse info.src info.name)
+    | none => pure (Ty.u none .zero)
+    | some (.u src level) => pure (Ty.u src level : Ty numParams)
+    | some _ => throw (structureResultTypeMustBeTypeUniverse info.src info.name)
 
   let structFieldStrs ← info.fields.mapM fun f => getAtomicFieldString info.name f.name
   let ctorFieldBinders : List Frontend.Ast.TypedBinder :=
-    info.fields.map fun f => ⟨f.src, f.name, mkFieldTyTerm f⟩
+    info.fields.map fun f => ⟨f.nameSrc, f.name, mkFieldTyTerm f⟩
 
   let indSynth : Frontend.Ast.Command.Inductive :=
     {
@@ -87,7 +89,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
   let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps paramsVal
   let majorTy ← majorTy.quote
-  let majorTy : Ty numParams := Ty.el majorTy
+  let majorTy : Ty numParams := Ty.el none majorTy
 
   let rec goProj
       {b}
@@ -95,7 +97,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
       Tele Param numParams b →
       MetaM Unit
     | .nil => return
-    | .snoc (b := idx) fs ⟨name, ty⟩ => do
+    | .snoc (b := idx) fs ⟨_, name, ty⟩ => do
         goProj (Nat.le_of_succ_le hb) fs
 
         let fname ← getAtomicFieldString info.name name
@@ -106,15 +108,15 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
         let ftyVal ← fty.eval envPrev
         let ftyTy ← ftyVal.quote
 
-        let pVar : Tm np1 := Tm.var ⟨0, by omega⟩
+        let pVar : Tm np1 := Tm.var none ⟨0, by omega⟩
         let fieldIdx := idx - numParams
-        let projBody : Tm np1 := Tm.proj fieldIdx pVar
+        let projBody : Tm np1 := Tm.proj none fieldIdx pVar
 
-        let projBodyTy : Ty numParams := Ty.pi ⟨`p, majorTy⟩ ftyTy
+        let projBodyTy : Ty numParams := Ty.pi none ⟨none, `p, majorTy⟩ ftyTy
         let projTy : Ty 0 := Ty.pis paramTys projBodyTy
         let projTm : Tm 0 :=
           Tm.lams paramTys <|
-          Tm.lam ⟨`p, majorTy⟩ projBody
+          Tm.lam none ⟨none, `p, majorTy⟩ projBody
 
         let univParams := (← getThe MetaState).univParams
         Global.addEntry projName (.definition { univParams, ty := projTy, tm := projTm })

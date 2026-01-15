@@ -29,7 +29,11 @@ def verifyDeps
     (deps : HashMap Q UInt64) :
     TaskM ε R Bool := do
   deps.toList.allM fun (q, old) => do
-    let v ← TaskM.fetch q
-    return fingerprint q v == old
+
+    try
+      let v ← TaskM.fetch q
+      return fingerprint q v == old
+    catch _ =>
+      return false
 
 end Qdt.Incremental

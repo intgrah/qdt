@@ -3,9 +3,6 @@ import Qdt.MLTT.Universe
 
 namespace Qdt.Frontend.Parser
 
-inductive Test α where
-  | mk (x : α) : Test α
-
 open Lean (Name)
 open Cst
 
@@ -28,6 +25,8 @@ private def Src.mk (startPos endPos : String.Pos.Raw) : Src :=
   some ⟨startPos, endPos⟩
 
 private def getPos : ParserM String.Pos.Raw := return (← get).pos
+
+private def setPos (pos : String.Pos.Raw) : ParserM Unit := modify fun st => { st with pos }
 
 private def isEof : ParserM Bool := do
   let st ← get
@@ -127,6 +126,19 @@ private partial def ws : ParserM Unit := do
     | none, _ =>
         return
 
+private def kw : List String :=
+  [
+    "fun",
+    "let",
+    "def",
+    "example",
+    "axiom",
+    "inductive",
+    "structure",
+    "where",
+    "import",
+  ]
+
 private def isIdentChar : Char → Bool :=
   fun c => c.isAlphanum || c == '_' || c == '\'' || c == '.'
 
@@ -164,8 +176,8 @@ private partial def readIdent : ParserM String := do
 private def Name.ofString : String → Name :=
   fun s => s.splitOn "." |>.foldl Name.str Name.anonymous
 
-private def str (s : String) : ParserM Unit := do
-  ws
+-- Token parser: consumes string WITHOUT leading/trailing whitespace
+private def tok (s : String) : ParserM Unit := do
   let expected := s.toList
   let rec loop : List Char → ParserM Unit
     | [] => return
@@ -181,9 +193,14 @@ private def str (s : String) : ParserM Unit := do
               fail s!"expected '{s}'"
   loop expected
 
+-- String parser: ws before, then token (no trailing ws)
+private def str (s : String) : ParserM Unit := do
+  ws
+  tok s
+
 private def keyword (kw : String) : ParserM Unit := str kw
 private def arrow : ParserM Unit := str "->" <|> str "→"
-private def times : ParserM Unit := str "×"
+-- private def times : ParserM Unit := str "×"
 
 private def parseNat : ParserM Nat := do
   ws
@@ -234,7 +251,10 @@ private inductive Prec
 deriving Repr, Inhabited, DecidableEq, Ord
 
 private def srcStartPos (src : Src) : String.Pos.Raw :=
-  src.map (·.startPos) |>.getD (String.Pos.Raw.mk 0)
+  src.map Span.startPos |>.getD (String.Pos.Raw.mk 0)
+
+private def srcEndPos (src : Src) : String.Pos.Raw :=
+  src.map Span.endPos |>.getD (String.Pos.Raw.mk 0)
 
 private def termStartPos : Term → String.Pos.Raw
   | .missing src
@@ -245,9 +265,6 @@ private def termStartPos : Term → String.Pos.Raw
   | .arrow src _ _
   | .letE src _ _ _ _
   | .u src _
-  | .sigma src _ _
-  | .prod src _ _
-  | .pair src _ _
   | .eq src _ _
   | .natLit src _
   | .add src _ _
@@ -256,6 +273,24 @@ private def termStartPos : Term → String.Pos.Raw
   | .ann src _ _
   | .sorry src =>
      srcStartPos src
+
+private def termEndPos : Term → String.Pos.Raw
+  | .missing src
+  | .ident src _ _
+  | .app src _ _
+  | .lam src _ _
+  | .pi src _ _
+  | .arrow src _ _
+  | .letE src _ _ _ _
+  | .u src _
+  | .eq src _ _
+  | .natLit src _
+  | .add src _ _
+  | .sub src _ _
+  | .mul src _ _
+  | .ann src _ _
+  | .sorry src =>
+     srcEndPos src
 
 private def levelKeywords : List String :=
   ["fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import", "sorry"]
@@ -276,19 +311,23 @@ private partial def parseTypedBinderGroup : ParserM TypedBinderGroup := do
   ws
   let startPos ← getPos
   str "("
-  let names ← many1 parseBinderName
+  let names ← many1 parseBinderNameWithSrc
   str ":"
   let ty ← parsePreterm
   str ")"
   let endPos ← getPos
   return .mk (Src.mk startPos endPos) names ty
 
-private partial def parseBinderName : ParserM Name := do
-  let (_src, name) ← parseIdentStr
+private partial def parseBinderNameWithSrc : ParserM (Src × Name) := do
+  let (src, name) ← parseIdentStr
   if name == "_" then
-    pure Name.anonymous
+    pure (src, Name.anonymous)
   else
-    pure (Name.ofString name)
+    pure (src, Name.ofString name)
+
+private partial def parseBinderName : ParserM Name := do
+  let (_, name) ← parseBinderNameWithSrc
+  pure name
 
 private partial def parseUniverseAtom : ParserM Universe := do
   ws
@@ -318,6 +357,8 @@ private partial def parseUniverseAtom : ParserM Universe := do
 
 private partial def parseUniverseLevel : ParserM Universe := do
   let base ← parseUniverseAtom
+  -- Save position before trying to consume whitespace for '+'
+  let posBeforeWs ← getPos
   ws
   match ← peekChar? with
   | some '+' =>
@@ -329,7 +370,10 @@ private partial def parseUniverseLevel : ParserM Universe := do
       for _ in List.range n do
         u := .succ u
       return u
-  | _ => return base
+  | _ =>
+      -- No '+', restore position to before whitespace
+      setPos posBeforeWs
+      return base
 
 private partial def parseUnivParams : ParserM (List Name) := do
   ws
@@ -387,7 +431,7 @@ private partial def parseLambdaLeading : ParserM Term := do
   let binders ← many1 parseBinderGroup
   keyword "=>"
   let body ← parsePreterm
-  let endPos ← getPos
+  let endPos := termEndPos body
   return .lam (Src.mk startPos endPos) binders body
 
 private partial def parseLetLeading : ParserM Term := do
@@ -400,7 +444,7 @@ private partial def parseLetLeading : ParserM Term := do
   let rhs ← parsePreterm
   str ";"
   let body ← parsePreterm
-  let endPos ← getPos
+  let endPos := termEndPos body
   return .letE (Src.mk startPos endPos) name tyOpt rhs body
 
 private partial def parsePiLeading : ParserM Term := do
@@ -409,17 +453,17 @@ private partial def parsePiLeading : ParserM Term := do
   let group ← parseTypedBinderGroup
   arrow
   let b ← prattParser .pi
-  let endPos ← getPos
+  let endPos := termEndPos b
   return .pi (Src.mk startPos endPos) group b
 
-private partial def parseSigmaLeading : ParserM Term := do
-  ws
-  let startPos ← getPos
-  let group ← parseTypedBinderGroup
-  times
-  let b ← prattParser .pi
-  let endPos ← getPos
-  return .sigma (Src.mk startPos endPos) group b
+-- private partial def parseSigmaLeading : ParserM Term := do
+--   ws
+--   let startPos ← getPos
+--   let group ← parseTypedBinderGroup
+--   times
+--   let b ← prattParser .pi
+--   let endPos := termEndPos b
+--   return .sigma (Src.mk startPos endPos) group b
 
 private partial def parseUnit : ParserM Term := do
   ws
@@ -441,12 +485,12 @@ private partial def parseAnnPairParen : ParserM Term := do
   let e ← parsePreterm
   ws
   match ← peekChar? with
-  | some ',' =>
-      str ","
-      let b ← parsePreterm
-      str ")"
-      let endPos ← getPos
-      return .pair (Src.mk startPos endPos) e b
+  -- | some ',' =>
+  --     str ","
+  --     let b ← parsePreterm
+  --     str ")"
+  --     let endPos ← getPos
+  --     return .pair (Src.mk startPos endPos) e b
   | some ':' =>
       str ":"
       let ty ← parsePreterm
@@ -482,23 +526,13 @@ private partial def parseIdentAtom : ParserM Term := do
   ws
   let startPos ← getPos
   let nameStr ← readIdent
-  let kw :=
-    [
-      "fun",
-      "let",
-      "def",
-      "example",
-      "axiom",
-      "inductive",
-      "structure",
-      "where",
-      "import",
-    ]
+  let afterIdent ← getPos
   if kw.contains nameStr then
     fail "keyword in expression"
   else
     let univs ← parseUnivArgs
-    let endPos ← getPos
+    let endPos ←
+      if univs.isEmpty then pure afterIdent else getPos
     return .ident (Src.mk startPos endPos) (Name.ofString nameStr) univs
 
 private partial def parseAtomLeading : ParserM Term := do
@@ -520,7 +554,7 @@ private partial def prattParser (minPrec : Prec) : ParserM Term := do
   let leadingParsers : List (Prec × ParserM Term) :=
     [
       (.max, parsePiLeading),
-      (.max, parseSigmaLeading),
+      -- (.max, parseSigmaLeading),
       (.max, parseAtomLeading),
       (.funE, parseLambdaLeading),
       (.letE, parseLetLeading),
@@ -533,7 +567,7 @@ private partial def prattParser (minPrec : Prec) : ParserM Term := do
       (.mulL, .mulR, parseMulTrailing),
       (.addL, .addR, parseAddTrailing),
       (.eq, .eq, parseEqTrailing),
-      (.pi, .pi, parseProdTrailing),
+      -- (.pi, .pi, parseProdTrailing),
       (.pi, .pi, parseArrowTrailing),
     ]
 
@@ -596,18 +630,18 @@ private partial def parseTypeLevelTrailing (_rightPrec : Prec) (left : Term) : P
 private partial def parseAppTrailing (_rightPrec : Prec) (left : Term) : ParserM Term :=
   (do
       let arg ← parseLambdaLeading
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos arg
       return .app (Src.mk startPos endPos) left arg) <|>
   (do
       let arg ← parseLetLeading
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos arg
       return .app (Src.mk startPos endPos) left arg) <|>
   (do
       let arg ← parseAtomLeading
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos arg
       return .app (Src.mk startPos endPos) left arg)
 
 private partial def parseMulTrailing (rightPrec : Prec) (left : Term) : ParserM Term := do
@@ -616,8 +650,8 @@ private partial def parseMulTrailing (rightPrec : Prec) (left : Term) : ParserM 
   | some '*' =>
       advanceChar
       let b ← prattParser rightPrec
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos b
       return .mul (Src.mk startPos endPos) left b
   | _ =>
       fail "expected *"
@@ -628,14 +662,14 @@ private partial def parseAddTrailing (rightPrec : Prec) (left : Term) : ParserM 
   | some '+' =>
       advanceChar
       let b ← prattParser rightPrec
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos b
       return .add (Src.mk startPos endPos) left b
   | some '-' =>
       advanceChar
       let b ← prattParser rightPrec
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos b
       return .sub (Src.mk startPos endPos) left b
   | _ =>
       fail "expected + or -"
@@ -646,24 +680,24 @@ private partial def parseEqTrailing (rightPrec : Prec) (left : Term) : ParserM T
   | some '=' =>
       advanceChar
       let b ← prattParser rightPrec
-      let endPos ← getPos
       let startPos := termStartPos left
+      let endPos := termEndPos b
       return .eq (Src.mk startPos endPos) left b
   | _ =>
       fail "expected ="
 
-private partial def parseProdTrailing (rightPrec : Prec) (left : Term) : ParserM Term := do
-  times
-  let b ← prattParser rightPrec
-  let endPos ← getPos
-  let startPos := termStartPos left
-  return .prod (Src.mk startPos endPos) left b
+-- private partial def parseProdTrailing (rightPrec : Prec) (left : Term) : ParserM Term := do
+--   times
+--   let b ← prattParser rightPrec
+--   let startPos := termStartPos left
+--   let endPos := termEndPos b
+--   return .prod (Src.mk startPos endPos) left b
 
 private partial def parseArrowTrailing (rightPrec : Prec) (left : Term) : ParserM Term := do
   arrow
   let b ← prattParser rightPrec
-  let endPos ← getPos
   let startPos := termStartPos left
+  let endPos := termEndPos b
   return .arrow (Src.mk startPos endPos) left b
 
 end
@@ -712,7 +746,7 @@ private def parseField : ParserM Command.StructureField := do
   ws
   let startPos ← getPos
   str "("
-  let (_src, nameStr) ← parseIdentStr
+  let (nameSrc, nameStr) ← parseIdentStr
   if nameStr.contains '.' then
     fail "Structure field names must be atomic"
   else
@@ -725,6 +759,7 @@ private def parseField : ParserM Command.StructureField := do
     pure
       {
         src := Src.mk startPos endPos
+        nameSrc
         name
         params
         ty
