@@ -1,0 +1,139 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "QDT",
+  "scopeName": "source.qdt",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#types" },
+    { "include": "#constructors" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-dash.qdt",
+          "match": "--.*$"
+        },
+        {
+          "name": "comment.block.qdt",
+          "begin": "/-",
+          "end": "-/",
+          "patterns": [{ "include": "#comments" }]
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "comment": "Definition declarations: def foo, axiom bar, example",
+          "begin": "\\b(def|axiom|opaque)\\b\\s*",
+          "beginCaptures": {
+            "1": { "name": "keyword.declaration.qdt" }
+          },
+          "end": "(?=[:\\(\\{]|:=|$)",
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#definitionName" }
+          ]
+        },
+        {
+          "comment": "Type declarations: inductive Nat, structure Prod",
+          "begin": "\\b(inductive|structure)\\b\\s*",
+          "beginCaptures": {
+            "1": { "name": "keyword.declaration.qdt" }
+          },
+          "end": "(?=\\bwhere\\b|[:\\(\\{]|$)",
+          "patterns": [{ "include": "#comments" }, { "include": "#typeName" }]
+        },
+        {
+          "comment": "Example (no name)",
+          "match": "\\b(example)\\b",
+          "name": "keyword.declaration.qdt"
+        }
+      ]
+    },
+    "definitionName": {
+      "patterns": [
+        {
+          "comment": "Qualified name like Nat.add or simple name",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)*\\b",
+          "name": "entity.name.function.qdt"
+        }
+      ]
+    },
+    "typeName": {
+      "patterns": [
+        {
+          "comment": "Type name (usually capitalized)",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_']*\\b",
+          "name": "entity.name.type.qdt"
+        }
+      ]
+    },
+    "constructors": {
+      "patterns": [
+        {
+          "comment": "Constructor pattern: | name or | name :",
+          "match": "(\\|)\\s*([A-Za-z_][A-Za-z0-9_']*)",
+          "captures": {
+            "1": { "name": "punctuation.separator.qdt" },
+            "2": { "name": "entity.name.tag.qdt" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.qdt",
+          "match": "\\b(import|namespace|end|open)\\b"
+        },
+        {
+          "name": "keyword.other.qdt",
+          "match": "\\b(where|fun|let|in|match|with)\\b"
+        },
+        {
+          "name": "invalid.illegal.qdt",
+          "match": "\\b(sorry)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "comment": "Type universe",
+          "name": "storage.type.qdt",
+          "match": "\\bType\\b"
+        },
+        {
+          "comment": "Prop",
+          "name": "storage.type.qdt",
+          "match": "\\bProp\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.qdt",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.qdt",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.qdt",
+          "match": "\\\\."
+        }
+      ]
+    }
+  }
+}
