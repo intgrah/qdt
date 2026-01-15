@@ -1,0 +1,63 @@
+{
+  "name": "vscode-qdt",
+  "displayName": "vscode-qdt",
+  "description": "QDT language support",
+  "version": "0.0.1",
+  "publisher": "intgrah",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "activationEvents": [
+    "workspaceContains:**/*.qdt"
+  ],
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "QDT",
+      "properties": {
+        "qdt.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to qdt-lsp executable (defaults to workspace .lake/build/bin/qdt-lsp or PATH)"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "qdt",
+        "aliases": [
+          "QDT",
+          "qdt"
+        ],
+        "extensions": [
+          ".qdt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "qdt",
+        "scopeName": "source.qdt",
+        "path": "./syntaxes/qdt.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "bun run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.8",
+    "@types/vscode": "^1.107.0",
+    "typescript": "^5.7.3"
+  }
+}
