@@ -3,7 +3,7 @@ import Qdt.IncrementalElab
 import Qdt.Frontend.Macro
 
 open Qdt
-open Incremental (Engine Key Val TaskM)
+open Qdt.Incremental (Engine Key Val TaskM)
 open Lean (Term MacroM)
 
 private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Incremental.GlobalEnv) := do

@@ -5,7 +5,7 @@ import Qdt.IncrementalElab
 
 open Cli
 open Qdt
-open Incremental (Engine TaskM Key Val GlobalEnv)
+open Qdt.Incremental (Engine TaskM Key Val GlobalEnv)
 open System (FilePath)
 
 private def countModuleEntries (file : FilePath) :
