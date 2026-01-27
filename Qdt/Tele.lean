@@ -8,9 +8,9 @@ inductive Tele (T : Nat → Type u) (a : Nat) : Nat → Type u
 
 namespace Tele
 
+variable {T : Nat → Type u} {U : Nat → Type v} {m : Type v → Type w} [Monad m] {a b c d : Nat}
+
 theorem le
-    {T : Nat → Type u}
-    {a b : Nat}
     (tele : Tele T a b) :
     a ≤ b := by
   induction tele with
@@ -18,7 +18,6 @@ theorem le
   | snoc ts t ih => exact Nat.le_trans ih (Nat.le_succ _)
 
 def append
-    {T : Nat → Type u}
     {a b c : Nat}
     (tele₁ : Tele T a b)
     (tele₂ : Tele T b c) :
@@ -32,8 +31,6 @@ instance {T : Nat → Type u} {a b c} : HAppend (Tele T a b) (Tele T b c) (Tele 
 
 @[simp]
 theorem append_snoc
-    {T : Nat → Type u}
-    {a b c : Nat}
     (tele₁ : Tele T a b)
     (tele₂ : Tele T b c)
     (t : T c) :
@@ -42,25 +39,19 @@ theorem append_snoc
 
 @[simp]
 theorem append_nil
-    {T : Nat → Type u}
-    {a b : Nat}
     (tele : Tele T a b) :
     tele ++ (Tele.nil : Tele T b b) = tele :=
   rfl
 
 @[simp]
 theorem nil_append
-    {T : Nat → Type u}
-    {a b : Nat}
     (tele : Tele T a b) :
     (Tele.nil : Tele T a a) ++ tele = tele := by
   induction tele with
   | nil => rfl
-  | snoc ts t ih => simp [ih]
+  | snoc ts t ih => simp only [append_snoc, ih]
 
 theorem append_assoc
-    {T : Nat → Type u}
-    {a b c d : Nat}
     (tele₁ : Tele T a b)
     (tele₂ : Tele T b c)
     (tele₃ : Tele T c d) :
@@ -70,7 +61,6 @@ theorem append_assoc
   | snoc ts t ih => simp only [append_snoc, ih]
 
 def any
-    {T : Nat → Type u}
     {a b : Nat}
     (f : ∀ {n}, T n → Bool) :
     Tele T a b →
@@ -80,8 +70,6 @@ def any
 
 @[specialize]
 def dmap
-    {T : Nat → Type u}
-    {U : Nat → Type v}
     {a b : Nat}
     (s : Nat)
     (f : ∀ {n}, T n → U (n + s)) :
@@ -91,8 +79,6 @@ def dmap
   | snoc ts t => Nat.succ_add _ s ▸ (ts.dmap s f).snoc (f t)
 
 def map
-    {T : Nat → Type u}
-    {U : Nat → Type v}
     {a b : Nat} :
     (∀ {n}, T n → U n) →
     Tele T a b →
@@ -102,10 +88,6 @@ def map
 
 @[specialize]
 def mapM
-    {m : Type v → Type w}
-    [Monad m]
-    {T : Nat → Type u}
-    {U : Nat → Type v}
     {a b : Nat}
     (f : ∀ {n}, T n → m (U n)) :
     Tele T a b →
@@ -114,9 +96,6 @@ def mapM
   | snoc ts t => return (← ts.mapM f).snoc (← f t)
 
 theorem dmap_snoc
-    {T : Nat → Type u}
-    {U : Nat → Type v}
-    {a b : Nat}
     (s : Nat)
     (f : ∀ {n}, T n → U (n + s))
     (ts : Tele T a b)
