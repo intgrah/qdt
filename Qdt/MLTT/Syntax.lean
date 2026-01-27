@@ -140,12 +140,13 @@ Source info (`Src`) hashes to 0 so it doesn't affect semantic equality.
 -/
 
 mutual
-partial def Ty.hash {n} : Ty n → UInt64
+
+def Ty.hash {n} : Ty n → UInt64
   | .u src u => mixHash 1 (mixHash (hash src) (hash u))
   | .pi src p b => mixHash 2 (mixHash (hash src) (mixHash p.hash b.hash))
   | .el src t => mixHash 3 (mixHash (hash src) t.hash)
 
-partial def Tm.hash {n} : Tm n → UInt64
+def Tm.hash {n} : Tm n → UInt64
   | .u' src u => mixHash 10 (mixHash (hash src) (hash u))
   | .var src i => mixHash 11 (mixHash (hash src) (hash i))
   | .const src name us => mixHash 12 (mixHash (hash src) (mixHash (hash name) (hash us)))
@@ -155,8 +156,9 @@ partial def Tm.hash {n} : Tm n → UInt64
   | .proj src i t => mixHash 16 (mixHash (hash src) (mixHash (hash i) t.hash))
   | .letE src name ty val body => mixHash 17 (mixHash (hash src) (mixHash (hash name) (mixHash ty.hash (mixHash val.hash body.hash))))
 
-partial def Param.hash {n} : Param n → UInt64
+def Param.hash {n} : Param n → UInt64
   | ⟨src, name, ty⟩ => mixHash (hash src) (mixHash (hash name) ty.hash)
+
 end
 
 instance {n} : Hashable (Ty n) := ⟨Ty.hash⟩
