@@ -20,7 +20,7 @@ def runWithEngine
     }
   let action : BaseM ε R (α × Engine ε R) := do
     let fetchRef : ST.Ref IO.RealWorld (∀ q, BaseM ε R (R q)) ←
-      ST.mkRef (fun q => throw (engine.mkCycleError q))
+      ST.mkRef (fun q => engine.recover q)
 
     let fetchIO (q : Q) : BaseM ε R (R q) := do
       (← fetchRef.get) q
@@ -38,14 +38,15 @@ def runWithEngine
       | some memo => pure memo.value
       | none =>
           if st.stack.contains q then
-            throw (st.engine.mkCycleError q)
+             let val ← st.engine.recover q
+             return val
           modify fun st => { st with stack := q :: st.stack }
           try
             let st ← get
             let engine := st.engine
 
             let recompute (store : Bool) : BaseM ε R (R q) := do
-              let (value, deps) ← (trackDeps engine.fingerprint (rules q)).run { fetch := fetchIO }
+              let (value, deps) ← (trackDeps engine.fingerprint (rules q)).run fetchIO
               let memo : Memo R q := { value, deps }
               modify fun st => { st with started := st.started.insert q memo }
               if store then
@@ -58,7 +59,7 @@ def runWithEngine
             else
               match engine.cache.get? q with
               | some memo =>
-                  if (← (verifyDeps engine.fingerprint memo.deps).run { fetch := fetchIO }) then
+                  if (← (verifyDeps engine.fingerprint memo.deps).run fetchIO) then
                     modify fun st => { st with started := st.started.insert q memo }
                     pure memo.value
                   else
@@ -73,7 +74,7 @@ def runWithEngine
 
     fetchRef.set rulesIO
 
-    let a ← task.run ⟨fetchIO⟩
+    let a ← task.run fetchIO
     let st ← get
     pure (a, st.engine)
 
