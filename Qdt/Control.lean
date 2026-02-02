@@ -123,7 +123,6 @@ def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
       (TaskM.fetch (Key.constTy file name) : QueryM _)
 
 def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
-  IO.toEIO Error.ioError <| IO.eprintln s!"[debug] fetchConstantInfo: {name}"
   let st ← getThe CoreState
   if let some result := st.localEnv.findConstantInfo name then
     return some result
