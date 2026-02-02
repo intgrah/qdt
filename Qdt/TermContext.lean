@@ -13,8 +13,8 @@ structure TermContext (n : Nat) where
   env : Env n n -- Pre-weakened environment
 
 def TermContext.empty : TermContext 0 where
-  ctx := .nil
-  env := .nil
+  ctx := Tele.nil
+  env := Env.nil
 
 def TermContext.bind {n} (name : Name) (ty : VTy n) (tctx : TermContext n) : TermContext (n + 1) where
   ctx := tctx.ctx.snoc ⟨name, ty⟩
