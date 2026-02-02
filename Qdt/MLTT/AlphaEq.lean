@@ -4,11 +4,9 @@ namespace Qdt
 
 open Lean (Name)
 
-section Definitions
-
-set_option hygiene false
-
+set_option hygiene false in
 infix:50 " ≡α " => Ty.AlphaEq
+set_option hygiene false in
 infix:50 " ≡α " => Tm.AlphaEq
 
 mutual
@@ -57,8 +55,6 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
       c₁ ≡α c₂ →
       .letE s₁ x₁ a₁ b₁ c₁ ≡α .letE s₂ x₂ a₂ b₂ c₂
 end
-
-end Definitions
 
 theorem Ty.AlphaEq.eqv {n} : Equivalence (@Ty.AlphaEq n) where
   refl := refl
