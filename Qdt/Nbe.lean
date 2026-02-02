@@ -106,11 +106,11 @@ partial def iotaReduction {n}
   let args := paramsMotivesMethods ++ fields
   let envList := args.reverse
   let env := Env.ofList envList
-  let nf := rule.numFields
+  let numFields := rule.numFields
   let univSubst := info.univParams.zip recUs
   let rhs := rule.rhs.substLevels univSubst
-  if h : envList.length = numParamsMotivesMinors + nf then
-    let env' : Env n (numParamsMotivesMinors + nf) := h ▸ env
+  if h : envList.length = numParamsMotivesMinors + numFields then
+    let env' : Env n (numParamsMotivesMinors + numFields) := h ▸ env
     rhs.eval env'
   else
     return none
