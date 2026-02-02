@@ -139,11 +139,11 @@ private def kw : List String :=
     "import",
   ]
 
-private def isIdentChar : Char → Bool :=
-  fun c => c.isAlphanum || c == '_' || c == '\'' || c == '.'
+private def isIdentChar (c : Char) : Bool :=
+  c.isAlphanum || c == '_' || c == '\'' || c == '.'
 
-private def isIdentStart : Char → Bool :=
-  fun c => c.isAlpha || c == '_' || c == '\''
+private def isIdentStart (c : Char) : Bool :=
+  c.isAlpha || c == '_' || c == '\''
 
 private partial def readIdent : ParserM String := do
   let some c ← peekChar? | fail "expected identifier"
