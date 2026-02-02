@@ -30,7 +30,7 @@
       "patterns": [
         {
           "comment": "Definition declarations: def foo, axiom bar, example",
-          "begin": "\\b(def|axiom|opaque)\\b\\s*",
+          "begin": "\\b(def|axiom|opaque|inductive|structure)\\b\\s*",
           "beginCaptures": {
             "1": { "name": "keyword.declaration.qdt" }
           },
