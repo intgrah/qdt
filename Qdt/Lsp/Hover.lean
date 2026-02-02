@@ -210,10 +210,16 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
   let coreState : CoreState := { modules := {}, importedEnv := global, localEnv := {}, errors := #[] }
   let metaCtx : MetaContext := { currentDecl := .anonymous }
   let metaState : MetaState := { sorryId := 0, univParams := [] }
-  let fetch : Incremental.Fetch Error Incremental.Val := { fetch _ := throw (.msg "Internal error") }
+  let fetch : ∀ q, Incremental.BaseM Error Incremental.Val (Incremental.Val q) := fun _ => throw (.msg "Internal error")
   let runState : Incremental.RunState Error Incremental.Val := {
-    engine := { mkCycleError := fun _ => .msg "cycle", fingerprint := fun _ _ => 0, isInput := fun _ => false }
-    started := {}, stack := [], deps := {}
+    engine := {
+      recover _ := throw (.msg "Internal error"),
+      fingerprint _ _ := 0,
+      isInput _ := false
+    }
+    started := {}
+    stack := []
+    deps := {}
   }
   let baseAction : Incremental.BaseM Error Incremental.Val (Except Error _) := do
     try

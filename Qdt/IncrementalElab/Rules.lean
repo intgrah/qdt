@@ -17,13 +17,11 @@ open System (FilePath)
 open Frontend
 
 abbrev IT := TaskM Error Val
-abbrev IFetch := Fetch Error Val
 
 @[inline] private def fetchQ : ∀ k, IT (Val k) := TaskM.fetch
 
 structure RulesContext where
   config : Config
-  importedEnv : GlobalEnv := Std.HashMap.emptyWithCapacity 0
 deriving Inhabited
 
 initialize rulesContextRef : IO.Ref RulesContext ← IO.mkRef default
@@ -50,14 +48,6 @@ private def getRulesContext : IO RulesContext :=
 
 private def setRulesContext (ctx : RulesContext) : IO Unit :=
   rulesContextRef.set ctx
-
-private def setImportedEnv (env : GlobalEnv) : IO Unit := do
-  let ctx ← rulesContextRef.get
-  rulesContextRef.set { ctx with importedEnv := env }
-
-private def getImportedEnv : IO GlobalEnv := do
-  let ctx ← rulesContextRef.get
-  return ctx.importedEnv
 
 private def getFieldString (structName fieldName : Name) : EIO Error String := do
   if !fieldName.isAtomic then
@@ -106,6 +96,21 @@ private def buildOwnerIndex (prog : Frontend.Ast.Program) : EIO Error (Std.HashM
     | .import _ => continue
   return m
 
+private def buildDeclOrdering (prog : Frontend.Ast.Program) : List TopDecl :=
+  let rec go (cmds : List Frontend.Ast.Command.Cmd) (idx : Nat) (acc : List TopDecl) : List TopDecl :=
+    match cmds with
+    | [] => acc.reverse
+    | cmd :: rest =>
+        let acc' := match cmd with
+          | .definition d => ⟨.definition, d.name⟩ :: acc
+          | .axiom a => ⟨.axiom, a.name⟩ :: acc
+          | .inductive i => ⟨.inductive, i.name⟩ :: acc
+          | .structure s => ⟨.structure, s.name⟩ :: acc
+          | .example _ => ⟨.example, .mkSimple s!"_example_{idx}"⟩ :: acc
+          | .import _ => acc
+        go rest (idx + 1) acc'
+  go prog 0 []
+
 private def findTopDeclCmd (prog : Frontend.Ast.Program) (decl : TopDecl) : EIO Error Frontend.Ast.Command.Cmd := do
   for h : idx in [:prog.length] do
     let cmd := prog[idx]
@@ -143,6 +148,7 @@ def fingerprint : ∀ k, Val k → UInt64
   | .fileText _, (s : String) => hash s
   | .astProgram _, (p : Frontend.Ast.Program) => hash p
   | .declOwner _, (m : Std.HashMap Name TopDecl) => hashNameTopDeclPairs m
+  | .declOrdering _, (ds : List TopDecl) => hash ds
   | .topDeclCmd _ _, (cmd : Frontend.Ast.Command.Cmd) => hash cmd
   | .elabTop _ _, (m : Std.HashMap Name Entry) => hashNameEntryPairs m
   | .entry _ _, (r : Option Entry) => hash r
@@ -152,6 +158,7 @@ def fingerprint : ∀ k, Val k → UInt64
   | .recursorInfo _ _, (r : Option RecursorInfo) => hash r
   | .constructorInfo _ _, (r : Option ConstructorInfo) => hash r
   | .inductiveInfo _ _, (r : Option InductiveInfo) => hash r
+
 
 private def logElab (decl : TopDecl) : IT PUnit :=
   IO.toEIO Error.ioError <|
@@ -238,15 +245,11 @@ def rules : ∀ k, TaskM Error Val (Val k)
 
   | .elabModule file => do
       let mut globalEnv ← fetchQ (.importedEnv file)
-      -- Set up the imported env for elabTop to use via getImportedEnv
-      IO.toEIO Error.ioError (setImportedEnv globalEnv)
-      let owners ← fetchQ (.declOwner file)
-      for (_, owner) in owners.toList.toArray do
-        let localEnv ← fetchQ (.elabTop file owner)
+      let ordering : List TopDecl ← fetchQ (.declOrdering file)
+      for decl in ordering do
+        let localEnv ← fetchQ (.elabTop file decl)
         for (n, e) in localEnv.toList.toArray do
           globalEnv := globalEnv.insert n e
-        -- Update so next declaration can see prior ones
-        IO.toEIO Error.ioError (setImportedEnv globalEnv)
       return globalEnv
 
   | .fileText file => do
@@ -262,6 +265,8 @@ def rules : ∀ k, TaskM Error Val (Val k)
           return Frontend.Cst.Program.desugar cstProg
   | .declOwner file => do
       buildOwnerIndex (← fetchQ (.astProgram file))
+  | .declOrdering file => do
+      return buildDeclOrdering (← fetchQ (.astProgram file))
   | .topDeclCmd file decl => do
       findTopDeclCmd (← fetchQ (.astProgram file)) decl
   | .elabTop file decl => do
@@ -287,7 +292,14 @@ def rules : ∀ k, TaskM Error Val (Val k)
         | .example _ => pure []
         | .import _ => pure []
       let coreCtx : CoreContext := { file := some file, selfNames }
-      let importedEnv ← IO.toEIO Error.ioError getImportedEnv
+      -- Build importedEnv from imports and prior declarations
+      let mut importedEnv : GlobalEnv ← fetchQ (.importedEnv file)
+      let ordering : List TopDecl ← fetchQ (.declOrdering file)
+      for priorDecl in ordering do
+        if priorDecl == decl then break
+        let priorEnv ← fetchQ (.elabTop file priorDecl)
+        for (n, e) in priorEnv.toList.toArray do
+          importedEnv := importedEnv.insert n e
       let init : CoreState :=
         {
           modules := Std.HashMap.emptyWithCapacity 8
@@ -354,7 +366,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       | _ => none
 
 def newEngine : Engine Error Val where
-  mkCycleError k := .msg s!"Cycle detected: {repr k}"
+  recover k := throw (.ioError (IO.userError s!"Cycle detected: {repr k}"))
   fingerprint
   isInput k :=
     match k with

@@ -35,6 +35,7 @@ inductive Key : Type
   | fileText (file : FilePath)
   | astProgram (file : FilePath)
   | declOwner (file : FilePath)
+  | declOrdering (file : FilePath)
   | topDeclCmd (file : FilePath) (decl : TopDecl)
   | elabTop (file : FilePath) (decl : TopDecl)
   | entry (file : FilePath) (name : Name)
@@ -56,6 +57,7 @@ def Val : Key → Type
   | .fileText _ => String
   | .astProgram _ => Frontend.Ast.Program
   | .declOwner _ => HashMap Name TopDecl
+  | .declOrdering _ => List TopDecl
   | .topDeclCmd _ _ => Frontend.Ast.Command.Cmd
   | .elabTop _ _ => HashMap Name Entry
   | .entry _ _ => Option Entry
