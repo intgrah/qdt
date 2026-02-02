@@ -4,6 +4,8 @@ inductive Option.{u} (A : Type u) : Type u where
   | none : Option A
   | some : A → Option A
 
-def Option.map.{u, v} (A : Type u) (B : Type v) (f : A → B) : Option.{u} A → Option.{v} B := Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) (fun a => Option.some.{v} B (f a))
-def Option.bind.{u, v} (A : Type u) (B : Type v) (o : Option.{u} A) (f : A → Option.{v} B) : Option.{v} B := Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) f o
+def Option.map.{u, v} (A : Type u) (B : Type v) (f : A → B) : Option.{u} A → Option.{v} B :=
+  Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) (fun a => Option.some.{v} B (f a))
+def Option.bind.{u, v} (A : Type u) (B : Type v) (o : Option.{u} A) (f : A → Option.{v} B) : Option.{v} B :=
+  Option.rec.{v, u} A (fun _ => Option.{v} B) (Option.none.{v} B) f o
 def Option.getD.{u} (A : Type u) (o : Option.{u} A) (dflt : A) : A := Option.rec.{u, u} A (fun _ => A) dflt (id.{u} A) o
