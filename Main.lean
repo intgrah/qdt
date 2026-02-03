@@ -26,7 +26,7 @@ private def runModuleOnce (config : Config) (engine : Engine Error Val) (filepat
       println!"{t1 - t0}ms"
       pure engine
 
-partial def watchLoop (config : Config) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
+def watchLoop (config : Config) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
   let engineRef ← IO.mkRef engine
   let pendingRef ← IO.mkRef ([] : List FilePath)
 
