@@ -1,21 +1,21 @@
 import Cli
 import FSWatch
 import Qdt
-import Qdt.IncrementalElab
+import Qdt.Incremental
 
 open Cli
 open Qdt
-open Qdt.Incremental (Engine TaskM Key Val GlobalEnv)
+open Qdt.Incremental (Engine TaskM Key Val)
 open System (FilePath)
 
-private def countModuleEntries (file : FilePath) :
+private def countModuleEntries (filepath : FilePath) :
     TaskM Error Val Nat := do
-  let env : GlobalEnv ← TaskM.fetch (Key.elabModule file)
+  let env : Global ← TaskM.fetch (Key.elabModule filepath)
   return env.size
 
-private def runModuleOnce (config : Config) (engine : Engine Error Val) (file : FilePath) : IO (Engine Error Val) := do
+private def runModuleOnce (config : Config) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do
   let t0 ← IO.monoMsNow
-  match ← Incremental.run config engine (countModuleEntries file) with
+  match ← Incremental.run config engine (countModuleEntries filepath) with
   | .ok (count, engine') =>
       let t1 ← IO.monoMsNow
       println!"{count} entries, {t1 - t0}ms"

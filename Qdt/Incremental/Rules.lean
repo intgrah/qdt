@@ -1,53 +1,42 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 
-import Qdt.Control
 import Qdt.Config
+import Qdt.Control
 import Qdt.Elab
+import Qdt.Error
 import Qdt.Frontend.Desugar
 import Qdt.Frontend.Parser
-import Qdt.Incremental
-import Qdt.IncrementalElab.Query
+import Qdt.Incremental.Basic
+import Qdt.Incremental.Query
 
 namespace Qdt.Incremental
 
 open Lean (Name)
-open Std (HashSet)
+open Std (HashMap HashSet)
 open System (FilePath)
 open Frontend
 
-abbrev IT := TaskM Error Val
+abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
 
-@[inline] private def fetchQ : ∀ k, IT (Val k) := TaskM.fetch
+private initialize rulesContextRef : IO.Ref Config ← IO.mkRef default
 
-structure RulesContext where
-  config : Config
-deriving Inhabited
+private initialize fileTextOverridesRef : IO.Ref (HashMap FilePath String) ←
+  IO.mkRef (HashMap.emptyWithCapacity 32)
 
-initialize rulesContextRef : IO.Ref RulesContext ← IO.mkRef default
+def setFileTextOverride (filepath : FilePath) (text : String) : IO Unit :=
+  fileTextOverridesRef.modify (·.insert filepath text)
 
-initialize fileTextOverridesRef : IO.Ref (Std.HashMap FilePath String) ←
-  IO.mkRef (Std.HashMap.emptyWithCapacity 32)
+def eraseFileTextOverride (filepath : FilePath) : IO Unit :=
+  fileTextOverridesRef.modify (·.erase filepath)
 
-def setFileTextOverride (file : FilePath) (text : String) : IO Unit := do
-  fileTextOverridesRef.modify (·.insert file text)
+def getFileTextOverride? (filepath : FilePath) : IO (Option String) :=
+  fileTextOverridesRef.get >>= fun m => return m[filepath]?
 
-def eraseFileTextOverride (file : FilePath) : IO Unit := do
-  fileTextOverridesRef.modify (·.erase file)
-
-def getFileTextOverride? (file : FilePath) : IO (Option String) := do
-  return (← fileTextOverridesRef.get)[file]?
-
-def getFileText (file : FilePath) : IO String := do
-  match ← getFileTextOverride? file with
+def getFileText (filepath : FilePath) : IO String := do
+  match ← getFileTextOverride? filepath with
   | some text => return text
-  | none => IO.FS.readFile file
-
-private def getRulesContext : IO RulesContext :=
-  rulesContextRef.get
-
-private def setRulesContext (ctx : RulesContext) : IO Unit :=
-  rulesContextRef.set ctx
+  | none => IO.FS.readFile filepath
 
 private def getFieldString (structName fieldName : Name) : EIO Error String := do
   if !fieldName.isAtomic then
@@ -57,16 +46,16 @@ private def getFieldString (structName fieldName : Name) : EIO Error String := d
   | _ => throw (.msg s!"{structName}: field name must be a string identifier")
 
 private def insertOwner
-    (m : Std.HashMap Name TopDecl)
+    (m : HashMap Name TopDecl)
     (n : Name)
     (owner : TopDecl) :
-    EIO Error (Std.HashMap Name TopDecl) := do
+    EIO Error (HashMap Name TopDecl) := do
   if m.contains n then
     throw (.msg s!"Duplicate global name: {n}")
   return m.insert n owner
 
-private def buildOwnerIndex (prog : Frontend.Ast.Program) : EIO Error (Std.HashMap Name TopDecl) := do
-  let mut m : Std.HashMap Name TopDecl := Std.HashMap.emptyWithCapacity 4096
+private def buildOwnerIndex (prog : Frontend.Ast.Program) : EIO Error (HashMap Name TopDecl) := do
+  let mut m : HashMap Name TopDecl := HashMap.emptyWithCapacity 4096
   for h : idx in [:prog.length] do
     let cmd := prog[idx]
     match cmd with
@@ -91,7 +80,7 @@ private def buildOwnerIndex (prog : Frontend.Ast.Program) : EIO Error (Std.HashM
           let fname ← getFieldString s.name field.name
           m ← insertOwner m (s.name.str fname) owner
     | .example _ =>
-        let owner : TopDecl := ⟨.example, .mkSimple s!"_example_{idx}"⟩
+        let owner : TopDecl := ⟨.example, (`_example).num idx⟩
         m ← insertOwner m owner.name owner
     | .import _ => continue
   return m
@@ -106,61 +95,44 @@ private def buildDeclOrdering (prog : Frontend.Ast.Program) : List TopDecl :=
           | .axiom a => ⟨.axiom, a.name⟩ :: acc
           | .inductive i => ⟨.inductive, i.name⟩ :: acc
           | .structure s => ⟨.structure, s.name⟩ :: acc
-          | .example _ => ⟨.example, .mkSimple s!"_example_{idx}"⟩ :: acc
+          | .example _ => ⟨.example, (`_example).num idx⟩ :: acc
           | .import _ => acc
         go rest (idx + 1) acc'
   go prog 0 []
 
-private def findTopDeclCmd (prog : Frontend.Ast.Program) (decl : TopDecl) : EIO Error Frontend.Ast.Command.Cmd := do
-  for h : idx in [:prog.length] do
-    let cmd := prog[idx]
-    match prog[idx] with
-    | .definition d => if decl.kind = .definition && decl.name = d.name then return cmd
-    | .axiom a => if decl.kind = .axiom && decl.name = a.name then return cmd
-    | .inductive i => if decl.kind = .inductive && decl.name = i.name then return cmd
-    | .structure s => if decl.kind = .structure && decl.name = s.name then return cmd
-    | .example _ => if decl.kind = .example && decl.name = .mkSimple s!"_example_{idx}" then return cmd
-    | .import _ => continue
-  throw (.msg s!"Top-level declaration not found: {repr decl}")
-
-private def hashNameTopDeclPairs (m : Std.HashMap Name TopDecl) : UInt64 :=
+private def hashNameTopDeclPairs (m : HashMap Name TopDecl) : UInt64 :=
   let pairs := m.toList.mergeSort (fun a b => a.fst.toString <= b.fst.toString)
   hash <| pairs.map fun (n, d) => mixHash (hash n) (hash d)
 
-private def hashNameEntryPairs (m : Std.HashMap Name Entry) : UInt64 :=
+private def hashNameEntryPairs (m : HashMap Name Entry) : UInt64 :=
   let pairs := m.toList.mergeSort (fun a b => a.fst.toString <= b.fst.toString)
   hash <| pairs.map fun (n, e) => mixHash (hash n) (hash e)
 
-private def hashFilePaths (s : HashSet FilePath) : UInt64 :=
-  let paths := s.toList.map (·.toString) |>.mergeSort (· <= ·)
-  hash paths
-
-private def hashNames (ns : List Name) : UInt64 :=
-  hash <| ns.map hash
-
 def fingerprint : ∀ k, Val k → UInt64
-  | .inputFiles, (s : HashSet FilePath) => hashFilePaths s
-  | .moduleFile _, (p : Option FilePath) => hash (p.map (·.toString))
-  | .moduleImports _, (ns : List Name) => hashNames ns
-  | .importedEnv _, (env : GlobalEnv) => hashNameEntryPairs env
-  | .elabModule _, (env : GlobalEnv) => hashNameEntryPairs env
+  | .inputFiles, (s : HashSet FilePath) =>
+    hash <| s.toList.map (·.toString) |>.mergeSort (· <= ·)
+  | .moduleFile .., (p : Option FilePath) => hash (p.map (·.toString))
+  | .moduleImports .., (ns : List Name) =>
+    hash <| ns.map hash
+  | .importedEnv .., (env : Global) => hashNameEntryPairs env
+  | .elabModule .., (env : Global) => hashNameEntryPairs env
 
-  | .fileText _, (s : String) => hash s
-  | .astProgram _, (p : Frontend.Ast.Program) => hash p
-  | .declOwner _, (m : Std.HashMap Name TopDecl) => hashNameTopDeclPairs m
-  | .declOrdering _, (ds : List TopDecl) => hash ds
-  | .topDeclCmd _ _, (cmd : Frontend.Ast.Command.Cmd) => hash cmd
-  | .elabTop _ _, (m : Std.HashMap Name Entry) => hashNameEntryPairs m
-  | .entry _ _, (r : Option Entry) => hash r
-  | .constTy _ _, (r : Option (Ty 0)) => hash r
-  | .constantInfo _ _, (r : Option ConstantInfo) => hash r
-  | .constDef _ _, (r : Option (Tm 0)) => hash r
-  | .recursorInfo _ _, (r : Option RecursorInfo) => hash r
-  | .constructorInfo _ _, (r : Option ConstructorInfo) => hash r
-  | .inductiveInfo _ _, (r : Option InductiveInfo) => hash r
+  | .fileText .., (s : String) => hash s
+  | .astProgram .., (p : Frontend.Ast.Program) => hash p
+  | .declOwner .., (m : HashMap Name TopDecl) => hashNameTopDeclPairs m
+  | .declOrdering .., (ds : List TopDecl) => hash ds
+  | .topDeclCmd .., (cmd : Frontend.Ast.Command.Cmd) => hash cmd
+  | .elabTop .., (m : HashMap Name Entry) => hashNameEntryPairs m
+  | .entry .., (r : Option Entry) => hash r
+  | .constTy .., (r : Option (Ty 0)) => hash r
+  | .constantInfo .., (r : Option ConstantInfo) => hash r
+  | .constDef .., (r : Option (Tm 0)) => hash r
+  | .recursorInfo .., (r : Option RecursorInfo) => hash r
+  | .constructorInfo .., (r : Option ConstructorInfo) => hash r
+  | .inductiveInfo .., (r : Option InductiveInfo) => hash r
 
 
-private def logElab (decl : TopDecl) : IT PUnit :=
+private def logElab (decl : TopDecl) : TaskM Error Val PUnit :=
   IO.toEIO Error.ioError <|
     IO.eprintln s!"[elab] {repr decl.kind} {decl.name}"
 
@@ -188,8 +160,7 @@ def extractImports (prog : Frontend.Ast.Program) : List Name :=
 
 def rules : ∀ k, TaskM Error Val (Val k)
   | .inputFiles => do
-      let ctx ← IO.toEIO Error.ioError getRulesContext
-      let config := ctx.config
+      let config ← IO.toEIO Error.ioError rulesContextRef.get
       let mut files : HashSet FilePath := HashSet.emptyWithCapacity 1024
       -- Project source directories
       for dir in config.sourceDirectories do
@@ -206,8 +177,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       return files
 
   | .moduleFile modName => do
-      let ctx ← IO.toEIO Error.ioError getRulesContext
-      let config := ctx.config
+      let config ← IO.toEIO Error.ioError rulesContextRef.get
       let files : HashSet FilePath ← fetchQ .inputFiles
       let relPath := moduleNameToPath modName
       -- Project source directories
@@ -226,13 +196,13 @@ def rules : ∀ k, TaskM Error Val (Val k)
             return some absPath
       return none
 
-  | .moduleImports file => do
-      let prog ← fetchQ (.astProgram file)
+  | .moduleImports filepath => do
+      let prog ← fetchQ (.astProgram filepath)
       return extractImports prog
 
-  | .importedEnv file => do
-      let imports ← fetchQ (.moduleImports file)
-      let mut globalEnv : GlobalEnv := Std.HashMap.emptyWithCapacity 4096
+  | .importedEnv filepath => do
+      let imports ← fetchQ (.moduleImports filepath)
+      let mut globalEnv : Global := HashMap.emptyWithCapacity 4096
       for modName in imports.toArray do
         match ← fetchQ (.moduleFile modName) with
         | none =>
@@ -243,35 +213,47 @@ def rules : ∀ k, TaskM Error Val (Val k)
               globalEnv := globalEnv.insert name entry
       return globalEnv
 
-  | .elabModule file => do
-      let mut globalEnv ← fetchQ (.importedEnv file)
-      let ordering : List TopDecl ← fetchQ (.declOrdering file)
+  | .elabModule filepath => do
+      let mut globalEnv ← fetchQ (.importedEnv filepath)
+      let ordering : List TopDecl ← fetchQ (.declOrdering filepath)
       for decl in ordering do
-        let localEnv ← fetchQ (.elabTop file decl)
+        let localEnv ← fetchQ (.elabTop filepath decl)
         for (n, e) in localEnv.toList.toArray do
           globalEnv := globalEnv.insert n e
       return globalEnv
 
-  | .fileText file => do
-      match ← IO.toEIO Error.ioError (getFileTextOverride? file) with
+  | .fileText filepath => do
+      match ← IO.toEIO Error.ioError (getFileTextOverride? filepath) with
       | some text => return text
-      | none => IO.toEIO Error.ioError <| IO.FS.readFile file
-  | .astProgram file => do
-      let content ← fetchQ (.fileText file)
+      | none => IO.toEIO Error.ioError <| IO.FS.readFile filepath
+  | .astProgram filepath => do
+      let content ← fetchQ (.fileText filepath)
       match Frontend.Parser.parse content with
       | .error err =>
           throw (.msg s!"Parse error: {err.msg} at position {err.pos.byteIdx}")
       | .ok cstProg =>
           return Frontend.Cst.Program.desugar cstProg
-  | .declOwner file => do
-      buildOwnerIndex (← fetchQ (.astProgram file))
-  | .declOrdering file => do
-      return buildDeclOrdering (← fetchQ (.astProgram file))
-  | .topDeclCmd file decl => do
-      findTopDeclCmd (← fetchQ (.astProgram file)) decl
-  | .elabTop file decl => do
+  | .declOwner filepath => do
+      let a : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
+      buildOwnerIndex a
+  | .declOrdering filepath => do
+      let a : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
+      return buildDeclOrdering a
+  | .topDeclCmd filepath decl => do
+      let prog : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
+      for h : idx in [:prog.length] do
+        let cmd := prog[idx]
+        match cmd with
+        | .definition d => if decl.kind = .definition && decl.name = d.name then return cmd
+        | .axiom a => if decl.kind = .axiom && decl.name = a.name then return cmd
+        | .inductive i => if decl.kind = .inductive && decl.name = i.name then return cmd
+        | .structure s => if decl.kind = .structure && decl.name = s.name then return cmd
+        | .example _ => if decl.kind = .example && decl.name = (`_example).num idx then return cmd
+        | .import _ => continue
+      throw (.msg s!"Top-level declaration not found: {repr decl}")
+  | .elabTop filepath decl => do
       logElab decl
-      let cmd ← fetchQ (.topDeclCmd file decl)
+      let cmd ← fetchQ (.topDeclCmd filepath decl)
       let selfNames : List Name ←
         match cmd with
         | .definition d => pure [d.name]
@@ -291,20 +273,20 @@ def rules : ∀ k, TaskM Error Val (Val k)
                 :: projNames
         | .example _ => pure []
         | .import _ => pure []
-      let coreCtx : CoreContext := { file := some file, selfNames }
+      let coreCtx : CoreContext := { file := some filepath, selfNames }
       -- Build importedEnv from imports and prior declarations
-      let mut importedEnv : GlobalEnv ← fetchQ (.importedEnv file)
-      let ordering : List TopDecl ← fetchQ (.declOrdering file)
+      let mut importedEnv : Global ← fetchQ (.importedEnv filepath)
+      let ordering : List TopDecl ← fetchQ (.declOrdering filepath)
       for priorDecl in ordering do
         if priorDecl == decl then break
-        let priorEnv ← fetchQ (.elabTop file priorDecl)
+        let priorEnv ← fetchQ (.elabTop filepath priorDecl)
         for (n, e) in priorEnv.toList.toArray do
           importedEnv := importedEnv.insert n e
       let init : CoreState :=
         {
-          modules := Std.HashMap.emptyWithCapacity 8
+          modules := HashMap.emptyWithCapacity 8
           importedEnv
-          localEnv := Std.HashMap.emptyWithCapacity 128
+          localEnv := HashMap.emptyWithCapacity 128
           errors := #[]
         }
       let action : CoreM CoreState := do
@@ -318,15 +300,15 @@ def rules : ∀ k, TaskM Error Val (Val k)
         get
       let st ← (action.run coreCtx).run' init
       return st.localEnv
-  | .entry file name => do
-      let owners : Std.HashMap Name TopDecl ← fetchQ (.declOwner file)
+  | .entry filepath name => do
+      let owners : HashMap Name TopDecl ← fetchQ (.declOwner filepath)
       match owners[name]? with
       | none => return none
       | some owner =>
-          let env : Std.HashMap Name Entry ← fetchQ (.elabTop file owner)
+          let env : HashMap Name Entry ← fetchQ (.elabTop filepath owner)
           return env[name]?
-  | .constTy file name =>
-      return match ← fetchQ (.entry file name) with
+  | .constTy filepath name =>
+      return match ← fetchQ (.entry filepath name) with
       | some e =>
           match e with
           | .definition info
@@ -337,31 +319,30 @@ def rules : ∀ k, TaskM Error Val (Val k)
           | .inductive info =>
               some info.ty
       | none => none
-  | .constantInfo file name =>
-      return match ← fetchQ (.entry file name) with
-      | some e =>
-          match e with
-          | .definition info => some info.toConstantInfo
-          | .opaque info => some info.toConstantInfo
-          | .axiom info => some info.toConstantInfo
-          | .recursor info => some info.toConstantInfo
-          | .constructor info => some info.toConstantInfo
-          | .inductive info => some info.toConstantInfo
-      | none => none
-  | .constDef file name =>
-      return match ← fetchQ (.entry file name) with
+  | .constantInfo filepath name => do
+      let e? : Option Entry ← fetchQ (.entry filepath name)
+      return e?.map fun
+        | .definition info
+        | .opaque info
+        | .axiom info
+        | .recursor info
+        | .constructor info
+        | .inductive info =>
+            info.toConstantInfo
+  | .constDef filepath name => do
+      return match ← fetchQ (.entry filepath name) with
       | some (.definition info) => some info.tm
       | _ => none
-  | .recursorInfo file name =>
-      return match ← fetchQ (.entry file name) with
+  | .recursorInfo filepath name =>
+      return match ← fetchQ (.entry filepath name) with
       | some (.recursor info) => some info
       | _ => none
-  | .constructorInfo file name =>
-      return match ← fetchQ (.entry file name) with
+  | .constructorInfo filepath name =>
+      return match ← fetchQ (.entry filepath name) with
       | some (.constructor info) => some info
       | _ => none
-  | .inductiveInfo file name =>
-      return match ← fetchQ (.entry file name) with
+  | .inductiveInfo filepath name =>
+      return match ← fetchQ (.entry filepath name) with
       | some (.inductive info) => some info
       | _ => none
 
@@ -374,13 +355,13 @@ def newEngine : Engine Error Val where
     | .inputFiles => true
     | _ => false
 
-def run
+protected def run
     {α : Type}
     (config : Config)
     (engine : Engine Error Val)
     (task : TaskM Error Val α) :
     IO (Except Error (α × Engine Error Val)) := do
-  setRulesContext { config }
+  rulesContextRef.set config
   (runWithEngine engine rules task).toIO'
 
 end Qdt.Incremental

@@ -1,5 +1,5 @@
 import Qdt
-import Qdt.IncrementalElab
+import Qdt.Incremental
 import Qdt.Frontend.Macro
 
 open Qdt
