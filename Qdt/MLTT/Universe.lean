@@ -179,10 +179,10 @@ where
     | _, _ => k ()
   termination_by (u, v)
 
+section Tests
+
 private abbrev u : Universe := .level `u
 private abbrev v : Universe := .level `v
-
-section Tests
 
 #guard le 0 0
 #guard le 0 u
@@ -206,4 +206,5 @@ section Tests
 end Tests
 
 end Universe
+
 end Qdt
