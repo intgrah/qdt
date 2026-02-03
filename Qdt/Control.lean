@@ -112,8 +112,7 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.entry file name) : QueryM _)
+  | some file => fetchQ (Key.entry file name)
 
 def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
   let st ← getThe CoreState
@@ -126,8 +125,7 @@ def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.constTy file name) : QueryM _)
+  | some file => fetchQ (Key.constTy file name)
 
 def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
   let st ← getThe CoreState
@@ -140,8 +138,7 @@ def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.constantInfo file name) : QueryM _)
+  | some file => fetchQ (Key.constantInfo file name)
 
 def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
   let st ← getThe CoreState
@@ -154,8 +151,7 @@ def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.constDef file name) : QueryM _)
+  | some file => fetchQ (Key.constDef file name)
 
 def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
   let st ← getThe CoreState
@@ -168,8 +164,7 @@ def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.inductiveInfo file name) : QueryM _)
+  | some file => fetchQ (Key.inductiveInfo file name)
 
 def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
   let st ← getThe CoreState
@@ -182,8 +177,7 @@ def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.recursorInfo file name) : QueryM _)
+  | some file => fetchQ (Key.recursorInfo file name)
 
 def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
   let st ← getThe CoreState
@@ -196,8 +190,7 @@ def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file =>
-      (TaskM.fetch (Key.constructorInfo file name) : QueryM _)
+  | some file => fetchQ (Key.constructorInfo file name)
 
 def Global.addEntry (name : Name) (entry : Entry) : CoreM Unit := do
   let st ← getThe CoreState

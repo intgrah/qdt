@@ -38,8 +38,6 @@ private def mkPrevEnv
       let proj ← proj.app x
       return Env.cons proj envTail
 
-open Qdt.Error
-
 def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
   let numParams := info.params.length
 
@@ -48,7 +46,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
     match info.tyOpt with
     | none => pure (Ty.u none .zero)
     | some (.u src level) => pure (Ty.u src level : Ty numParams)
-    | some _ => throw (structureResultTypeMustBeTypeUniverse info.src info.name)
+    | some _ => throw (.structureResultTypeMustBeTypeUniverse info.src info.name)
 
   let structFieldStrs ← info.fields.mapM fun f => getAtomicFieldString info.name f.name
   let ctorFieldBinders : List Frontend.Ast.TypedBinder :=

@@ -3,13 +3,13 @@ import Qdt.Incremental
 import Qdt.Frontend.Macro
 
 open Qdt
-open Qdt.Incremental (Engine Key Val TaskM)
+open Incremental (Engine Key Val TaskM)
 open Lean (Term MacroM)
 
-private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Incremental.GlobalEnv) := do
+private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Global) := do
   let config : Config := Config.empty
   let engine : Engine Error Val := Incremental.newEngine
-  let task : TaskM Error Val Incremental.GlobalEnv := do
+  let task : TaskM Error Val Global := do
     let prog := Frontend.Cst.Program.desugar prog
     let coreCtx : CoreContext := CoreContext.empty
     let init : CoreState := {

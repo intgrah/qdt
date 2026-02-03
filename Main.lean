@@ -5,12 +5,12 @@ import Qdt.Incremental
 
 open Cli
 open Qdt
-open Qdt.Incremental (Engine TaskM Key Val)
+open Incremental (Engine TaskM Key Val)
 open System (FilePath)
 
 private def countModuleEntries (filepath : FilePath) :
     TaskM Error Val Nat := do
-  let env : Global ← TaskM.fetch (Key.elabModule filepath)
+  let env : Global ← fetchQ (Key.elabModule filepath)
   return env.size
 
 private def runModuleOnce (config : Config) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do

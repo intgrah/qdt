@@ -223,8 +223,9 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
   }
   let baseAction : Incremental.BaseM Error Incremental.Val (Except Error _) := do
     try
-      let inner : QueryM _ := action metaCtx |>.run metaState |>.run coreCtx |>.run coreState
-      return .ok (← inner.run fetchQ).1.1
+      let inner : QueryM ((Option (Name × HoverResult) × MetaState) × CoreState) :=
+        action metaCtx |>.run metaState |>.run coreCtx |>.run coreState
+      return .ok (← inner.run fetchQ).fst.fst
     catch e => return .error e
   let eioAction := baseAction.run' runState
   let result ← eioAction.toIO fun e => IO.Error.userError (toString e)

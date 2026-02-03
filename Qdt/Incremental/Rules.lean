@@ -17,8 +17,6 @@ open Std (HashMap HashSet)
 open System (FilePath)
 open Frontend
 
-abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
-
 private initialize rulesContextRef : IO.Ref Config ← IO.mkRef default
 
 private initialize fileTextOverridesRef : IO.Ref (HashMap FilePath String) ←
@@ -307,18 +305,17 @@ def rules : ∀ k, TaskM Error Val (Val k)
       | some owner =>
           let env : HashMap Name Entry ← fetchQ (.elabTop filepath owner)
           return env[name]?
-  | .constTy filepath name =>
-      return match ← fetchQ (.entry filepath name) with
-      | some e =>
-          match e with
-          | .definition info
-          | .opaque info
-          | .axiom info
-          | .recursor info
-          | .constructor info
-          | .inductive info =>
-              some info.ty
-      | none => none
+  | .constTy filepath name => do
+      let some e ← fetchQ (.entry filepath name)
+        | return none
+      return match e with
+        | .definition info
+        | .opaque info
+        | .axiom info
+        | .recursor info
+        | .constructor info
+        | .inductive info =>
+            some info.ty
   | .constantInfo filepath name => do
       let e? : Option Entry ← fetchQ (.entry filepath name)
       return e?.map fun
@@ -330,21 +327,21 @@ def rules : ∀ k, TaskM Error Val (Val k)
         | .inductive info =>
             info.toConstantInfo
   | .constDef filepath name => do
-      return match ← fetchQ (.entry filepath name) with
-      | some (.definition info) => some info.tm
-      | _ => none
-  | .recursorInfo filepath name =>
-      return match ← fetchQ (.entry filepath name) with
-      | some (.recursor info) => some info
-      | _ => none
-  | .constructorInfo filepath name =>
-      return match ← fetchQ (.entry filepath name) with
-      | some (.constructor info) => some info
-      | _ => none
-  | .inductiveInfo filepath name =>
-      return match ← fetchQ (.entry filepath name) with
-      | some (.inductive info) => some info
-      | _ => none
+      let some (.definition info) ← fetchQ (.entry filepath name)
+        | return none
+      return some info.tm
+  | .recursorInfo filepath name => do
+      let some (.recursor info) ← fetchQ (.entry filepath name)
+        | return none
+      return some info
+  | .constructorInfo filepath name => do
+      let some (.constructor info) ← fetchQ (.entry filepath name)
+        | return none
+      return some info
+  | .inductiveInfo filepath name => do
+      let some (.inductive info) ← fetchQ (.entry filepath name)
+        | return none
+      return some info
 
 def newEngine : Engine Error Val where
   recover k := throw (.ioError (IO.userError s!"Cycle detected: {repr k}"))

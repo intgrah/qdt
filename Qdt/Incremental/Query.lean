@@ -1,10 +1,14 @@
 import Std.Data.HashMap
 import Std.Data.HashSet
 
+import Qdt.Error
 import Qdt.MLTT.Global
 import Qdt.Frontend.Ast
+import Qdt.Incremental.Basic
 
-namespace Qdt.Incremental
+namespace Qdt
+
+namespace Incremental
 
 open Lean (Name)
 open Std (HashMap HashSet)
@@ -69,4 +73,10 @@ def Val : Key → Type
   | .constructorInfo .. => Option ConstructorInfo
   | .inductiveInfo .. => Option InductiveInfo
 
-end Qdt.Incremental
+abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
+
+end Incremental
+
+export Incremental (fetchQ)
+
+end Qdt

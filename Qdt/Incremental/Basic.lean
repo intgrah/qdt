@@ -2,7 +2,9 @@ import Std.Data.DHashMap
 import Std.Data.HashMap
 import Std.Data.HashSet
 
-namespace Qdt.Incremental
+namespace Qdt
+
+namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
 
@@ -81,10 +83,7 @@ The choice of the constraint `c` has concrete meanings:
 - `c := Monad` - dynamic dependencies
 -/
 
-abbrev TaskF := Task (c := Functor)
-abbrev TaskA := Task (c := Applicative)
 abbrev TaskT := Task (c := Monad)
-abbrev TaskMP := Task (c := Alternative)
 
 abbrev TaskM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
   TaskT Q R (BaseM ε R)
@@ -194,4 +193,6 @@ def runWithEngine
 
   action.run' init
 
-end Qdt.Incremental
+end Incremental
+
+end Qdt
