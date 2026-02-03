@@ -9,13 +9,14 @@ import Lean.Data.Lsp.Utf16
 import Qdt.Config
 import Qdt.Error
 import Qdt.Frontend.Source
-import Qdt.IncrementalElab
+import Qdt.Incremental
 import Qdt.Lsp.Hover
 import Qdt.Pretty
 
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Qdt
+open Incremental (Engine fetchQ Key TaskM Val)
 
 private def mkRange (text : String) (src : Frontend.Src) : Range :=
   let fileMap := Lean.FileMap.ofString text
@@ -76,14 +77,14 @@ private def normaliseConfig (cfg : Config) : IO Config := do
 
 structure ProjectState where
   config : Config
-  engine : Incremental.Engine Error Incremental.Val
+  engine : Engine Error Val
 
 structure ServerState where
   projects : Std.HashMap FilePath ProjectState := Std.HashMap.emptyWithCapacity 8
   shutdownRequested : Bool := false
 
-private def getProject (st : ServerState) (file : FilePath) : IO (ServerState × ProjectState) := do
-  let dir : FilePath := file.parent.getD (FilePath.mk ".")
+private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × ProjectState) := do
+  let dir : FilePath := filepath.parent.getD (FilePath.mk ".")
   let tomlPath? ← findTomlUp dir 100
   let root0 : FilePath :=
     match tomlPath? with
@@ -182,8 +183,8 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : Incremental.TaskM Error Incremental.Val Incremental.GlobalEnv :=
-    Incremental.TaskM.fetch (Incremental.Key.elabModule file)
+  let task : TaskM Error Val Global :=
+    fetchQ (Key.elabModule file)
 
   match ← Incremental.run ps.config ps.engine task with
   | Except.ok (_, engine') =>
@@ -221,8 +222,8 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : Incremental.TaskM Error Incremental.Val Incremental.GlobalEnv :=
-    Incremental.TaskM.fetch (Incremental.Key.elabModule file)
+  let task : TaskM Error Val Global :=
+    fetchQ (Key.elabModule file)
 
   match ← Incremental.run ps.config ps.engine task with
   | Except.ok (_, engine') =>
@@ -275,8 +276,8 @@ private def handleHover
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : Incremental.TaskM Error Incremental.Val Incremental.GlobalEnv :=
-    Incremental.TaskM.fetch (Incremental.Key.elabModule file)
+  let task : TaskM Error Val Global :=
+    fetchQ (Key.elabModule file)
 
   match ← Incremental.run ps.config ps.engine task with
   | .error _ =>

@@ -210,7 +210,7 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
   let coreState : CoreState := { modules := {}, importedEnv := global, localEnv := {}, errors := #[] }
   let metaCtx : MetaContext := { currentDecl := .anonymous }
   let metaState : MetaState := { sorryId := 0, univParams := [] }
-  let fetch : ∀ q, Incremental.BaseM Error Incremental.Val (Incremental.Val q) := fun _ => throw (.msg "Internal error")
+  let fetchQ : ∀ q, Incremental.BaseM Error Incremental.Val (Incremental.Val q) := fun _ => throw (.msg "Internal error")
   let runState : Incremental.RunState Error Incremental.Val := {
     engine := {
       recover _ := throw (.msg "Internal error"),
@@ -224,7 +224,7 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
   let baseAction : Incremental.BaseM Error Incremental.Val (Except Error _) := do
     try
       let inner : QueryM _ := action metaCtx |>.run metaState |>.run coreCtx |>.run coreState
-      return .ok (← inner.run fetch).1.1
+      return .ok (← inner.run fetchQ).1.1
     catch e => return .error e
   let eioAction := baseAction.run' runState
   let result ← eioAction.toIO fun e => IO.Error.userError (toString e)

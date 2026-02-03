@@ -4,8 +4,8 @@ import Qdt.Frontend.Source
 import Qdt.Error
 import Qdt.MLTT.Global
 import Qdt.TermContext
-import Qdt.Incremental
-import Qdt.IncrementalElab.Query
+import Qdt.Incremental.Basic
+import Qdt.Incremental.Query
 
 namespace Qdt
 
@@ -50,40 +50,47 @@ structure MetaState where
   univParams : List Name
 deriving Repr, Inhabited
 
-/--
-CoreM provides context at the global scope.
-It provides the ability to throw exceptions,
-make queries, and extend the local environment for the current decl.
--/
-abbrev QueryM := TaskM Error Val
+section Monads
 
-abbrev CoreM := ReaderT CoreContext (StateT CoreState QueryM)
+-- abbrev BaseM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
+--   StateRefT (RunState ε R) (EIO ε)
 
-/--
-MetaM provides context at the definition scope.
--/
-abbrev MetaM := ReaderT MetaContext (StateT MetaState CoreM)
+-- abbrev Task
+--     (c : (Type u → Type u) → Type (u + 1))
+--     (Q : Type u)
+--     (R : Q → Type u)
+--     (f : Type u → Type u) [c f] :=
+--   ReaderT (∀ q : Q, f (R q)) f
 
-instance : Monad MetaM :=
-  inferInstanceAs (Monad (ReaderT MetaContext (StateT MetaState CoreM)))
+-- abbrev TaskT := Task Monad
 
-instance : MonadStateOf MetaState MetaM :=
-  inferInstanceAs (MonadStateOf MetaState (ReaderT MetaContext (StateT MetaState CoreM)))
+-- abbrev TaskM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
+--   TaskT Q R (BaseM ε R)
 
-/--
-TermM provides context at the syntactic term scope.
-It provides the context.
--/
-abbrev TermM (n : Nat) := ReaderT (TermContext n) MetaM
+/-- QueryM provides the ability to make queries queries. -/
+abbrev QueryM : Type → Type :=
+  TaskM Error Val
 
-/--
-SemM provides context at the semantic term scope.
-It provides the environment
--/
-abbrev SemM (n c : Nat) := ReaderT (Env n c) MetaM
+/-- CoreM provides context at the global scope. -/
+abbrev CoreM : Type → Type :=
+  ReaderT CoreContext (StateT CoreState QueryM)
+
+/-- MetaM provides context at the definition scope. -/
+abbrev MetaM : Type → Type :=
+  ReaderT MetaContext (StateT MetaState CoreM)
+
+/-- TermM provides context for type checking. -/
+abbrev TermM (n : Nat) : Type → Type :=
+  ReaderT (TermContext n) MetaM
+
+/-- SemM provides the environment for NbE. -/
+abbrev SemM (n c : Nat) : Type → Type :=
+  ReaderT (Env n c) MetaM
 
 protected instance {n} : MonadLiftT (SemM n n) (TermM n) where
-  monadLift m := fun e => m e.env
+  monadLift := (· ·.env)
+
+end Monads
 
 def getLocalEnv : CoreM Global := do
   let genv ← getThe CoreState

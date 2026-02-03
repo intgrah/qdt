@@ -1,2 +1,3 @@
 import Qdt.Incremental.Basic
-import Qdt.Incremental.Run
+import Qdt.Incremental.Query
+import Qdt.Incremental.Rules
