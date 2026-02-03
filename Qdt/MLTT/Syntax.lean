@@ -25,6 +25,7 @@ inductive Ty : Nat → Type
   | el {n} : Src → Tm n → Ty n
 deriving Repr
 
+/-- Terms -/
 inductive Tm : Nat → Type
   | u' {n} : Src → Universe → Tm n
   | var {n} : Src → Idx n → Tm n
@@ -49,14 +50,14 @@ abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi none ⟨none, .anonymous, ty⟩
 
 /-- Replace the source span of a term only if target has no span -/
 def Tm.withSrc {n} (newSrc : Src) : Tm n → Tm n
-  | .u' oldSrc u => .u' (oldSrc.orElse fun _ => newSrc) u
-  | .var oldSrc i => .var (oldSrc.orElse fun _ => newSrc) i
-  | .const oldSrc name us => .const (oldSrc.orElse fun _ => newSrc) name us
-  | .lam oldSrc p body => .lam (oldSrc.orElse fun _ => newSrc) p body
-  | .app oldSrc f a => .app (oldSrc.orElse fun _ => newSrc) f a
-  | .pi' oldSrc pSrc x a b => .pi' (oldSrc.orElse fun _ => newSrc) pSrc x a b
-  | .proj oldSrc i t => .proj (oldSrc.orElse fun _ => newSrc) i t
-  | .letE oldSrc x ty val body => .letE (oldSrc.orElse fun _ => newSrc) x ty val body
+  | .u' oldSrc u => .u' (oldSrc <|> newSrc) u
+  | .var oldSrc i => .var (oldSrc <|> newSrc) i
+  | .const oldSrc name us => .const (oldSrc <|> newSrc) name us
+  | .lam oldSrc p body => .lam (oldSrc <|> newSrc) p body
+  | .app oldSrc f a => .app (oldSrc <|> newSrc) f a
+  | .pi' oldSrc pSrc x a b => .pi' (oldSrc <|> newSrc) pSrc x a b
+  | .proj oldSrc i t => .proj (oldSrc <|> newSrc) i t
+  | .letE oldSrc x ty val body => .letE (oldSrc <|> newSrc) x ty val body
 
 @[match_pattern]
 def Tm.apps {n} : Tm n → List (Tm n) → Tm n :=

@@ -58,7 +58,6 @@ def Val : Key → Type
   | .moduleImports .. => List Name
   | .importedEnv .. => Global
   | .elabModule .. => Global
-
   | .fileText .. => String
   | .astProgram .. => Frontend.Ast.Program
   | .declOwner .. => HashMap Name TopDecl

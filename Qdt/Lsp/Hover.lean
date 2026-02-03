@@ -206,8 +206,8 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
               if spanSize result.span < spanSize prevResult.span then
                 best := some (name, result)
     return best
-  let coreCtx : CoreContext := { file := none, selfNames := [] }
-  let coreState : CoreState := { modules := {}, importedEnv := global, localEnv := {}, errors := #[] }
+  let coreCtx : CoreContext := { file := none, selfNames := [], imports := [] }
+  let coreState : CoreState := { modules := {}, localEnv := global, importedEnv := {}, errors := #[] }
   let metaCtx : MetaContext := { currentDecl := .anonymous }
   let metaState : MetaState := { sorryId := 0, univParams := [] }
   let fetchQ : ∀ q, Incremental.BaseM Error Incremental.Val (Incremental.Val q) := fun _ => throw (.msg "Internal error")
