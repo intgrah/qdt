@@ -87,7 +87,7 @@ def WalkCtx.inferTyLevel {n} (ctx : WalkCtx n) (ty : Ty n) : MetaM String := do
 
 mutual
 
-partial def findInTy {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Ty n → MetaM (Option HoverResult)
+def findInTy {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Ty n → MetaM (Option HoverResult)
   | .u src level =>
       if src.contains pos then
         return src.bind fun span => some { contents := s!"Type {Universe.succ level}", span }
@@ -105,7 +105,7 @@ partial def findInTy {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Ty n → Met
       return none
   | .el _ t => findInTm ctx pos t
 
-partial def findInTm {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Tm n → MetaM (Option HoverResult)
+def findInTm {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Tm n → MetaM (Option HoverResult)
   | .u' src level =>
       if src.contains pos then
         return src.bind fun span => some { contents := s!"Type {Universe.succ level}", span }
