@@ -119,6 +119,23 @@ private def publishDiagnostics
   | Except.ok s =>
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
+partial def buildEnv (filepath : FilePath) : TaskM Error Val Global := do
+  let mut globalEnv : Global := Std.HashMap.emptyWithCapacity 4096
+  let importNames ← fetchQ (Key.moduleImports filepath)
+  for modName in importNames.toArray do
+    match ← fetchQ (Key.moduleFile modName) with
+    | none => throw (.msg s!"Import not found: {modName}")
+    | some depFile =>
+        let depEnv ← buildEnv depFile
+        for (n, e) in depEnv.toList.toArray do
+          globalEnv := globalEnv.insert n e
+  let ordering : List Incremental.TopDecl ← fetchQ (Key.declOrdering filepath)
+  for decl in ordering do
+    let localEnv : Global ← fetchQ (Key.elabTop filepath decl)
+    for (n, e) in localEnv.toList.toArray do
+      globalEnv := globalEnv.insert n e
+  return globalEnv
+
 private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
   let _params : InitializeParams ←
     match params? with
@@ -183,8 +200,7 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : TaskM Error Val Global :=
-    fetchQ (Key.elabModule file)
+  let task : TaskM Error Val Global := buildEnv file
 
   match ← Incremental.run ps.config ps.engine task with
   | Except.ok (_, engine') =>
@@ -222,8 +238,7 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : TaskM Error Val Global :=
-    fetchQ (Key.elabModule file)
+  let task : TaskM Error Val Global := buildEnv file
 
   match ← Incremental.run ps.config ps.engine task with
   | Except.ok (_, engine') =>
@@ -265,8 +280,7 @@ private def handleHover
   let lspPos := params.position
 
   let some file ← uriToPath? uri
-    | do hOut.writeLspMessage <| Message.response id Json.null
-         return
+    | hOut.writeLspMessage <| Message.response id Json.null
 
   let text ← Incremental.getFileText file
   let fileMap := Lean.FileMap.ofString text
@@ -276,8 +290,7 @@ private def handleHover
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : TaskM Error Val Global :=
-    fetchQ (Key.elabModule file)
+  let task : TaskM Error Val Global := buildEnv file
 
   match ← Incremental.run ps.config ps.engine task with
   | .error _ =>
@@ -302,47 +315,48 @@ private def handleHover
           }
           hOut.writeLspMessage <| Message.response id (toJson hover)
 
-partial def mainLoop (hIn hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) : IO Unit := do
+partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) : IO Unit := do
   while true do
-    let msg ← hIn.readLspMessage
+    let msg ← stdin.readLspMessage
     match msg with
     | .request id method params? =>
         match method with
         | "initialize" =>
             try
-              handleInitialize hOut id params?
+              handleInitialize stdout id params?
             catch e =>
-              hOut.writeLspMessage <|
+              stdout.writeLspMessage <|
                 Message.responseError id ErrorCode.internalError s!"initialize failed: {e}" none
         | "shutdown" =>
-            handleShutdown hOut id stRef
+            handleShutdown stdout id stRef
         | "textDocument/hover" =>
             try
-              handleHover hOut id stRef params?
+              handleHover stdout id stRef params?
             catch e =>
-              hOut.writeLspMessage <|
+              stdout.writeLspMessage <|
                 Message.responseError id ErrorCode.internalError s!"hover failed: {e}" none
         | _ =>
-            hOut.writeLspMessage <|
+            stdout.writeLspMessage <|
               Message.responseError id ErrorCode.methodNotFound s!"unknown method: {method}" none
     | .notification method params? =>
         match method with
         | "exit" => throw (IO.userError "exit")
         | "textDocument/didOpen" =>
-            try handleDidOpen hOut stRef params? catch _ => pure ()
+            try handleDidOpen stdout stRef params? catch _ => pure ()
         | "textDocument/didChange" =>
-            try handleDidChange hOut stRef params? catch _ => pure ()
+            try handleDidChange stdout stRef params? catch _ => pure ()
         | "textDocument/didClose" =>
-            try handleDidClose hOut params? catch _ => pure ()
+            try handleDidClose stdout params? catch _ => pure ()
         | _ => pure ()
     | _ => pure ()
 
 def main : IO UInt32 := do
-  let hIn ← IO.getStdin
-  let hOut ← IO.getStdout
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
   let stRef ← IO.mkRef { : ServerState}
   try
-    mainLoop hIn hOut stRef
+    mainLoop stdin stdout stRef
     pure 0
-  finally
-    pure 0
+  catch e =>
+    IO.println s!"fatal: {e}"
+    pure 1

@@ -99,12 +99,10 @@ private def buildDeclOrdering (prog : Frontend.Ast.Program) : List TopDecl :=
   go prog 0 []
 
 private def hashNameTopDeclPairs (m : HashMap Name TopDecl) : UInt64 :=
-  let pairs := m.toList.mergeSort (fun a b => a.fst.toString <= b.fst.toString)
-  hash <| pairs.map fun (n, d) => mixHash (hash n) (hash d)
+  hash <| m.toList.map fun (n, d) => mixHash (hash n) (hash d)
 
 private def hashNameEntryPairs (m : HashMap Name Entry) : UInt64 :=
-  let pairs := m.toList.mergeSort (fun a b => a.fst.toString <= b.fst.toString)
-  hash <| pairs.map fun (n, e) => mixHash (hash n) (hash e)
+  hash <| m.toList.map fun (n, e) => mixHash (hash n) (hash e)
 
 def fingerprint : ∀ k, Val k → UInt64
   | .inputFiles, (s : HashSet FilePath) =>
@@ -114,7 +112,6 @@ def fingerprint : ∀ k, Val k → UInt64
     hash <| ns.map hash
   | .importedEnv .., (env : Global) => hashNameEntryPairs env
   | .elabModule .., (env : Global) => hashNameEntryPairs env
-
   | .fileText .., (s : String) => hash s
   | .astProgram .., (p : Frontend.Ast.Program) => hash p
   | .declOwner .., (m : HashMap Name TopDecl) => hashNameTopDeclPairs m
@@ -155,6 +152,18 @@ def extractImports (prog : Frontend.Ast.Program) : List Name :=
     match cmd with
     | .import i => some i.moduleName
     | _ => none
+
+partial def collectTransitiveImports (visited : HashSet FilePath) (modName : Name) : TaskM Error Val (HashSet FilePath) := do
+  match ← fetchQ (.moduleFile modName) with
+  | none => throw (.msg s!"Import not found: {modName}")
+  | some depFile =>
+      if visited.contains depFile then
+        return visited
+      else
+        let visited := visited.insert depFile
+        let depImports ← fetchQ (.moduleImports depFile)
+        depImports.toArray.foldlM (init := visited) fun vis nm =>
+          collectTransitiveImports vis nm
 
 def rules : ∀ k, TaskM Error Val (Val k)
   | .inputFiles => do
@@ -203,8 +212,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       let mut globalEnv : Global := HashMap.emptyWithCapacity 4096
       for modName in imports.toArray do
         match ← fetchQ (.moduleFile modName) with
-        | none =>
-            throw (.msg s!"Import not found: {modName}")
+        | none => throw (.msg s!"Import not found: {modName}")
         | some depFile =>
             let depEnv ← fetchQ (.elabModule depFile)
             for (name, entry) in depEnv.toList.toArray do
@@ -271,20 +279,13 @@ def rules : ∀ k, TaskM Error Val (Val k)
                 :: projNames
         | .example _ => pure []
         | .import _ => pure []
-      let coreCtx : CoreContext := { file := some filepath, selfNames }
-      -- Build importedEnv from imports and prior declarations
-      let mut importedEnv : Global ← fetchQ (.importedEnv filepath)
-      let ordering : List TopDecl ← fetchQ (.declOrdering filepath)
-      for priorDecl in ordering do
-        if priorDecl == decl then break
-        let priorEnv ← fetchQ (.elabTop filepath priorDecl)
-        for (n, e) in priorEnv.toList.toArray do
-          importedEnv := importedEnv.insert n e
+      let importedEnv : Global ← fetchQ (.importedEnv filepath)
+      let coreCtx : CoreContext := { file := some filepath, selfNames, imports := [] }
       let init : CoreState :=
         {
           modules := HashMap.emptyWithCapacity 8
-          importedEnv
           localEnv := HashMap.emptyWithCapacity 128
+          importedEnv
           errors := #[]
         }
       let action : CoreM CoreState := do

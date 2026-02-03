@@ -16,6 +16,9 @@ namespace Universe
 instance {n} : OfNat Universe n where
   ofNat := n.repeat .succ .zero
 
+instance : HAdd Universe Nat Universe where
+  hAdd i n := n.repeat .succ i
+
 private def parenIf (p : Bool) : Std.Format → Std.Format :=
   if p then .paren else id
 

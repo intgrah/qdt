@@ -8,10 +8,30 @@ open Qdt
 open Incremental (Engine TaskM Key Val)
 open System (FilePath)
 
+partial def forceElaborateModule (visited : Std.HashSet FilePath) (filepath : FilePath) :
+    TaskM Error Val (Nat × Std.HashSet FilePath) := do
+  if visited.contains filepath then
+    return (0, visited)
+  let mut count := 0
+  let mut visited := visited.insert filepath
+  let importNames ← fetchQ (Key.moduleImports filepath)
+  for modName in importNames.toArray do
+    match ← fetchQ (Key.moduleFile modName) with
+    | none => throw (.msg s!"Import not found: {modName}")
+    | some depFile =>
+        let (c, v) ← forceElaborateModule visited depFile
+        count := count + c
+        visited := v
+  let ordering : List Incremental.TopDecl ← fetchQ (Key.declOrdering filepath)
+  for decl in ordering do
+    let localEnv ← fetchQ (Key.elabTop filepath decl)
+    count := count + localEnv.size
+  return (count, visited)
+
 private def countModuleEntries (filepath : FilePath) :
     TaskM Error Val Nat := do
-  let env : Global ← fetchQ (Key.elabModule filepath)
-  return env.size
+  let (count, _) ← forceElaborateModule (Std.HashSet.emptyWithCapacity 256) filepath
+  return count
 
 private def runModuleOnce (config : Config) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do
   let t0 ← IO.monoMsNow

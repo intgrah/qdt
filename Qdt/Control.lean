@@ -24,10 +24,12 @@ deriving Repr, Inhabited
 structure CoreContext where
   file : Option System.FilePath
   selfNames : List Name
+  imports : List System.FilePath
 
 def CoreContext.empty : CoreContext where
   file := none
   selfNames := []
+  imports := []
 
 structure CoreState where
   modules : Std.HashMap Name ModuleStatus
@@ -112,7 +114,15 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.entry file name)
+  | some file =>
+      if let some e ← fetchQ (Key.entry file name) then
+        modify fun st => { st with importedEnv := st.importedEnv.insert name e }
+        return some e
+      for importFile in ctx.imports do
+        if let some e ← fetchQ (Key.entry importFile name) then
+          modify fun st => { st with importedEnv := st.importedEnv.insert name e }
+          return some e
+      return none
 
 def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
   let st ← getThe CoreState
@@ -125,7 +135,13 @@ def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.constTy file name)
+  | some file =>
+      if let some ty ← fetchQ (Key.constTy file name) then
+        return some ty
+      for importFile in ctx.imports do
+        if let some ty ← fetchQ (Key.constTy importFile name) then
+          return some ty
+      return none
 
 def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
   let st ← getThe CoreState
@@ -138,7 +154,13 @@ def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.constantInfo file name)
+  | some file =>
+      if let some result ← fetchQ (Key.constantInfo file name) then
+        return some result
+      for importFile in ctx.imports do
+        if let some result ← fetchQ (Key.constantInfo importFile name) then
+          return some result
+      return none
 
 def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
   let st ← getThe CoreState
@@ -151,7 +173,13 @@ def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.constDef file name)
+  | some file =>
+      if let some tm ← fetchQ (Key.constDef file name) then
+        return some tm
+      for importFile in ctx.imports do
+        if let some tm ← fetchQ (Key.constDef importFile name) then
+          return some tm
+      return none
 
 def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
   let st ← getThe CoreState
@@ -164,7 +192,13 @@ def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.inductiveInfo file name)
+  | some file =>
+      if let some info ← fetchQ (Key.inductiveInfo file name) then
+        return some info
+      for importFile in ctx.imports do
+        if let some info ← fetchQ (Key.inductiveInfo importFile name) then
+          return some info
+      return none
 
 def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
   let st ← getThe CoreState
@@ -177,7 +211,13 @@ def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.recursorInfo file name)
+  | some file =>
+      if let some info ← fetchQ (Key.recursorInfo file name) then
+        return some info
+      for importFile in ctx.imports do
+        if let some info ← fetchQ (Key.recursorInfo importFile name) then
+          return some info
+      return none
 
 def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
   let st ← getThe CoreState
@@ -190,7 +230,13 @@ def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
     return none
   match ctx.file with
   | none => return none
-  | some file => fetchQ (Key.constructorInfo file name)
+  | some file =>
+      if let some info ← fetchQ (Key.constructorInfo file name) then
+        return some info
+      for importFile in ctx.imports do
+        if let some info ← fetchQ (Key.constructorInfo importFile name) then
+          return some info
+      return none
 
 def Global.addEntry (name : Name) (entry : Entry) : CoreM Unit := do
   let st ← getThe CoreState
