@@ -47,8 +47,8 @@ private def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
       catch _ =>
         pure (some p)
 
-private partial def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
-  | 0 => pure none
+private def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
+  | 0 => return none
   | fuel + 1 => do
       let candidate := dir / "qdt.toml"
       if ← candidate.pathExists then

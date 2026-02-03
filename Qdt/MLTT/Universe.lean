@@ -76,7 +76,9 @@ private def normLt (l₁ l₂ : Universe) : Bool :=
 @[specialize] private partial def getMaxArgsAux (normalise : Universe → Universe)
     : Universe → Bool → Array Universe → Array Universe
   | .max l₁ l₂, alreadyNorm, lvls =>
-      getMaxArgsAux normalise l₂ alreadyNorm (getMaxArgsAux normalise l₁ alreadyNorm lvls)
+      lvls
+      |> getMaxArgsAux normalise l₁ alreadyNorm
+      |> getMaxArgsAux normalise l₂ alreadyNorm
   | l, false, lvls  => getMaxArgsAux normalise (normalise l) true lvls
   | l, true,  lvls  => lvls.push l
 
@@ -84,7 +86,7 @@ private def accMax (result : Universe) (prev : Universe) (offset : Nat) : Univer
   if result = .zero then addOffset prev offset
   else .max result (addOffset prev offset)
 
-private partial def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
+private def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
     (prev : Universe) (prevK : Nat) (result : Universe) : Universe :=
   if h : i < lvls.size then
     let lvl := lvls[i]
@@ -97,14 +99,14 @@ private partial def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
   else
     accMax result prev (extraK + prevK)
 
-private partial def skipExplicit (lvls : Array Universe) (i : Nat) : Nat :=
+private def skipExplicit (lvls : Array Universe) (i : Nat) : Nat :=
   if h : i < lvls.size then
     let lvl := lvls[i]
     if getLevelOffset lvl = .zero then skipExplicit lvls (i + 1) else i
   else
     i
 
-private partial def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i : Nat) : Bool :=
+private def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i : Nat) : Bool :=
   if h : i < lvls.size then
     let lvl := lvls[i]
     if getOffset lvl ≥ maxExplicit then true
