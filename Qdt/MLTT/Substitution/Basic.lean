@@ -183,7 +183,7 @@ section SubstitutionLemmas
 
 @[simp]
 theorem Subst.id_comp {m n} (σ : Subst m n) : (Subst.id m).comp σ = σ := rfl
-@[simp]
+-- @[simp]
 -- theorem Subst.comp_id {m n} (σ : Subst m n) : σ.comp (Subst.id n) = σ := by
 --   funext i; apply Tm.subst_id
 
