@@ -81,7 +81,7 @@ private partial def inferPi {n} (src : Frontend.Src) : Frontend.Ast.TypedBinder 
       let (codTm, codTy) ← inferTm cod ctx
       let .u codLevel := codTy
         | throw (.expectedType (cod.src) (← read).names (← codTy.quote))
-      return (.pi' src binderSrc x domTm codTm, .max domLevel codLevel)
+      return (.pi' src ⟨binderSrc, x, domTm⟩ codTm, .max domLevel codLevel)
 
 partial def checkTyWithLevel {n} : Frontend.Ast.Term → TermM n (Ty n × Universe)
   | .missing src => throw (.typecheckMissing src)

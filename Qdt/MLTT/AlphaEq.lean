@@ -44,7 +44,7 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
   | congrPiHat {n} {s₁ s₂ ps₁ ps₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .pi' s₁ ps₁ x₁ a₁ b₁ ≡α .pi' s₂ ps₂ x₂ a₂ b₂
+      .pi' s₁ ⟨ps₁, x₁, a₁⟩ b₁ ≡α .pi' s₂ ⟨ps₂, x₂, a₂⟩ b₂
   | congrLam {n} {s₁ s₂ ps₁ ps₂ : Frontend.Src} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
@@ -76,7 +76,5 @@ def Tm.AlphaQuot.setoid (n : Nat) : Setoid (Tm n) where
 
 def Ty.AlphaQuot (n : Nat) := Quotient (Ty.AlphaQuot.setoid n)
 def Tm.AlphaQuot (n : Nat) := Quotient (Tm.AlphaQuot.setoid n)
-
--- TODO: decide whether setoid reasoning is worth it
 
 end Qdt

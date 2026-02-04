@@ -32,7 +32,7 @@ inductive Tm : Nat → Type
   | const {n} : Src → Name → List Universe → Tm n
   | lam {n} : Src → Param n → Tm (n + 1) → Tm n
   | app {n} : Src → Tm n → Tm n → Tm n
-  | pi' {n} : Src → Src → Name → Tm n → Tm (n + 1) → Tm n
+  | pi' {n} : Src → Param' n → Tm (n + 1) → Tm n
   | proj {n} : Src → Nat → Tm n → Tm n
   | letE {n} : Src → Name → Ty n → Tm n → Tm (n + 1) → Tm n
 deriving Repr
@@ -40,6 +40,11 @@ deriving Repr
 @[pp_using_anonymous_constructor]
 inductive Param : Nat → Type
   | mk {n} (src : Src) (name : Name) (ty : Ty n) : Param n
+deriving Repr
+
+@[pp_using_anonymous_constructor]
+inductive Param' : Nat → Type
+  | mk {n} (src : Src) (name : Name) (tm : Tm n) : Param' n
 deriving Repr
 
 end
@@ -55,7 +60,7 @@ def Tm.withSrc {n} (newSrc : Src) : Tm n → Tm n
   | .const oldSrc name us => .const (oldSrc <|> newSrc) name us
   | .lam oldSrc p body => .lam (oldSrc <|> newSrc) p body
   | .app oldSrc f a => .app (oldSrc <|> newSrc) f a
-  | .pi' oldSrc pSrc x a b => .pi' (oldSrc <|> newSrc) pSrc x a b
+  | .pi' oldSrc ⟨pSrc, x, a⟩ b => .pi' (oldSrc <|> newSrc) ⟨pSrc, x, a⟩ b
   | .proj oldSrc i t => .proj (oldSrc <|> newSrc) i t
   | .letE oldSrc x ty val body => .letE (oldSrc <|> newSrc) x ty val body
 
@@ -101,7 +106,7 @@ def Tm.substLevels {n} (subst : List (Name × Universe)) : Tm n → Tm n
   | .const src c us => .const src c (us.map (·.subst subst))
   | .lam src ⟨psrc, name, ty⟩ b => .lam src ⟨psrc, name, ty.substLevels subst⟩ (b.substLevels subst)
   | .app src f a => .app src (f.substLevels subst) (a.substLevels subst)
-  | .pi' src pSrc name a b => .pi' src pSrc name (a.substLevels subst) (b.substLevels subst)
+  | .pi' src ⟨pSrc, name, a⟩ b => .pi' src ⟨pSrc, name, a.substLevels subst⟩ (b.substLevels subst)
   | .proj src i t => .proj src i (t.substLevels subst)
   | .letE src name ty rhs body =>
       .letE src name (ty.substLevels subst) (rhs.substLevels subst) (body.substLevels subst)
@@ -124,7 +129,7 @@ def Tm.levelNames {n} : Tm n → List Name
   | .const _ _ us => us.flatMap Universe.levelNames
   | .lam _ ⟨_, _, ty⟩ b => ty.levelNames ++ b.levelNames
   | .app _ f a => f.levelNames ++ a.levelNames
-  | .pi' _ _ _ a b => a.levelNames ++ b.levelNames
+  | .pi' _ ⟨_, _, a⟩ b => a.levelNames ++ b.levelNames
   | .proj _ _ t => t.levelNames
   | .letE _ _ ty rhs body => ty.levelNames ++ rhs.levelNames ++ body.levelNames
 
@@ -153,7 +158,7 @@ def Tm.hash {n} : Tm n → UInt64
   | .const src name us => mixHash 12 (mixHash (hash src) (mixHash (hash name) (hash us)))
   | .lam src p body => mixHash 13 (mixHash (hash src) (mixHash p.hash body.hash))
   | .app src f a => mixHash 14 (mixHash (hash src) (mixHash f.hash a.hash))
-  | .pi' src pSrc name a b => mixHash 15 (mixHash (hash src) (mixHash (hash pSrc) (mixHash (hash name) (mixHash a.hash b.hash))))
+  | .pi' src ⟨pSrc, name, a⟩ b => mixHash 15 (mixHash (hash src) (mixHash (hash pSrc) (mixHash (hash name) (mixHash a.hash b.hash))))
   | .proj src i t => mixHash 16 (mixHash (hash src) (mixHash (hash i) t.hash))
   | .letE src name ty val body => mixHash 17 (mixHash (hash src) (mixHash (hash name) (mixHash ty.hash (mixHash val.hash body.hash))))
 

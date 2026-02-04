@@ -28,7 +28,7 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .const _ name us => deltaReduction name (us.map Universe.normalise)
   | .lam _ ⟨_, x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
   | .app _ f a => do (← f.eval).app (← a.eval)
-  | .pi' _ _ x a b => return .pi' x (← a.eval) ⟨← read, b⟩
+  | .pi' _ ⟨_, x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
   | .proj _ i t => do (← t.eval).proj i
   | .letE _ _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
