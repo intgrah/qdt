@@ -108,12 +108,12 @@ def Ty.subst {m n : Nat} (σ : Subst m n) : Ty m → Ty n
   | .u src i => .u src i
   | .pi src ⟨ps, x, a⟩ b => .pi src ⟨ps, x, a.subst σ⟩ (b.subst σ.up)
   | .el src t => .el src (t.subst σ)
--- Substitution preserves the original span when possible (only if source has span)
+
 def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .u' src i => .u' src i
   | .var src i => match src with
-    | none => σ i  -- No span to preserve
-    | some _ => (σ i).withSrc src  -- Preserve source span
+    | none => σ i
+    | some _ => (σ i).withSrc src
   | .const src name us => .const src name us
   | .lam src ⟨ps, x, a⟩ body => .lam src ⟨ps, x, a.subst σ⟩ (body.subst σ.up)
   | .app src f a => .app src (f.subst σ) (a.subst σ)
@@ -122,7 +122,6 @@ def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .letE src x ty t body => .letE src x (ty.subst σ) (t.subst σ) (body.subst σ.up)
 end
 
--- Only holds for none spans; for some spans, withSrc is applied
 -- @[simp]
 -- theorem Tm.subst_var {m n : Nat} (σ : Subst m n) (src : Frontend.Src) (i : Idx m) :
 --     Tm.subst σ (.var src i) = σ i := rfl
@@ -139,53 +138,55 @@ theorem Subst.subst_comp_up {m n} (ξ : Ren m n) :
     ξ.toSubst.up = ξ.up.toSubst := by
   funext ⟨i, hi⟩; cases i <;> rfl
 
--- mutual
--- theorem Ty.ren_eq_subst_var {m n} (ξ : Ren m n) :
---     ∀ A : Ty m, A.ren ξ = A.subst ξ.toSubst
---   | .u .. => rfl
---   | .pi _ ⟨_, _, _⟩ _ => by
---     simp only [Ty.ren, Ty.subst, Ty.ren_eq_subst_var, Subst.subst_comp_up]
---   | .el _ t => by simp only [Ty.ren, Ty.subst, Tm.ren_eq_subst_var ξ t]
--- theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
---     ∀ t : Tm m, t.ren ξ = t.subst ξ.toSubst
---   | .u' .. => rfl
---   | .var .. => sorry
---   | .const .. => rfl
---   | .lam _ ⟨_, _, _⟩ _ => by
---       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
---   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
---   | .pi' .. => by
---       simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var, Subst.subst_comp_up]
---   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
---   | .letE .. => by
---       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
--- end
+mutual
+theorem Ty.ren_eq_subst_var {m n} (ξ : Ren m n) :
+    ∀ A : Ty m, A.ren ξ = A.subst ξ.toSubst
+  | .u .. => rfl
+  | .pi _ ⟨_, _, _⟩ _ => by
+    simp only [Ty.ren, Ty.subst, Ty.ren_eq_subst_var, Subst.subst_comp_up]
+  | .el _ t => by simp only [Ty.ren, Ty.subst, Tm.ren_eq_subst_var ξ t]
+
+theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
+    ∀ t : Tm m, t.ren ξ = t.subst ξ.toSubst
+  | .u' .. => rfl
+  | .var src _ => by cases src <;> rfl
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => by
+      simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
+  | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
+  | .pi' _ ⟨_, _, _⟩ _ => by
+      simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var, Subst.subst_comp_up]
+  | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
+  | .letE .. => by
+      simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
+end
 
 section SubstitutionLemmas
 
--- mutual
--- @[simp]
--- theorem Ty.subst_id {n} : ∀ A : Ty n, A.subst (Subst.id n) = A
---   | .u .. => rfl
---   | .pi _ ⟨_, _, _⟩ _ => by simp [Ty.subst, Ty.subst_id]
---   | .el .. => by simp only [Ty.subst, Tm.subst_id]
--- @[simp]
--- theorem Tm.subst_id {n} : ∀ t : Tm n, t.subst (Subst.id n) = t
---   | .u' .. => rfl
---   | .var .. => sorry
---   | .const .. => rfl
---   | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
---   | .app .. => by simp [Tm.subst, Tm.subst_id]
---   | .pi' .. => by simp [Tm.subst, Tm.subst_id]
---   | .proj .. => by simp only [Tm.subst, Tm.subst_id]
---   | .letE .. => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
--- end
+mutual
+@[simp]
+theorem Ty.subst_id {n} : ∀ A : Ty n, A.subst (Subst.id n) = A
+  | .u .. => rfl
+  | .pi _ ⟨_, _, _⟩ _ => by simp [Ty.subst, Ty.subst_id]
+  | .el .. => by simp only [Ty.subst, Tm.subst_id]
+
+@[simp]
+theorem Tm.subst_id {n} : ∀ t : Tm n, t.subst (Subst.id n) = t
+  | .u' .. => rfl
+  | .var src _ => by cases src <;> rfl
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
+  | .app .. => by simp [Tm.subst, Tm.subst_id]
+  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Tm.subst_id]
+  | .proj .. => by simp only [Tm.subst, Tm.subst_id]
+  | .letE .. => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
+end
 
 @[simp]
 theorem Subst.id_comp {m n} (σ : Subst m n) : (Subst.id m).comp σ = σ := rfl
--- @[simp]
--- theorem Subst.comp_id {m n} (σ : Subst m n) : σ.comp (Subst.id n) = σ := by
---   funext i; apply Tm.subst_id
+@[simp]
+theorem Subst.comp_id {m n} (σ : Subst m n) : σ.comp (Subst.id n) = σ := by
+  funext i; apply Tm.subst_id
 
 theorem Subst.up_eq_cons_ren {m n} (σ : Subst m n) :
     σ.up = .var none 0 .: (Tm.ren Ren.shift ∘ σ) := rfl
@@ -211,7 +212,7 @@ private theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
   | .u .. => rfl
   | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
   | .el .. => by simp only [Ty.ren, Ty.subst, Tm.ren_subst]
--- Span preservation breaks this for some spans
+
 private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     ∀ t : Tm l, (t.ren ξ).subst σ = t.subst (σ ∘ ξ) := by
   intro t; sorry
@@ -230,18 +231,19 @@ private theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
   | .u .. => rfl
   | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
   | .el .. => by simp only [Ty.subst, Ty.ren, Tm.subst_ren]
--- Span preservation breaks this for some spans
+
 private theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
-    ∀ t : Tm l, (t.subst σ).ren ξ = t.subst (Tm.ren ξ ∘ σ) := by
-  intro t; sorry
+    ∀ t : Tm l, (t.subst σ).ren ξ = t.subst (Tm.ren ξ ∘ σ)
+  | .u' .. => rfl
+  | .var src _ => sorry
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => sorry
+  | .app .. => sorry
+  | .pi' _ ⟨_, _, _⟩ _ => sorry
+  | .proj .. => sorry
+  | .letE .. => sorry
+
 end
-
--- theorem Subst.shift_up_comm {m n} (σ : Subst m n) :
---     shift.comp σ.up = σ.comp shift := by
---   funext ⟨i, hi⟩
---   simp [shift]
---   apply Tm.ren_eq_subst_var
-
 
 @[simp]
 theorem Subst.up_comp {l m n} (σ : Subst l m) (τ : Subst m n) :
@@ -253,8 +255,6 @@ theorem Subst.up_comp {l m n} (σ : Subst l m) (τ : Subst m n) :
     simp [Subst.up, Subst.cons, Subst.comp, Tm.subst_ren, Tm.ren_subst]
     rfl
 
--- Span preservation breaks these theorems for `some` spans
--- Would need quotient reasoning under span equivalence
 mutual
 @[simp]
 theorem Ty.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
@@ -310,17 +310,16 @@ theorem Subst.shift_beta {n} (s : Tm n) :
     shift.comp (beta s) = id n :=
   rfl
 
--- @[simp]
--- theorem Ty.shift_beta {n} (A : Ty n) (s : Tm n) :
---     (A.subst Subst.shift).subst (Subst.beta s) = A := by
---   rw [Ty.comp_subst, Subst.shift_beta, Ty.subst_id]
+@[simp]
+theorem Ty.shift_beta {n} (A : Ty n) (s : Tm n) :
+    (A.subst Subst.shift).subst (Subst.beta s) = A := by
+  rw [Ty.comp_subst, Subst.shift_beta, Ty.subst_id]
 
--- @[simp]
--- theorem Tm.shift_beta {n} (t : Tm n) (s : Tm n) :
---     (t.subst Subst.shift).subst (Subst.beta s) = t := by
---   rw [Tm.comp_subst, Subst.shift_beta, Tm.subst_id]
+@[simp]
+theorem Tm.shift_beta {n} (t : Tm n) (s : Tm n) :
+    (t.subst Subst.shift).subst (Subst.beta s) = t := by
+  rw [Tm.comp_subst, Subst.shift_beta, Tm.subst_id]
 
--- These theorems only hold for none spans
 @[simp]
 theorem Tm.var_zero_beta {n} (s : Tm n) :
     (Tm.var none 0).subst (Subst.beta s) = s := rfl
@@ -331,9 +330,9 @@ theorem Tm.var_succ_beta {n} (i : Idx n) (s : Tm n) :
 
 theorem Subst.beta_up_zero {n} (s : Tm n) : (beta s).up 0 = Tm.var none 0 := rfl
 
--- theorem Subst.beta_up_one {n} (s : Tm n) : (beta s).up 1 = s.subst shift := by
---   simp only [up, beta, cons, Function.comp_apply]
---   exact Tm.ren_eq_subst_var Ren.shift s
+theorem Subst.beta_up_one {n} (s : Tm n) : (beta s).up 1 = s.subst shift := by
+  simp only [up, beta, cons, Function.comp_apply]
+  exact Tm.ren_eq_subst_var Ren.shift s
 
 theorem Subst.beta_up_succ_succ {n} (s : Tm n) (i : Idx n) :
     (beta s).up i.succ.succ = Subst.id (n + 1) i.succ := rfl
@@ -345,48 +344,48 @@ theorem Subst.cons_id_comp_shift {n} (s : Tm n) :
     (s .: Subst.id n) ∘ Ren.shift = Subst.id n := by
   funext i; rfl
 
--- theorem Subst.beta_comp_up {m n} (a : Tm m) (σ : Subst m n) :
---     (Subst.beta a).comp σ = σ.up.comp (Subst.beta (a.subst σ)) := by
---   ext ⟨i, hi⟩
---   cases i with
---   | zero => rfl
---   | succ j =>
---     simp only [comp, beta, cons, id, up, Function.comp_apply, Tm.ren_subst]
---     exact (Tm.subst_id (σ ⟨j, by omega⟩)).symm
+theorem Subst.beta_comp_up {m n} (a : Tm m) (σ : Subst m n) :
+    (Subst.beta a).comp σ = σ.up.comp (Subst.beta (a.subst σ)) := by
+  ext ⟨i, hi⟩
+  cases i with
+  | zero => rfl
+  | succ j =>
+    simp only [comp, beta, cons, id, up, Function.comp_apply, Tm.ren_subst]
+    exact (Tm.subst_id (σ ⟨j, by omega⟩)).symm
 
--- theorem Ty.beta_comp_up {m n} (A : Ty (m + 1)) (a : Tm m) (σ : Subst m n) :
---     (A.subst (Subst.beta a)).subst σ = (A.subst σ.up).subst (Subst.beta (a.subst σ)) := by
---   rw [Ty.comp_subst, Ty.comp_subst, Subst.beta_comp_up]
+theorem Ty.beta_comp_up {m n} (A : Ty (m + 1)) (a : Tm m) (σ : Subst m n) :
+    (A.subst (Subst.beta a)).subst σ = (A.subst σ.up).subst (Subst.beta (a.subst σ)) := by
+  rw [Ty.comp_subst, Ty.comp_subst, Subst.beta_comp_up]
 
--- theorem Tm.beta_comp_up {m n} (t : Tm (m + 1)) (a : Tm m) (σ : Subst m n) :
---     (t.subst (Subst.beta a)).subst σ = (t.subst σ.up).subst (Subst.beta (a.subst σ)) := by
---   rw [comp_subst, comp_subst, Subst.beta_comp_up]
+theorem Tm.beta_comp_up {m n} (t : Tm (m + 1)) (a : Tm m) (σ : Subst m n) :
+    (t.subst (Subst.beta a)).subst σ = (t.subst σ.up).subst (Subst.beta (a.subst σ)) := by
+  rw [comp_subst, comp_subst, Subst.beta_comp_up]
 
 theorem Subst.beta_comp_beta {n} (a : Tm (n + 1)) (b : Tm n) :
     (beta a).comp (beta b) = (a.subst (beta b)) .: b .: id n := by
   funext ⟨i, hi⟩
   cases i <;> rfl
 
--- theorem Subst.beta_up_comp_beta {n} (a : Tm n) (b : Tm n) :
---     (beta a).up.comp (beta b) = b .: a .: id n := by
---   ext ⟨i, hi⟩
---   cases i with
---   | zero => rfl
---   | succ j =>
---     cases j with
---     | zero =>
---       simp only [Subst.comp, Function.comp_apply, Subst.up, Subst.cons]
---       rw [Tm.ren_eq_subst_var]
---       exact Tm.shift_beta a b
---     | succ k => rfl
+theorem Subst.beta_up_comp_beta {n} (a : Tm n) (b : Tm n) :
+    (beta a).up.comp (beta b) = b .: a .: id n := by
+  ext ⟨i, hi⟩
+  cases i with
+  | zero => rfl
+  | succ j =>
+    cases j with
+    | zero =>
+      simp only [Subst.comp, Function.comp_apply, Subst.up, Subst.cons]
+      rw [Tm.ren_eq_subst_var]
+      exact Tm.shift_beta a b
+    | succ k => rfl
 
 theorem Subst.beta_up_comp_beta_up {n} (a : Tm (n + 1)) (b : Tm n) :
     (beta a).up.comp (beta b).up = ((beta a).comp (beta b)).up := by
   rw [← Subst.up_comp]
 
--- theorem Subst.beta_up_comp_up {m n} (a : Tm m) (σ : Subst m n) :
---     (beta a).up.comp σ.up = σ.up.up.comp (beta (a.subst σ)).up := by
---   rw [← up_comp, ← up_comp, beta_comp_up]
+theorem Subst.beta_up_comp_up {m n} (a : Tm m) (σ : Subst m n) :
+    (beta a).up.comp σ.up = σ.up.up.comp (beta (a.subst σ)).up := by
+  rw [← up_comp, ← up_comp, beta_comp_up]
 
 theorem Ty.beta_comp_beta {n} (A : Ty (n + 2)) (a : Tm (n + 1)) (b : Tm n) :
     (A.subst (Subst.beta a)).subst (Subst.beta b) =
@@ -434,20 +433,20 @@ theorem Ren.id_upN {n : Nat} : ∀ k, (Ren.id n).upN k = Ren.id (n + k)
   | 0 => rfl
   | k + 1 => by simp [Ren.id_upN]; rfl
 
--- @[simp]
--- theorem Subst.id_upN {n : Nat} : ∀ k, (Subst.id n).upN k = Subst.id (n + k)
---   | 0 => rfl
---   | k + 1 => by simp [Subst.id_upN]; rfl
+@[simp]
+theorem Subst.id_upN {n : Nat} : ∀ k, (Subst.id n).upN k = Subst.id (n + k)
+  | 0 => rfl
+  | k + 1 => by simp [Subst.id_upN]; rfl
 
 theorem Ren.comp_upN {l m n : Nat} (ξ : Ren l m) (ζ : Ren m n) :
     ∀ k, (ξ.comp ζ).upN k = (ξ.upN k).comp (ζ.upN k)
   | 0 => rfl
   | k + 1 => by simp [Ren.comp_upN, Ren.up_comp]
 
--- theorem Subst.comp_upN {l m n : Nat} (σ : Subst l m) (τ : Subst m n) :
---     ∀ k, (σ.comp τ).upN k = (σ.upN k).comp (τ.upN k)
---   | 0 => rfl
---   | k + 1 => by simp [Subst.comp_upN]
+theorem Subst.comp_upN {l m n : Nat} (σ : Subst l m) (τ : Subst m n) :
+    ∀ k, (σ.comp τ).upN k = (σ.upN k).comp (τ.upN k)
+  | 0 => rfl
+  | k + 1 => by simp [Subst.comp_upN]
 
 theorem Subst.shift_upN_beta {n : Nat} (s : Tm n) :
     ∀ k, (Subst.shift.upN k).comp ((Subst.beta s).upN k) = (Subst.id n).upN k
