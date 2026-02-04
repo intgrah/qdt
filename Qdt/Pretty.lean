@@ -70,7 +70,7 @@ def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
       let fFmt := f.fmt ctx Prec.app
       let aFmt := a.fmt ctx Prec.max
       parenIf (prec > Prec.app) f!"{fFmt} {aFmt}"
-  | .pi' _ _ name dom cod =>
+  | .pi' _ ⟨_, name, dom⟩ cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.app
       let codFmt := cod.fmt (x :: ctx) Prec.arrow

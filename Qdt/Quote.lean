@@ -27,7 +27,7 @@ partial def VTm.quote {n} : VTm n → MetaM (Tm n)
       let a ← a.quote
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
-      return .pi' none none x a b
+      return .pi' none ⟨none, x, a⟩ b
 
 partial def Head.quote {n} : Head n → MetaM (Tm n)
   | .var i => return .var none i.rev
@@ -47,7 +47,7 @@ partial def VTy.reify {n} : VTy n → MetaM (Tm n)
       let a ← a.reify
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.reify
-      return .pi' none none x a b
+      return .pi' none ⟨none, x, a⟩ b
   | .el n => n.quote
 
 partial def VTy.inferLevel {n} (ctx : Tele VParam 0 n) : VTy n → MetaM Universe

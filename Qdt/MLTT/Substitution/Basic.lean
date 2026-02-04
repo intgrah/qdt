@@ -31,7 +31,7 @@ private def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
   | .const src x us => .const src x us
   | .lam src ⟨ps, x, a⟩ body => .lam src ⟨ps, x, a.ren ξ⟩ (body.ren ξ.up)
   | .app src f a => .app src (f.ren ξ) (a.ren ξ)
-  | .pi' src pSrc x a b => .pi' src pSrc x (a.ren ξ) (b.ren ξ.up)
+  | .pi' src ⟨pSrc, x, a⟩ b => .pi' src ⟨pSrc, x, a.ren ξ⟩ (b.ren ξ.up)
   | .proj src i t => .proj src i (t.ren ξ)
   | .letE src x ty t body => .letE src x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
 end
@@ -59,7 +59,7 @@ private theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
   | .const .. => rfl
   | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
   | .app .. => by simp only [Tm.ren, Tm.ren_id]
-  | .pi' .. => by simp [Tm.ren, Tm.ren_id]
+  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Tm.ren_id]
   | .proj .. => by simp only [Tm.ren, Tm.ren_id]
   | .letE .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
 end
@@ -82,7 +82,7 @@ private theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
   | .const .. => rfl
   | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
   | .app .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .pi' .. => by simp [Tm.ren, Tm.comp_ren]
+  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Tm.comp_ren]
   | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
   | .letE .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
 end
@@ -117,7 +117,7 @@ def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .const src name us => .const src name us
   | .lam src ⟨ps, x, a⟩ body => .lam src ⟨ps, x, a.subst σ⟩ (body.subst σ.up)
   | .app src f a => .app src (f.subst σ) (a.subst σ)
-  | .pi' src pSrc x a b => .pi' src pSrc x (a.subst σ) (b.subst σ.up)
+  | .pi' src ⟨pSrc, x, a⟩ b => .pi' src ⟨pSrc, x, a.subst σ⟩ (b.subst σ.up)
   | .proj src i t => .proj src i (t.subst σ)
   | .letE src x ty t body => .letE src x (ty.subst σ) (t.subst σ) (body.subst σ.up)
 end

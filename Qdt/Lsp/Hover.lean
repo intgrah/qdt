@@ -148,7 +148,7 @@ def findInTm {n} (ctx : WalkCtx n) (pos : String.Pos.Raw) : Tm n → MetaM (Opti
         let tyStr ← ctx.inferType tm
         return src.bind fun span => some { contents := tyStr, span }
       return none
-  | tm@(.pi' src paramSrc name dom cod) => do
+  | tm@(.pi' src ⟨paramSrc, name, dom⟩ cod) => do
       if let some r ← findInTm ctx pos dom then return some r
       let domVal ← ctx.evalTmTy dom
       let ctx' := ctx.extend name (.el none dom) domVal
