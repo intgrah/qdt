@@ -8,8 +8,10 @@ namespace Qdt
 
 open Lean (Name)
 
+def VCtx : Nat → Type := Tele VParam 0
+
 structure TermContext (n : Nat) where
-  ctx : Tele VParam 0 n
+  ctx : VCtx n
   env : Env n n -- Pre-weakened environment
 
 def TermContext.empty : TermContext 0 where
@@ -24,7 +26,7 @@ def TermContext.define {n} (name : Name) (ty : VTy n) (value : VTm n) (tctx : Te
   ctx := tctx.ctx.snoc ⟨name, ty⟩
   env := tctx.env.weaken.cons value.weaken
 
-def Tele.lookup {n} : Idx n → Tele VParam 0 n → VTy n
+def VCtx.lookup {n} : Idx n → VCtx n → VTy n
   | ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.weaken
   | ⟨i + 1, _⟩, .snoc ctx' _ => (lookup ⟨i, by omega⟩ ctx').weaken
 
@@ -42,9 +44,9 @@ def TermContext.findName? {n} (name : Name) (tctx : TermContext n) : Option (Idx
         return (k.succ, ty.weaken)
   go tctx.ctx
 
-def Tele.names {n} : Tele VParam 0 n → List Name
+def VCtx.names {n} : VCtx n → List Name
   | .nil => []
-  | .snoc ts ⟨name, _⟩ => name :: ts.names
+  | .snoc ts ⟨name, _⟩ => name :: VCtx.names ts
 
 def TermContext.names {n} (tctx : TermContext n) : List Name :=
   tctx.ctx.names

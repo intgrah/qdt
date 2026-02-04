@@ -49,6 +49,8 @@ deriving Repr
 
 end
 
+def Ctx := Tele Param
+
 notation "𝑢" => Ty.u none
 
 abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi none ⟨none, .anonymous, ty⟩
@@ -69,7 +71,7 @@ def Tm.apps {n} : Tm n → List (Tm n) → Tm n :=
   List.foldl (Tm.app none)
 
 /- Point free! Point free! -/
-def Ty.pis {a b} : Tele Param a b → Ty b → Ty a
+def Ty.pis {a b} : Ctx a b → Ty b → Ty a
   | .nil => id
   | .snoc bs param => pis bs ∘ pi none param
 
@@ -78,7 +80,7 @@ def Ty.getResultUniverse? {n} : Ty n → Option Universe
   | .pi _ _ cod => cod.getResultUniverse?
   | .el _ _ => none
 
-def Tm.lams {a b} : Tele Param a b → Tm b → Tm a
+def Tm.lams {a b} : Ctx a b → Tm b → Tm a
   | .nil => id
   | .snoc bs param => lams bs ∘ lam none param
 

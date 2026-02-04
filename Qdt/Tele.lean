@@ -1,5 +1,3 @@
-namespace Qdt
-
 universe u v w
 
 inductive Tele (T : Nat → Type u) (a : Nat) : Nat → Type u
@@ -107,9 +105,8 @@ instance {T : Nat → Type u} {a b} : HAppend (Tele T a b) (T b) (Tele T a (b + 
   hAppend := snoc
 
 @[app_unexpander snoc]
-def snoc.unexpand : Lean.PrettyPrinter.Unexpander
+meta def snoc.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $ts $t) => `($ts ++ $t)
   | _ => throw ()
 
 end Tele
-end Qdt

@@ -50,7 +50,7 @@ partial def VTy.reify {n} : VTy n → MetaM (Tm n)
       return .pi' none ⟨none, x, a⟩ b
   | .el n => n.quote
 
-partial def VTy.inferLevel {n} (ctx : Tele VParam 0 n) : VTy n → MetaM Universe
+partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → MetaM Universe
   | .u i => return i.succ
   | .pi ⟨_x, a⟩ ⟨env, b⟩ => do
       let aLevel ← a.inferLevel ctx

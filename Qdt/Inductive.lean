@@ -1,3 +1,4 @@
+import Qdt.MLTT.Context
 import Qdt.MLTT.Substitution.Basic
 import Qdt.Control
 import Qdt.Frontend.Ast
@@ -16,11 +17,11 @@ private def Tm.getAppArgs {n} : Tm n → Tm n × List (Tm n) :=
     | t => (t, spine)
   go []
 
-def Ty.getTele {a} : Ty a → Σ b, Tele Param a b × Ty b :=
+def Ty.getTele {a} : Ty a → Σ b, Ctx a b × Ty b :=
   let rec go {a b}
-      (acc : Tele Param a b) :
+      (acc : Ctx a b) :
       Ty b →
-      Σ nb : Nat, Tele Param a nb × Ty nb
+      Σ nb : Nat, Ctx a nb × Ty nb
     | .pi _ param b => go (acc.snoc param) b
     | t => ⟨b, acc, t⟩
   go Tele.nil
@@ -58,7 +59,7 @@ end
 
 private structure RecFieldInfo (n : Nat) where
   nestedEnd : Nat
-  nestedTele : Tele Param n nestedEnd
+  nestedTele : Ctx n nestedEnd
   indices : List (Tm nestedEnd)
 
 private structure ParamRec (n : Nat) where
@@ -69,7 +70,7 @@ private structure ParamRec (n : Nat) where
 private structure RecFieldSeed (numParamsMotivesMinors numFields : Nat) where
   fieldIdx : Fin numFields
   nestedEnd : Nat
-  nestedTele : Tele Param (numParamsMotivesMinors + numFields) nestedEnd
+  nestedTele : Ctx (numParamsMotivesMinors + numFields) nestedEnd
   indices : List (Tm nestedEnd)
 
 private structure RuleSeed (numParamsMotivesMinors : Nat) where
@@ -77,10 +78,10 @@ private structure RuleSeed (numParamsMotivesMinors : Nat) where
   numFields : Nat
   recFields : List (RecFieldSeed numParamsMotivesMinors numFields)
 
-def Tele.shiftAt {a b} (cutoff s : Nat) (tele : Tele Param a b) : Tele Param (a + s) (b + s) :=
+private def Ctx.shiftAt {a b} (cutoff s : Nat) (tele : Ctx a b) : Ctx (a + s) (b + s) :=
   tele.dmap s fun {n} ⟨src, name, ty⟩ => ⟨src, name, ty.shiftAfter (n + cutoff) s⟩
 
-def Tele.shift {m k} := @Tele.shiftAt m k 0
+private def Ctx.shift {m k} := @Ctx.shiftAt m k 0
 
 /--
 Given a recursive occurrence of the inductive type, check that:
@@ -255,10 +256,10 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
     let rec buildIhs
         {j k}
         (hj : j ≤ numParamsMotivesIthMinorFields)
-        (ihTele : Tele Param numParamsMotivesIthMinorFields k)
+        (ihTele : Ctx numParamsMotivesIthMinorFields k)
         (recFields : List (RecFieldSeed numParamsMotivesMinors numFields)) :
         Tele ParamRec numParamsMotivesIthMinor j →
-        MetaM (Σ nRec : Nat, Tele Param numParamsMotivesIthMinorFields nRec × List (RecFieldSeed numParamsMotivesMinors numFields))
+        MetaM (Σ nRec : Nat, Ctx numParamsMotivesIthMinorFields nRec × List (RecFieldSeed numParamsMotivesMinors numFields))
       | .nil => return ⟨k, ihTele, recFields⟩
       | .snoc (b := idx) fs f => do
           have hIdx : idx < numParamsMotivesIthMinorFields := by omega
@@ -273,7 +274,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
           have hStart : idx + fieldsAfter = numParamsMotivesIthMinorFields := by omega
           let nestedEnd₁ : Nat := numParamsMotivesIthMinorFields + numNested
           have hEnd : info.nestedEnd + fieldsAfter = nestedEnd₁ := by omega
-          let nestedTele₁ : Tele Param numParamsMotivesIthMinorFields nestedEnd₁ :=
+          let nestedTele₁ : Ctx numParamsMotivesIthMinorFields nestedEnd₁ :=
             hEnd ▸ hStart ▸ info.nestedTele.dmap fieldsAfter fun {n} ⟨src, name, ty⟩ =>
               ⟨src, name, ty.shiftAfter (n - idx) fieldsAfter⟩
           let indices₁ : List (Tm nestedEnd₁) :=
@@ -305,7 +306,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
           let nestedEnd₂ : Nat := rhsCtx + numNested
           have hStart₂ : idx + minorsAfter + fieldsAfter = rhsCtx := by omega
           have hEnd₂ : info.nestedEnd + minorsAfter + fieldsAfter = nestedEnd₂ := by omega
-          let nestedTele₂ : Tele Param rhsCtx nestedEnd₂ :=
+          let nestedTele₂ : Ctx rhsCtx nestedEnd₂ :=
             hEnd₂ ▸ hStart₂ ▸ (info.nestedTele.shiftAt idx minorsAfter).shift fieldsAfter
 
           let indices₂ : List (Tm nestedEnd₂) :=
@@ -357,9 +358,9 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
   let rec goMinors
       (ithMinor : Nat)
       (hi : ithMinor ≤ numMinors)
-      (acc : Tele Param numParamsMotives (numParamsMotives + ithMinor))
+      (acc : Ctx numParamsMotives (numParamsMotives + ithMinor))
       (seeds : Vector (RuleSeed numParamsMotivesMinors) ithMinor) :
-      MetaM (Tele Param numParamsMotives numParamsMotivesMinors × Vector (RuleSeed numParamsMotivesMinors) numMinors) := do
+      MetaM (Ctx numParamsMotives numParamsMotivesMinors × Vector (RuleSeed numParamsMotivesMinors) numMinors) := do
     if h' : ithMinor < numMinors then
       let astCtor := ind.ctors[ithMinor]
       let (ctorName, ctorFieldsTy) := ctors[ithMinor]'h'
@@ -375,8 +376,8 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
     goMinors 0 (Nat.zero_le numMinors) .nil ⟨#[], rfl⟩
 
   let numParamsMotivesMinorsIndices := numParamsMotivesMinors + numIndices
-  let indexTys' : Tele Param numParamsMotivesMinors numParamsMotivesMinorsIndices :=
-    let rec goW {k} : Tele Param numParams k → Tele Param numParamsMotivesMinors (k + (1 + numMinors))
+  let indexTys' : Ctx numParamsMotivesMinors numParamsMotivesMinorsIndices :=
+    let rec goW {k} : Ctx numParams k → Ctx numParamsMotivesMinors (k + (1 + numMinors))
       | .nil =>
           have h : numParams + (1 + numMinors) = numParamsMotivesMinors := by omega
           h ▸ Tele.nil
