@@ -27,7 +27,7 @@ private def mkPrevEnv
     (univs : List Universe)
     (params : List (VTm (numParams + 1)))
     (x : VTm (numParams + 1)) :
-    {b : Nat} → Tele Param numParams b → MetaM (Env (numParams + 1) b)
+    {b : Nat} → Ctx numParams b → MetaM (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
   | _, .snoc fs ⟨_, name, _⟩ => do
       let envTail ← mkPrevEnv structName numParams univs params x fs
@@ -92,7 +92,7 @@ def elabStructure (info : Frontend.Ast.Command.Structure) : MetaM Unit := do
   let rec goProj
       {b}
       (hb : b ≤ numParamsFields) :
-      Tele Param numParams b →
+      Ctx numParams b →
       MetaM Unit
     | .nil => return
     | .snoc (b := idx) fs ⟨_, name, ty⟩ => do

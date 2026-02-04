@@ -8,12 +8,12 @@ open Lean (Name)
 
 /-- Elaborate parameters and return their types with universe levels -/
 def elabParamsWithLevels {n} (params : List Frontend.Ast.TypedBinder) :
-    TermM n (TermContext (n + params.length) × Tele Param n (n + params.length) × List Universe) :=
+    TermM n (TermContext (n + params.length) × Ctx n (n + params.length) × List Universe) :=
   Nat.zero_add params.length ▸  go n .nil [] params
   where
-    go {a : Nat} (b : Nat) (acc : Tele Param a b) (levels : List Universe) :
+    go {a : Nat} (b : Nat) (acc : Ctx a b) (levels : List Universe) :
       (params : List Frontend.Ast.TypedBinder) →
-        TermM b (TermContext (b + params.length) × Tele Param a (b + params.length) × List Universe)
+        TermM b (TermContext (b + params.length) × Ctx a (b + params.length) × List Universe)
     | [] => return (← read, acc, levels.reverse)
     | ⟨src, name, ty⟩ :: bs => do
         let (ty, level) ← checkTyWithLevel ty
@@ -25,13 +25,13 @@ def elabParamsWithLevels {n} (params : List Frontend.Ast.TypedBinder) :
           using ← go (b + 1) (acc.snoc ⟨src, name, ty⟩) (level :: levels) bs ctx
 
 def elabParamsFrom {n} (params : List Frontend.Ast.TypedBinder) :
-    TermM n (TermContext (n + params.length) × Tele Param n (n + params.length)) := do
+    TermM n (TermContext (n + params.length) × Ctx n (n + params.length)) := do
   let (ctx, tele, _) ← elabParamsWithLevels params
   return (ctx, tele)
 
 
 def elabParams (params : List Frontend.Ast.TypedBinder) :
-    MetaM (TermContext params.length × Tele Param 0 params.length) :=
+    MetaM (TermContext params.length × Ctx 0 params.length) :=
   Nat.zero_add params.length ▸ elabParamsFrom params TermContext.empty
 
 def elabVParamsFrom {n} (params : List Frontend.Ast.TypedBinder) :

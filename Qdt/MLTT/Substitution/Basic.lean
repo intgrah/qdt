@@ -1,5 +1,3 @@
-import Mathlib.CategoryTheory.Functor.Basic
-
 import Qdt.MLTT.Syntax
 import Qdt.MLTT.Substitution.Ren
 
@@ -237,35 +235,35 @@ theorem Subst.comp_assoc {k l m n} (σ : Subst k l) (τ : Subst l m) (ρ : Subst
 
 end SubstitutionLemmas
 
-section Category
+-- section Category
 
-open CategoryTheory
+-- open CategoryTheory
 
-structure Subst.Obj where
-  n : Nat
+-- structure Subst.Obj where
+--   n : Nat
 
-instance : Coe Subst.Obj Nat where
-  coe := Subst.Obj.n
+-- instance : Coe Subst.Obj Nat where
+--   coe := Subst.Obj.n
 
-instance : Category Subst.Obj where
-  id n := Subst.id n
-  Hom m n := Subst m n
-  comp σ τ := Subst.comp σ τ
-  id_comp σ := Subst.id_comp σ
-  comp_id σ := Subst.comp_id σ
-  assoc σ τ ρ := Subst.comp_assoc σ τ ρ
+-- instance : Category Subst.Obj where
+--   id n := Subst.id n
+--   Hom m n := Subst m n
+--   comp σ τ := Subst.comp σ τ
+--   id_comp σ := Subst.id_comp σ
+--   comp_id σ := Subst.comp_id σ
+--   assoc σ τ ρ := Subst.comp_assoc σ τ ρ
 
-def Subst.upFunctor : Subst.Obj ⥤ Subst.Obj where
-  obj n := ⟨n + 1⟩
-  map := Subst.up
-  map_id n := Subst.up_id n
-  map_comp := Subst.up_comp
+-- def Subst.upFunctor : Subst.Obj ⥤ Subst.Obj where
+--   obj n := ⟨n + 1⟩
+--   map := Subst.up
+--   map_id n := Subst.up_id n
+--   map_comp := Subst.up_comp
 
-theorem Ren.toSubst_up {m n} (ξ : Ren m n) :
-    Subst.up (Ren.toSubst ξ) = Ren.toSubst (Ren.up ξ) :=
-  Subst.subst_comp_up ξ
+-- theorem Ren.toSubst_up {m n} (ξ : Ren m n) :
+--     Subst.up (Ren.toSubst ξ) = Ren.toSubst (Ren.up ξ) :=
+--   Subst.subst_comp_up ξ
 
-end Category
+-- end Category
 
 def Subst.beta {n : Nat} (s : Tm n) : Subst (n + 1) n := s .: Subst.id n
 
