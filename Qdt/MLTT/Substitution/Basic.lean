@@ -1,101 +1,22 @@
+import Mathlib.CategoryTheory.Functor.Basic
+
 import Qdt.MLTT.Syntax
+import Qdt.MLTT.Substitution.Ren
 
 namespace Qdt
 
-open Frontend (Src)
-
-private def Ren (a b : Nat) := Idx a → Idx b
-private def Ren.id (a : Nat) : Ren a a := fun i => i
-private def Ren.shift {a} : Ren a (a + 1) := Fin.succ
-private def Ren.comp {l m n : Nat} (ξ : Ren l m) (ζ : Ren m n) : Ren l n := ζ ∘ ξ
-private theorem Ren.id_comp {m n} (ξ : Ren m n) : Ren.comp (Ren.id m) ξ = ξ := Function.id_comp ξ
-private theorem Ren.comp_id {m n}(ξ : Ren m n) : Ren.comp ξ (Ren.id n) = ξ := Function.comp_id ξ
-private theorem Ren.comp_assoc {k l m n} (ξ : Ren k l) (ζ : Ren l m) (η : Ren m n) :
-    (ξ.comp ζ).comp η = ξ.comp (ζ.comp η) := rfl
-
-private def Ren.cons {a b} (j : Idx b) (ξ : Ren a b) : Ren (a + 1) b
-  | ⟨0, _⟩ => j
-  | ⟨i + 1, h⟩ => ξ ⟨i, by omega⟩
-infixr:67 " .: " => Ren.cons
-
-private def Ren.up {a b} (ξ : Ren a b) : Ren (a + 1) (b + 1) := 0 .: Ren.shift ∘ ξ
-
-mutual
-private def Ty.ren {m n : Nat} (ξ : Ren m n) : Ty m → Ty n
-  | .u src i => .u src i
-  | .pi src ⟨ps, x, a⟩ b => .pi src ⟨ps, x, a.ren ξ⟩ (b.ren ξ.up)
-  | .el src t => .el src (t.ren ξ)
-private def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
-  | .u' src i => .u' src i
-  | .var src i => .var src (ξ i)
-  | .const src x us => .const src x us
-  | .lam src ⟨ps, x, a⟩ body => .lam src ⟨ps, x, a.ren ξ⟩ (body.ren ξ.up)
-  | .app src f a => .app src (f.ren ξ) (a.ren ξ)
-  | .pi' src ⟨pSrc, x, a⟩ b => .pi' src ⟨pSrc, x, a.ren ξ⟩ (b.ren ξ.up)
-  | .proj src i t => .proj src i (t.ren ξ)
-  | .letE src x ty t body => .letE src x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
-end
-
-
-@[simp]
-private theorem Ren.up_id (n : Nat) : (Ren.id n).up = Ren.id (n + 1) := by
-  funext ⟨i, hi⟩; cases i <;> rfl
-
-@[simp]
-private theorem Ren.up_comp {l m n : Nat} (ξ : Ren l m) (ζ : Ren m n) :
-    (ξ.comp ζ).up = ξ.up.comp ζ.up := by
-  funext ⟨i, hi⟩; cases i <;> rfl
-
-mutual
-@[simp]
-private theorem Ty.ren_id {n} : ∀ A : Ty n, A.ren (Ren.id n) = A
-  | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp [Ty.ren, Ty.ren_id]
-  | .el .. => by simp [Ty.ren, Tm.ren_id]
-@[simp]
-private theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
-  | .u' .. => rfl
-  | .var .. => rfl
-  | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
-  | .app .. => by simp only [Tm.ren, Tm.ren_id]
-  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Tm.ren_id]
-  | .proj .. => by simp only [Tm.ren, Tm.ren_id]
-  | .letE .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
-end
-
-private theorem Ren.shift_comp {m n} (ξ : Ren m n) :
-    Ren.shift.comp ξ.up = ξ.comp Ren.shift := rfl
-
-mutual
-@[simp]
-private theorem Ty.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
-    ∀ A : Ty l, A.ren (ξ.comp ζ) = (A.ren ξ).ren ζ
-  | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp [Ty.ren, Ty.comp_ren]
-  | .el .. => by simp only [Ty.ren, Tm.comp_ren]
-@[simp]
-private theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
-    ∀ t : Tm l, t.ren (ξ.comp ζ) = (t.ren ξ).ren ζ
-  | .u' .. => rfl
-  | .var .. => rfl
-  | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
-  | .app .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.ren, Tm.comp_ren]
-  | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .letE .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
-end
-
-
 def Subst (a b : Nat) := Idx a → Tm b
-@[ext] theorem Subst.ext {a b : Nat} {σ τ : Subst a b} : (∀ i, σ i = τ i) →  σ = τ := funext
 def Subst.id (a : Nat) : Subst a a := Tm.var none
 def Subst.shift {a} : Subst a (a + 1) := Subst.id (a + 1) ∘ Ren.shift
 def Subst.cons {a b} (s : Tm b) (σ : Subst a b) : Subst (a + 1) b
   | ⟨0, _⟩ => s
   | ⟨i + 1, h⟩ => σ ⟨i, by omega⟩
+
 infixr:67 " .: " => Subst.cons
+
+@[ext]
+theorem Subst.ext {a b : Nat} {σ τ : Subst a b} : (∀ i, σ i = τ i) →  σ = τ := funext
+
 def Subst.up {m n} (σ : Subst m n) : Subst (m + 1) (n + 1) :=
   Subst.id (n + 1) 0 .: Tm.ren Ren.shift ∘ σ
 
@@ -104,6 +25,7 @@ theorem Subst.up_id (n : Nat) : (Subst.id n).up = Subst.id (n + 1) := by
   funext ⟨i, hi⟩; cases i <;> rfl
 
 mutual
+
 def Ty.subst {m n : Nat} (σ : Subst m n) : Ty m → Ty n
   | .u src i => .u src i
   | .pi src ⟨ps, x, a⟩ b => .pi src ⟨ps, x, a.subst σ⟩ (b.subst σ.up)
@@ -120,6 +42,7 @@ def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .pi' src ⟨pSrc, x, a⟩ b => .pi' src ⟨pSrc, x, a.subst σ⟩ (b.subst σ.up)
   | .proj src i t => .proj src i (t.subst σ)
   | .letE src x ty t body => .letE src x (ty.subst σ) (t.subst σ) (body.subst σ.up)
+
 end
 
 -- @[simp]
@@ -139,6 +62,7 @@ theorem Subst.subst_comp_up {m n} (ξ : Ren m n) :
   funext ⟨i, hi⟩; cases i <;> rfl
 
 mutual
+
 theorem Ty.ren_eq_subst_var {m n} (ξ : Ren m n) :
     ∀ A : Ty m, A.ren ξ = A.subst ξ.toSubst
   | .u .. => rfl
@@ -159,11 +83,13 @@ theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
   | .letE .. => by
       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
+
 end
 
 section SubstitutionLemmas
 
 mutual
+
 @[simp]
 theorem Ty.subst_id {n} : ∀ A : Ty n, A.subst (Subst.id n) = A
   | .u .. => rfl
@@ -180,6 +106,7 @@ theorem Tm.subst_id {n} : ∀ t : Tm n, t.subst (Subst.id n) = t
   | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Tm.subst_id]
   | .proj .. => by simp only [Tm.subst, Tm.subst_id]
   | .letE .. => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
+
 end
 
 @[simp]
@@ -207,6 +134,7 @@ private theorem Subst.comp_ren_up {l m n} (σ : Subst m n) (ξ : Ren l m) :
   cases i <;> rfl
 
 mutual
+
 private theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     (A : Ty l) → (A.ren ξ).subst σ = A.subst (σ ∘ ξ)
   | .u .. => rfl
@@ -214,8 +142,16 @@ private theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
   | .el .. => by simp only [Ty.ren, Ty.subst, Tm.ren_subst]
 
 private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
-    ∀ t : Tm l, (t.ren ξ).subst σ = t.subst (σ ∘ ξ) := by
-  intro t; sorry
+    ∀ t : Tm l, (t.ren ξ).subst σ = t.subst (σ ∘ ξ)
+  | .u' .. => rfl
+  | .var src _ => rfl
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
+  | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
+  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
+  | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
+  | .letE .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
+
 end
 
 private theorem Subst.ren_comp_up {l m n} (σ : Subst l m) (ξ : Ren m n) :
@@ -226,6 +162,7 @@ private theorem Subst.ren_comp_up {l m n} (σ : Subst l m) (ξ : Ren m n) :
   | succ _ => simp only [up, cons, Function.comp_apply, ← Tm.comp_ren, Ren.shift_comp]
 
 mutual
+
 private theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ A : Ty l, (A.subst σ).ren ξ = A.subst (Tm.ren ξ ∘ σ)
   | .u .. => rfl
@@ -235,15 +172,29 @@ private theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
 private theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ t : Tm l, (t.subst σ).ren ξ = t.subst (Tm.ren ξ ∘ σ)
   | .u' .. => rfl
-  | .var src _ => sorry
+  | .var src _ => by cases src <;> simp [Tm.subst, Tm.ren_withSrc]
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => sorry
-  | .app .. => sorry
-  | .pi' _ ⟨_, _, _⟩ _ => sorry
-  | .proj .. => sorry
-  | .letE .. => sorry
+  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .app .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
+  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .proj .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
+  | .letE .. => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
 
 end
+
+theorem Tm.subst_withSrc {m n} (σ : Subst m n) (src : Frontend.Src) :
+    ∀ t : Tm m, (t.withSrc src).subst σ = (t.subst σ).withSrc src
+  | .u' .. => rfl
+  | .var src i => by
+    cases src
+    · sorry
+    · sorry
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => rfl
+  | .app .. => rfl
+  | .pi' _ ⟨_, _, _⟩ _ => rfl
+  | .proj .. => rfl
+  | .letE _ _ _ _ _ => rfl
 
 @[simp]
 theorem Subst.up_comp {l m n} (σ : Subst l m) (τ : Subst m n) :
@@ -256,15 +207,26 @@ theorem Subst.up_comp {l m n} (σ : Subst l m) (τ : Subst m n) :
     rfl
 
 mutual
+
 @[simp]
 theorem Ty.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
-    ∀ A : Ty l, (A.subst σ).subst τ = A.subst (σ.comp τ) := by
-  intro A; sorry
+    ∀ A : Ty l, (A.subst σ).subst τ = A.subst (σ.comp τ)
+  | .u .. => rfl
+  | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.subst]; sorry
+  | .el .. => by simp only [Ty.subst]; sorry
 
 @[simp]
 theorem Tm.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
-    ∀ t : Tm l, (t.subst σ).subst τ = t.subst (σ.comp τ) := by
-  intro t; sorry
+    ∀ t : Tm l, (t.subst σ).subst τ = t.subst (σ.comp τ)
+  | .u' .. => rfl
+  | .var .. => by simp only [Tm.subst]; sorry
+  | .const .. => rfl
+  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.subst]; sorry
+  | .app .. => by simp only [Tm.subst]; sorry
+  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.subst]; sorry
+  | .proj .. => by simp only [Tm.subst]; sorry
+  | .letE .. => by simp only [Tm.subst]; sorry
+
 end
 
 theorem Subst.comp_assoc {k l m n} (σ : Subst k l) (τ : Subst l m) (ρ : Subst m n) :
@@ -275,33 +237,35 @@ theorem Subst.comp_assoc {k l m n} (σ : Subst k l) (τ : Subst l m) (ρ : Subst
 
 end SubstitutionLemmas
 
--- Substitutions form a category
+section Category
 
--- open CategoryTheory
+open CategoryTheory
 
--- structure Subst.Obj where
---   n : Nat
+structure Subst.Obj where
+  n : Nat
 
--- instance : Coe Subst.Obj Nat where
---   coe := Subst.Obj.n
+instance : Coe Subst.Obj Nat where
+  coe := Subst.Obj.n
 
--- instance : Category Subst.Obj where
---   id n := Subst.id n
---   Hom m n := Subst m n
---   comp σ τ := Subst.comp σ τ
---   id_comp σ := Subst.id_comp σ
---   comp_id σ := Subst.comp_id σ
---   assoc σ τ ρ := Subst.comp_assoc σ τ ρ
+instance : Category Subst.Obj where
+  id n := Subst.id n
+  Hom m n := Subst m n
+  comp σ τ := Subst.comp σ τ
+  id_comp σ := Subst.id_comp σ
+  comp_id σ := Subst.comp_id σ
+  assoc σ τ ρ := Subst.comp_assoc σ τ ρ
 
--- def Subst.upFunctor : Subst.Obj ⥤ Subst.Obj where
---   obj n := ⟨n + 1⟩
---   map := Subst.up
---   map_id n := Subst.up_id n
---   map_comp := Subst.up_comp
+def Subst.upFunctor : Subst.Obj ⥤ Subst.Obj where
+  obj n := ⟨n + 1⟩
+  map := Subst.up
+  map_id n := Subst.up_id n
+  map_comp := Subst.up_comp
 
 theorem Ren.toSubst_up {m n} (ξ : Ren m n) :
     Subst.up (Ren.toSubst ξ) = Ren.toSubst (Ren.up ξ) :=
   Subst.subst_comp_up ξ
+
+end Category
 
 def Subst.beta {n : Nat} (s : Tm n) : Subst (n + 1) n := s .: Subst.id n
 
@@ -478,8 +442,10 @@ abbrev Tm.shift {n : Nat} : ∀ s, Tm n → Tm (n + s) := Tm.shiftAfter 0
 
 private unsafe def Tm.wkClosed_impl {n : Nat} : Tm 0 → Tm n := unsafeCast
 private unsafe def Ty.wkClosed_impl {n : Nat} : Ty 0 → Ty n := unsafeCast
+
 @[implemented_by Tm.wkClosed_impl]
 def Tm.wkClosed {n : Nat} (t : Tm 0) : Tm n := Nat.zero_add n ▸ t.shift n
+
 @[implemented_by Ty.wkClosed_impl]
 def Ty.wkClosed {n : Nat} (t : Ty 0) : Ty n := Nat.zero_add n ▸ t.shift n
 
