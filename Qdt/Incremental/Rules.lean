@@ -17,25 +17,6 @@ open Std (HashMap HashSet)
 open System (FilePath)
 open Frontend
 
-private initialize rulesContextRef : IO.Ref Config ← IO.mkRef default
-
-private initialize fileTextOverridesRef : IO.Ref (HashMap FilePath String) ←
-  IO.mkRef (HashMap.emptyWithCapacity 32)
-
-def setFileTextOverride (filepath : FilePath) (text : String) : IO Unit :=
-  fileTextOverridesRef.modify (·.insert filepath text)
-
-def eraseFileTextOverride (filepath : FilePath) : IO Unit :=
-  fileTextOverridesRef.modify (·.erase filepath)
-
-def getFileTextOverride? (filepath : FilePath) : IO (Option String) :=
-  fileTextOverridesRef.get >>= fun m => return m[filepath]?
-
-def getFileText (filepath : FilePath) : IO String := do
-  match ← getFileTextOverride? filepath with
-  | some text => return text
-  | none => IO.FS.readFile filepath
-
 private def getFieldString (structName fieldName : Name) : EIO Error String := do
   if !fieldName.isAtomic then
     throw (.msg s!"{structName}: field name must be atomic")
@@ -167,7 +148,8 @@ partial def collectTransitiveImports (visited : HashSet FilePath) (modName : Nam
 
 def rules : ∀ k, TaskM Error Val (Val k)
   | .inputFiles => do
-      let config ← IO.toEIO Error.ioError rulesContextRef.get
+      let ctx ← readThe Context
+      let config := ctx.config
       let mut files : HashSet FilePath := HashSet.emptyWithCapacity 1024
       -- Project source directories
       for dir in config.sourceDirectories do
@@ -175,28 +157,16 @@ def rules : ∀ k, TaskM Error Val (Val k)
         for f in dirFiles do
           let absPath ← IO.toEIO Error.ioError <| IO.FS.realPath f
           files := files.insert absPath
-      -- Dependencies
-      for dep in config.dependencies do
-        let depFiles ← IO.toEIO Error.ioError <| listSrcFiles dep.path
-        for f in depFiles do
-          let absPath ← IO.toEIO Error.ioError <| IO.FS.realPath f
-          files := files.insert absPath
       return files
 
   | .moduleFile modName => do
-      let config ← IO.toEIO Error.ioError rulesContextRef.get
+      let ctx ← readThe Context
+      let config := ctx.config
       let files : HashSet FilePath ← fetchQ .inputFiles
       let relPath := moduleNameToPath modName
       -- Project source directories
       for dir in config.sourceDirectories do
         let candidate := dir / relPath
-        if ← IO.toEIO Error.ioError candidate.pathExists then
-          let absPath ← IO.toEIO Error.ioError <| IO.FS.realPath candidate
-          if files.contains absPath then
-            return some absPath
-      -- Dependencies
-      for dep in config.dependencies do
-        let candidate := dep.path / relPath
         if ← IO.toEIO Error.ioError candidate.pathExists then
           let absPath ← IO.toEIO Error.ioError <| IO.FS.realPath candidate
           if files.contains absPath then
@@ -229,7 +199,8 @@ def rules : ∀ k, TaskM Error Val (Val k)
       return globalEnv
 
   | .fileText filepath => do
-      match ← IO.toEIO Error.ioError (getFileTextOverride? filepath) with
+      let ctx ← readThe Context
+      match ctx.overrides[filepath]? with
       | some text => return text
       | none => IO.toEIO Error.ioError <| IO.FS.readFile filepath
   | .astProgram filepath => do
@@ -353,13 +324,7 @@ def newEngine : Engine Error Val where
     | .inputFiles => true
     | _ => false
 
-protected def run
-    {α : Type}
-    (config : Config)
-    (engine : Engine Error Val)
-    (task : TaskM Error Val α) :
-    IO (Except Error (α × Engine Error Val)) := do
-  rulesContextRef.set config
-  (runWithEngine engine rules task).toIO'
+protected def run {α} :=
+  runWithEngine (α := α) rules
 
 end Qdt.Incremental

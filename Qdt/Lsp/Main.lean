@@ -13,6 +13,7 @@ import Qdt.Incremental
 import Qdt.Lsp.Hover
 import Qdt.Pretty
 
+open Std (HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Qdt
@@ -66,21 +67,20 @@ private def normaliseConfig (cfg : Config) : IO Config := do
   let root ← IO.FS.realPath root
   let srcDirs := cfg.sourceDirectories.map (root / ·)
   let watchDirs := cfg.watchDirs.map (root / ·)
-  let deps := cfg.dependencies.map fun d => { d with path := root / d.path }
   return {
     cfg with
     projectRoot := some root
     sourceDirectories := srcDirs
     watchDirs := watchDirs
-    dependencies := deps
   }
 
 structure ProjectState where
   config : Config
   engine : Engine Error Val
+  overrides : HashMap FilePath String
 
 structure ServerState where
-  projects : Std.HashMap FilePath ProjectState := Std.HashMap.emptyWithCapacity 8
+  projects : HashMap FilePath ProjectState := ∅
   shutdownRequested : Bool := false
 
 private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × ProjectState) := do
@@ -101,7 +101,7 @@ private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerStat
         | none => pure { Config.empty with projectRoot := some root }
       let cfg := { cfg with projectRoot := some root }
       let cfg ← normaliseConfig cfg
-      let ps : ProjectState := { config := cfg, engine := Incremental.newEngine }
+      let ps : ProjectState := { config := cfg, engine := Incremental.newEngine, overrides := ∅ }
       let st := { st with projects := st.projects.insert root ps }
       return (st, ps)
 
@@ -120,7 +120,7 @@ private def publishDiagnostics
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
 partial def buildEnv (filepath : FilePath) : TaskM Error Val Global := do
-  let mut globalEnv : Global := Std.HashMap.emptyWithCapacity 4096
+  let mut globalEnv : Global := HashMap.emptyWithCapacity 4096
   let importNames ← fetchQ (Key.moduleImports filepath)
   for modName in importNames.toArray do
     match ← fetchQ (Key.moduleFile modName) with
@@ -137,13 +137,12 @@ partial def buildEnv (filepath : FilePath) : TaskM Error Val Global := do
   return globalEnv
 
 private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
+  let some params := params?
+    | throw (IO.userError "initialize: missing params")
   let _params : InitializeParams ←
-    match params? with
-    | none => throw (IO.userError "initialize: missing params")
-    | some p =>
-        match (fromJson? (toJson p) : Except String InitializeParams) with
-        | Except.ok ps => pure ps
-        | Except.error e => throw (IO.userError s!"initialize: bad params: {e}")
+    match fromJson? (α := InitializeParams) (toJson params) with
+    | .ok ps => pure ps
+    | Except.error e => throw (IO.userError s!"initialize: bad params: {e}")
 
   let sync : TextDocumentSyncOptions :=
     {
@@ -169,14 +168,12 @@ private def handleShutdown (hOut : IO.FS.Stream) (id : RequestID) (stRef : IO.Re
   hOut.writeLspMessage <| Message.response id Json.null
 
 private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+  let some params := params?
+    | throw (IO.userError "didOpen: missing params")
   let params ←
-    (match params? with
-    | none => throw (IO.userError "didOpen: missing params")
-    | some p =>
-        match (fromJson? (toJson p) : Except String DidOpenTextDocumentParams) with
-        | Except.ok ps => pure ps
-        | Except.error e => throw (IO.userError s!"didOpen: bad params: {e}")
-    : IO DidOpenTextDocumentParams)
+    match fromJson? (α := DidOpenTextDocumentParams) (toJson params) with
+    | .ok ps => pure ps
+    | .error e => throw (IO.userError s!"didOpen: bad params: {e}")
 
   let uri := params.textDocument.uri
   let text := params.textDocument.text
@@ -194,16 +191,18 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
       ]
       return
 
-  Incremental.setFileTextOverride file text
-
   let st ← stRef.get
   let (st, ps) ← getProject st file
+
+  let overrides := ps.overrides.insert file text
+  let ps := { ps with overrides }
   stRef.set st
 
   let task : TaskM Error Val Global := buildEnv file
+  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
 
-  match ← Incremental.run ps.config ps.engine task with
-  | Except.ok (_, engine') =>
+  match ← (Incremental.run ctx ps.engine task).toIO' with
+  | .ok (_, engine') =>
       let ps' : ProjectState := { ps with engine := engine' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
@@ -213,13 +212,12 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
       publishDiagnostics hOut uri version? #[diag]
 
 private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+  let some params := params?
+    | throw (IO.userError "didChange: missing params")
   let params ←
-    match params? with
-    | none => throw (IO.userError "didChange: missing params")
-    | some p =>
-        match fromJson? (α := DidChangeTextDocumentParams) (toJson p) with
-        | .ok ps => pure ps
-        | .error e => throw (IO.userError s!"didChange: bad params: {e}")
+    match fromJson? (α := DidChangeTextDocumentParams) (toJson params) with
+    | .ok ps => pure ps
+    | .error e => throw (IO.userError s!"didChange: bad params: {e}")
 
   let uri := params.textDocument.uri
   let version? : Option Int := params.textDocument.version?.map Int.ofNat
@@ -232,16 +230,18 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
     | some (.fullChange text) => some text
     | _ => none
   let some text := text? | return
-  Incremental.setFileTextOverride file text
-
   let st ← stRef.get
   let (st, ps) ← getProject st file
+
+  let overrides := ps.overrides.insert file text
+  let ps := { ps with overrides }
   stRef.set st
 
   let task : TaskM Error Val Global := buildEnv file
+  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
 
-  match ← Incremental.run ps.config ps.engine task with
-  | Except.ok (_, engine') =>
+  match ← (Incremental.run ctx ps.engine task).toIO' with
+  | .ok (_, engine') =>
       let ps' : ProjectState := { ps with engine := engine' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
@@ -250,17 +250,22 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
       let diag := mkDiagnostic text err
       publishDiagnostics hOut uri version? #[diag]
 
-private def handleDidClose (hOut : IO.FS.Stream) (params? : Option Json.Structured) : IO Unit := do
+private def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+  let some params := params?
+    | throw (IO.userError "hover: missing params")
   let params ←
-    match params? with
-    | none => throw (IO.userError "didClose: missing params")
-    | some p =>
-        match fromJson? (α := DidCloseTextDocumentParams) (toJson p) with
-        | .ok ps => pure ps
-        | .error e => throw (IO.userError s!"didClose: bad params: {e}")
+    match fromJson? (α := DidCloseTextDocumentParams) (toJson params) with
+    | .ok ps => pure ps
+    | .error e => throw (IO.userError s!"didClose: bad params: {e}")
   let uri := params.textDocument.uri
   if let some file ← uriToPath? uri then
-    Incremental.eraseFileTextOverride file
+    let st ← stRef.get
+    let (st, ps) ← getProject st file
+    let overrides := ps.overrides.erase file
+    let ps := { ps with overrides }
+    let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
+    let st := setProject st root ps
+    stRef.set st
   publishDiagnostics hOut uri none #[]
 
 private def handleHover
@@ -268,13 +273,12 @@ private def handleHover
     (id : RequestID)
     (stRef : IO.Ref ServerState)
     (params? : Option Json.Structured) : IO Unit := do
+  let some params := params?
+    | throw (IO.userError "hover: missing params")
   let params ←
-    match params? with
-    | none => throw (IO.userError "hover: missing params")
-    | some p =>
-        match fromJson? (α := HoverParams) (toJson p) with
-        | .ok ps => pure ps
-        | .error e => throw (IO.userError s!"hover: bad params: {e}")
+    match fromJson? (α := HoverParams) (toJson params) with
+    | .ok ps => pure ps
+    | .error e => throw (IO.userError s!"hover: bad params: {e}")
 
   let uri := params.textDocument.uri
   let lspPos := params.position
@@ -282,17 +286,18 @@ private def handleHover
   let some file ← uriToPath? uri
     | hOut.writeLspMessage <| Message.response id Json.null
 
-  let text ← Incremental.getFileText file
-  let fileMap := Lean.FileMap.ofString text
-  let bytePos := fileMap.lspPosToUtf8Pos lspPos
-
   let st ← stRef.get
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let task : TaskM Error Val Global := buildEnv file
+  let text := ps.overrides.getD file (← IO.FS.readFile file)
+  let fileMap := Lean.FileMap.ofString text
+  let bytePos := fileMap.lspPosToUtf8Pos lspPos
 
-  match ← Incremental.run ps.config ps.engine task with
+  let task : TaskM Error Val Global := buildEnv file
+  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
+
+  match ← (Incremental.run ctx ps.engine task).toIO' with
   | .error _ =>
       hOut.writeLspMessage <| Message.response id Json.null
   | .ok (globalEnv, engine') =>
@@ -300,7 +305,7 @@ private def handleHover
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
 
-      match ← Lsp.findHoverInGlobal file.toString bytePos globalEnv with
+      match ← Lsp.findHoverInGlobal ctx file.toString bytePos globalEnv with
       | none =>
           hOut.writeLspMessage <| Message.response id Json.null
       | some (_name, result) =>
@@ -346,7 +351,7 @@ partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) 
         | "textDocument/didChange" =>
             try handleDidChange stdout stRef params? catch _ => pure ()
         | "textDocument/didClose" =>
-            try handleDidClose stdout params? catch _ => pure ()
+            try handleDidClose stdout stRef params? catch _ => pure ()
         | _ => pure ()
     | _ => pure ()
 
