@@ -47,24 +47,21 @@ private def runModuleOnce (ctx : Incremental.Context) (engine : Engine Error Val
       pure engine
 
 def watchLoop (ctx : Incremental.Context) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
-  let engineRef ← IO.mkRef engine
-  let pendingRef ← IO.mkRef ([] : List FilePath)
-
-  let engine' ← runModuleOnce ctx engine entryFile
-  engineRef.set engine'
+  let engine ← IO.mkRef (← runModuleOnce ctx engine entryFile)
+  let pending ← IO.mkRef []
 
   FSWatch.Manager.withManager fun m => do
     for dir in ctx.config.watchDirs do
       let _ ← m.watchTree dir (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
-        pendingRef.modify (e.path :: ·)
+        pending.modify (e.path :: ·)
 
     while true do
       IO.sleep 50
-      let pending ← pendingRef.modifyGet (·, [])
+      let pending ← pending.modifyGet (·, [])
       if !pending.isEmpty then
-        let eng ← engineRef.get
+        let eng ← engine.get
         let eng' ← runModuleOnce ctx eng entryFile
-        engineRef.set eng'
+        engine.set eng'
 
 def resolveEntryFile (config : Config) (cliArg : Option String) : IO FilePath := do
   let projectRoot := config.projectRoot.getD "."
