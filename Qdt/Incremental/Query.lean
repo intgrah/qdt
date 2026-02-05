@@ -73,9 +73,10 @@ def Val : Key → Type
   | .inductiveInfo .. => Option InductiveInfo
 
 abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
+abbrev fetchQUntracked : ∀ k, TaskM Error Val (Val k) := TaskM.fetchUntracked
 
 end Incremental
 
-export Incremental (fetchQ)
+export Incremental (fetchQ fetchQUntracked)
 
 end Qdt

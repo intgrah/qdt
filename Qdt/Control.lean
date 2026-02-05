@@ -108,6 +108,8 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
   if let some e := st.localEnv[name]? then
     return some e
   if let some e := st.importedEnv[name]? then
+    if let some file := e.file then
+      let _ ← fetchQ (Key.entry ⟨file⟩ name)
     return some e
   let ctx ← read
   if ctx.selfNames.contains name then
@@ -125,118 +127,32 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
       return none
 
 def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
-  let st ← getThe CoreState
-  if let some ty := st.localEnv.findTy name then
-    return some ty
-  if let some ty := st.importedEnv.findTy name then
-    return some ty
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some ty ← fetchQ (Key.constTy file name) then
-        return some ty
-      for importFile in ctx.imports do
-        if let some ty ← fetchQ (Key.constTy importFile name) then
-          return some ty
-      return none
+  let some e ← fetchEntry name | return none
+  return some (match e with
+    | .definition info | .opaque info | .axiom info
+    | .recursor info | .constructor info | .inductive info => info.ty)
 
 def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
-  let st ← getThe CoreState
-  if let some result := st.localEnv.findConstantInfo name then
-    return some result
-  if let some result := st.importedEnv.findConstantInfo name then
-    return some result
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some result ← fetchQ (Key.constantInfo file name) then
-        return some result
-      for importFile in ctx.imports do
-        if let some result ← fetchQ (Key.constantInfo importFile name) then
-          return some result
-      return none
+  let some e ← fetchEntry name | return none
+  return some (match e with
+    | .definition info | .opaque info | .axiom info
+    | .recursor info | .constructor info | .inductive info => info.toConstantInfo)
 
 def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
-  let st ← getThe CoreState
-  if let some info := st.localEnv.findDefinition name then
-    return some info.tm
-  if let some info := st.importedEnv.findDefinition name then
-    return some info.tm
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some tm ← fetchQ (Key.constDef file name) then
-        return some tm
-      for importFile in ctx.imports do
-        if let some tm ← fetchQ (Key.constDef importFile name) then
-          return some tm
-      return none
+  let some (.definition info) ← fetchEntry name | return none
+  return some info.tm
 
 def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
-  let st ← getThe CoreState
-  if let some info := st.localEnv.findInductive name then
-    return some info
-  if let some info := st.importedEnv.findInductive name then
-    return some info
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some info ← fetchQ (Key.inductiveInfo file name) then
-        return some info
-      for importFile in ctx.imports do
-        if let some info ← fetchQ (Key.inductiveInfo importFile name) then
-          return some info
-      return none
+  let some (.inductive info) ← fetchEntry name | return none
+  return some info
 
 def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
-  let st ← getThe CoreState
-  if let some info := st.localEnv.findRecursor name then
-    return some info
-  if let some info := st.importedEnv.findRecursor name then
-    return some info
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some info ← fetchQ (Key.recursorInfo file name) then
-        return some info
-      for importFile in ctx.imports do
-        if let some info ← fetchQ (Key.recursorInfo importFile name) then
-          return some info
-      return none
+  let some (.recursor info) ← fetchEntry name | return none
+  return some info
 
 def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
-  let st ← getThe CoreState
-  if let some info := st.localEnv.findConstructor name then
-    return some info
-  if let some info := st.importedEnv.findConstructor name then
-    return some info
-  let ctx ← read
-  if ctx.selfNames.contains name then
-    return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some info ← fetchQ (Key.constructorInfo file name) then
-        return some info
-      for importFile in ctx.imports do
-        if let some info ← fetchQ (Key.constructorInfo importFile name) then
-          return some info
-      return none
+  let some (.constructor info) ← fetchEntry name | return none
+  return some info
 
 def Global.addEntry (name : Name) (entry : Entry) : CoreM Unit := do
   let st ← getThe CoreState

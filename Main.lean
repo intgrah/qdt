@@ -51,7 +51,7 @@ def watchLoop (ctx : Incremental.Context) (engine : Engine Error Val) (entryFile
   let pending ← IO.mkRef []
 
   FSWatch.Manager.withManager fun m => do
-    for dir in ctx.config.watchDirs do
+    for dir in ctx.config.sourceDirectories do
       let _ ← m.watchTree dir (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
         pending.modify (e.path :: ·)
 
@@ -77,21 +77,18 @@ def resolveEntryFile (config : Config) (cliArg : Option String) : IO FilePath :=
 
   throw (IO.userError "No entry point specified. Use 'qdt <module>' or set 'entry' in qdt.toml")
 
-def runQdt (parsed : Parsed) : IO UInt32 := do
+def run (parsed : Parsed) : IO UInt32 := do
   let sourceDir := parsed.flag? "source" |>.map (·.as! String)
   let watchMode := parsed.hasFlag "watch"
-  let watchDir := parsed.flag? "watch-dir" |>.map (·.as! String)
 
   let cliArg := parsed.variableArgsAs? String |>.bind (·[0]?)
 
   let mut config ← Config.load
 
   if let some dir := sourceDir then
-    config := { config with sourceDirectories := [⟨dir⟩] }
+    config := { config with sourceDirectories := #[⟨dir⟩] }
   if watchMode then
     config := { config with watchMode := true }
-  if let some dir := watchDir then
-    config := { config with watchDirs := [⟨dir⟩] }
 
   let filePath ← resolveEntryFile config cliArg
 
@@ -100,16 +97,15 @@ def runQdt (parsed : Parsed) : IO UInt32 := do
 
   let engine : Engine Error Val := Incremental.newEngine
 
-  let ctx : Incremental.Context := ⟨config, ∅⟩
+  let ctx : Incremental.Context := { config, overrides := ∅ }
 
   if config.watchMode then
-    println!"[watch] Watching {config.watchDirs}"
     watchLoop ctx engine filePath
   else
     let _ ← runModuleOnce ctx engine filePath
   return 0
 
-def qdtCmd : Cmd :=
+def cmd : Cmd :=
   Cmd.mk
     (name := "qdt")
     (version? := none)
@@ -120,7 +116,7 @@ def qdtCmd : Cmd :=
       { longName := "watch-dir", description := "Add directory to watch", «type» := String }
     ])
     (positionalArgs := #[])
-    (run := runQdt)
+    (run := run)
 
-def main (args : List String) : IO UInt32 :=
-  qdtCmd.validate args
+def main : List String → IO UInt32 :=
+  cmd.validate

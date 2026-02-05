@@ -7,8 +7,7 @@ open Lake.Toml
 
 structure Config where
   entry : Option String
-  sourceDirectories : List FilePath
-  watchDirs : List FilePath
+  sourceDirectories : Array FilePath
   watchMode : Bool := false
   projectRoot : Option FilePath := none
 deriving Repr
@@ -17,42 +16,25 @@ namespace Config
 
 def empty : Config where
   entry := none
-  sourceDirectories := ["."]
-  watchDirs := ["."]
+  sourceDirectories := #["."]
   watchMode := false
   projectRoot := none
 
-def fromTomlTable (table : Table) : Config :=
-  let entry : Option String :=
+def fromTomlTable (table : Table) : Config where
+  entry :=
     match table.find? `entry with
     | some (Value.string _ s) => some s
     | _ => none
-
-  let sourceDirectories : List FilePath :=
+  sourceDirectories :=
     match table.find? `«source-directories» with
     | some (Value.array _ vs) =>
-        vs.toList.filterMap fun v =>
+        vs.filterMap fun v =>
           match v with
           | Value.string _ s => some s
           | _ => none
-    | _ => ["."]
-
-  let watchDirs : List FilePath :=
-    match table.find? `watch with
-    | some (Value.array _ vs) =>
-        vs.toList.filterMap fun v =>
-          match v with
-          | Value.string _ s => some s
-          | _ => none
-    | _ => sourceDirectories
-
-  {
-    entry
-    sourceDirectories
-    watchDirs
-    watchMode := false
-    projectRoot := none
-  }
+    | _ => #["."]
+  watchMode := false
+  projectRoot := none
 
 def fromTomlFile (path : FilePath) : IO Config := do
   let contents ← IO.FS.readFile path
