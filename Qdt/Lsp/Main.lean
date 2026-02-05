@@ -65,13 +65,11 @@ private def normaliseConfig (cfg : Config) : IO Config := do
   let cwd ← IO.currentDir
   let root := cfg.projectRoot.getD cwd
   let root ← IO.FS.realPath root
-  let srcDirs := cfg.sourceDirectories.map (root / ·)
-  let watchDirs := cfg.watchDirs.map (root / ·)
+  let sourceDirectories := cfg.sourceDirectories.map (root / ·)
   return {
     cfg with
     projectRoot := some root
-    sourceDirectories := srcDirs
-    watchDirs := watchDirs
+    sourceDirectories
   }
 
 structure ProjectState where
