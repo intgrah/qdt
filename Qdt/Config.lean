@@ -5,32 +5,22 @@ namespace Qdt
 open System (FilePath)
 open Lake.Toml
 
-structure Dependency where
-  name : String
-  path : FilePath
-deriving Repr, Inhabited
-
 structure Config where
   entry : Option String
   sourceDirectories : List FilePath
-  dependencies : List Dependency
   watchDirs : List FilePath
   watchMode : Bool := false
   projectRoot : Option FilePath := none
-deriving Repr, Inhabited
+deriving Repr
 
 namespace Config
 
 def empty : Config where
   entry := none
   sourceDirectories := ["."]
-  dependencies := []
   watchDirs := ["."]
   watchMode := false
   projectRoot := none
-
-def stdlibDep (config : Config) : Option Dependency :=
-  config.dependencies.find? (·.name == "std")
 
 def fromTomlTable (table : Table) : Config :=
   let entry : Option String :=
@@ -47,19 +37,6 @@ def fromTomlTable (table : Table) : Config :=
           | _ => none
     | _ => ["."]
 
-  let dependencies : List Dependency :=
-    match table.find? `dependencies with
-    | some (Value.table _ depTable) =>
-        depTable.fold (init := []) fun acc name value =>
-          match value with
-          | Value.table _ t =>
-              match t.find? `path with
-              | some (Value.string _ path) => acc ++ [{ name := name.toString, path }]
-              | _ => acc
-          | Value.string _ path => acc ++ [{ name := name.toString, path }]
-          | _ => acc
-    | _ => []
-
   let watchDirs : List FilePath :=
     match table.find? `watch with
     | some (Value.array _ vs) =>
@@ -72,7 +49,6 @@ def fromTomlTable (table : Table) : Config :=
   {
     entry
     sourceDirectories
-    dependencies
     watchDirs
     watchMode := false
     projectRoot := none
@@ -121,4 +97,5 @@ def moduleToPath (modName : String) : FilePath :=
   FilePath.mk pathStr |>.addExtension "qdt"
 
 end Config
+
 end Qdt

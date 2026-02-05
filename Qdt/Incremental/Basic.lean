@@ -2,11 +2,14 @@ import Std.Data.DHashMap
 import Std.Data.HashMap
 import Std.Data.HashSet
 
+import Qdt.Config
+
 namespace Qdt
 
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
+open System (FilePath)
 
 universe u
 
@@ -55,6 +58,10 @@ def invalidateFiles (engine : Engine ε R) (changedFiles : List Q) : Engine ε R
 
 end Engine
 
+structure Context where
+  config : Config
+  overrides : HashMap FilePath String
+
 structure RunState (ε : Type) (R : Q → Type) where
   engine : Engine ε R
   started : DHashMap Q (Memo R)
@@ -62,7 +69,7 @@ structure RunState (ε : Type) (R : Q → Type) where
   deps : HashMap Q UInt64
 
 abbrev BaseM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
-  StateRefT (RunState ε R) (EIO ε)
+  ReaderT Context (StateRefT (RunState ε R) (EIO ε))
 
 set_option checkBinderAnnotations false in
 abbrev Task
@@ -117,8 +124,9 @@ def verifyDeps
     return fingerprint q v == old
 
 def runWithEngine {α}
-    (engine : Engine ε R)
     (rules : ∀ q, TaskM ε R (R q))
+    (ctx : Context)
+    (engine : Engine ε R)
     (task : TaskM ε R α) :
     EIO ε (α × Engine ε R) := do
   let init : RunState ε R :=
@@ -188,7 +196,7 @@ def runWithEngine {α}
     let st ← get
     pure (a, st.engine)
 
-  action.run' init
+  (action ctx).run' init
 
 end Incremental
 
