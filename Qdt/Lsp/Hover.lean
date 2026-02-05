@@ -6,7 +6,9 @@ import Qdt.TypeOf
 import Qdt.Quote
 import Qdt.Control
 
-namespace Qdt.Frontend
+namespace Qdt
+
+namespace Frontend
 
 def Span.contains (span : Span) (pos : String.Pos.Raw) : Bool :=
   span.startPos.byteIdx ≤ pos.byteIdx ∧ pos.byteIdx < span.endPos.byteIdx
@@ -16,9 +18,9 @@ def Src.contains (src : Src) (pos : String.Pos.Raw) : Bool :=
   | none => false
   | some span => span.contains pos
 
-end Qdt.Frontend
+end Frontend
 
-namespace Qdt.Lsp
+namespace Lsp
 
 open Lean (Name Format ToFormat format)
 
@@ -233,4 +235,6 @@ def findHoverInGlobal (file : String) (pos : String.Pos.Raw) (global : Global) :
   | .ok result => result
   | .error _ => none
 
-end Qdt.Lsp
+end Lsp
+
+end Qdt
