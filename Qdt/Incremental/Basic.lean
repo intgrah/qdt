@@ -10,19 +10,16 @@ open Std (DHashMap HashMap HashSet)
 
 universe u
 
-variable {ε α Q : Type} {R : Q → Type} [BEq Q] [LawfulBEq Q] [Hashable Q]
+variable {ε Q : Type} {R : Q → Type} [BEq Q] [LawfulBEq Q] [Hashable Q]
 
 structure Memo (R : Q → Type) (q : Q) where
   value : R q
   deps : HashMap Q UInt64
 
-abbrev Cache (R : Q → Type) [BEq Q] [Hashable Q] := DHashMap Q (Memo R)
-abbrev ReverseDeps (Q : Type) [BEq Q] [Hashable Q] := HashMap Q (HashSet Q)
-
 structure Engine (ε : Type) (R : Q → Type) where
-  cache : Cache R := DHashMap.emptyWithCapacity 1024
-  reverseDeps : ReverseDeps Q := HashMap.emptyWithCapacity 1024
-  recover : (q : Q) → EIO ε (R q)
+  cache : DHashMap Q (Memo R) := DHashMap.emptyWithCapacity 1024
+  reverseDeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
+  recover : ∀ q, EIO ε (R q)
   fingerprint : ∀ q, R q → UInt64
   isInput : Q → Bool
 
@@ -60,7 +57,7 @@ end Engine
 
 structure RunState (ε : Type) (R : Q → Type) where
   engine : Engine ε R
-  started : Cache R
+  started : DHashMap Q (Memo R)
   stack : List Q
   deps : HashMap Q UInt64
 
@@ -93,7 +90,7 @@ def TaskM.fetch (q : Q) : TaskM ε R (R q) :=
 
 export TaskM (fetch)
 
-def trackDeps
+def trackDeps {α}
     (fingerprint : ∀ q, R q → UInt64)
     (task : TaskM ε R α) :
     TaskM ε R (α × HashMap Q UInt64) := do
@@ -119,7 +116,7 @@ def verifyDeps
     let v ← fetch q
     return fingerprint q v == old
 
-def runWithEngine
+def runWithEngine {α}
     (engine : Engine ε R)
     (rules : ∀ q, TaskM ε R (R q))
     (task : TaskM ε R α) :
