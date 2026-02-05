@@ -113,11 +113,11 @@ def qdtCmd : Cmd :=
   Cmd.mk
     (name := "qdt")
     (version? := none)
-    (description := "QDT - Query-based Dependent Types compiler")
+    (description := "Query-based Dependent Type elaborator")
     (flags := #[
       ⟨some "s", "source", "source directory", String⟩,
       Flag.paramless (longName := "watch") (description := "Enable watch mode"),
-      ⟨none, "watch-dir", "Add directory to watch", String⟩
+      { longName := "watch-dir", description := "Add directory to watch", «type» := String }
     ])
     (positionalArgs := #[])
     (run := runQdt)
