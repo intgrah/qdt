@@ -79,25 +79,22 @@ private def buildDeclOrdering (prog : Frontend.Ast.Program) : List TopDecl :=
         go rest (idx + 1) acc'
   go prog 0 []
 
-private def hashNameTopDeclPairs (m : HashMap Name TopDecl) : UInt64 :=
-  hash <| m.toList.map fun (n, d) => mixHash (hash n) (hash d)
-
-private def hashNameEntryPairs (m : HashMap Name Entry) : UInt64 :=
-  hash <| m.toList.map fun (n, e) => mixHash (hash n) (hash e)
+instance {α} [Hashable α] : Hashable (HashMap Name α) where
+  hash m := hash <| m.toList.map fun (n, d) => mixHash (hash n) (hash d)
 
 def fingerprint : ∀ k, Val k → UInt64
   | .inputFiles, (s : HashSet FilePath) =>
-    hash <| s.toList.map FilePath.toString |>.mergeSort (· <= ·)
+    hash <| s.toList.map FilePath.toString |>.mergeSort (· ≤ ·)
   | .moduleFile .., (p : Option FilePath) => hash p
   | .moduleImports .., (ns : List Name) => hash ns
-  | .importedEnv .., (env : Global) => hashNameEntryPairs env
-  | .elabModule .., (env : Global) => hashNameEntryPairs env
+  | .importedEnv .., (env : Global) => hash env
+  | .elabModule .., (env : Global) => hash env
   | .fileText .., (s : String) => hash s
   | .astProgram .., (p : Frontend.Ast.Program) => hash p
-  | .declOwner .., (m : HashMap Name TopDecl) => hashNameTopDeclPairs m
+  | .declOwner .., (m : HashMap Name TopDecl) => hash m
   | .declOrdering .., (ds : List TopDecl) => hash ds
   | .topDeclCmd .., (cmd : Frontend.Ast.Command.Cmd) => hash cmd
-  | .elabTop .., (m : HashMap Name Entry) => hashNameEntryPairs m
+  | .elabTop .., (m : HashMap Name Entry) => hash m
   | .entry .., (r : Option Entry) => hash r
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
