@@ -52,6 +52,7 @@ section Busy
 
 variable {Q : Type u} [DecidableEq Q] {R : Q → Type u}
 
+/- # TODO: figure out how to hypothesise acyclicity as `unsafe` basically forgoes all chance at reasoning -/
 unsafe def busy : Build Applicative PUnit Q R := fun tasks key store =>
   let rec fetch q : StateM (Store PUnit Q R) (R q) :=
     match tasks q with
@@ -379,5 +380,62 @@ partial def restarting : Scheduler Monad (ExcelInfo Q) (Q → Bool) Q R :=
 def excel : Build Monad (ExcelInfo Q) Q R := restarting dirtyBitRebuilder
 
 end Excel
+
+section Shake
+
+variable {Q : Type u} [DecidableEq Q] [Hashable Q] [∀ q, Hashable (R q)] {R : Q → Type u}
+
+abbrev Hash (_ : Type u) : Type u := ULift UInt64
+
+instance : ∀ α, DecidableEq (Hash α) := inferInstance
+
+def VT.rebuilder [∀ q, Hashable (R q)] : Rebuilder Monad (VT Q R Hash) Q R :=
+  fun q r task {f} [MonadStateM (VT Q R Hash) f] fetch => do
+    let store ← get
+    let ⟨upToDate⟩ ← store.verify q (hash r) fetch
+    if upToDate then
+      return r
+    else
+      let (newValue, deps) ← track task fetch
+      modify (VT.record q ⟨hash newValue⟩ (deps.map fun ⟨d, v⟩ => ⟨d, ⟨hash v⟩⟩))
+      return newValue
+
+partial def suspending : Scheduler Monad I I Q R :=
+  fun rebuilder tasks target store =>
+
+    let rec fetch (q : Q) : StateM (Store I Q R × HashSet Q) (R q) := do
+      let (store, done) ← get
+
+      if done.contains q then
+        return store.values q
+      else
+        match tasks q with
+        | none =>
+          return store.values q
+        | some task =>
+          let value := store.values q
+          let newTask : Task (MonadStateM I) Q R q :=
+            rebuilder q value task
+
+          let liftRun
+              (act : Task (MonadStateM I) Q R q)
+              (f : ∀ q, StateM (Store I Q R × HashSet Q) (R q)) :
+              StateM (Store I Q R × HashSet Q) (R q) := do
+            let (s, d) ← get
+            sorry
+
+          let newValue ← liftRun (newTask fetch)
+
+          modify fun (s, d) =>
+            ({ s with values := fun k => if h : k = q then h ▸ newValue else s.values k },
+             d.insert q)
+
+          return newValue
+
+    (fetch target).run (store, ∅) |>.snd.1
+
+def shake [∀ q, Hashable (R q)] : Build Monad (VT Q R Hash) Q R := suspending VT.rebuilder
+
+end Shake
 
 end BuildSystems
