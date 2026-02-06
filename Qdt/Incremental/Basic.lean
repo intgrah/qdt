@@ -95,13 +95,7 @@ abbrev TaskM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type
 def TaskM.fetch (q : Q) : TaskM ε R (R q) :=
   fun fetch => fetch q
 
-def TaskM.fetchUntracked (q : Q) : TaskM ε R (R q) := do
-  let oldDeps := (← get).deps
-  let v ← TaskM.fetch q
-  modify fun st => { st with deps := oldDeps }
-  return v
-
-export TaskM (fetch fetchUntracked)
+export TaskM (fetch)
 
 def trackDeps {α}
     (fingerprint : ∀ q, R q → UInt64)
