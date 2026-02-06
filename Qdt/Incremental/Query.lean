@@ -42,14 +42,6 @@ inductive Key : Type
   | topDeclCmd (filepath : FilePath) (decl : TopDecl)
   | elabTop (filepath : FilePath) (decl : TopDecl)
   | entry (filepath : FilePath) (name : Name)
-    /-- Type of any global entry -/
-  | constTy (filepath : FilePath) (name : Name)
-  | constantInfo (filepath : FilePath) (name : Name)
-    /-- Definition of a def entry -/
-  | constDef (filepath : FilePath) (name : Name)
-  | recursorInfo (filepath : FilePath) (name : Name)
-  | constructorInfo (filepath : FilePath) (name : Name)
-  | inductiveInfo (filepath : FilePath) (name : Name)
 deriving DecidableEq, Repr, Inhabited, Hashable
 
 def Val : Key → Type
@@ -65,12 +57,6 @@ def Val : Key → Type
   | .topDeclCmd .. => Frontend.Ast.Command.Cmd
   | .elabTop .. => HashMap Name Entry
   | .entry .. => Option Entry
-  | .constTy .. => Option (Ty 0)
-  | .constantInfo .. => Option ConstantInfo
-  | .constDef .. => Option (Tm 0)
-  | .recursorInfo .. => Option RecursorInfo
-  | .constructorInfo .. => Option ConstructorInfo
-  | .inductiveInfo .. => Option InductiveInfo
 
 abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
 abbrev fetchQUntracked : ∀ k, TaskM Error Val (Val k) := TaskM.fetchUntracked

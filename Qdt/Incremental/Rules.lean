@@ -99,12 +99,6 @@ def fingerprint : ∀ k, Val k → UInt64
   | .topDeclCmd .., (cmd : Frontend.Ast.Command.Cmd) => hash cmd
   | .elabTop .., (m : HashMap Name Entry) => hashNameEntryPairs m
   | .entry .., (r : Option Entry) => hash r
-  | .constTy .., (r : Option (Ty 0)) => hash r
-  | .constantInfo .., (r : Option ConstantInfo) => hash r
-  | .constDef .., (r : Option (Tm 0)) => hash r
-  | .recursorInfo .., (r : Option RecursorInfo) => hash r
-  | .constructorInfo .., (r : Option ConstructorInfo) => hash r
-  | .inductiveInfo .., (r : Option InductiveInfo) => hash r
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []
@@ -283,42 +277,6 @@ def rules : ∀ k, TaskM Error Val (Val k)
           let env : HashMap Name Entry ← fetchQ (.elabTop filepath owner)
           return env[name]?
 
-  | .constTy filepath name => do
-      let e? ← fetchQ (.entry filepath name)
-      return e?.map fun
-        | .definition info
-        | .opaque info
-        | .axiom info
-        | .recursor info
-        | .constructor info
-        | .inductive info =>
-            info.ty
-  | .constantInfo filepath name => do
-      let e? : Option Entry ← fetchQ (.entry filepath name)
-      return e?.map fun
-        | .definition info
-        | .opaque info
-        | .axiom info
-        | .recursor info
-        | .constructor info
-        | .inductive info =>
-            info.toConstantInfo
-  | .constDef filepath name => do
-      let some (.definition info) ← fetchQ (.entry filepath name)
-        | return none
-      return some info.tm
-  | .recursorInfo filepath name => do
-      let some (.recursor info) ← fetchQ (.entry filepath name)
-        | return none
-      return some info
-  | .constructorInfo filepath name => do
-      let some (.constructor info) ← fetchQ (.entry filepath name)
-        | return none
-      return some info
-  | .inductiveInfo filepath name => do
-      let some (.inductive info) ← fetchQ (.entry filepath name)
-        | return none
-      return some info
 
 def newEngine : Engine Error Val where
   recover k := throw (.ioError (IO.userError s!"Cycle detected: {repr k}"))
