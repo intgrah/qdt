@@ -58,7 +58,7 @@ def Val : Key → Type
   | .elabTop .. => HashMap Name Entry
   | .entry .. => Option Entry
 
-abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
+abbrev fetchQ := TaskM.fetch (ε := Error) (Q := Key) (R := Val)
 
 end Incremental
 
