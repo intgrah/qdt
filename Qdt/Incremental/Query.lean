@@ -59,10 +59,9 @@ def Val : Key → Type
   | .entry .. => Option Entry
 
 abbrev fetchQ : ∀ k, TaskM Error Val (Val k) := TaskM.fetch
-abbrev fetchQUntracked : ∀ k, TaskM Error Val (Val k) := TaskM.fetchUntracked
 
 end Incremental
 
-export Incremental (fetchQ fetchQUntracked)
+export Incremental (fetchQ)
 
 end Qdt
