@@ -7,9 +7,19 @@ import Mathlib.Control.Monad.Writer
 Lean port of code from the paper
 -/
 
+@[specialize]
+def List.allMlift.{u, v} {m : Type u → Type u} [Monad m] {α : Type v} (p : α → m (ULift Bool)) : (l : List α) → m (ULift Bool)
+  | []    => pure ⟨true⟩
+  | a::as => do
+    match ← p a with
+    | ⟨true⟩  => allMlift p as
+    | ⟨false⟩ => pure ⟨false⟩
+
 namespace BuildSystems
 
 universe u
+
+open Std (HashSet)
 
 section Defs
 
@@ -173,73 +183,73 @@ some (20, [⟨"C1", 2⟩, ⟨"A2", 20⟩])
 
 section Traces
 
-variable (Q : Type) [DecidableEq Q] (R : Q → Type) (Hash : Type → Type) {m} [Monad m]
-
+variable (Q : Type u) (R : Q → Type u) (Hash : Type u → Type u)
 /-- 4.2.2 Verifying Traces -/
 def VT := List (Σ q, Hash (R q) × List (Σ d, Hash (R d)))
+/-- 4.2.3 Constructive Traces -/
+def CT := List (Σ q, R q × List (Σ d, Hash (R d)))
 
-def recordVT (q : Q) (h : Hash (R q)) (deps : List (Σ d, Hash (R d))) : VT Q R Hash → VT Q R Hash :=
+variable {Q : Type u} [DecidableEq Q] {R : Q → Type u} {Hash : Type u → Type u} [∀ α, DecidableEq (Hash α)] {m} [Monad m]
+
+
+def VT.record (q : Q) (h : Hash (R q)) (deps : List (Σ d, Hash (R d))) : VT Q R Hash → VT Q R Hash :=
   List.cons ⟨q, h, deps⟩
 
-def verifyVT [∀ α, DecidableEq (Hash α)]
-    (vt : VT Q R Hash) (key : Q) (h : Hash (R key)) (fetchHash : ∀ d, m (Hash (R d))) : m Bool := do
-  let rec matchTrace : List (Σ q, Hash (R q) × List (Σ d, Hash (R d))) → m Bool
-    | [] => return false
-    | ⟨q, h', deps⟩ :: rest => do
-      if heq : q = key then
+def VT.verify (q : Q) (h : Hash (R q)) (fetchHash : ∀ d, m (Hash (R d))) (vt : VT Q R Hash) : m (ULift Bool) := do
+  let rec matchTrace : List (Σ q, Hash (R q) × List (Σ d, Hash (R d))) → m (ULift Bool)
+    | [] => return ⟨false⟩
+    | ⟨q', h', deps⟩ :: rest => do
+      if heq : q' = q then
         match heq with
         | rfl =>
           if h == h' then
-            let depMatch : (Σ d, Hash (R d)) → m Bool := fun ⟨d, dh⟩ => do
+            let depMatch : (Σ d, Hash (R d)) → m (ULift Bool) := fun ⟨d, dh⟩ => do
               let currentDh ← fetchHash d
-              return currentDh == dh
-            if ← deps.allM depMatch then return true else matchTrace rest
+              return ⟨currentDh == dh⟩
+            let ⟨allMatch⟩ ← deps.allMlift depMatch
+            if allMatch then return ⟨true⟩ else matchTrace rest
           else
             matchTrace rest
       else
         matchTrace rest
   matchTrace vt
 
-/-- 4.2.3 Constructive Traces -/
-def CT := List (Σ q, R q × List (Σ d, Hash (R d)))
 
-def recordCT (q : Q) (v : R q) (deps : List (Σ d, Hash (R d))) : CT Q R Hash → CT Q R Hash :=
+def CT.record (q : Q) (v : R q) (deps : List (Σ d, Hash (R d))) : CT Q R Hash → CT Q R Hash :=
   List.cons ⟨q, v, deps⟩
 
-def constructCT [∀ α, DecidableEq (Hash α)]
-    (ct : CT Q R Hash) (key : Q) (fetchHash : ∀ d, m (Hash (R d))) : m (List (R key)) := do
-  let rec findMatches : List (Σ q, R q × List (Σ d, Hash (R d))) → m (List (R key))
+def CT.construct (q : Q) (fetchHash : ∀ d, m (Hash (R d))) (ct : CT Q R Hash) : m (List (R q)) := do
+  let rec findMatches : List (Σ q, R q × List (Σ d, Hash (R d))) → m (List (R q))
     | [] => return []
-    | ⟨q, val, deps⟩ :: rest => do
+    | ⟨q', val, deps⟩ :: rest => do
       let others ← findMatches rest
-      if heq : q = key then
+      if heq : q' = q then
         match heq with
         | rfl =>
-          let depMatch : (Σ d, Hash (R d)) → m Bool := fun ⟨d, dh⟩ => do
+          let depMatch : (Σ d, Hash (R d)) → m (ULift Bool) := fun ⟨d, dh⟩ => do
             let currentDh ← fetchHash d
-            return currentDh == dh
-          if ← deps.allM depMatch then return val :: others else return others
+            return ⟨currentDh == dh⟩
+          let ⟨allMatch⟩ ← deps.allMlift depMatch
+          if allMatch then return val :: others else return others
       else
         return others
   findMatches ct
 
 end Traces
 
-section Make
+def liftInfo {α} (x : StateM I α) : StateM (Store I Q R) α := do
+  let s ← get
+  let (a, info) := x.run s.info
+  set { s with info }
+  return a
 
-open Std (HashSet)
+section Make
 
 variable {Q : Type u} [DecidableEq Q] [Hashable Q] {R : Q → Type u}
 
 abbrev Time := Nat
 
 def MakeInfo (Q : Type u) := Time × List (Q × Time)
-
-def liftStore {α : Type u} (x : StateM I α) : StateM (Store I Q R) α := do
-  let s ← get
-  let (a, info) := x.run s.info
-  set { s with info }
-  return a
 
 def modTimeRebuilder : Rebuilder Applicative (MakeInfo Q) Q R :=
   fun q r task {f} [MonadStateM (MakeInfo Q) f] fetch => do
@@ -294,12 +304,80 @@ def topological : Scheduler Applicative I I Q R :=
       let r := store.values q
       let newTask : Task (MonadStateM I) Q R q := rebuilder q r task
       let fetch k : StateM I (R k) := return store.values k
-      let newValue ← liftStore (newTask fetch)
+      let newValue ← liftInfo (newTask fetch)
       modify fun s => { s with values := fun k => if h : k = q then h ▸ newValue else s.values k }
   StateT.run (order.forM build) store |>.snd
 
 def make : Build Applicative (MakeInfo Q) Q R := topological modTimeRebuilder
 
 end Make
+
+section Excel
+
+variable {IR Q : Type u} [DecidableEq Q] [Hashable Q] {R : Q → Type u}
+
+abbrev Chain := List
+
+structure ExcelInfo (Q : Type u) where
+  dirty : Q → Bool
+  calculations : Chain Q
+
+instance : MonadStateM (Q → Bool) (StateM (ExcelInfo Q)) where
+  get := return (← MonadState.get).dirty
+  set d := modify fun ⟨_, c⟩ => ⟨d, c⟩
+  modifyGet f := modifyGet fun ⟨d, c⟩ =>
+    let ⟨a, d⟩ := f d
+    ⟨a, d, c⟩
+
+def dirtyBitRebuilder : Rebuilder Monad (Q → Bool) Q R :=
+  fun q r task {f} [MonadStateM (Q → Bool) f] fetch => do
+  if (← get) q then task fetch else return r
+
+instance {f} [MonadStateM I f] : MonadStateM I (ExceptT Q f) where
+  get := ExceptT.lift MonadState.get
+  set := ExceptT.lift ∘ MonadState.set
+  modifyGet := ExceptT.lift ∘ MonadState.modifyGet
+
+def try' {ε q} (task : Task (MonadStateM (Q → Bool)) Q R q) : Task (MonadStateM (Q → Bool)) Q (fun q => Except ε (R q)) q :=
+  fun {f} [MonadStateM (Q → Bool) f] fetch => ExceptT.run (task fetch)
+
+partial def restarting : Scheduler Monad (ExcelInfo Q) (Q → Bool) Q R :=
+  fun rebuilder tasks target store =>
+
+  let rec go (done : HashSet Q) : Chain Q → StateM (Store (Q → Bool) Q R) (Chain Q)
+    | [] => return []
+    | q :: qs => do
+      match tasks q with
+      | none =>
+        let rest ← go (done.insert q) qs
+        return q :: rest
+      | some task =>
+        let store ← get
+        let r := store.values q
+        let newTask : Task (MonadStateM (Q → Bool)) Q (fun q => Except Q (R q)) q :=
+          try' (rebuilder q r task)
+        let fetch (k : Q) : StateM (Q → Bool) (Except Q (R k)) :=
+          if done.contains k then
+            return return store.values k
+          else
+            return throw k
+        match ← liftInfo (newTask fetch) with
+        | .error dep =>
+          let qs := qs.filter (· != dep)
+          go done (dep :: qs ++ [q])
+        | .ok newVal =>
+          modify fun s => { s with values := fun k => if h : k = q then h ▸ newVal else s.values k }
+          let qs ← go (done.insert q) qs
+          return q :: qs
+
+  let chain := store.info.calculations
+  let startChain := if chain.contains target then chain else chain ++ [target]
+  let store' : Store (Q → Bool) Q R := { info := store.info.dirty, values := store.values }
+  let ⟨newChain, dirty, values⟩ := (go ∅ startChain).run store'
+  { info := { dirty, calculations := newChain }, values }
+
+def excel : Build Monad (ExcelInfo Q) Q R := restarting dirtyBitRebuilder
+
+end Excel
 
 end BuildSystems
