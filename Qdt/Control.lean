@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 
 import Qdt.Frontend.Source
 import Qdt.Error
@@ -12,6 +13,8 @@ namespace Qdt
 open Lean (Name)
 open Incremental (BaseM Key Val TaskM)
 
+open Std (HashMap HashSet)
+
 /--
 Topological sort of modules using DFS
 Temporary-permanent mark algorithm
@@ -24,15 +27,15 @@ deriving Repr, Inhabited
 structure CoreContext where
   file : Option System.FilePath
   selfNames : List Name
-  imports : List System.FilePath
+  imports : HashSet System.FilePath
 
 def CoreContext.empty : CoreContext where
   file := none
   selfNames := []
-  imports := []
+  imports := ∅
 
 structure CoreState where
-  modules : Std.HashMap Name ModuleStatus
+  modules : HashMap Name ModuleStatus
   /-- Entries from imported modules. -/
   importedEnv : Global
   /-- Entries produced while elaborating the current top-level declaration -/
@@ -109,7 +112,7 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
     return some e
   if let some e := st.importedEnv[name]? then
     if let some file := e.file then
-      let _ ← fetchQ (Key.entry ⟨file⟩ name)
+      let _ ← fetchQ (.entry ⟨file⟩ name)
     return some e
   let ctx ← read
   if ctx.selfNames.contains name then
@@ -117,11 +120,11 @@ def fetchEntry (name : Name) : CoreM (Option Entry) := do
   match ctx.file with
   | none => return none
   | some file =>
-      if let some e ← fetchQ (Key.entry file name) then
+      if let some e ← fetchQ (.entry file name) then
         modify fun st => { st with importedEnv := st.importedEnv.insert name e }
         return some e
       for importFile in ctx.imports do
-        if let some e ← fetchQ (Key.entry importFile name) then
+        if let some e ← fetchQ (.entry importFile name) then
           modify fun st => { st with importedEnv := st.importedEnv.insert name e }
           return some e
       return none
