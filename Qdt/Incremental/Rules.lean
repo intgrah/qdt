@@ -87,10 +87,9 @@ private def hashNameEntryPairs (m : HashMap Name Entry) : UInt64 :=
 
 def fingerprint : ∀ k, Val k → UInt64
   | .inputFiles, (s : HashSet FilePath) =>
-    hash <| s.toList.map (·.toString) |>.mergeSort (· <= ·)
-  | .moduleFile .., (p : Option FilePath) => hash (p.map (·.toString))
-  | .moduleImports .., (ns : List Name) =>
-    hash <| ns.map hash
+    hash <| s.toList.map FilePath.toString |>.mergeSort (· <= ·)
+  | .moduleFile .., (p : Option FilePath) => hash p
+  | .moduleImports .., (ns : List Name) => hash ns
   | .importedEnv .., (env : Global) => hashNameEntryPairs env
   | .elabModule .., (env : Global) => hashNameEntryPairs env
   | .fileText .., (s : String) => hash s
@@ -106,11 +105,6 @@ def fingerprint : ∀ k, Val k → UInt64
   | .recursorInfo .., (r : Option RecursorInfo) => hash r
   | .constructorInfo .., (r : Option ConstructorInfo) => hash r
   | .inductiveInfo .., (r : Option InductiveInfo) => hash r
-
-
-private def logElab (decl : TopDecl) : TaskM Error Val PUnit :=
-  IO.toEIO Error.ioError <|
-    IO.eprintln s!"[elab] {repr decl.kind} {decl.name}"
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []
@@ -203,6 +197,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       match ctx.overrides[filepath]? with
       | some text => return text
       | none => IO.toEIO Error.ioError <| IO.FS.readFile filepath
+
   | .astProgram filepath => do
       let content ← fetchQ (.fileText filepath)
       match Frontend.Parser.parse content with
@@ -210,12 +205,15 @@ def rules : ∀ k, TaskM Error Val (Val k)
           throw (.msg s!"Parse error: {err.msg} at position {err.pos.byteIdx}")
       | .ok cstProg =>
           return Frontend.Cst.Program.desugar cstProg
+
   | .declOwner filepath => do
       let a : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
       buildOwnerIndex a
+
   | .declOrdering filepath => do
       let a : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
       return buildDeclOrdering a
+
   | .topDeclCmd filepath decl => do
       let prog : Frontend.Ast.Program ← fetchQ (.astProgram filepath)
       for h : idx in [:prog.length] do
@@ -228,8 +226,10 @@ def rules : ∀ k, TaskM Error Val (Val k)
         | .example _ => if decl.kind = .example && decl.name = (`_example).num idx then return cmd
         | .import _ => continue
       throw (.msg s!"Top-level declaration not found: {repr decl}")
+
   | .elabTop filepath decl => do
-      logElab decl
+      IO.toEIO Error.ioError <|
+        IO.eprintln s!"[elab] {repr decl.kind} {decl.name}"
       let cmd ← fetchQ (.topDeclCmd filepath decl)
       let selfNames : List Name ←
         match cmd with
@@ -274,6 +274,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
         get
       let st ← (action.run coreCtx).run' init
       return st.localEnv
+
   | .entry filepath name => do
       let owners : HashMap Name TopDecl ← fetchQ (.declOwner filepath)
       match owners[name]? with
@@ -281,17 +282,17 @@ def rules : ∀ k, TaskM Error Val (Val k)
       | some owner =>
           let env : HashMap Name Entry ← fetchQ (.elabTop filepath owner)
           return env[name]?
+
   | .constTy filepath name => do
-      let some e ← fetchQ (.entry filepath name)
-        | return none
-      return match e with
+      let e? ← fetchQ (.entry filepath name)
+      return e?.map fun
         | .definition info
         | .opaque info
         | .axiom info
         | .recursor info
         | .constructor info
         | .inductive info =>
-            some info.ty
+            info.ty
   | .constantInfo filepath name => do
       let e? : Option Entry ← fetchQ (.entry filepath name)
       return e?.map fun
