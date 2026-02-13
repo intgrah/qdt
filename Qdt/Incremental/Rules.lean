@@ -133,7 +133,7 @@ partial def collectTransitiveImports (visited : HashSet FilePath) (modName : Nam
 
 def rules : ∀ k, TaskM Error Val (Val k)
   | .inputFiles => do
-      let ctx ← readThe Context
+      let ctx ← readThe BaseContext
       let config := ctx.config
       let mut files : HashSet FilePath := HashSet.emptyWithCapacity 1024
       -- Project source directories
@@ -145,7 +145,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       return files
 
   | .moduleFile modName => do
-      let ctx ← readThe Context
+      let ctx ← readThe BaseContext
       let config := ctx.config
       let files : HashSet FilePath ← fetchQ .inputFiles
       let relPath := moduleNameToPath modName
@@ -184,7 +184,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       return globalEnv
 
   | .fileText filepath => do
-      let ctx ← readThe Context
+      let ctx ← readThe BaseContext
       match ctx.overrides[filepath]? with
       | some text => return text
       | none => IO.toEIO Error.ioError <| IO.FS.readFile filepath

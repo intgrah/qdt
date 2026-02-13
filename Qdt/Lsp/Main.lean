@@ -197,7 +197,7 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   stRef.set st
 
   let task : TaskM Error Val Global := buildEnv file
-  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
+  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
   | .ok (_, engine') =>
@@ -236,7 +236,7 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   stRef.set st
 
   let task : TaskM Error Val Global := buildEnv file
-  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
+  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
   | .ok (_, engine') =>
@@ -293,7 +293,7 @@ private def handleHover
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
 
   let task : TaskM Error Val Global := buildEnv file
-  let ctx : Incremental.Context := { config := ps.config, overrides := ps.overrides }
+  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
   | .error _ =>
