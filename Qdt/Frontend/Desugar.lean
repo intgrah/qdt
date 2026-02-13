@@ -3,13 +3,13 @@ import Qdt.Frontend.Cst
 
 namespace Qdt.Frontend.Cst
 
--- TODO: show termination
-private partial def Term.desugar : Term → Ast.Term
+private def Term.desugar : Term → Ast.Term
   | .missing src => .missing src
   | .ident src name univs => .ident src name univs
   | .app src f a => .app src f.desugar a.desugar
   | .lam src binders body =>
-      let expandedBinders : List Ast.Binder := binders.flatMap fun
+      let expandedBinders : List Ast.Binder := binders.flatMap fun binder =>
+        match _ : binder with
         | .untyped bSrc name => [.untyped bSrc name]
         | .typed ⟨_groupSrc, names, ty⟩ =>
             let ty := ty.desugar
@@ -28,8 +28,10 @@ private partial def Term.desugar : Term → Ast.Term
           .pi src ⟨firstSrc, firstName, ty⟩ inner
   | .arrow src a b =>
       .pi src ⟨src, .anonymous, a.desugar⟩ b.desugar
-  | .letE src name tyOpt rhs body =>
-      .letE src name (tyOpt.map Term.desugar) rhs.desugar body.desugar
+  | .letE src name none rhs body =>
+      .letE src name none rhs.desugar body.desugar
+  | .letE src name (some ty) rhs body =>
+      .letE src name (some ty.desugar) rhs.desugar body.desugar
   | .u src level => .u src level
   | .eq src a b => .eq src a.desugar b.desugar
   | .natLit src n => n.repeat (.app src (.ident src `Nat.succ [])) (.ident src `Nat.zero [])
@@ -38,6 +40,12 @@ private partial def Term.desugar : Term → Ast.Term
   | .mul src a b => .app src (.app src (.ident src `Nat.mul []) a.desugar) b.desugar
   | .ann src e ty => .ann src e.desugar ty.desugar
   | .sorry src => .sorry src
+termination_by e => e
+decreasing_by
+  all_goals try decreasing_tactic
+  calc sizeOf ty
+    < sizeOf binder := by decreasing_tactic
+    _ < sizeOf (lam src binders body) := by decreasing_tactic
 
 private def TypedBinderGroup.desugar : TypedBinderGroup → List Ast.TypedBinder
   | ⟨_groupSrc, names, ty⟩ =>
