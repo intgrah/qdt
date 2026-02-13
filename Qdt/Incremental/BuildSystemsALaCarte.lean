@@ -98,28 +98,22 @@ def sprsh₂ : Tasks Monad String (fun _ => Nat)
     if c1 == 1 then fetch "A1" else fetch "B1"
   | _ => none
 
-def compute (q : Q) (task : Task Monad Q R q) (store : Store I Q R) : R q :=
+def compute {q} (task : Task Monad Q R q) (store : Store I Q R) : R q :=
   Id.run do task store.values
 
 section Correctness
 
-def Correctness
-    (build : Build c I Q R)
-    (tasks : Tasks c Q R)
-    (q : Q)
-    (store result : Store I Q R) :=
-  result = build tasks q store
-
-def Agree
-    (tasks : Tasks c Q R)
-    (result store : Store I Q R) :=
-  ∀ q, tasks q = none → result.values q = store.values q
-
-def Consistent
+def Build.Correct
+    (build : Build Monad I Q R)
     (tasks : Tasks Monad Q R)
-    (result : Store I Q R) :=
-  ∀ q task, tasks q = some task →
-  result.values q = compute q task result
+    (q : Q)
+    (store : Store I Q R) :=
+  let result := build tasks q store
+  ∀ q, result.values q = match tasks q with
+  -- Agree on inputs
+  | none => store.values q
+  -- Consistent
+  | some task => compute task result
 
 end Correctness
 
