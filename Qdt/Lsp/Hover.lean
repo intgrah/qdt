@@ -13,8 +13,7 @@ namespace Frontend
 def Span.contains (span : Span) (pos : String.Pos.Raw) : Bool :=
   span.startPos.byteIdx ≤ pos.byteIdx ∧ pos.byteIdx < span.endPos.byteIdx
 
-def Src.contains (src : Src) (pos : String.Pos.Raw) : Bool :=
-  match src with
+def Src.contains (pos : String.Pos.Raw) : Src → Bool
   | none => false
   | some span => span.contains pos
 
