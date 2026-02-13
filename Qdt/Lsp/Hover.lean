@@ -194,7 +194,7 @@ def findInEntry (ctx : WalkCtx 0) (pos : String.Pos.Raw) : Entry → MetaM (Opti
 def spanSize (span : Frontend.Span) : Nat :=
   span.endPos.byteIdx - span.startPos.byteIdx
 
-def findHoverInGlobal (ctx : Incremental.Context) (file : String) (pos : String.Pos.Raw) (global : Global) : IO (Option (Name × HoverResult)) := do
+def findHoverInGlobal (ctx : Incremental.BaseContext) (file : String) (pos : String.Pos.Raw) (global : Global) : IO (Option (Name × HoverResult)) := do
   let action : MetaM (Option (Name × HoverResult)) := do
     let ctx := WalkCtx.empty
     let entries := global.toList

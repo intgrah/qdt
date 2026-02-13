@@ -58,7 +58,7 @@ def invalidateFiles (engine : Engine ε R) (changedFiles : List Q) : Engine ε R
 
 end Engine
 
-structure Context where
+structure BaseContext where
   config : Config
   overrides : HashMap FilePath String
 
@@ -69,7 +69,7 @@ structure RunState (ε : Type) (R : Q → Type) where
   deps : HashMap Q UInt64
 
 abbrev BaseM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
-  ReaderT Context (StateRefT (RunState ε R) (EIO ε))
+  ReaderT BaseContext (StateRefT (RunState ε R) (EIO ε))
 
 set_option checkBinderAnnotations false in
 abbrev Task
@@ -127,7 +127,7 @@ def verifyDeps
 
 def runWithEngine {α}
     (rules : ∀ q, TaskM ε R (R q))
-    (ctx : Context)
+    (ctx : BaseContext)
     (engine : Engine ε R)
     (task : TaskM ε R α) :
     EIO ε (α × Engine ε R) := do

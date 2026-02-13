@@ -33,7 +33,7 @@ private def countModuleEntries (filepath : FilePath) :
   let (count, _) ← forceElaborateModule (Std.HashSet.emptyWithCapacity 256) filepath
   return count
 
-private def runModuleOnce (ctx : Incremental.Context) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do
+private def runModuleOnce (ctx : Incremental.BaseContext) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do
   let t0 ← IO.monoMsNow
   match ← (Incremental.run ctx engine (countModuleEntries filepath)).toIO' with
   | .ok (count, engine') =>
@@ -46,7 +46,7 @@ private def runModuleOnce (ctx : Incremental.Context) (engine : Engine Error Val
       println!"{t1 - t0}ms"
       pure engine
 
-def watchLoop (ctx : Incremental.Context) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
+def watchLoop (ctx : Incremental.BaseContext) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
   let engine ← IO.mkRef (← runModuleOnce ctx engine entryFile)
   let pending ← IO.mkRef []
 
@@ -97,7 +97,7 @@ def run (parsed : Parsed) : IO UInt32 := do
 
   let engine : Engine Error Val := Incremental.newEngine
 
-  let ctx : Incremental.Context := { config, overrides := ∅ }
+  let ctx : Incremental.BaseContext := { config, overrides := ∅ }
 
   if config.watchMode then
     watchLoop ctx engine filePath
