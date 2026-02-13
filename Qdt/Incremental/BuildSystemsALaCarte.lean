@@ -375,7 +375,7 @@ def excel : Build Monad (ExcelInfo Q) Q R := restarting dirtyBitRebuilder
 
 end Excel
 
-/- section Shake
+section Shake
 
 variable {Q : Type u} [DecidableEq Q] [Hashable Q] [∀ q, Hashable (R q)] {R : Q → Type u}
 
@@ -386,7 +386,7 @@ instance : ∀ α, DecidableEq (Hash α) := inferInstance
 def VT.rebuilder [∀ q, Hashable (R q)] : Rebuilder Monad (VT Q R Hash) Q R :=
   fun q r task {f} [MonadStateM (VT Q R Hash) f] fetch => do
     let store ← get
-    let ⟨upToDate⟩ ← store.verify q (hash r) fetch
+    let ⟨upToDate⟩ ← store.verify q ⟨hash r⟩ (fun d => return ⟨hash (← fetch d)⟩)
     if upToDate then
       return r
     else
@@ -394,11 +394,17 @@ def VT.rebuilder [∀ q, Hashable (R q)] : Rebuilder Monad (VT Q R Hash) Q R :=
       modify (VT.record q ⟨hash newValue⟩ (deps.map fun ⟨d, v⟩ => ⟨d, ⟨hash v⟩⟩))
       return newValue
 
-partial def suspending : Scheduler Monad I I Q R :=
-  fun rebuilder tasks target store =>
+instance : MonadStateM I (StateM (Store I Q R × HashSet Q)) where
+  get := return (← MonadState.get).1.info
+  set i := modify fun (s, d) => ({ s with info := i }, d)
+  modifyGet f := modifyGet fun (s, d) =>
+    let (a, i) := f s.info
+    (a, { s with info := i }, d)
 
+unsafe def suspending : Scheduler Monad I I Q R :=
+  fun rebuilder tasks target store =>
     let rec fetch (q : Q) : StateM (Store I Q R × HashSet Q) (R q) := do
-      let (store, done) ← get
+      let (store, done) ← getThe (Store I Q R × HashSet Q)
 
       if done.contains q then
         return store.values q
@@ -411,16 +417,9 @@ partial def suspending : Scheduler Monad I I Q R :=
           let newTask : Task (MonadStateM I) Q R q :=
             rebuilder q value task
 
-          let liftRun
-              (act : Task (MonadStateM I) Q R q)
-              (f : ∀ q, StateM (Store I Q R × HashSet Q) (R q)) :
-              StateM (Store I Q R × HashSet Q) (R q) := do
-            let (s, d) ← get
-            sorry
+          let newValue ← newTask fetch
 
-          let newValue ← liftRun (newTask fetch)
-
-          modify fun (s, d) =>
+          modifyThe (Store I Q R × HashSet Q) fun (s, d) =>
             ({ s with values := fun k => if h : k = q then h ▸ newValue else s.values k },
              d.insert q)
 
@@ -428,8 +427,8 @@ partial def suspending : Scheduler Monad I I Q R :=
 
     (fetch target).run (store, ∅) |>.snd.1
 
-def shake [∀ q, Hashable (R q)] : Build Monad (VT Q R Hash) Q R := suspending VT.rebuilder
+unsafe def shake [∀ q, Hashable (R q)] : Build Monad (VT Q R Hash) Q R := suspending VT.rebuilder
 
-end Shake -/
+end Shake
 
 end BuildSystems
