@@ -381,7 +381,7 @@ def excel : Build Monad (ExcelInfo Q) Q R := restarting dirtyBitRebuilder
 
 end Excel
 
-section Shake
+/- section Shake
 
 variable {Q : Type u} [DecidableEq Q] [Hashable Q] [∀ q, Hashable (R q)] {R : Q → Type u}
 
@@ -436,6 +436,6 @@ partial def suspending : Scheduler Monad I I Q R :=
 
 def shake [∀ q, Hashable (R q)] : Build Monad (VT Q R Hash) Q R := suspending VT.rebuilder
 
-end Shake
+end Shake -/
 
 end BuildSystems
