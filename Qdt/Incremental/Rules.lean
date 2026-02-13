@@ -245,7 +245,7 @@ def rules : ∀ k, TaskM Error Val (Val k)
       let mut importFiles : HashSet FilePath := HashSet.emptyWithCapacity 64
       for modName in moduleImports.toArray do
         importFiles ← collectTransitiveImports importFiles modName
-      let importedEnv : Global ← fetchQUntracked (.importedEnv filepath)
+      let importedEnv : Global ← fetchQ (.importedEnv filepath)
       let coreCtx : CoreContext := { file := some filepath, selfNames, imports := importFiles }
       let init : CoreState :=
         {
