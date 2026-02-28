@@ -1,0 +1,54 @@
+/-
+https://github.com/AndrasKovacs/normalization-bench
+-/
+
+def Nat.{u} : Type (u + 1) := (N : Type u) → (N → N) → N → N
+def n2.{u} : Nat.{u} := fun N s z => s (s z)
+def n5.{u} : Nat.{u} := fun N s z => s (s (s (s (s z))))
+def mul.{u} (a b : Nat.{u}) : Nat.{u} := fun N s z => a N (b N s) z
+def suc.{u} (a : Nat.{u}) : Nat.{u} := fun N s z => s (a N s z)
+
+def n10.{u} : Nat.{u} := mul.{u} n2.{u} n5.{u}
+def n10b.{u} : Nat.{u} := mul.{u} n5.{u} n2.{u}
+def n20.{u} : Nat.{u} := mul.{u} n2.{u} n10.{u}
+def n20b.{u} : Nat.{u} := mul.{u} n2.{u} n10b.{u}
+def n21.{u} : Nat.{u} := suc.{u} n20.{u}
+def n21b.{u} : Nat.{u} := suc.{u} n20b.{u}
+def n22.{u} : Nat.{u} := suc.{u} n21.{u}
+def n22b.{u} : Nat.{u} := suc.{u} n21b.{u}
+def n100.{u} : Nat.{u} := mul.{u} n10.{u} n10.{u}
+def n100b.{u} : Nat.{u} := mul.{u} n10b.{u} n10b.{u}
+def n10k.{u} : Nat.{u} := mul.{u} n100.{u} n100.{u}
+def n10kb.{u} : Nat.{u} := mul.{u} n100b.{u} n100b.{u}
+def n100k.{u} : Nat.{u} := mul.{u} n10k.{u} n10.{u}
+def n100kb.{u} : Nat.{u} := mul.{u} n10kb.{u} n10b.{u}
+def n1M.{u} : Nat.{u} := mul.{u} n10k.{u} n100.{u}
+def n1Mb.{u} : Nat.{u} := mul.{u} n10kb.{u} n100b.{u}
+def n5M.{u} : Nat.{u} := mul.{u} n1M.{u} n5.{u}
+def n5Mb.{u} : Nat.{u} := mul.{u} n1Mb.{u} n5.{u}
+def n10M.{u} : Nat.{u} := mul.{u} n1M.{u} n10.{u}
+def n10Mb.{u} : Nat.{u} := mul.{u} n1Mb.{u} n10b.{u}
+def n20M.{u} : Nat.{u} := mul.{u} n10M.{u} n2.{u}
+def n20Mb.{u} : Nat.{u} := mul.{u} n10Mb.{u} n2.{u}
+
+def Tree : Type 1 := (T : Type 0) → T → (T → T → T) → T
+def leaf : Tree := fun T l n => l
+def node (t1 t2 : Tree) : Tree := fun T l n => n (t1 T l n) (t2 T l n)
+def fullTree (n : Nat.{1}) : Tree := n Tree (fun t => node t t) leaf
+
+def t2M : Tree := fullTree n20.{1}
+def t4M : Tree := fullTree n21.{1}
+def t8M : Tree := fullTree n22.{1}
+def t2Mb : Tree := fullTree n20b.{1}
+def t4Mb : Tree := fullTree n21b.{1}
+def t8Mb : Tree := fullTree n22b.{1}
+
+def Eq.{u} (A : Type u) (x y : A) : Type (u + 1) := (P : A → Type u) → P x → P y
+def Eq.refl.{u} (A : Type u) (x : A) : Eq.{u} A x x := fun P px => px
+
+-- def ex1 : Eq.{1} Nat.{0} n5M.{0} n5Mb.{0} := Eq.refl.{1} Nat.{0} n5M.{0}
+-- def ex2 : Eq.{1} Nat.{0} n10M.{0} n10Mb.{0} := Eq.refl.{1} Nat.{0} n10M.{0}
+
+def ex4.{u} : Eq.{1} Tree t2M t2Mb := Eq.refl.{1} Tree t2M
+def ex4.{u} : Eq.{1} Tree t4M t4Mb := Eq.refl.{1} Tree t4M
+def ex5.{u} : Eq.{1} Tree t8M t8Mb := Eq.refl.{1} Tree t8M

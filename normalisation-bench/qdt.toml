@@ -1,0 +1,2 @@
+entry = "Bench"
+source-directories = ["."]
