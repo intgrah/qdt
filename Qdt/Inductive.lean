@@ -10,10 +10,51 @@ namespace Qdt
 
 export Lean (Name)
 
+open Frontend (Ast)
+
+structure InductiveConstructor where
+  name : Name
+  fields : List Ast
+  tyOpt : Option Ast
+deriving Inhabited
+
+structure Inductive where
+  name : Name
+  univParams : List Name
+  params : List Ast
+  tyOpt : Option Ast
+  ctors : List InductiveConstructor
+
+private def parseConstructor : Ast → Option InductiveConstructor
+  | .node `Constructor cs => do
+      let name := cs[0]!.getName
+      let .node _ fields := cs[1]! | none
+      let tyOpt := cs[2]!
+      let tyOpt := match tyOpt with
+        | .node `null _ | .missing => none
+        | _ => some tyOpt
+      some { name, fields := fields.toList, tyOpt }
+  | _ => none
+
+def parseInductive : Ast → Option Inductive
+  | .node `Command.inductive cs => do
+      let name := cs[0]!.getName
+      let .node _ univParamsAst := cs[1]! | none
+      let .node _ paramsAst := cs[2]! | none
+      let tyOpt := cs[3]!
+      let .node _ ctorsAst := cs[4]! | none
+      let univParams := univParamsAst.toList.filterMap fun a => a.name?
+      let tyOpt := match tyOpt with
+        | .node `null _ | .missing => none
+        | _ => some tyOpt
+      let ctors := ctorsAst.toList.filterMap parseConstructor
+      some { name, univParams, params := paramsAst.toList, tyOpt, ctors }
+  | _ => none
+
 /-- Destructure an App chain into its head and spine -/
 private def Tm.getAppArgs {n} : Tm n → Tm n × List (Tm n) :=
   let rec go {n} (spine : List (Tm n)) : Tm n → Tm n × List (Tm n)
-    | .app _ f a => go (a :: spine) f
+    | .app f a => go (a :: spine) f
     | t => (t, spine)
   go []
 
@@ -22,13 +63,12 @@ def Ty.getTele {a} : Ty a → Σ b, Ctx a b × Ty b :=
       (acc : Ctx a b) :
       Ty b →
       Σ nb : Nat, Ctx a nb × Ty nb
-    | .pi _ param b => go (acc.snoc param) b
+    | .pi param b => go (acc.snoc param) b
     | t => ⟨b, acc, t⟩
   go Tele.nil
 
 private unsafe def weaken_impl {n m} : List (VTm n) → (_ : n ≤ m) → List (VTm m) := unsafeCast
 
--- @[implemented_by weaken_impl]
 private def weaken' {n m} (ts : List (VTm n)) (h : n ≤ m) : List (VTm m) :=
   ts.map (VTm.weaken h)
 
@@ -41,19 +81,19 @@ private def Env.infer : {n : Nat} → Env n n
 mutual
 
 private def Tm.hasIndOcc {n} (ind : Name) : Tm n → Bool
-  | .u' _ _ => false
-  | .var _ _ => false
-  | .const _ name _ => name == ind
-  | .lam _ ⟨_, _, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .app _ a b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .pi' _ ⟨_, _, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .proj _ _ a => a.hasIndOcc ind
-  | .letE _ _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
+  | .u' _ => false
+  | .var _ => false
+  | .const name _ => name == ind
+  | .lam ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .app a b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .pi' ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .proj _ a => a.hasIndOcc ind
+  | .letE _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
 
 private def Ty.hasIndOcc {n} (ind : Name) : Ty n → Bool
-  | .u _ _ => false
-  | .pi _ ⟨_, _, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .el _ a => a.hasIndOcc ind
+  | .u _ => false
+  | .pi ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .el a => a.hasIndOcc ind
 
 end
 
@@ -79,7 +119,7 @@ private structure RuleSeed (numParamsMotivesMinors : Nat) where
   recFields : List (RecFieldSeed numParamsMotivesMinors numFields)
 
 private def Ctx.shiftAt {a b} (cutoff s : Nat) (tele : Ctx a b) : Ctx (a + s) (b + s) :=
-  tele.dmap s fun {n} ⟨src, name, ty⟩ => ⟨src, name, ty.shiftAfter (n + cutoff) s⟩
+  tele.dmap s fun {n} ⟨name, ty⟩ => ⟨name, ty.shiftAfter (n + cutoff) s⟩
 
 private def Ctx.shift {m k} := @Ctx.shiftAt m k 0
 
@@ -91,52 +131,58 @@ Given a recursive occurrence of the inductive type, check that:
 Returns the indices.
 -/
 private def indConsistency {n}
-    (src : Frontend.Src)
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (args : List (Tm n)) :
     CoreM (List (Tm n)) := do
   if args.length != numParams + numIndices then
-    throw (.nonPositiveOccurrence src indName)
+    throw (.nonPositiveOccurrence indName)
   let (params, indices) := args.splitAt numParams
   for (ithParam, param) in params.mapIdx Prod.mk do
-    let .var _ j := param
-      | throw (.ctorParamMismatch src ctorName)
+    let .var j := param
+      | throw (.ctorParamMismatch ctorName)
     if ithParam + j.val + 1 != n then
-      throw (.ctorParamMismatch src ctorName)
+      throw (.ctorParamMismatch ctorName)
   for index in indices do
     if index.hasIndOcc indName then
-      throw (.nonPositiveOccurrence src indName)
+      throw (.nonPositiveOccurrence indName)
   return indices
 
 private def analyseRecField
-    (fieldSrc : Frontend.Src)
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (jthFieldCtx : Nat)
     (fty : Ty jthFieldCtx) :
     CoreM (Option (RecFieldInfo jthFieldCtx)) := do
   let ⟨nb, nestedTele, endTy⟩ := fty.getTele
-  if nestedTele.any (fun ⟨_, _, t⟩ => t.hasIndOcc indName) then
-    throw (.nonPositiveOccurrence fieldSrc indName)
+  if nestedTele.any (fun ⟨_, t⟩ => t.hasIndOcc indName) then
+    throw (.nonPositiveOccurrence indName)
   match endTy with
-  | .u _ _ => return none
-  | .el _ tm => do
+  | .u _ => return none
+  | .el tm => do
       let (head, args) := tm.getAppArgs
-      if let .const _ name _ := head then
+      if let .const name _ := head then
         if name == indName then
-          let indices ← indConsistency fieldSrc numParams numIndices indName ctorName args
+          let indices ← indConsistency numParams numIndices indName ctorName args
           return some { nestedEnd := nb, nestedTele, indices : RecFieldInfo _ }
         else
           for arg in args do
             if arg.hasIndOcc indName then
-              throw (.nonPositiveOccurrence fieldSrc indName)
+              throw (.nonPositiveOccurrence indName)
           return none
       else
         if tm.hasIndOcc indName then
-          throw (.nonPositiveOccurrence fieldSrc indName)
+          throw (.nonPositiveOccurrence indName)
         return none
   | .pi .. => throw (.msg "Internal error")
+
+private def getTypedBinder : Ast → Option (Name × Ast)
+  | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
+  | _ => none
+
+private def getFieldName : Ast → Option Name
+  | .node `Binder.typed cs => cs[0]!.name?
+  | _ => none
 
 def elabCtor
     (numParams numIndices : Nat)
@@ -145,53 +191,54 @@ def elabCtor
     (indTyVal : VTy numParams)
     (resultUniv : Universe)
     (paramCtx : TermContext numParams)
-    (ctor : Frontend.Ast.Command.InductiveConstructor) :
+    (ctor : InductiveConstructor) :
     MetaM (Name × Ty numParams) := do
   if !ctor.name.isAtomic then
     throw (.msg s!"{ctor.name}: constructor name must be atomic")
   let ctorName := indName.append ctor.name
   let indParamCtx : TermContext (numParams + 1) := paramCtx.bind indName indTyVal
   let params : List (VTm (numParams + 1)) := List.finRange numParams |>.map fun i => VTm.varAt i.val
-  let (fieldCtx, fieldTys, fieldUnivs) ← elabParamsWithLevels ctor.fields indParamCtx
+  let (fieldCtx, fieldTys, fieldUnivs) ← withChild 1 (elabParamsWithLevels ctor.fields indParamCtx)
   for (field, fieldUniv) in ctor.fields.zip fieldUnivs do
+    let fieldName := getFieldName field |>.getD .anonymous
     if !Universe.le fieldUniv resultUniv then
-      throw (.msg s!"{ctorName}: field '{field.name}' has type in universe {fieldUniv}, but inductive lives in {resultUniv}")
+      throw (.msg s!"{ctorName}: field '{fieldName}' has type in universe {fieldUniv}, but inductive lives in {resultUniv}")
   let numFields := ctor.fields.length
   let retTy ←
     match ctor.tyOpt with
     | some retTy =>
-      checkTy retTy fieldCtx
+      withChild 2 (checkTy retTy fieldCtx)
     | none => do
         if numIndices > 0 then
-          throw (.typeFamilyCtorReturnTypeRequired ctor.src ctorName)
+          throw (Error.typeFamilyCtorReturnTypeRequired ctorName)
         let indVar : VTm (numParams + 1 + numFields) := VTm.varAt numParams
         let res ← indVar.apps (weaken params)
         let res ← res.quote
-        pure (Ty.el none res)
+        pure (Ty.el res)
   let ctorTyWithInd : Ty (numParams + 1) := Ty.pis fieldTys retTy
-  let ctorTy : Ty numParams := ctorTyWithInd.subst (Subst.beta (.const none indName indUnivs))
+  let ctorTy : Ty numParams := ctorTyWithInd.subst (Subst.beta (.const indName indUnivs))
   return (ctorName, ctorTy)
 
-def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
+def elabInductive (ind : Inductive) : MetaM Unit := do
   let numParams := ind.params.length
   let numMotives := 1
   let numParamsMotives := numParams + numMotives
-  let (paramCtx, paramTys) ← elabParams ind.params
+  let (paramCtx, paramTys) ← withChild 2 (elabParams ind.params)
   let params := List.finRange numParams |>.map VTm.var
   let resultTy : Ty numParams ←
     match ind.tyOpt with
-    | none => pure (Ty.u none .zero)
-    | some ty => checkTy ty paramCtx
+    | none => pure (Ty.u .zero)
+    | some ty => withChild 3 (checkTy ty paramCtx)
   let indTy : Ty 0 := Ty.pis paramTys resultTy
   let univParams := (← getThe MetaState).univParams
-  Global.addEntry ind.name (.opaque { univParams, ty := indTy })
+  let _ ← Global.addEntry ind.name (.opaque { univParams, ty := indTy })
 
   let ⟨numParamsIndices, indexTys, returnTy⟩ := resultTy.getTele
   let numIndices := numParamsIndices - numParams
   let resultUniv ← match returnTy with
-    | .u _ u => pure u
-    | .el _ _ => throw (.msg "inductive return type must be Type")
-    | .pi _ _ _ => throw (.msg "internal error: unexpected pi in return type")
+    | .u u => pure u
+    | .el _ => throw (.msg "inductive return type must be Type")
+    | .pi _ _ => throw (.msg "internal error: unexpected pi in return type")
 
   let indUnivs := univParams.map Universe.level
   let indVal : VTm 0 := VTm.const ind.name indUnivs
@@ -207,8 +254,8 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
   let motiveUnivName := Universe.freshName univParams
   let motiveTy : Ty numParams :=
     Ty.pis indexTys <|
-    Ty.arrow (Ty.el none motiveInd) <|
-    Ty.u none (.level motiveUnivName)
+    Ty.arrow (Ty.el motiveInd) <|
+    Ty.u (.level motiveUnivName)
   let motiveVal : VTm numParamsMotives := VTm.varAt numParams
 
   let numMinors := ind.ctors.length
@@ -219,7 +266,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
 
   for (name, ctorFieldsTy) in ctors do
     let ctorFieldsTy := Ty.pis paramTys ctorFieldsTy
-    Global.addEntry name (.constructor { univParams, ty := ctorFieldsTy, indName := ind.name })
+    let _ ← Global.addEntry name (.constructor { univParams, ty := ctorFieldsTy, indName := ind.name })
 
   let numParamsMotivesMinors := numParamsMotives + numMinors
 
@@ -230,7 +277,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
   let recName := ind.name.str "rec"
 
   let buildMinorTy
-      (astCtor : Frontend.Ast.Command.InductiveConstructor)
+      (astCtor : InductiveConstructor)
       (ctorName : Name)
       (ithMinor : Nat)
       (him : ithMinor ≤ numMinors)
@@ -244,10 +291,8 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
     let numFields := numParamsMotivesIthMinorFields - numParamsMotivesIthMinor
 
     let fieldTeleRec : Tele ParamRec numParamsMotivesIthMinor numParamsMotivesIthMinorFields ←
-      fieldTele.mapM fun {jf} ⟨src, name, ty⟩ => do
-        let fieldIdx := jf - numParamsMotivesIthMinor
-        let fieldSrc := astCtor.fields[fieldIdx]?.map (·.src) |>.getD src
-        let recOpt ← analyseRecField fieldSrc numParams numIndices ind.name ctorName jf ty
+      fieldTele.mapM fun {jf} ⟨name, ty⟩ => do
+        let recOpt ← analyseRecField numParams numIndices ind.name ctorName jf ty
         return ⟨name, ty, recOpt⟩
 
     let rhsCtx := numParamsMotivesMinors + numFields
@@ -275,8 +320,8 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
           let nestedEnd₁ : Nat := numParamsMotivesIthMinorFields + numNested
           have hEnd : info.nestedEnd + fieldsAfter = nestedEnd₁ := by omega
           let nestedTele₁ : Ctx numParamsMotivesIthMinorFields nestedEnd₁ :=
-            hEnd ▸ hStart ▸ info.nestedTele.dmap fieldsAfter fun {n} ⟨src, name, ty⟩ =>
-              ⟨src, name, ty.shiftAfter (n - idx) fieldsAfter⟩
+            hEnd ▸ hStart ▸ info.nestedTele.dmap fieldsAfter fun {n} ⟨name, ty⟩ =>
+              ⟨name, ty.shiftAfter (n - idx) fieldsAfter⟩
           let indices₁ : List (Tm nestedEnd₁) :=
             info.indices.map (hEnd ▸ ·.shiftAfter numNested fieldsAfter)
 
@@ -291,7 +336,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
           let ih ← ih.apps indices₁
           let ih ← ih.app recVal
           let ih ← ih.quote
-          let ih := Ty.el none ih
+          let ih := Ty.el ih
           let ih := Ty.pis nestedTele₁ ih
 
           let ihName := f.name.str "ih"
@@ -300,7 +345,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
             have : numParamsMotivesIthMinorFields ≤ k := ihTele.le
             omega
           let ihTy : Ty k := hShift ▸ ih.shift numIhsSoFar
-          let ihTele := ihTele.snoc ⟨none, ihName, ihTy⟩
+          let ihTele := ihTele.snoc ⟨ihName, ihTy⟩
 
           let minorsAfter : Nat := numMinors - ithMinor
           let nestedEnd₂ : Nat := rhsCtx + numNested
@@ -334,14 +379,14 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
 
     let ctorIdxVals ←
       match ctorRetTy with
-      | .el _ tm =>
+      | .el tm =>
           let (head, args) := tm.getAppArgs
-          let .const _ name _ := head
-            | throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
+          let .const name _ := head
+            | throw (Error.ctorMustReturnInductive ctorName ind.name)
           if name != ind.name then
-            throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
-          indConsistency astCtor.src numParams numIndices ind.name ctorName args
-      | .u _ _ => throw (.ctorMustReturnInductive astCtor.src ctorName ind.name)
+            throw (Error.ctorMustReturnInductive ctorName ind.name)
+          indConsistency numParams numIndices ind.name ctorName args
+      | .u _ => throw (Error.ctorMustReturnInductive ctorName ind.name)
       | .pi .. => throw (.msg "Internal error")
     let ctorIdxVals ← ctorIdxVals.mapM (·.eval Env.infer)
     let ctorIdxVals := ctorIdxVals.map VTm.weaken
@@ -350,11 +395,11 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
     let minorTy ← minorTy.apps ctorIdxVals
     let minorTy ← minorTy.app ctorApp
     let minorTy ← minorTy.quote
-    let minorTy := Ty.el none minorTy
+    let minorTy := Ty.el minorTy
     let minorTy := Ty.pis ihTele minorTy
     let minorTy := Ty.pis fieldTele minorTy
 
-    return (⟨none, ctorName, minorTy⟩, ⟨ctorName, numFields, recFields⟩)
+    return (⟨ctorName, minorTy⟩, ⟨ctorName, numFields, recFields⟩)
   let rec goMinors
       (ithMinor : Nat)
       (hi : ithMinor ≤ numMinors)
@@ -363,7 +408,7 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
       MetaM (Ctx numParamsMotives numParamsMotivesMinors × Vector (RuleSeed numParamsMotivesMinors) numMinors) := do
     if h' : ithMinor < numMinors then
       let astCtor := ind.ctors[ithMinor]
-      let (ctorName, ctorFieldsTy) := ctors[ithMinor]'h'
+      let (ctorName, ctorFieldsTy) := ctors[ithMinor]
       let (p, seed) ← buildMinorTy astCtor ctorName ithMinor (Nat.le_of_lt h') ctorFieldsTy
       let acc := acc.snoc p
       goMinors (ithMinor + 1) (by omega) acc (seeds.push seed)
@@ -381,9 +426,9 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
       | .nil =>
           have h : numParams + (1 + numMinors) = numParamsMotivesMinors := by omega
           h ▸ Tele.nil
-      | .snoc (b := n) bs ⟨src, name, ty⟩ =>
+      | .snoc (b := n) bs ⟨name, ty⟩ =>
           have h : n + (1 + numMinors) + 1 = n + 1 + (1 + numMinors) := by omega
-          h ▸ (goW bs).snoc ⟨src, name, ty.shiftAfter (n - numParams) (1 + numMinors)⟩
+          h ▸ (goW bs).snoc ⟨name, ty.shiftAfter (n - numParams) (1 + numMinors)⟩
 
     have : numParamsIndices + (numMotives + numMinors) = numParamsMotivesMinorsIndices := by have := indexTys.le; omega
     this ▸ goW indexTys
@@ -443,24 +488,24 @@ def elabInductive (ind : Frontend.Ast.Command.Inductive) : MetaM Unit := do
   let majorTy ← majorTy.apps (weaken params)
   let majorTy ← majorTy.apps indicesVals
   let majorTy ← majorTy.quote
-  let majorTy := Ty.el none majorTy
+  let majorTy := Ty.el majorTy
   let majorVal : VTm (numParamsMotivesMinorsIndices + 1) := VTm.varAt numParamsMotivesMinorsIndices
 
   let conclusionTy : VTm (numParamsMotivesMinorsIndices + 1) := motiveVal.weaken
   let conclusionTy ← conclusionTy.apps (weaken indicesVals)
   let conclusionTy ← conclusionTy.app majorVal
   let conclusionTy ← conclusionTy.quote
-  let conclusionTy := Ty.el none conclusionTy
+  let conclusionTy := Ty.el conclusionTy
 
   let recTy : Ty 0 :=
     Ty.pis paramTys <|
-    Ty.pi none ⟨none, `motive, motiveTy⟩ <|
+    Ty.pi ⟨`motive, motiveTy⟩ <|
     Ty.pis minorTys <|
     Ty.pis indexTys' <|
     Ty.arrow majorTy <|
     conclusionTy
 
   let recUnivParams := motiveUnivName :: univParams
-  Global.addEntry recName (.recursor { univParams := recUnivParams, ty := recTy, recName, numParams, numMotives := 1, numMinors, numIndices, recRules })
+  let _ ← Global.addEntry recName (.recursor { univParams := recUnivParams, ty := recTy, recName, numParams, numMotives := 1, numMinors, numIndices, recRules })
 
 end Qdt

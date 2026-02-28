@@ -8,31 +8,56 @@ import Lean.Data.Lsp.Utf16
 
 import Qdt.Config
 import Qdt.Error
-import Qdt.Frontend.Source
+import Qdt.Frontend.Cst
+import Qdt.Frontend.Parser
 import Qdt.Incremental
 import Qdt.Lsp.Hover
-import Qdt.Pretty
 
 open Std (HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Qdt
 open Incremental (Engine fetchQ Key TaskM Val)
+open Frontend (Ast Cst Path SourceMap Span)
 
-private def mkRange (text : String) (src : Frontend.Src) : Range :=
+private partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
+  go 0 0
+where
+  go (cp : Nat) (bp : Nat) : Nat :=
+    if bp >= bytePos then cp
+    else if bp < s.utf8ByteSize then
+      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
+    else cp
+
+private partial def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
+  go 0 0
+where
+  go (cp : Nat) (bp : Nat) : Nat :=
+    if cp >= cpPos then bp
+    else if bp < s.utf8ByteSize then
+      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
+    else bp
+
+private def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
-  match src with
-  | none => { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
-  | some span =>
-      {
-        start := fileMap.utf8PosToLspPos span.startPos
-        «end» := fileMap.utf8PosToLspPos span.endPos
-      }
-
-private def mkDiagnostic (text : String) (err : Error) : Diagnostic :=
-  let src := Error.src err
+  let startByte := codepointPosToUtf8Pos text span.startPos
+  let endByte := codepointPosToUtf8Pos text span.endPos
   {
-    range := mkRange text src
+    start := fileMap.utf8PosToLspPos ⟨startByte⟩
+    «end» := fileMap.utf8PosToLspPos ⟨endByte⟩
+  }
+
+private def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic :=
+  {
+    range := mkRange text span
+    severity? := some DiagnosticSeverity.error
+    source? := some "qdt"
+    message := toString err
+  }
+
+private def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic :=
+  {
+    range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
     severity? := some DiagnosticSeverity.error
     source? := some "qdt"
     message := toString err
@@ -74,7 +99,7 @@ private def normaliseConfig (cfg : Config) : IO Config := do
 
 structure ProjectState where
   config : Config
-  engine : Engine Error Val
+  engine : Engine Val
   overrides : HashMap FilePath String
 
 structure ServerState where
@@ -110,29 +135,38 @@ private def publishDiagnostics
     (hOut : IO.FS.Stream)
     (uri : DocumentUri)
     (version? : Option Int)
-    (diags : Array Diagnostic) : IO Unit := do
+    (diags : Array Lsp.Diagnostic) : IO Unit := do
   let params : PublishDiagnosticsParams := { uri, version?, diagnostics := diags }
   match Json.toStructured? params with
   | Except.error e => throw (IO.userError s!"internal error: cannot encode diagnostics: {e}")
   | Except.ok s =>
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
-partial def buildEnv (filepath : FilePath) : TaskM Error Val Global := do
-  let mut globalEnv : Global := HashMap.emptyWithCapacity 4096
-  let importNames ← fetchQ (Key.moduleImports filepath)
-  for modName in importNames.toArray do
-    match ← fetchQ (Key.moduleFile modName) with
-    | none => throw (.msg s!"Import not found: {modName}")
-    | some depFile =>
-        let depEnv ← buildEnv depFile
-        for (n, e) in depEnv.toList.toArray do
-          globalEnv := globalEnv.insert n e
-  let ordering : List Incremental.TopDecl ← fetchQ (Key.declOrdering filepath)
-  for decl in ordering do
-    let localEnv : Global ← fetchQ (Key.elabTop filepath decl)
-    for (n, e) in localEnv.toList.toArray do
-      globalEnv := globalEnv.insert n e
-  return globalEnv
+def elaborateFile (filepath : FilePath) : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := do
+  let (env, info) ← fetchQ (Key.elabModule filepath)
+  let sourceMap ← fetchQ (Key.sourceMap filepath)
+  let text ← fetchQ (Key.fileText filepath)
+  let astProg ← fetchQ (Key.astProgram filepath)
+  let cst := match Frontend.Parser.parse text with
+    | .ok c => c
+    | .error _ => .node `error #[]
+  return (env, info, sourceMap, cst, astProg)
+
+def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
+  info.diagnostics.map fun d =>
+    let astPathFwd := d.path.reverse
+    let cstPath? := Id.run do
+      for len in (List.range astPathFwd.length).reverse do
+        let astPrefix := astPathFwd.take (len + 1)
+        if let some cstPath := sourceMap.astToCst[astPrefix]? then
+          return some cstPath
+      return none
+    match cstPath? with
+    | some cstPath =>
+        match cst.spanAtPath cstPath with
+        | some span => mkDiagnostic text span d.error
+        | none => mkDiagnosticNoSpan d.error
+    | none => mkDiagnosticNoSpan d.error
 
 private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -184,7 +218,7 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
           severity? := some DiagnosticSeverity.error
           source? := some "qdt"
           message := s!"unsupported URI: {uri}"
-          : Diagnostic
+          : Lsp.Diagnostic
         }
       ]
       return
@@ -196,18 +230,18 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   let ps := { ps with overrides }
   stRef.set st
 
-  let task : TaskM Error Val Global := buildEnv file
+  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
   let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
-  | .ok (_, engine') =>
+  | .ok ((_, info, sourceMap, cst, _), engine') =>
       let ps' : ProjectState := { ps with engine := engine' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
-      publishDiagnostics hOut uri version? #[]
-  | Except.error err =>
-      let diag := mkDiagnostic text err
-      publishDiagnostics hOut uri version? #[diag]
+      let diagnostics := buildDiagnostics text info sourceMap cst
+      publishDiagnostics hOut uri version? diagnostics
+  | Except.error () =>
+      publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
 
 private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -235,18 +269,18 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   let ps := { ps with overrides }
   stRef.set st
 
-  let task : TaskM Error Val Global := buildEnv file
+  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
   let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
-  | .ok (_, engine') =>
+  | .ok ((_, info, sourceMap, cst, _), engine') =>
       let ps' : ProjectState := { ps with engine := engine' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
-      publishDiagnostics hOut uri version? #[]
-  | Except.error err =>
-      let diag := mkDiagnostic text err
-      publishDiagnostics hOut uri version? #[diag]
+      let diagnostics := buildDiagnostics text info sourceMap cst
+      publishDiagnostics hOut uri version? diagnostics
+  | Except.error () =>
+      publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
 
 private def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -291,29 +325,50 @@ private def handleHover
   let text := ps.overrides.getD file (← IO.FS.readFile file)
   let fileMap := Lean.FileMap.ofString text
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
+  let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let task : TaskM Error Val Global := buildEnv file
+  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
   let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
 
   match ← (Incremental.run ctx ps.engine task).toIO' with
-  | .error _ =>
+  | .error () =>
       hOut.writeLspMessage <| Message.response id Json.null
-  | .ok (globalEnv, engine') =>
+  | .ok ((_, info, sourceMap, cst, astProg), engine') =>
       let ps' : ProjectState := { ps with engine := engine' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
 
-      match ← Lsp.findHoverInGlobal ctx file.toString bytePos globalEnv with
+      let cstPath := cst.pathAtPosition codepointPos
+
+      let typeInfos := info.types.map fun t => (t.path.reverse, t.ty)
+
+      let mut best : Option (Path × Path × String) := none
+      for len in (List.range cstPath.length).reverse do
+        let cstPrefix := cstPath.take (len + 1)
+        if let some astPath := sourceMap.cstToAst[cstPrefix]? then
+          for (tyPath, ty) in typeInfos do
+            if tyPath == astPath then
+              match best with
+              | none => best := some (cstPrefix, astPath, ty)
+              | some (_, prevAstPath, _) =>
+                  if astPath.length > prevAstPath.length then
+                    best := some (cstPrefix, astPath, ty)
+              break
+
+      match best with
       | none =>
           hOut.writeLspMessage <| Message.response id Json.null
-      | some (_name, result) =>
-          let range := mkRange text (some result.span)
-          let content : MarkupContent := {
+      | some (cstPath, astPath, ty) =>
+          let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
+          let ast := Lsp.astAtPath astProg astPath
+          let content := Lsp.formatHover ast ty
+          let range := mkRange text span
+          let markupContent : MarkupContent := {
             kind := MarkupKind.markdown
-            value := s!"```qdt\n{result.contents}\n```"
+            value := s!"```qdt\n{content}\n```"
           }
           let hover : Hover := {
-            contents := content
+            contents := markupContent
             range? := some range
           }
           hOut.writeLspMessage <| Message.response id (toJson hover)
