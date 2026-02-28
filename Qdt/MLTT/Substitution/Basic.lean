@@ -4,7 +4,7 @@ import Qdt.MLTT.Substitution.Ren
 namespace Qdt
 
 def Subst (a b : Nat) := Idx a → Tm b
-def Subst.id (a : Nat) : Subst a a := Tm.var none
+def Subst.id (a : Nat) : Subst a a := Tm.var
 def Subst.shift {a} : Subst a (a + 1) := Subst.id (a + 1) ∘ Ren.shift
 def Subst.cons {a b} (s : Tm b) (σ : Subst a b) : Subst (a + 1) b
   | ⟨0, _⟩ => s
@@ -25,35 +25,29 @@ theorem Subst.up_id (n : Nat) : (Subst.id n).up = Subst.id (n + 1) := by
 mutual
 
 def Ty.subst {m n : Nat} (σ : Subst m n) : Ty m → Ty n
-  | .u src i => .u src i
-  | .pi src ⟨ps, x, a⟩ b => .pi src ⟨ps, x, a.subst σ⟩ (b.subst σ.up)
-  | .el src t => .el src (t.subst σ)
+  | .u i => .u i
+  | .pi ⟨x, a⟩ b => .pi ⟨x, a.subst σ⟩ (b.subst σ.up)
+  | .el t => .el (t.subst σ)
 
 def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
-  | .u' src i => .u' src i
-  | .var src i => match src with
-    | none => σ i
-    | some _ => (σ i).withSrc src
-  | .const src name us => .const src name us
-  | .lam src ⟨ps, x, a⟩ body => .lam src ⟨ps, x, a.subst σ⟩ (body.subst σ.up)
-  | .app src f a => .app src (f.subst σ) (a.subst σ)
-  | .pi' src ⟨pSrc, x, a⟩ b => .pi' src ⟨pSrc, x, a.subst σ⟩ (b.subst σ.up)
-  | .proj src i t => .proj src i (t.subst σ)
-  | .letE src x ty t body => .letE src x (ty.subst σ) (t.subst σ) (body.subst σ.up)
+  | .u' i => .u' i
+  | .var i => σ i
+  | .const name us => .const name us
+  | .lam ⟨x, a⟩ body => .lam ⟨x, a.subst σ⟩ (body.subst σ.up)
+  | .app f a => .app (f.subst σ) (a.subst σ)
+  | .pi' ⟨x, a⟩ b => .pi' ⟨x, a.subst σ⟩ (b.subst σ.up)
+  | .proj i t => .proj i (t.subst σ)
+  | .letE x ty t body => .letE x (ty.subst σ) (t.subst σ) (body.subst σ.up)
 
 end
 
--- @[simp]
--- theorem Tm.subst_var {m n : Nat} (σ : Subst m n) (src : Frontend.Src) (i : Idx m) :
---     Tm.subst σ (.var src i) = σ i := rfl
-
 @[simp]
-theorem Tm.subst_var_none {m n : Nat} (σ : Subst m n) (i : Idx m) :
-    Tm.subst σ (.var none i) = σ i := rfl
+theorem Tm.subst_var {m n : Nat} (σ : Subst m n) (i : Idx m) :
+    Tm.subst σ (.var i) = σ i := rfl
 
 def Subst.comp {l m n : Nat} (σ : Subst l m) (τ : Subst m n) : Subst l n := Tm.subst τ ∘ σ
 
-abbrev Ren.toSubst {m n} (ξ : Ren m n) : Subst m n := fun i => Tm.var none (ξ i)
+abbrev Ren.toSubst {m n} (ξ : Ren m n) : Subst m n := fun i => Tm.var (ξ i)
 
 theorem Subst.subst_comp_up {m n} (ξ : Ren m n) :
     ξ.toSubst.up = ξ.up.toSubst := by
@@ -64,19 +58,19 @@ mutual
 theorem Ty.ren_eq_subst_var {m n} (ξ : Ren m n) :
     ∀ A : Ty m, A.ren ξ = A.subst ξ.toSubst
   | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by
+  | .pi ⟨_, _⟩ _ => by
     simp only [Ty.ren, Ty.subst, Ty.ren_eq_subst_var, Subst.subst_comp_up]
-  | .el _ t => by simp only [Ty.ren, Ty.subst, Tm.ren_eq_subst_var ξ t]
+  | .el t => by simp only [Ty.ren, Ty.subst, Tm.ren_eq_subst_var ξ t]
 
 theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
     ∀ t : Tm m, t.ren ξ = t.subst ξ.toSubst
   | .u' .. => rfl
-  | .var src _ => by cases src <;> rfl
+  | .var _ => rfl
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by
+  | .lam ⟨_, _⟩ _ => by
       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
-  | .pi' _ ⟨_, _, _⟩ _ => by
+  | .pi' ⟨_, _⟩ _ => by
       simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
   | .letE .. => by
@@ -91,17 +85,17 @@ mutual
 @[simp]
 theorem Ty.subst_id {n} : ∀ A : Ty n, A.subst (Subst.id n) = A
   | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp [Ty.subst, Ty.subst_id]
+  | .pi ⟨_, _⟩ _ => by simp [Ty.subst, Ty.subst_id]
   | .el .. => by simp only [Ty.subst, Tm.subst_id]
 
 @[simp]
 theorem Tm.subst_id {n} : ∀ t : Tm n, t.subst (Subst.id n) = t
   | .u' .. => rfl
-  | .var src _ => by cases src <;> rfl
+  | .var _ => rfl
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
+  | .lam ⟨_, _⟩ _ => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
   | .app .. => by simp [Tm.subst, Tm.subst_id]
-  | .pi' _ ⟨_, _, _⟩ _ => by simp [Tm.subst, Tm.subst_id]
+  | .pi' ⟨_, _⟩ _ => by simp [Tm.subst, Tm.subst_id]
   | .proj .. => by simp only [Tm.subst, Tm.subst_id]
   | .letE .. => by simp [Tm.subst, Ty.subst_id, Tm.subst_id]
 
@@ -114,7 +108,7 @@ theorem Subst.comp_id {m n} (σ : Subst m n) : σ.comp (Subst.id n) = σ := by
   funext i; apply Tm.subst_id
 
 theorem Subst.up_eq_cons_ren {m n} (σ : Subst m n) :
-    σ.up = .var none 0 .: (Tm.ren Ren.shift ∘ σ) := rfl
+    σ.up = .var 0 .: (Tm.ren Ren.shift ∘ σ) := rfl
 
 theorem Subst.cons_comp {l m n} (s : Tm m) (σ : Subst l m) (τ : Subst m n) :
     (s .: σ).comp τ = s.subst τ .: σ.comp τ := by
@@ -136,17 +130,17 @@ mutual
 private theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     (A : Ty l) → (A.ren ξ).subst σ = A.subst (σ ∘ ξ)
   | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
+  | .pi ⟨_, _⟩ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
   | .el .. => by simp only [Ty.ren, Ty.subst, Tm.ren_subst]
 
 private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     ∀ t : Tm l, (t.ren ξ).subst σ = t.subst (σ ∘ ξ)
   | .u' .. => rfl
-  | .var src _ => rfl
+  | .var _ => rfl
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
+  | .lam ⟨_, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
-  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
+  | .pi' ⟨_, _⟩ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
   | .letE .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
 
@@ -164,35 +158,21 @@ mutual
 private theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ A : Ty l, (A.subst σ).ren ξ = A.subst (Tm.ren ξ ∘ σ)
   | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
+  | .pi ⟨_, _⟩ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
   | .el .. => by simp only [Ty.subst, Ty.ren, Tm.subst_ren]
 
 private theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ t : Tm l, (t.subst σ).ren ξ = t.subst (Tm.ren ξ ∘ σ)
   | .u' .. => rfl
-  | .var src _ => by cases src <;> simp [Tm.subst, Tm.ren_withSrc]
+  | .var _ => rfl
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .lam ⟨_, _⟩ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
   | .app .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
-  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .pi' ⟨_, _⟩ _ => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
   | .proj .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
   | .letE .. => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
 
 end
-
-theorem Tm.subst_withSrc {m n} (σ : Subst m n) (src : Frontend.Src) :
-    ∀ t : Tm m, (t.withSrc src).subst σ = (t.subst σ).withSrc src
-  | .u' .. => rfl
-  | .var src i => by
-    cases src
-    · sorry
-    · sorry
-  | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => rfl
-  | .app .. => rfl
-  | .pi' _ ⟨_, _, _⟩ _ => rfl
-  | .proj .. => rfl
-  | .letE _ _ _ _ _ => rfl
 
 @[simp]
 theorem Subst.up_comp {l m n} (σ : Subst l m) (τ : Subst m n) :
@@ -210,20 +190,20 @@ mutual
 theorem Ty.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
     ∀ A : Ty l, (A.subst σ).subst τ = A.subst (σ.comp τ)
   | .u .. => rfl
-  | .pi _ ⟨_, _, _⟩ _ => by simp only [Ty.subst]; sorry
-  | .el .. => by simp only [Ty.subst]; sorry
+  | .pi ⟨_, _⟩ _ => by simp only [Ty.subst, Ty.comp_subst, Subst.up_comp]
+  | .el .. => by simp only [Ty.subst, Tm.comp_subst]
 
 @[simp]
 theorem Tm.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
     ∀ t : Tm l, (t.subst σ).subst τ = t.subst (σ.comp τ)
   | .u' .. => rfl
-  | .var .. => by simp only [Tm.subst]; sorry
+  | .var .. => rfl
   | .const .. => rfl
-  | .lam _ ⟨_, _, _⟩ _ => by simp only [Tm.subst]; sorry
-  | .app .. => by simp only [Tm.subst]; sorry
-  | .pi' _ ⟨_, _, _⟩ _ => by simp only [Tm.subst]; sorry
-  | .proj .. => by simp only [Tm.subst]; sorry
-  | .letE .. => by simp only [Tm.subst]; sorry
+  | .lam ⟨_, _⟩ _ => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
+  | .app .. => by simp only [Tm.subst, Tm.comp_subst]
+  | .pi' ⟨_, _⟩ _ => by simp only [Tm.subst, Tm.comp_subst, Subst.up_comp]
+  | .proj .. => by simp only [Tm.subst, Tm.comp_subst]
+  | .letE .. => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
 
 end
 
@@ -284,13 +264,13 @@ theorem Tm.shift_beta {n} (t : Tm n) (s : Tm n) :
 
 @[simp]
 theorem Tm.var_zero_beta {n} (s : Tm n) :
-    (Tm.var none 0).subst (Subst.beta s) = s := rfl
+    (Tm.var 0).subst (Subst.beta s) = s := rfl
 
 @[simp]
 theorem Tm.var_succ_beta {n} (i : Idx n) (s : Tm n) :
-    (Tm.var none i.succ).subst (Subst.beta s) = Subst.id n i := rfl
+    (Tm.var i.succ).subst (Subst.beta s) = Subst.id n i := rfl
 
-theorem Subst.beta_up_zero {n} (s : Tm n) : (beta s).up 0 = Tm.var none 0 := rfl
+theorem Subst.beta_up_zero {n} (s : Tm n) : (beta s).up 0 = Tm.var 0 := rfl
 
 theorem Subst.beta_up_one {n} (s : Tm n) : (beta s).up 1 = s.subst shift := by
   simp only [up, beta, cons, Function.comp_apply]

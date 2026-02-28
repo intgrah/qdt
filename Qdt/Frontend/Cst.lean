@@ -1,116 +1,83 @@
-import Qdt.Frontend.Source
-import Qdt.MLTT.Universe
+import Qdt.Frontend.Ast
+import Std.Data.HashMap
 
-namespace Qdt.Frontend.Cst
+namespace Qdt.Frontend
 
-open Lean (Name)
+open Lean (Name Syntax SyntaxNodeKind)
+open Std (HashMap)
 
-mutual
-inductive Term : Type
-  | missing : Src → Term
-  | ident : Src → Name → List Universe → Term
-  | app : Src → Term → Term → Term
-  | lam : Src → List BinderGroup → Term → Term
-  | pi : Src → TypedBinderGroup → Term → Term
-  | arrow : Src → Term → Term → Term
-  | letE : Src → Name → Option Term → Term → Term → Term
-  | u : Src → Universe → Term
-  | eq : Src → Term → Term → Term
-  | natLit : Src → Nat → Term
-  | add : Src → Term → Term → Term
-  | sub : Src → Term → Term → Term
-  | mul : Src → Term → Term → Term
-  | ann : Src → Term → Term → Term
-  | sorry : Src → Term
+inductive Cst : Type
+  | token (kind : SyntaxNodeKind) (val : String)
+  | node (kind : SyntaxNodeKind) (children : Array Cst)
 deriving Repr, Inhabited
 
-inductive BinderGroup : Type
-  | untyped : Src → Name → BinderGroup
-  | typed : TypedBinderGroup → BinderGroup
+structure Span where
+  startPos : Nat
+  endPos : Nat
 deriving Repr, Inhabited
 
-/-- A typed binder group like `(x y : T)` stores per-name source info -/
-inductive TypedBinderGroup : Type
-  | mk : Src → List (Src × Name) → Term → TypedBinderGroup
-deriving Repr, Inhabited
-end
+namespace Cst
 
-namespace Command
+def width : Cst → Nat
+  | .token _ val => val.length
+  | .node _ children => children.foldl (· + ·.width) 0
 
-structure Import where
-  src : Src
-  moduleName : Name
-deriving Repr, Inhabited
+def spanAtPath (root : Cst) (path : Path) : Option Span := do
+  let mut current := root
+  let mut startPos := 0
+  for idx in path do
+    match current with
+    | .node _ children =>
+        for h : i in [:idx] do
+          if hi : i < children.size then
+            startPos := startPos + children[i].width
+        if hj : idx < children.size then
+          current := children[idx]
+        else
+          failure
+    | .token _ _ => failure
+  return { startPos, endPos := startPos + current.width }
 
-structure Definition where
-  src : Src
-  name : Name
-  univParams : List Name
-  params : List TypedBinderGroup
-  tyOpt : Option Term
-  body : Term
-deriving Repr, Inhabited
+partial def pathAtPosition (root : Cst) (pos : Nat) : Path :=
+  go root pos []
+where
+  go (cst : Cst) (pos : Nat) (acc : Path) : Path :=
+    match cst with
+    | .token _ _ => acc.reverse
+    | .node _ children => Id.run do
+        let mut offset := 0
+        for h : i in [:children.size] do
+          let child := children[i]
+          let childWidth := child.width
+          if offset ≤ pos ∧ pos < offset + childWidth then
+            return go child (pos - offset) (i :: acc)
+          offset := offset + childWidth
+        return acc.reverse
 
-structure Example where
-  src : Src
-  univParams : List Name
-  params : List TypedBinderGroup
-  tyOpt : Option Term
-  body : Term
-deriving Repr, Inhabited
+def ofLeanSyntax : Syntax → Cst
+  | .missing => .token `missing ""
+  | .atom _ val => .token `atom val
+  | .ident _ rawVal _ _ => .token `ident rawVal.toString
+  | .node _ kind args => Cst.node kind (args.map ofLeanSyntax)
 
-structure Axiom where
-  src : Src
-  name : Name
-  univParams : List Name
-  params : List TypedBinderGroup
-  ty : Term
-deriving Repr, Inhabited
+end Cst
 
-structure InductiveConstructor where
-  src : Src
-  name : Name
-  fields : List TypedBinderGroup
-  tyOpt : Option Term
-deriving Repr, Inhabited
+abbrev CstPath := Path
+abbrev AstPath := Path
 
-structure Inductive where
-  src : Src
-  name : Name
-  univParams : List Name
-  params : List TypedBinderGroup
-  tyOpt : Option Term
-  ctors : List InductiveConstructor
-deriving Repr, Inhabited
+structure SourceMap where
+  cstToAst : HashMap CstPath AstPath
+  astToCst : HashMap AstPath CstPath
 
-structure StructureField where
-  src : Src
-  nameSrc : Src  -- Span of just the field name
-  name : Name
-  params : List TypedBinderGroup
-  ty : Term
-deriving Repr, Inhabited
+instance : Hashable SourceMap where
+  hash sm := mixHash (hash sm.cstToAst.size) (hash sm.astToCst.size)
 
-structure Structure where
-  src : Src
-  name : Name
-  univParams : List Name
-  params : List TypedBinderGroup
-  tyOpt : Option Term
-  fields : List StructureField
-deriving Repr, Inhabited
+namespace SourceMap
 
-inductive Cmd : Type
-  | import : Import → Cmd
-  | definition : Definition → Cmd
-  | example : Example → Cmd
-  | axiom : Axiom → Cmd
-  | inductive : Inductive → Cmd
-  | structure : Structure → Cmd
-deriving Repr, Inhabited
+def insert (m : SourceMap) (cstPath : CstPath) (astPath : AstPath) : SourceMap where
+  cstToAst := m.cstToAst.insert cstPath astPath
+  astToCst := m.astToCst.insert astPath cstPath
 
-end Command
+end SourceMap
 
-abbrev Program := List Command.Cmd
-
-end Qdt.Frontend.Cst
+end Qdt.Frontend

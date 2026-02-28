@@ -36,30 +36,30 @@ instance : Arbitrary Universe where
 
 mutual
 def Ty.sample (n : Nat) : Nat → Gen (Ty n)
-  | 0 => return .u none (← Universe.sample 2)
+  | 0 => return .u (← Universe.sample 2)
   | fuel + 1 => do
       match ← SampleableExt.interpSample (Fin 3) with
-      | 0 => return .u none (← Universe.sample 2)
+      | 0 => return .u (← Universe.sample 2)
       | 1 => return Ty.arrow (← Ty.sample n fuel) (← Ty.sample (n + 1) fuel)
-      | 2 => return .el none (← Tm.sample n fuel)
+      | 2 => return .el (← Tm.sample n fuel)
 
 def Tm.sample (n : Nat) : Nat → Gen (Tm n)
   | 0 => do
       if h : 0 < n then
         let i ← SampleableExt.interpSample Nat
-        return .var none ⟨i % n, Nat.mod_lt i h⟩
-      else return .const none `x []
+        return .var ⟨i % n, Nat.mod_lt i h⟩
+      else return .const `x []
   | fuel + 1 => do
       match ← SampleableExt.interpSample (Fin 4) with
       | 0 =>
           if h : 0 < n then
             let i ← SampleableExt.interpSample Nat
-            return .var none ⟨i % n, Nat.mod_lt i h⟩
+            return .var ⟨i % n, Nat.mod_lt i h⟩
           else
-            return .const none `x []
-      | 1 => return .const none `c []
-      | 2 => return .lam none ⟨none, .anonymous, ← Ty.sample n fuel⟩ (← Tm.sample (n + 1) fuel)
-      | 3 => return .app none (← Tm.sample n fuel) (← Tm.sample n fuel)
+            return .const `x []
+      | 1 => return .const `c []
+      | 2 => return .lam ⟨.anonymous, ← Ty.sample n fuel⟩ (← Tm.sample (n + 1) fuel)
+      | 3 => return .app (← Tm.sample n fuel) (← Tm.sample n fuel)
 end
 
 instance {n} : Arbitrary (Ty n) where

@@ -12,44 +12,44 @@ open Lean (Name)
 mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
-  | .u _ i => return .u i.normalise
-  | .pi _ ⟨_, x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
-  | .el _ t => do doEl (← t.eval)
+  | .u i => return .u i.normalise
+  | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
+  | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → MetaM (VTy n)
   | .u' i => return .u i.normalise
-  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el none b⟩
+  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
   | .neutral ne => return .el ne
-  | .lam .. => throw (.msg "doEl: expected type code or neutral")
+  | .lam .. => panic! "doEl: expected type code or neutral"
 
 partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
-  | .u' _ i => return .u' i.normalise
-  | .var _ i => return (← read).get i
-  | .const _ name us => deltaReduction name (us.map Universe.normalise)
-  | .lam _ ⟨_, x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
-  | .app _ f a => do (← f.eval).app (← a.eval)
-  | .pi' _ ⟨_, x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
-  | .proj _ i t => do (← t.eval).proj i
-  | .letE _ _x _a t body => do body.eval (.cons (← t.eval) (← read))
+  | .u' i => return .u' i.normalise
+  | .var i => return (← read).get i
+  | .const name us => deltaReduction name (us.map Universe.normalise)
+  | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
+  | .app f a => do (← f.eval).app (← a.eval)
+  | .pi' ⟨x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
+  | .proj i t => do (← t.eval).proj i
+  | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
 partial def VTm.app {n} (f a : VTm n) : MetaM (VTm n) :=
   match f with
-  | .u' .. => throw (.msg "VTm.app: expected lambda or neutral")
+  | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _param clos => betaReduction clos a
   | .neutral ne => do
     match ← iotaReduction ne a with
     | some result => return result
     | none => return .neutral (ne.app a)
-  | .pi' .. => throw (.msg "VTm.app: expected lambda or neutral")
+  | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
-  | .u' .. => throw (.msg "VTm.proj: expected neutral")
-  | .lam .. => throw (.msg "VTm.proj: expected neutral")
+  | .u' .. => panic! "VTm.proj: expected neutral"
+  | .lam .. => panic! "VTm.proj: expected neutral"
   | .neutral ne => do
     match ← projReduction ne i with
     | some result => return result
     | none => return .neutral (ne.proj i)
-  | .pi' .. => throw (.msg s!"VTm.proj: expected neutral")
+  | .pi' .. => panic! "VTm.proj: expected neutral"
 
 /-- δ-reduction definition unfolding -/
 @[inline]

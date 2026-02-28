@@ -60,6 +60,9 @@ deriving Repr
 
 end
 
+instance {n} : Inhabited (VTy n) := ⟨.u .zero⟩
+instance {n} : Inhabited (VTm n) := ⟨.u' .zero⟩
+
 def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
 def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
 def VTm.const {n} (name : Name) (us : List Universe := []) : VTm n := .neutral ⟨.const name us, .nil⟩

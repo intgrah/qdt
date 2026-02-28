@@ -9,44 +9,46 @@ open Incremental (Engine TaskM Key Val)
 open System (FilePath)
 
 partial def forceElaborateModule (visited : Std.HashSet FilePath) (filepath : FilePath) :
-    TaskM Error Val (Nat × Std.HashSet FilePath) := do
-  if visited.contains filepath then
+    TaskM Val (Nat × Std.HashSet FilePath) := do
+  if filepath ∈ visited then
     return (0, visited)
   let mut count := 0
   let mut visited := visited.insert filepath
   let importNames ← fetchQ (Key.moduleImports filepath)
   for modName in importNames.toArray do
     match ← fetchQ (Key.moduleFile modName) with
-    | none => throw (.msg s!"Import not found: {modName}")
+    | none =>
+        IO.toEIO (fun _ => ()) <| IO.eprintln s!"[warn] Module not found: {modName}"
     | some depFile =>
         let (c, v) ← forceElaborateModule visited depFile
         count := count + c
         visited := v
-  let ordering : List Incremental.TopDecl ← fetchQ (Key.declOrdering filepath)
-  for decl in ordering do
-    let localEnv ← fetchQ (Key.elabTop filepath decl)
-    count := count + localEnv.size
+  let (env, _info) ← fetchQ (Key.elabModule filepath)
+  let importedEnv ← fetchQ (Key.importedEnv filepath)
+  let fileCount := env.size - importedEnv.size
+  IO.toEIO (fun _ => ()) <| IO.eprintln s!"[count] {filepath}: {fileCount} entries"
+  count := count + fileCount
   return (count, visited)
 
 private def countModuleEntries (filepath : FilePath) :
-    TaskM Error Val Nat := do
+    TaskM Val Nat := do
   let (count, _) ← forceElaborateModule (Std.HashSet.emptyWithCapacity 256) filepath
   return count
 
-private def runModuleOnce (ctx : Incremental.BaseContext) (engine : Engine Error Val) (filepath : FilePath) : IO (Engine Error Val) := do
+private def runModuleOnce (ctx : Incremental.BaseContext) (engine : Engine Val) (filepath : FilePath) : IO (Engine Val) := do
   let t0 ← IO.monoMsNow
   match ← (Incremental.run ctx engine (countModuleEntries filepath)).toIO' with
   | .ok (count, engine') =>
       let t1 ← IO.monoMsNow
       println!"{count} entries, {t1 - t0}ms"
       pure engine'
-  | .error err =>
+  | .error () =>
       let t1 ← IO.monoMsNow
-      println!"[error] {err}"
+      println!"[error] cycle detected"
       println!"{t1 - t0}ms"
       pure engine
 
-def watchLoop (ctx : Incremental.BaseContext) (engine : Engine Error Val) (entryFile : FilePath) : IO Unit := do
+def watchLoop (ctx : Incremental.BaseContext) (engine : Engine Val) (entryFile : FilePath) : IO Unit := do
   let engine ← IO.mkRef (← runModuleOnce ctx engine entryFile)
   let pending ← IO.mkRef []
 
@@ -95,7 +97,7 @@ def run (parsed : Parsed) : IO UInt32 := do
   println!"[config] Entry: {filePath}"
   println!"[config] Source directories: {config.sourceDirectories}"
 
-  let engine : Engine Error Val := Incremental.newEngine
+  let engine : Engine Val := Incremental.newEngine
 
   let ctx : Incremental.BaseContext := { config, overrides := ∅ }
 
