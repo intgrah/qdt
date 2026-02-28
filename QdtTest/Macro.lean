@@ -1,16 +1,19 @@
 import Qdt
 import Qdt.Incremental
-import Qdt.Frontend.Macro
 
 open Qdt
-open Incremental (Engine Key Val TaskM)
+open Incremental (Engine Key Val TaskM BaseContext)
 open Lean (Term MacroM)
 
-private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Global) := do
+private def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
+  let cst := match Frontend.Parser.parse src with
+    | .ok cst => cst
+    | .error e => panic! s!"parse error at {e.pos}: {e.msg}"
   let config : Config := Config.empty
-  let engine : Engine Error Val := Incremental.newEngine
-  let task : TaskM Error Val Global := do
-    let prog := Frontend.Cst.Program.desugar prog
+  let ctx : BaseContext := { config, overrides := ∅ }
+  let engine : Engine Val := Incremental.newEngine
+  let (asts, _) := Frontend.desugarProgram cst
+  let task : TaskM Val (Array Diagnostic × Global) := do
     let coreCtx : CoreContext := CoreContext.empty
     let init : CoreState := {
       modules := Std.HashMap.emptyWithCapacity 8
@@ -19,39 +22,37 @@ private def elabProg (prog : Frontend.Cst.Program) : IO (Except Error Global) :=
       errors := #[]
     }
     let action : CoreM CoreState := do
-      for cmd in prog do
-        match cmd with
-        | .import _ => pure ()
-        | .definition d => elabDefinition d
-        | .example ex => elabExample ex
-        | .axiom a => elabAxiom a
-        | .inductive i => elabInductiveCmd i
-        | .structure s => elabStructureCmd s
+      for ast in asts do
+        if let some d := parseDefinition ast then elabDefinition d
+        else if let some ex := parseExample ast then elabExample ex
+        else if let some a := parseAxiom ast then elabAxiom a
+        else if let some i := parseInductive ast then elabInductiveCmd i
+        else if let some s := parseStructure ast then elabStructureCmd s
       get
-    let st ← (action.run coreCtx).run' init
-    if st.errors.isEmpty then
-      pure st.localEnv
-    else
-      throw st.errors[0]!
-  match ← Incremental.run config engine task with
-  | .ok (env, _) => pure (.ok env)
-  | .error e => pure (.error e)
+    let ((result, elabInfo), st) ← ((action.run coreCtx).run.run).run init
+    let diagnostics := elabInfo.diagnostics
+    match result with
+    | .ok s => return (diagnostics, s.localEnv)
+    | .error e => return (diagnostics.push { path := [], error := e }, st.localEnv)
+  match ← (Incremental.run ctx engine task).toIO' with
+  | .ok ((diagnostics, env), _) => pure (diagnostics, env)
+  | .error () => pure (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
-private def shouldPass (prog : Frontend.Cst.Program) : IO Unit := do
-  match ← elabProg prog with
-  | .ok _ => pure ()
-  | .error e => throw (IO.userError s!"expected success, got: {e}")
+private def shouldPass (src : String) : IO Unit := do
+  let (diagnostics, _) ← elabProgFromString src
+  if diagnostics.isEmpty then
+    pure ()
+  else
+    throw (IO.userError s!"expected success, got: {diagnostics[0]!.error}")
 
-private def shouldFail (check : Error → Bool) (prog : Frontend.Cst.Program) : IO Unit := do
-  match ← elabProg prog with
-  | .ok _ => throw (IO.userError "expected error, got success")
-  | .error e =>
-      if check e then pure ()
-      else throw (IO.userError s!"wrong error: {e}")
-
-private def termListExpr (xs : List Term) : MacroM Term := do
-  let xsArray := xs.toArray
-  `([$[$xsArray],*])
+private def shouldFail (check : Error → Bool) (src : String) : IO Unit := do
+  let (diagnostics, _) ← elabProgFromString src
+  if diagnostics.isEmpty then
+    throw (IO.userError "expected error, got success")
+  else
+    let err := diagnostics[0]!.error
+    if check err then pure ()
+    else throw (IO.userError s!"wrong error: {err}")
 
 /--
 `#pass (prog)` expects `prog` to elaborate successfully.
@@ -60,9 +61,8 @@ syntax "#pass" "(" command* ")" : command
 
 macro_rules
   | `(command| #pass ($[$cs:command]*)) => do
-      let cmdTerms ← cs.mapM fun c => Frontend.Macro.cmd c.raw
-      let prog ← termListExpr cmdTerms.toList
-      `(command| #eval shouldPass $prog)
+      let src := String.intercalate "\n" (cs.toList.map (·.raw.prettyPrint.pretty))
+      `(command| #eval shouldPass $(Lean.quote src))
 
 /--
 `#fail (prog) with pat` expects `prog` to fail with
@@ -72,6 +72,5 @@ syntax "#fail" "(" command* ")" "with" term : command
 
 macro_rules
   | `(command| #fail ($[$cs:command]*) with $pat:term) => do
-      let cmdTerms ← cs.mapM fun c => Frontend.Macro.cmd c.raw
-      let prog ← termListExpr cmdTerms.toList
-      `(command| #eval shouldFail (· matches $pat) $prog)
+      let src := String.intercalate "\n" (cs.toList.map (·.raw.prettyPrint.pretty))
+      `(command| #eval shouldFail (· matches $pat) $(Lean.quote src))
