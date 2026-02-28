@@ -694,33 +694,34 @@ def desugarImport (cst : Cst) : DesugarM Ast := do
       | none => return .missing
   | _ => return .missing
 
+private def matchKind (kind : SyntaxNodeKind) (name : String) : Bool :=
+  kind == name.toName || kind.toString == name
+
 partial def desugarCommand (cst : Cst) : DesugarM Ast := do
   recordMapping
-  dbg_trace "desugarCommand: {match cst with | .node k _ => k | .token k _ => k}"
   match cst with
-  | .node `Lean.Parser.Command.declaration args =>
-      let nonTrivia := nonTriviaIndices args
-      if h : nonTrivia.size ≥ 2 then
-        desugarCommand nonTrivia[1].cst
-      else
-        return .missing
-  | .node `Lean.Parser.Command.definition _ => desugarDefinition cst
-  | .node `Lean.Parser.Command.axiom _ => desugarAxiom cst
-  | .node `Lean.Parser.Command.inductive _ => desugarInductive cst
-  | .node `Lean.Parser.Command.structure _ => desugarStructure cst
-  | .node `Lean.Parser.Command.example _ => desugarExample cst
-  | .node `Lean.Parser.Command.import _ => desugarImport cst
+  | .node kind args =>
+      if matchKind kind "Lean.Parser.Command.declaration" then
+        let nonTrivia := nonTriviaIndices args
+        if h : nonTrivia.size ≥ 2 then
+          desugarCommand nonTrivia[1].cst
+        else
+          return .missing
+      else if matchKind kind "Lean.Parser.Command.definition" then desugarDefinition cst
+      else if matchKind kind "Lean.Parser.Command.axiom" then desugarAxiom cst
+      else if matchKind kind "Lean.Parser.Command.inductive" then desugarInductive cst
+      else if matchKind kind "Lean.Parser.Command.structure" then desugarStructure cst
+      else if matchKind kind "Lean.Parser.Command.example" then desugarExample cst
+      else if matchKind kind "Lean.Parser.Command.import" then desugarImport cst
+      else return .missing
   | _ => return .missing
 
 def desugarProgram (module : Cst) : (Array Ast × SourceMap) :=
   let action : DesugarM (Array Ast) := do
     match module with
     | .node kind args =>
-        dbg_trace "desugarProgram kind == Module: {kind == `Lean.Parser.Module}"
-        dbg_trace "kind: {repr kind}"
-        if kind == `Lean.Parser.Module then
+        if matchKind kind "Lean.Parser.Module" then
           let nonTrivia := nonTriviaIndices args
-          dbg_trace "nonTrivia: {nonTrivia.size}"
           let result ← nonTrivia.toList.mapIdxM fun i ic =>
             withCstChild ic.idx <| withAstChild i <| desugarCommand ic.cst
           return result.toArray
