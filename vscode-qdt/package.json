@@ -50,6 +50,14 @@
       {
         "command": "qdt.input.convert",
         "title": "QDT: Convert abbreviation"
+      },
+      {
+        "command": "qdt.restartServer",
+        "title": "QDT: Restart server"
+      },
+      {
+        "command": "qdt.stopServer",
+        "title": "QDT: Stop server"
       }
     ],
     "keybindings": [

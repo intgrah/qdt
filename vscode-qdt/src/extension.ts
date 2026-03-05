@@ -35,6 +35,15 @@ export async function activate(
   client = new LanguageClient("qdt", "QDT", serverOptions, clientOptions);
   context.subscriptions.push({ dispose: () => client?.stop() });
 
+  context.subscriptions.push(
+    VSCode.commands.registerCommand("qdt.restartServer", async () => {
+      await client?.restart();
+    }),
+    VSCode.commands.registerCommand("qdt.stopServer", async () => {
+      await client?.stop();
+    }),
+  );
+
   try {
     await client.start();
   } catch (err: unknown) {
