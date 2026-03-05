@@ -29,25 +29,16 @@
     "declarations": {
       "patterns": [
         {
-          "comment": "Definition declarations: def foo, axiom bar, example",
+          "comment": "Definition declarations: def foo, axiom bar, inductive Foo, structure Foo",
           "begin": "\\b(def|axiom|opaque|inductive|structure)\\b\\s*",
           "beginCaptures": {
             "1": { "name": "keyword.declaration.qdt" }
           },
-          "end": "(?=[:\\(\\{]|:=|$)",
+          "end": "(?=\\bwhere\\b|[:\\(\\{]|:=|$)",
           "patterns": [
             { "include": "#comments" },
             { "include": "#definitionName" }
           ]
-        },
-        {
-          "comment": "Type declarations: inductive Nat, structure Prod",
-          "begin": "\\b(inductive|structure)\\b\\s*",
-          "beginCaptures": {
-            "1": { "name": "keyword.declaration.qdt" }
-          },
-          "end": "(?=\\bwhere\\b|[:\\(\\{]|$)",
-          "patterns": [{ "include": "#comments" }, { "include": "#typeName" }]
         },
         {
           "comment": "Example (no name)",
