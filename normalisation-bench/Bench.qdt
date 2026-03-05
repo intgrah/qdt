@@ -43,12 +43,12 @@ def t2Mb : Tree := fullTree n20b.{1}
 def t4Mb : Tree := fullTree n21b.{1}
 def t8Mb : Tree := fullTree n22b.{1}
 
-def Eq.{u} (A : Type u) (x y : A) : Type (u + 1) := (P : A → Type u) → P x → P y
-def Eq.refl.{u} (A : Type u) (x : A) : Eq.{u} A x x := fun P px => px
+def Eq.{u} (α : Type u) (x y : α) : Type (u + 1) := (P : α → Type u) → P x → P y
+def Eq.refl.{u} (α : Type u) (a : α) : Eq.{u} α a a := fun P px => px
 
--- def ex1 : Eq.{1} Nat.{0} n5M.{0} n5Mb.{0} := Eq.refl.{1} Nat.{0} n5M.{0}
--- def ex2 : Eq.{1} Nat.{0} n10M.{0} n10Mb.{0} := Eq.refl.{1} Nat.{0} n10M.{0}
+def test₁ : Eq.{1} Nat.{0} n5M.{0} n5Mb.{0} := Eq.refl.{1} Nat.{0} n5M.{0}
+def test₂ : Eq.{1} Nat.{0} n10M.{0} n10Mb.{0} := Eq.refl.{1} Nat.{0} n10M.{0}
 
-def ex4.{u} : Eq.{1} Tree t2M t2Mb := Eq.refl.{1} Tree t2M
-def ex4.{u} : Eq.{1} Tree t4M t4Mb := Eq.refl.{1} Tree t4M
-def ex5.{u} : Eq.{1} Tree t8M t8Mb := Eq.refl.{1} Tree t8M
+def test₃.{u} : Eq.{1} Tree t2M t2Mb := Eq.refl.{1} Tree t2M
+def test₄.{u} : Eq.{1} Tree t4M t4Mb := Eq.refl.{1} Tree t4M
+def test₅.{u} : Eq.{1} Tree t8M t8Mb := Eq.refl.{1} Tree t8M
