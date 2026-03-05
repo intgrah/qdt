@@ -5,14 +5,17 @@ import {
   type LanguageClientOptions,
   type ServerOptions,
 } from "vscode-languageclient/node";
+import { AbbreviationFeature } from "./abbreviation/AbbreviationFeature";
 
 let client: LanguageClient | undefined;
 
 export async function activate(
-  context: VSCode.ExtensionContext
+  context: VSCode.ExtensionContext,
 ): Promise<void> {
   const output = VSCode.window.createOutputChannel("QDT");
   context.subscriptions.push(output);
+
+  context.subscriptions.push(new AbbreviationFeature());
 
   const serverOptions: ServerOptions = {
     command: "qdt-lsp",
