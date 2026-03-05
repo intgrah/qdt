@@ -43,7 +43,7 @@
       {
         "language": "qdt",
         "scopeName": "source.qdt",
-        "path": "./syntaxes/qdt.tmLanguage.json"
+        "path": "./syntaxes/qdt.json"
       }
     ],
     "commands": [
