@@ -4,79 +4,14 @@ import Std.Data.HashSet
 
 import Qdt.Config
 
-namespace Qdt
-
-namespace Incremental
+namespace Qdt.Incremental
 
 open Std (DHashMap HashMap HashSet)
 open System (FilePath)
 
 universe u
 
-variable {Q : Type} {R : Q → Type} [BEq Q] [LawfulBEq Q] [Hashable Q]
-
-structure Memo (R : Q → Type) (q : Q) where
-  value : R q
-  deps : HashMap Q UInt64
-
-structure Engine (R : Q → Type) where
-  cache : DHashMap Q (Memo R) := DHashMap.emptyWithCapacity 1024
-  reverseDeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
-  fingerprint : ∀ q, R q → UInt64
-  isInput : Q → Bool
-
-namespace Engine
-
-def addReverseDep (engine : Engine R) (dependency dependent : Q) : Engine R :=
-  let existing := engine.reverseDeps.getD dependency (HashSet.emptyWithCapacity 8)
-  { engine with reverseDeps := engine.reverseDeps.insert dependency (existing.insert dependent) }
-
-partial def getTransitiveDependents (engine : Engine R) (keys : HashSet Q) : HashSet Q :=
-  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
-    match worklist with
-    | [] => visited
-    | k :: rest =>
-        if visited.contains k then
-          go rest visited
-        else
-          let visited := visited.insert k
-          let dependents := engine.reverseDeps.getD k (HashSet.emptyWithCapacity 0)
-          let newWork := dependents.toList.filter (!visited.contains ·)
-          go (newWork ++ rest) visited
-  go keys.toList (HashSet.emptyWithCapacity keys.size)
-
-def invalidate (engine : Engine R) (changedKeys : HashSet Q) : Engine R :=
-  let toInvalidate := engine.getTransitiveDependents changedKeys
-  let newCache := toInvalidate.fold (init := engine.cache) fun cache key =>
-    cache.erase key
-  { engine with cache := newCache }
-
-def invalidateFiles (engine : Engine R) (changedFiles : List Q) : Engine R :=
-  let changedSet := changedFiles.foldl (init := HashSet.emptyWithCapacity changedFiles.length) (·.insert ·)
-  engine.invalidate changedSet
-
-end Engine
-
-structure BaseContext where
-  config : Config
-  overrides : HashMap FilePath String
-
-structure RunState (R : Q → Type) where
-  engine : Engine R
-  started : DHashMap Q (Memo R)
-  stack : List Q
-  deps : HashMap Q UInt64
-
-abbrev BaseM {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
-  ReaderT BaseContext (StateRefT (RunState R) (EIO Unit))
-
-set_option checkBinderAnnotations false in
-abbrev Task
-    (c : (Type u → Type u) → Type (u + 1))
-    (Q : Type u)
-    (R : Q → Type u)
-    (f : Type u → Type u) [c f] :=
-  ReaderT (∀ q : Q, f (R q)) f
+variable (Q : Type) (R : Q → Type) [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
 /-!
 [Build systems à la carte]
@@ -86,118 +21,239 @@ The choice of the constraint `c` has concrete meanings:
 - `c := Monad` - dynamic dependencies
 -/
 
-abbrev TaskT := Task (c := Monad)
+structure Task (α : Type) : Type 1 where
+  run : ∀ {f} [Monad f], ReaderT (∀ q, f (R q)) f α
 
-abbrev TaskM {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
-  TaskT Q R (BaseM R)
+namespace Task
 
-def TaskM.fetch (q : Q) : TaskM R (R q) :=
-  fun fetch => fetch q
+variable {Q : Type} {R : Q → Type} {α β : Type}
 
-export TaskM (fetch)
+def pure (a : α) : Task Q R α := ⟨fun {f} [Monad f] => return a⟩
+def bind (t : Task Q R α) (f : α → Task Q R β) : Task Q R β :=
+  ⟨fun {g} [Monad g] => t.run >>= fun a => (f a).run⟩
+def map (f : α → β) (t : Task Q R α) : Task Q R β :=
+  ⟨fun {g} [Monad g] => f <$> t.run⟩
+def fetch (q : Q) : Task Q R (R q) := ⟨fun {f} [Monad f] => do (← read) q⟩
 
-def trackDeps {α}
-    (fingerprint : ∀ q, R q → UInt64)
-    (task : TaskM R α) :
-    TaskM R (α × HashMap Q UInt64) := do
-  let oldDeps := (← get).deps
-  modify fun st => { st with deps := HashMap.emptyWithCapacity 64 }
-  let base ← read
-  let fetchQ' : ∀ q, BaseM R (R q) := fun q => do
-    let v ← base q
-    let ds := (← get).deps
-    if !ds.contains q then
-      modify fun st => { st with deps := st.deps.insert q (fingerprint q v) }
-    pure v
-  let a ← task.run fetchQ'
-  let deps := (← get).deps
-  modify fun st => { st with deps := oldDeps }
-  return (a, deps)
+instance : Monad (Task Q R) where
+  pure := pure
+  bind := bind
+  map := map
 
-def verifyDeps
-    (fingerprint : ∀ q, R q → UInt64)
-    (deps : HashMap Q UInt64) :
-    TaskM R Bool := do
-  deps.toList.allM fun (q, old) => do
-    try
-      let v ← fetch q
-      return fingerprint q v == old
-    catch _ => return false
+end Task
 
-def runWithEngine {α}
-    (rules : ∀ q, TaskM R (R q))
-    (ctx : BaseContext)
-    (engine : Engine R)
-    (task : TaskM R α) :
-    EIO Unit (α × Engine R) := do
-  let init : RunState R :=
-    {
-      engine
+structure Memo (q : Q) where
+  value : R q
+  deps : HashMap Q UInt64
+  hash : UInt64
+  hash_value : Hashable.hash value = hash := by rfl
+
+structure Store where
+  cache : DHashMap Q (Memo Q R) := DHashMap.emptyWithCapacity 1024
+  reverseDeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
+
+namespace Store
+
+def addReverseDep (store : Store Q R) (dependency dependent : Q) : Store Q R :=
+  let existing := store.reverseDeps.getD dependency ∅
+  let existing := existing.insert dependent
+  let reverseDeps := store.reverseDeps.insert dependency existing
+  { store with reverseDeps }
+
+partial def getTransitiveDependents (store : Store Q R) (keys : HashSet Q) : HashSet Q :=
+  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
+    match worklist with
+    | [] => visited
+    | k :: rest =>
+        if visited.contains k then
+          go rest visited
+        else
+          let visited := visited.insert k
+          let dependents := store.reverseDeps.getD k (HashSet.emptyWithCapacity 0)
+          let newWork := dependents.toList.filter (!visited.contains ·)
+          go (newWork ++ rest) visited
+  go keys.toList (HashSet.emptyWithCapacity keys.size)
+
+def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
+  let toInvalidate := store.getTransitiveDependents Q R changedKeys
+  let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
+  { store with cache }
+
+end Store
+
+def Tasks : Type 1 :=
+  ∀ q, Option (Task Q R (R q))
+
+structure ProfEntry where
+  hits    : Nat := 0
+  misses  : Nat := 0
+  totalNs : Nat := 0
+
+abbrev Profile := IO.Ref (HashMap String ProfEntry)
+
+def Build : Type 1 :=
+  ∀ {α}, Tasks Q R → Store Q R → Task Q R α → EIO Unit (α × Store Q R)
+
+namespace Build
+
+partial def busy : Build Q R :=
+  fun tasks store task => do
+    let storeRef : ST.Ref IO.RealWorld (Store Q R) ← ST.mkRef store
+    let rec fetch (q : Q) : EIO Unit (R q) := do
+      match tasks q with
+      | none =>
+          match (← storeRef.get).cache.get? q with
+          | some memo => return memo.value
+          | none => throw ()
+      | some t =>
+          let v ← t.run fetch
+          storeRef.modify fun s =>
+            let memo := { value := v, deps := ∅, hash := hash v }
+            let cache := s.cache.insert q memo
+            { s with cache }
+          return v
+    let a ← task.run fetch
+    let s ← storeRef.get
+    pure (a, s)
+
+private structure ShakeState where
+  store : Store Q R
+  started : DHashMap Q (Memo Q R)
+  stack : List Q
+  currentDeps : HashMap Q UInt64
+
+def shake [∀ q, Hashable (R q)]
+    (label : Q → String := fun _ => "?")
+    (prof : Option Profile := none) : Build Q R :=
+  fun {α} tasks store task => do
+    let init : ShakeState Q R := {
+      store
       started := DHashMap.emptyWithCapacity 1024
       stack := []
-      deps := HashMap.emptyWithCapacity 64
+      currentDeps := HashMap.emptyWithCapacity 64
     }
-  let action : BaseM R (α × Engine R) := do
-    let fetchRef : ST.Ref IO.RealWorld (∀ q, BaseM R (R q)) ←
-      ST.mkRef (fun _ => throw ())
 
-    let fetchIO (q : Q) : BaseM R (R q) := do
-      (← fetchRef.get) q
+    let action : StateRefT (ShakeState Q R) (EIO Unit) (α × Store Q R) := do
+      let fetchRef : ST.Ref IO.RealWorld (∀ q, StateRefT (ShakeState Q R) (EIO Unit) (R q)) ←
+        ST.mkRef fun _ => throw ()
 
-    let rulesIO (q : Q) : BaseM R (R q) := do
-      let st ← get
+      let rec buildRule (q : Q) : StateRefT (ShakeState Q R) (EIO Unit) (R q) := do
+        let st ← get
 
-      match st.stack.head? with
-      | some dependent =>
-          modify fun st =>
-            { st with engine := st.engine.addReverseDep q dependent }
-      | none => pure ()
-
-      match st.started.get? q with
-      | some memo => pure memo.value
-      | none =>
-          if st.stack.contains q then
-             throw ()
-          modify fun st => { st with stack := q :: st.stack }
-          try
-            let st ← get
-            let engine := st.engine
-
-            let recompute (store : Bool) : BaseM R (R q) := do
-              let (value, deps) ← (trackDeps engine.fingerprint (rules q)).run fetchIO
-              let memo : Memo R q := { value, deps }
-              modify fun st => { st with started := st.started.insert q memo }
-              if store then
+        match st.started.get? q with
+        | some memo =>
+            match st.stack.head? with
+            | some dependent =>
                 modify fun st =>
-                  { st with engine := { st.engine with cache := st.engine.cache.insert q memo } }
-              pure value
+                  let store := st.store.addReverseDep Q R q dependent
+                  { st with store }
+            | none => pure ()
+            pure memo.value
+        | none =>
+            match st.stack.head? with
+            | some dependent =>
+                modify fun st =>
+                  let store := st.store.addReverseDep Q R q dependent
+                  { st with store }
+            | none => pure ()
+            if st.stack.contains q then
+              let stackStr := st.stack.map label |>.toString
+              (IO.eprintln s!"[cycle] {label q} in stack {stackStr}").catchExceptions fun _ => pure ()
+              throw ()
+            modify fun st => { st with stack := q :: st.stack }
+            try
+              let st ← get
 
-            if engine.isInput q then
-              recompute (store := false)
-            else
-              match engine.cache.get? q with
-              | some memo =>
-                  if ← (verifyDeps engine.fingerprint memo.deps).run fetchIO then
-                    modify fun st => { st with started := st.started.insert q memo }
-                    pure memo.value
-                  else
-                    recompute (store := true)
+              match tasks q with
               | none =>
-                  recompute (store := true)
-          finally
-            modify fun st =>
-              match st.stack with
-              | [] => st
-              | _ :: rest => { st with stack := rest }
+                  match st.store.cache.get? q with
+                  | some memo =>
+                      modify fun st => { st with started := st.started.insert q memo }
+                      pure memo.value
+                  | none =>
+                      throw ()
+              | some taskQ =>
+                  let compute : StateRefT (ShakeState Q R) (EIO Unit) (R q × HashMap Q UInt64) := do
+                    let oldDeps := (← get).currentDeps
+                    modify fun st => { st with currentDeps := HashMap.emptyWithCapacity 64 }
+                    let fetch' : ∀ q, StateRefT (ShakeState Q R) (EIO Unit) (R q) := fun q => do
+                      let v ← (← fetchRef.get) q
+                      let ds := (← get).currentDeps
+                      if !ds.contains q then
+                        let h := match (← get).started.get? q with
+                          | some memo => memo.hash
+                          | none => hash v
+                        modify fun st => { st with currentDeps := st.currentDeps.insert q h }
+                      pure v
+                    let a ← taskQ.run fetch'
+                    let deps := (← get).currentDeps
+                    modify fun st => { st with currentDeps := oldDeps }
+                    pure (a, deps)
 
-    fetchRef.set rulesIO
+                  let verifyDeps (deps : HashMap Q UInt64) : StateRefT (ShakeState Q R) (EIO Unit) Bool := do
+                    deps.toList.allM fun (depKey, oldHash) => do
+                      try
+                        let _ ← (← fetchRef.get) depKey
+                        let h := match (← get).started.get? depKey with
+                          | some memo => memo.hash
+                          | none => 0
+                        pure (h == oldHash)
+                      catch _ => pure false
 
-    let a ← task.run fetchIO
-    let st ← get
-    pure (a, st.engine)
+                  let recompute : StateRefT (ShakeState Q R) (EIO Unit) (R q) := do
+                    let t0 ← IO.monoNanosNow
+                    let (value, deps) ← compute
+                    let t1 ← IO.monoNanosNow
+                    if let some p := prof then
+                      p.modify fun m =>
+                        let e := m.getD (label q) {}
+                        m.insert (label q) { e with misses := e.misses + 1, totalNs := e.totalNs + (t1 - t0) }
+                    let memo : Memo Q R q := { value, deps, hash := hash value }
+                    modify fun st =>
+                      { st with
+                        started := st.started.insert q memo
+                        store := { st.store with cache := st.store.cache.insert q memo } }
+                    pure value
 
-  (action ctx).run' init
+                  match st.store.cache.get? q with
+                  | some memo =>
+                      if ← verifyDeps memo.deps then
+                        if let some p := prof then
+                          p.modify fun m =>
+                            let e := m.getD (label q) {}
+                            m.insert (label q) { e with hits := e.hits + 1 }
+                        modify fun st => { st with started := st.started.insert q memo }
+                        pure memo.value
+                      else
+                        recompute
+                  | none =>
+                      recompute
+            finally
+              modify fun st =>
+                match st.stack with
+                | [] => st
+                | _ :: rest => { st with stack := rest }
 
-end Incremental
+      fetchRef.set buildRule
 
-end Qdt
+      let a ← task.run (← fetchRef.get)
+      let st ← get
+      return (a, st.store)
+
+    action.run' init
+
+end Build
+
+private def padR (s : String) (n : Nat) : String := s ++ String.ofList (List.replicate (n - s.length) ' ')
+private def padL (s : String) (n : Nat) : String := String.ofList (List.replicate (n - s.length) ' ') ++ s
+
+def Profile.print (p : Profile) : IO Unit := do
+  let m ← p.get
+  let rows := m.toArray.map fun (k, e) => (k, e.hits, e.misses, e.totalNs / 1000000)
+  let rows := rows.toList.mergeSort (fun a b => a.2.2.2 > b.2.2.2)
+  println!"{padR "Key" 22} {padL "hits" 8} {padL "misses" 8} {padL "ms" 10}"
+  println! String.ofList (List.replicate 52 '-')
+  for (k, hits, misses, ms) in rows do
+    IO.println s!"{padR k 22} {padL (toString hits) 8} {padL (toString misses) 8} {padL (toString ms) 10}"
+
+end Qdt.Incremental

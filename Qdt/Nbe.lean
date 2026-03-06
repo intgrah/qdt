@@ -9,6 +9,7 @@ namespace Qdt
 
 open Lean (Name)
 
+
 mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
@@ -27,19 +28,19 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .var i => return (← read).get i
   | .const name us => deltaReduction name (us.map Universe.normalise)
   | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
-  | .app f a => do (← f.eval).app (← a.eval)
+  | .app fn arg => do (← fn.eval).app (← arg.eval)
   | .pi' ⟨x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
-partial def VTm.app {n} (f a : VTm n) : MetaM (VTm n) :=
-  match f with
+partial def VTm.app {n} (fn arg : VTm n) : MetaM (VTm n) :=
+  match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
-  | .lam _param clos => betaReduction clos a
+  | .lam _param clos => betaReduction clos arg
   | .neutral ne => do
-    match ← iotaReduction ne a with
+    match ← iotaReduction ne arg with
     | some result => return result
-    | none => return .neutral (ne.app a)
+    | none => return .neutral (ne.app arg)
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
@@ -51,7 +52,6 @@ partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
     | none => return .neutral (ne.proj i)
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
-/-- δ-reduction definition unfolding -/
 @[inline]
 partial def deltaReduction {n} (name : Name) (us : List Universe) : MetaM (VTm n) := do
   match ← fetchDefinition name, ← fetchConstantInfo name with
@@ -60,29 +60,15 @@ partial def deltaReduction {n} (name : Name) (us : List Universe) : MetaM (VTm n
     tm.substLevels subst |>.eval .nil
   | _, _ => return .neutral ⟨.const name us, .nil⟩
 
-/-- β-reduction taken with a pinch of salt. Substitution is delayed because we have closures. -/
 @[inline]
-partial def betaReduction {n} (f : ClosTm n) (a : VTm n) : MetaM (VTm n) :=
-  let ⟨env, body⟩ := f
-  body.eval (.cons a env)
+partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : MetaM (VTm n) :=
+  let ⟨env, body⟩ := clos
+  body.eval (.cons arg env)
 
-/--
-ι-reduction is the computation rule for inductive type recursors.
-```
-This example shows one stage in the computation of 1 + 1
-
-                              rec      motive        zero     succ                major    field
----------------------------------------------------------------------------------------------------
-                              Nat.rec (fun _ => Nat) Nat.one (fun _ => Nat.succ) (Nat.succ Nat.zero) ⤳
-(fun _ => Nat.succ) Nat.zero (Nat.rec (fun _ => Nat) Nat.one (fun _ => Nat.succ) Nat.zero)
-------------------------------------------------------------------------------------------
- succ               field    (rec      motive        zero     succ               field   )
-```
--/
 @[inline]
 partial def iotaReduction {n}
     (ne : Neutral n)
-    (a : VTm n) : -- possible major premise
+    (arg : VTm n) :
     MetaM (Option (VTm n)) := do
   let ⟨.const recName recUs, sp⟩ := ne
     | return none
@@ -94,7 +80,7 @@ partial def iotaReduction {n}
   let numParamsMotivesMinorsIndices := numParamsMotivesMinors + info.numIndices
   if spList.length < numParamsMotivesMinorsIndices then
     return none
-  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ := a
+  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ := arg
     | return none
   let some rule := info.recRules.find? (fun r => r.ctorName == ctorName)
     | return none
@@ -115,11 +101,6 @@ partial def iotaReduction {n}
   else
     return none
 
-/--
-Prod-reduction is the computation rule for projections.
-
-(Prod.mk Nat Nat 2 3).0 ⤳ 2
--/
 @[inline]
 partial def projReduction {n}
     (ne : Neutral n)

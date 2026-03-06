@@ -9,11 +9,12 @@ open Cst
 structure ParseError where
   msg : String
   pos : Nat
-deriving Repr, Inhabited
+deriving Repr, Inhabited, Hashable
 
 private structure State where
   input : String
   pos : Nat
+  errors : Array ParseError
 deriving Inhabited
 
 private abbrev ParserM := StateT State (Except ParseError)
@@ -74,7 +75,7 @@ where
         | some c => advanceChar; go (acc.push c) depth
         | none => fail "unterminated block comment"
 
-private partial def trivia : ParserM (Array Cst) := do
+private def trivia : ParserM (Array Cst) := do
   let mut arr : Array Cst := #[]
   while true do
     match ← peekChar? with
@@ -100,12 +101,9 @@ private def atomRaw (s : String) : ParserM Cst := do
     | none => fail s!"expected '{s}'"
   return .token `atom s
 
-private def isIdentStart (c : Char) : Bool := c.isAlpha || c == '_' || c == '\''
-private def isIdentChar (c : Char) : Bool := c.isAlphanum || c == '_' || c == '\'' || c == '.'
-
-private partial def readIdentChars : ParserM String := do
+private def readIdentChars : ParserM String := do
   let some c ← peekChar? | fail "expected identifier"
-  if !isIdentStart c then fail "expected identifier"
+  if !Lean.isIdFirst c then fail "expected identifier"
   let mut acc := ""
   acc := acc.push c
   advanceChar
@@ -117,11 +115,11 @@ private partial def readIdentChars : ParserM String := do
         match ← peekChar? with
         | some '{' => setPos pos; break
         | some c' =>
-            if isIdentStart c' then acc := acc.push '.'
+            if Lean.isIdFirst c' then acc := acc.push '.'
             else setPos pos; break
         | none => setPos pos; break
     | some c' =>
-        if isIdentChar c' then acc := acc.push c'; advanceChar
+        if Lean.isIdRest c' then acc := acc.push c'; advanceChar
         else break
     | none => break
   return acc
@@ -159,7 +157,7 @@ private def peekIdentStr : ParserM (Option String) := do
   let pos ← getPos
   match ← peekChar? with
   | some c =>
-      if isIdentStart c then
+      if Lean.isIdFirst c then
         let name ← readIdentChars
         setPos pos
         return some name
@@ -233,7 +231,7 @@ partial def explicitBinder : ParserM Cst :=
 partial def binderName : ParserM Cst := do
   let s ← peekString 2
   match s.toList with
-  | '_' :: c :: _ => if isIdentChar c then identRaw else hole
+  | '_' :: c :: _ => if Lean.isIdRest c then identRaw else hole
   | '_' :: [] => hole
   | _ => identRaw
 
@@ -421,7 +419,7 @@ partial def parseStructField : ParserM Cst :=
 partial def parseStructure : ParserM Cst :=
   node `Lean.Parser.Command.structure <|
     one (atomRaw "structure") ++ one ws ++ one declId ++ one optDeclSig ++ trivia ++
-    one (atomRaw "where") ++ trivia ++ one parseStructField ++ many (trivia ++ one parseStructField)
+    one (atomRaw "where") ++ many (trivia ++ one parseStructField)
 
 partial def parseImport : ParserM Cst :=
   node `Lean.Parser.Command.import <| one (atomRaw "import") ++ one ws ++ one identRaw
@@ -436,23 +434,64 @@ partial def parseCommand : ParserM Cst := do
   | some "import" => parseImport
   | _ => fail "expected command"
 
-partial def parseProgram : ParserM Cst :=
-  node `Lean.Parser.Module <|
-    trivia ++ many (one parseImport ++ trivia) ++ many (one parseCommand ++ trivia)
-
 end
 
-def parse (input : String) : Except ParseError Cst :=
-  match parseProgram.run { input, pos := 0 } with
-  | .ok (cst, _) => .ok cst
-  | .error e => .error e
+private def skipUntilRecovery : ParserM Unit := do
+  while ! (← isEof) do
+    match ← peekIdentStr with
+    | some k => if k ∈ keywords then break else advanceChar
+    | none => advanceChar
+
+private def manyRecover (p : ParserM Cst) : ParserM (Array Cst) := do
+  let mut arr : Array Cst := #[]
+  while ! (← isEof) do
+    arr := arr ++ (← trivia)
+    if ← isEof then break
+    try
+      arr := arr.push (← p)
+    catch e =>
+      modify fun s => { s with errors := s.errors.push e }
+      let st ← get
+      let startPos := st.pos
+      skipUntilRecovery
+      if (← get).pos == startPos && !(← isEof) then
+        advanceChar
+      let endPos := (← get).pos
+      if startPos < endPos then
+        let skipped := String.Pos.Raw.extract st.input ⟨startPos⟩ ⟨endPos⟩
+        arr := arr.push (.token `skipped skipped)
+  return arr
+
+def parseProgram : ParserM Cst :=
+  node `Lean.Parser.Module <|
+    manyRecover parseCommand
+
+def parse (input : String) : Cst × Array ParseError :=
+  let init : State := { input, pos := 0, errors := #[] }
+  match parseProgram.run init with
+  | .ok (cst, st) => (cst, st.errors)
+  | .error e => (.token `missing "", #[e]) -- Should be unreachable with manyRecover, but as fallback
 
 def parseExpr (input : String) : Except ParseError Cst :=
-  match term.run { input, pos := 0 } with
+  match term.run { input, pos := 0, errors := #[] } with
   | .ok (cst, _) => .ok cst
   | .error e => .error e
 
-partial def showTree (cst : Cst) (indent : Nat := 0) : String :=
+def parseLean (input : String) : IO (Cst × Array ParseError) := do
+  let ictx := Lean.Parser.mkInputContext input "<input>"
+  let (header, mps, _) ← Lean.Parser.parseHeader ictx
+  let env ← Lean.mkEmptyEnvironment 0
+  let pmctx : Lean.Parser.ParserModuleContext := { env, options := {} }
+  let mut mps := mps
+  let mut children : Array Cst := #[Cst.ofLeanSyntax header]
+  while mps.pos.byteIdx < input.utf8ByteSize do
+    let (cmd, mps', _) := Lean.Parser.parseCommand ictx pmctx mps {}
+    children := children.push (Cst.ofLeanSyntax cmd)
+    if mps'.pos == mps.pos then break
+    mps := mps'
+  return (Cst.node `Lean.Parser.Module children, #[])
+
+def showTree (cst : Cst) (indent : Nat := 0) : String :=
   let pfx := "".pushn ' ' (indent * 2)
   match cst with
   | .token kind val =>

@@ -9,12 +9,11 @@ open Frontend (Path)
 
 inductive Error
   | msg (msg : String)
-  | ioError (error : IO.Error)
   | notImplemented (msg : String)
+  | importCycle (modules : List Name)
   | expectedType {c} (names : List Name) (got : Ty c)
   | syntaxError
   | duplicateUniverseParam (name : Name)
-  | higherUniverse
   | inferUnannotatedLambda
   | inferSorry
   | expectedFunctionType {c} (names : List Name) (got : Ty c)
@@ -27,67 +26,113 @@ inductive Error
   | nonPositiveOccurrence (indName : Name)
   | ctorMustReturnInductive (ctorName : Name) (indName : Name)
   | ctorParamMismatch (ctorName : Name)
-deriving Inhabited
+deriving Inhabited, Hashable
 
 instance : ToString Error where toString
-  | .msg msg => msg
-  | .ioError error => s!"IO error: {error}"
-  | .notImplemented msg => s!"Not implemented: {msg}"
-  | .expectedType names got => s!"Expected type, got {got.fmt names Prec.min}"
-  | .syntaxError => "Syntax error"
-  | .duplicateUniverseParam name => s!"Duplicate universe parameter {name}"
-  | .higherUniverse => "No higher universes than Type"
-  | .inferUnannotatedLambda => "Cannot infer type of unannotated lambda"
-  | .inferSorry => "Cannot infer type of sorry"
-  | .expectedFunctionType names got => s!"Expected function type, got {got.fmt names Prec.min}"
-  | .typeMismatch names expected got => s!"Type mismatch: expected\n{expected.fmt names Prec.min},\ngot\n{got.fmt names Prec.min}"
-  | .unboundVariable name => s!"Unbound variable {name}"
-  | .unboundUniverseVariable name => s!"Unbound universe variable {name}"
-  | .typeFamilyCtorReturnTypeRequired ctorName => s!"{ctorName}: constructor must specify return type for inductive type family"
-  | .structureResultTypeMustBeTypeUniverse structName => s!"{structName}: structure result type must be of the form Type u"
-  | .universeArgCountMismatch name expected got => s!"{name}: expected {expected} universe arguments, got {got}"
-  | .nonPositiveOccurrence indName => s!"{indName} has a non-positive occurrence"
-  | .ctorMustReturnInductive ctorName indName => s!"{ctorName} must return {indName}"
-  | .ctorParamMismatch ctorName => s!"{ctorName}: inductive type parameters must be constant throughout the definition"
+  | .msg msg =>
+    msg
+  | .notImplemented msg =>
+    s!"Not implemented: {msg}"
+  | .importCycle modules =>
+    s!"Import cycle: {modules}"
+  | .expectedType names got =>
+    s!"Expected type, got {got.fmt names Prec.min}"
+  | .syntaxError =>
+    "Syntax error"
+  | .duplicateUniverseParam name =>
+    s!"Duplicate universe parameter {name}"
+  | .inferUnannotatedLambda =>
+    "Cannot infer type of unannotated lambda"
+  | .inferSorry =>
+    "Cannot infer type of sorry"
+  | .expectedFunctionType names got =>
+    s!"Expected function type, got {got.fmt names Prec.min}"
+  | .typeMismatch names expected got =>
+    s!"Type mismatch: expected\n{expected.fmt names Prec.min},\ngot\n{got.fmt names Prec.min}"
+  | .unboundVariable name =>
+    s!"Unbound variable {name}"
+  | .unboundUniverseVariable name =>
+    s!"Unbound universe variable {name}"
+  | .typeFamilyCtorReturnTypeRequired ctorName =>
+    s!"{ctorName}: constructor must specify return type for inductive type family"
+  | .structureResultTypeMustBeTypeUniverse structName =>
+    s!"{structName}: structure result type must be of the form Type u"
+  | .universeArgCountMismatch name expected got =>
+    s!"{name}: expected {expected} universe arguments, got {got}"
+  | .nonPositiveOccurrence indName =>
+    s!"{indName} has a non-positive occurrence"
+  | .ctorMustReturnInductive ctorName indName =>
+    s!"{ctorName} must return {indName}"
+  | .ctorParamMismatch ctorName =>
+    s!"{ctorName}: inductive type parameters must be constant throughout the definition"
 
+@[pp_using_anonymous_constructor]
 structure Diagnostic where
   path : Path
   error : Error
-deriving Inhabited
+deriving Inhabited, Hashable
 
-structure TypeInfo where
+inductive HoverContent where
+  | signature (name : Name) {n : Nat} (params : Ctx 0 n) (retTy : Ty n)
+  | localVar (name : Name) (ctxNames : List Name) {n : Nat} (ty : Ty n)
+  | typeOnly (ctxNames : List Name) {n : Nat} (ty : Ty n)
+deriving Hashable
+
+structure HoverInfo where
   path : Path
-  ty : String
+  hover : HoverContent
+deriving Hashable
 
-instance : Inhabited TypeInfo := ⟨{ path := [], ty := "" }⟩
+def HoverContent.format : HoverContent → String
+  | .signature name params retTy =>
+      let rec collectParams : {a b : Nat} → List Name → Ctx a b → List String × List Name
+        | _, _, names, .nil => ([], names)
+        | _, _, names, .snoc bs ⟨pname, pty⟩ =>
+            let (prev, prevNames) := collectParams names bs
+            let x := freshName prevNames pname
+            let tyStr := toString (pty.fmt prevNames Prec.min)
+            (prev ++ [s!"({x} : {tyStr})"], x :: prevNames)
+      let rec peelPis : {m : Nat} → List Name → Ty m → List String × String
+        | _, names, .pi ⟨pname, dom⟩ cod =>
+            if pname.isAnonymous then
+              ([], toString ((Ty.pi ⟨pname, dom⟩ cod).fmt names Prec.min))
+            else
+              let x := freshName names pname
+              let domStr := toString (dom.fmt names Prec.min)
+              let (rest, retStr) := peelPis (x :: names) cod
+              (s!"({x} : {domStr})" :: rest, retStr)
+        | _, names, ty => ([], toString (ty.fmt names Prec.min))
+      let (ctxParts, ctxNames) := collectParams [] params
+      let (piParts, retStr) := peelPis ctxNames retTy
+      let allParts := ctxParts ++ piParts
+      let paramsStr := " ".intercalate allParts
+      if paramsStr.isEmpty then s!"{name} : {retStr}"
+      else s!"{name} {paramsStr} : {retStr}"
+  | .localVar name ctxNames ty =>
+      s!"{name} : {toString (ty.fmt ctxNames Prec.min)}"
+  | .typeOnly ctxNames ty =>
+      toString (ty.fmt ctxNames Prec.min)
 
 instance {α} : Monoid (Array α) where
   one := #[]
   mul := Array.append
   one_mul _ := Array.empty_append
-  mul_one a := Array.append_empty
-  mul_assoc a b c := Array.append_assoc
+  mul_one _ := Array.append_empty
+  mul_assoc _ _ _ := Array.append_assoc
 
+@[pp_using_anonymous_constructor]
 structure ElabInfo where
   diagnostics : Array Diagnostic
-  types : Array TypeInfo
-deriving Inhabited
+  hovers : Array HoverInfo
 
 instance : Hashable ElabInfo where
-  hash info := mixHash (hash info.diagnostics.size) (hash info.types.size)
-
-instance : One ElabInfo where
-  one := { diagnostics := #[], types := #[] }
-
-@[simp] theorem ElabInfo.one_diagnostics : (1 : ElabInfo).diagnostics = #[] := rfl
-@[simp] theorem ElabInfo.one_types : (1 : ElabInfo).types = #[] := rfl
-
-instance : Mul ElabInfo where
-  mul a b := { diagnostics := a.diagnostics ++ b.diagnostics, types := a.types ++ b.types }
+  hash info := mixHash (hash info.diagnostics.size) (hash info.hovers.size)
 
 instance : Monoid ElabInfo where
-  one_mul x := by cases x; simp [HMul.hMul, Mul.mul]
-  mul_one x := by cases x; simp [HMul.hMul, Mul.mul]
-  mul_assoc _ _ _ := by simp only [HMul.hMul, Mul.mul]; congr 1 <;> exact Array.append_assoc ..
+  one := ⟨#[], #[]⟩
+  mul | ⟨d₁, h₁⟩, ⟨d₂, h₂⟩ => ⟨d₁ ++ d₂, h₁ ++ h₂⟩
+  one_mul := by simp [HMul.hMul]
+  mul_one := by simp [HMul.hMul]
+  mul_assoc := by simp [HMul.hMul]
 
 end Qdt

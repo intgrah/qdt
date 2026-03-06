@@ -35,6 +35,15 @@ def child? (ast : Ast) (i : Nat) : Option Ast :=
   | .ident n => n
   | _ => .anonymous
 
+def get! (ast : Ast) (i : Nat) : Ast :=
+  match ast with
+  | .node _ cs => if h : i < cs.size then cs[i] else .missing
+  | _ => .missing
+
+def numChildren : Ast → Nat
+  | .node _ cs => cs.size
+  | _ => 0
+
 end Ast
 
 end Qdt.Frontend

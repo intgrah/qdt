@@ -4,6 +4,7 @@ import Qdt.Nbe
 
 namespace Qdt
 
+
 mutual
 
 partial def VTy.quote {n} : VTy n → MetaM (Ty n)

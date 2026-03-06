@@ -109,4 +109,11 @@ meta def snoc.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $ts $t) => `($ts ++ $t)
   | _ => throw ()
 
+private def hash [∀ n, Hashable (T n)] {a b} : Tele T a b → UInt64
+  | .nil => 0
+  | .snoc ts t => mixHash (hash ts) (Hashable.hash t)
+
+instance [∀ n, Hashable (T n)] {a b} : Hashable (Tele T a b) where
+  hash := hash
+
 end Tele

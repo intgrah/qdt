@@ -47,6 +47,10 @@ deriving Repr
 
 end
 
+instance {n} : Inhabited (Ty n) := ⟨.u .zero⟩
+instance {n} : Inhabited (Tm n) := ⟨.u' .zero⟩
+instance {n} : Inhabited (Param n) := ⟨⟨.anonymous, default⟩⟩
+
 def Ctx := Tele Param
 
 notation "𝑢" => Ty.u
@@ -157,5 +161,11 @@ end
 instance {n} : Hashable (Ty n) := ⟨Ty.hash⟩
 instance {n} : Hashable (Tm n) := ⟨Tm.hash⟩
 instance {n} : Hashable (Param n) := ⟨Param.hash⟩
+
+private def hashCtx {a b} : Ctx a b → UInt64
+  | .nil => 0
+  | .snoc ts t => mixHash (hashCtx ts) (hash t)
+
+instance {a b} : Hashable (Ctx a b) := ⟨hashCtx⟩
 
 end Qdt
