@@ -18,31 +18,13 @@ def kind? : Ast → Option SyntaxNodeKind
   | .node k _ => some k
   | _ => none
 
-def children? : Ast → Option (Array Ast)
-  | .node _ cs => some cs
-  | _ => none
-
 def name? : Ast → Option Name
   | .ident n => some n
-  | _ => none
-
-def child? (ast : Ast) (i : Nat) : Option Ast :=
-  match ast with
-  | .node _ cs => cs[i]?
   | _ => none
 
 @[inline] def getName : Ast → Name
   | .ident n => n
   | _ => .anonymous
-
-def get! (ast : Ast) (i : Nat) : Ast :=
-  match ast with
-  | .node _ cs => if h : i < cs.size then cs[i] else .missing
-  | _ => .missing
-
-def numChildren : Ast → Nat
-  | .node _ cs => cs.size
-  | _ => 0
 
 end Ast
 

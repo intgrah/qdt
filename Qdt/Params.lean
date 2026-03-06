@@ -7,9 +7,8 @@ namespace Qdt
 open Lean (Name)
 open Frontend (Ast Path)
 
-private def getTypedBinder (ast : Ast) : Option (Name × Ast) :=
-  match ast with
-  | .node `Binder.typed _ => some ((ast.get! 0).getName, ast.get! 1)
+private def getTypedBinder : Ast → Option (Name × Ast)
+  | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
   | _ => none
 
 def elabParamsWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
@@ -22,7 +21,7 @@ def elabParamsWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | [] => return (ctx, acc, levels.reverse)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
-          | raiseError Error.syntaxError
+          | raiseError .syntaxError
         let (ty, level) ← withChild idx (withChild 1 (checkTyWithLevel ctx tyAst))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))
@@ -49,7 +48,7 @@ def elabVParamsFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | [] => return (ctx, acc)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
-          | raiseError Error.syntaxError
+          | raiseError .syntaxError
         let ty ← withChild idx (withChild 1 (checkTy ctx tyAst))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))

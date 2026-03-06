@@ -25,12 +25,11 @@ structure Inductive where
   tyOpt : Option Ast
   ctors : List InductiveConstructor
 
-private def parseConstructor (ast : Ast) : Option InductiveConstructor :=
-  match ast with
-  | .node `Constructor _ =>
-      let name := (ast.get! 0).getName
-      let fieldsNode := ast.get! 1
-      let tyOpt := ast.get! 2
+private def parseConstructor  : Ast → Option InductiveConstructor
+  | .node `Constructor cs =>
+      let name := cs[0]!.getName
+      let fieldsNode := cs[1]!
+      let tyOpt := cs[2]!
       let fields := match fieldsNode with
         | .node _ cs => cs.toList
         | _ => []
@@ -40,14 +39,13 @@ private def parseConstructor (ast : Ast) : Option InductiveConstructor :=
       some { name, fields, tyOpt }
   | _ => none
 
-def parseInductive (ast : Ast) : Option Inductive :=
-  match ast with
-  | .node `Command.inductive _ =>
-      let name := (ast.get! 0).getName
-      let univParamsNode := ast.get! 1
-      let paramsNode := ast.get! 2
-      let tyOpt := ast.get! 3
-      let ctorsNode := ast.get! 4
+def parseInductive : Ast → Option Inductive
+  | .node `Command.inductive cs =>
+      let name := cs[0]!.getName
+      let univParamsNode := cs[1]!
+      let paramsNode := cs[2]!
+      let tyOpt := cs[3]!
+      let ctorsNode := cs[4]!
       let univParams := match univParamsNode with
         | .node _ cs => cs.toList.filterMap fun c => c.name?
         | _ => []
@@ -180,13 +178,13 @@ private def analyseRecField
         return none
   | .pi .. => raiseError (.msg "Internal error")
 
-private def getTypedBinder' (ast : Ast) : Option (Name × Ast) :=
-  match ast with
-  | .node `Binder.typed _ => some ((ast.get! 0).getName, ast.get! 1)
+private def getTypedBinder' : Ast → Option (Name × Ast)
+  | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
   | _ => none
 
-private def getFieldName' (ast : Ast) : Option Name :=
-  (ast.get! 0).name?
+private def getFieldName' : Ast → Option Name
+  | .node _ cs => cs[0]!.name?
+  | _ => none
 
 def elabCtor
     (numParams numIndices : Nat)

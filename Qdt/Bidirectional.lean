@@ -19,16 +19,14 @@ private def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : T
       return
   emitHover (.localVar name ctx.names (← ty.quote))
 
-partial def checkAstUniverse (ast : Ast) : OptionT MetaM Universe :=
-  match ast with
+partial def checkAstUniverse : Ast → OptionT MetaM Universe
   | .node `Level.zero _ => return .zero
-  | .node `Level.succ _ => do return .succ (← checkAstUniverse (ast.get! 0))
-  | .node `Level.max _ => do return .max (← checkAstUniverse (ast.get! 0)) (← checkAstUniverse (ast.get! 1))
-  | .node `Level.name _ => return .level (ast.get! 0).getName
-  | _ => raiseError Error.syntaxError
+  | .node `Level.succ cs => do return .succ (← checkAstUniverse cs[0]!)
+  | .node `Level.max cs => do return .max (← checkAstUniverse cs[0]!) (← checkAstUniverse cs[1]!)
+  | .node `Level.name cs => return .level cs[0]!.getName
+  | _ => raiseError .syntaxError
 
-def checkAstUniverses (univNode : Ast) : OptionT MetaM (List Universe) :=
-  match univNode with
+def checkAstUniverses : Ast → OptionT MetaM (List Universe)
   | .node _ cs => cs.toList.mapM checkAstUniverse
   | _ => return []
 
@@ -58,20 +56,6 @@ private def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : Li
           else instantiateLevels name info.univParams info.ty univs
         return (.const name univs, ← ty.eval .nil)
     | none => raiseError (.unboundVariable name)
-
-private def isTypedBinder : Ast → Bool
-  | .node `Binder.typed _ => true
-  | _ => false
-
-private def isUntypedBinder : Ast → Bool
-  | .node `Binder.untyped _ => true
-  | _ => false
-
-private def getBinderName (ast : Ast) : Name :=
-  (ast.get! 0).getName
-
-private def getBinderType (ast : Ast) : Ast :=
-  ast.get! 1
 
 private def emitSorryTm {n : Nat}
     (ctx : TermContext n)
@@ -145,30 +129,27 @@ private partial def inferPi {n : Nat}
     | raiseError (.expectedType ctx'.names (← codTy.quote))
   return (.pi' ⟨x, domTm⟩ codTm, .max domLevel codLevel)
 
-partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT MetaM (Ty n × Universe) :=
-  match ast with
-  | .missing => raiseError Error.syntaxError
-  | .node `Term.u _ => do
-      let level ← checkAstUniverse (ast.get! 0)
+partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT MetaM (Ty n × Universe)
+  | .missing => raiseError .syntaxError
+  | .node `Term.u cs => do
+      let level ← checkAstUniverse cs[0]!
       checkUniverseLevel level
       emitType ctx (.u level.succ)
       return (.u level, level.succ)
-  | .node `Term.pi _ => do
-      let binder := ast.get! 0
-      if !isTypedBinder binder then raiseError Error.syntaxError
-      let x := getBinderName binder
-      let dom := getBinderType binder
-      let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevel ctx dom))
+  | .node `Term.pi cs => do
+      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let x := bs[0]!.getName
+      let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevel ctx bs[1]!))
       let domVal ← dom.eval ctx.env
       withChild 0 (withChild 0 (emitType ctx domVal))
       let ctx' := ctx.bind x domVal
-      let (cod, codLevel) ← withChild 1 (checkTyWithLevel ctx' (ast.get! 1))
+      let (cod, codLevel) ← withChild 1 (checkTyWithLevel ctx' cs[1]!)
       emitType ctx (.u (.max domLevel codLevel))
       return (.pi ⟨x, dom⟩ cod, .max domLevel codLevel)
-  | .node `Term.eq _ => do
-      let (tm, level) ← checkEq ctx (ast.get! 0) (ast.get! 1)
+  | .node `Term.eq cs => do
+      let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       return (.el tm, level)
-  | _ => do
+  | ast => do
       let (tm, ty) ← inferTm ctx ast
       let .u level := ty | raiseError (.expectedType ctx.names (← ty.quote))
       return (.el tm, level)
@@ -176,95 +157,90 @@ partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : Optio
 partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT MetaM (Ty n) :=
   return (← checkTyWithLevel ctx ast).fst
 
-partial def inferTm {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT MetaM (Tm n × VTy n) :=
-  match ast with
-  | .missing => raiseError Error.syntaxError
-  | .node `Term.ident _ => do
-      let univs ← checkAstUniverses (ast.get! 1)
-      let result ← inferIdent ctx (ast.get! 0).getName univs
-      emitIdentHover ctx (ast.get! 0).getName result.fst result.snd
+partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT MetaM (Tm n × VTy n)
+  | .missing => raiseError .syntaxError
+  | .node `Term.ident cs => do
+      let univs ← checkAstUniverses cs[1]!
+      let result ← inferIdent ctx cs[0]!.getName univs
+      emitIdentHover ctx cs[0]!.getName result.fst result.snd
       return result
-  | .node `Term.app _ => do
-      let (fTm, fTy) ← withChild 0 (inferTm ctx (ast.get! 0))
+  | .node `Term.app cs => do
+      let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
       let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy
         | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
-      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy (ast.get! 1)))
+      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval ctx.env
       let bTyVal ← bTy.eval (env.cons aVal)
       emitType ctx bTyVal
       return (.app fTm aTm, bTyVal)
-  | .node `Term.u _ => do
-      let level ← checkAstUniverse (ast.get! 0)
+  | .node `Term.u cs => do
+      let level ← checkAstUniverse cs[0]!
       let ty : VTy n := .u level.succ
       emitType ctx ty
       return (.u' level, ty)
-  | .node `Term.lam _ => do
-      let binder := ast.get! 0
-      if !isTypedBinder binder then raiseError Error.inferUnannotatedLambda
-      let x := getBinderName binder
-      let ty := getBinderType binder
-      let aTy ← withChild 0 (withChild 1 (checkTy ctx ty))
+  | .node `Term.lam cs => do
+      let .node `Binder.typed bs := cs[0]! | raiseError .inferUnannotatedLambda
+      let x := bs[0]!.getName
+      let aTy ← withChild 0 (withChild 1 (checkTy ctx bs[1]!))
       let aTyVal ← aTy.eval ctx.env
       withChild 0 (withChild 0 (emitType ctx aTyVal))
       let ctx' := ctx.bind x aTyVal
-      let (bodyTm, bodyTy) ← withChild 1 (inferTm ctx' (ast.get! 1))
+      let (bodyTm, bodyTy) ← withChild 1 (inferTm ctx' cs[1]!)
       let clos := ⟨ctx.env, ← bodyTy.quote⟩
       let resultTy : VTy n := .pi ⟨x, aTyVal⟩ clos
       emitType ctx resultTy
       return (.lam ⟨x, aTy⟩ bodyTm, resultTy)
-  | .node `Term.pi _ => do
-      let binder := ast.get! 0
-      if !isTypedBinder binder then raiseError Error.syntaxError
-      let (tm, level) ← inferPi ctx (getBinderName binder) (getBinderType binder) (ast.get! 1)
+  | .node `Term.pi cs => do
+      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       let ty : VTy n := .u level
       emitType ctx ty
       return (tm, ty)
-  | .node `Term.eq _ => do
-      let (tm, level) ← checkEq ctx (ast.get! 0) (ast.get! 1)
+  | .node `Term.eq cs => do
+      let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       let ty : VTy n := .u level
       emitType ctx ty
       return (tm, ty)
-  | .node `Term.letE _ => do
-      let name := (ast.get! 0).getName
-      let (rhsTm, rhsTySyn, rhsVal, ctx') ← processLetRhs ctx name (ast.get! 1) (ast.get! 2)
-      let (body, bodyTyVal) ← withChild 3 (inferTm ctx' (ast.get! 3))
+  | .node `Term.letE cs => do
+      let name := cs[0]!.getName
+      let (rhsTm, rhsTySyn, rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
+      let (body, bodyTyVal) ← withChild 3 (inferTm ctx' cs[3]!)
       let bodyTy ← bodyTyVal.quote
       let ty ← bodyTy.eval (ctx.env.cons rhsVal)
       emitType ctx ty
       return (.letE name rhsTySyn rhsTm body, ty)
-  | .node `Term.ann _ => do
-      let result ← inferAnn ctx (ast.get! 0) (ast.get! 1)
+  | .node `Term.ann cs => do
+      let result ← inferAnn ctx cs[0]! cs[1]!
       emitType ctx result.snd
       return result
-  | .node `Term.sorry _ => raiseError Error.inferSorry
-  | _ => raiseError Error.syntaxError
+  | .node `Term.sorry _ => raiseError .inferSorry
+  | _ => raiseError .syntaxError
 
-partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : OptionT MetaM (Tm n) :=
-  match ast with
-  | .missing => raiseError Error.syntaxError
-  | .node `Term.ident _ => do
-      let univs ← checkAstUniverses (ast.get! 1)
-      let (tm, ty) ← inferIdent ctx (ast.get! 0).getName univs
+partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT MetaM (Tm n)
+  | .missing => raiseError .syntaxError
+  | .node `Term.ident cs => do
+      let univs ← checkAstUniverses cs[1]!
+      let (tm, ty) ← inferIdent ctx cs[0]!.getName univs
       if !(← ty.defEq expected) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
-      emitIdentHover ctx (ast.get! 0).getName tm ty
+      emitIdentHover ctx cs[0]!.getName tm ty
       return tm
-  | .node `Term.lam _ => do
-      let binder := ast.get! 0
-      let body := ast.get! 1
+  | ast@(.node `Term.lam cs) => do
+      let body := cs[1]!
       let .pi ⟨_, a⟩ ⟨env, b⟩ := expected
         | raiseError (.typeMismatch ctx.names (← expected.quote) (← (← inferTm ctx ast).snd.quote))
-      if isUntypedBinder binder then
-        let x := getBinderName binder
+      match cs[0]! with
+      | .node `Binder.untyped bs =>
+        let x := bs[0]!.getName
         withChild 0 (withChild 0 (emitType ctx a))
         let ctx' := ctx.bind x a
         let b ← b.eval (env.weaken.cons (VTm.varAt n))
         let b ← withChild 1 (checkTmCore ctx' b body)
         emitType ctx expected
         return .lam ⟨x, ← a.quote⟩ b
-      else if isTypedBinder binder then
-        let x := getBinderName binder
-        let ann ← withChild 0 (withChild 1 (checkTy ctx (getBinderType binder)))
+      | .node `Binder.typed bs =>
+        let x := bs[0]!.getName
+        let ann ← withChild 0 (withChild 1 (checkTy ctx bs[1]!))
         let annVal : VTy n ← ann.eval ctx.env
         if !(← annVal.defEq a) then
           raiseError (.typeMismatch ctx.names (← a.quote) (← annVal.quote))
@@ -274,52 +250,51 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast 
         let body ← withChild 1 (checkTmCore ctx' b body)
         emitType ctx expected
         return .lam ⟨x, ← a.quote⟩ body
-      else raiseError Error.syntaxError
-  | .node `Term.letE _ => do
-      let name := (ast.get! 0).getName
-      let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs ctx name (ast.get! 1) (ast.get! 2)
-      let body ← withChild 3 (checkTmCore ctx' expected.weaken (ast.get! 3))
+      | _ => raiseError .syntaxError
+  | .node `Term.letE cs => do
+      let name := cs[0]!.getName
+      let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
+      let body ← withChild 3 (checkTmCore ctx' expected.weaken cs[3]!)
       emitType ctx expected
       return .letE name rhsTySyn rhsTm body
   | .node `Term.sorry _ => emitSorryTm ctx expected
-  | .node `Term.pi _ => do
-      let binder := ast.get! 0
-      if !isTypedBinder binder then raiseError Error.syntaxError
-      let (tm, level) ← inferPi ctx (getBinderName binder) (getBinderType binder) (ast.get! 1)
+  | .node `Term.pi cs => do
+      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       if !(← expected.defEq (.u level)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
       emitType ctx expected
       return tm
-  | .node `Term.eq _ => do
-      let (tm, level) ← checkEq ctx (ast.get! 0) (ast.get! 1)
+  | .node `Term.eq cs => do
+      let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       if !(← expected.defEq (.u level)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
       emitType ctx expected
       return tm
-  | .node `Term.ann _ => do
-      let (tm, ty) ← inferAnn ctx (ast.get! 0) (ast.get! 1)
+  | .node `Term.ann cs => do
+      let (tm, ty) ← inferAnn ctx cs[0]! cs[1]!
       if !(← expected.defEq ty) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
       emitType ctx expected
       return tm
-  | .node `Term.u _ => do
-      let level ← checkAstUniverse (ast.get! 0)
+  | .node `Term.u cs => do
+      let level ← checkAstUniverse cs[0]!
       if !(← expected.defEq (.u level.succ)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level.succ))
       emitType ctx expected
       return .u' level
-  | .node `Term.app _ => do
-      let (fTm, fTy) ← withChild 0 (inferTm ctx (ast.get! 0))
+  | .node `Term.app cs => do
+      let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
       let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy
         | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
-      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy (ast.get! 1)))
+      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval ctx.env
       let tyVal ← bTy.eval (env.cons aVal)
       if !(← tyVal.defEq expected) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← tyVal.quote))
       emitType ctx expected
       return .app fTm aTm
-  | _ => raiseError Error.syntaxError
+  | _ => raiseError .syntaxError
 
 partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : MetaM (Tm n) := do
   match ← OptionT.run (checkTmCore ctx expected ast) with

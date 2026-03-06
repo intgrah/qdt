@@ -39,8 +39,7 @@ structure Axiom where
 structure Import where
   moduleName : Name
 
-def parseDefinition (ast : Ast) : Option Definition :=
-  match ast with
+def parseDefinition : Ast → Option Definition
   | .node `Command.definition cs =>
       if cs.size != 5 then none else
       let name := cs[0]!.getName
@@ -60,8 +59,7 @@ def parseDefinition (ast : Ast) : Option Definition :=
       some { name, univParams, params, tyOpt, body }
   | _ => none
 
-def parseExample (ast : Ast) : Option Example :=
-  match ast with
+def parseExample : Ast → Option Example
   | .node `Command.example cs =>
       if cs.size != 3 then none else
       let paramsAst := cs[0]!
@@ -76,8 +74,7 @@ def parseExample (ast : Ast) : Option Example :=
       some { univParams := [], params, tyOpt, body }
   | _ => none
 
-def parseAxiom (ast : Ast) : Option Axiom :=
-  match ast with
+def parseAxiom : Ast → Option Axiom
   | .node `Command.axiom cs =>
       if cs.size != 4 then none else
       let name := cs[0]!.getName
@@ -93,8 +90,7 @@ def parseAxiom (ast : Ast) : Option Axiom :=
       some { name, univParams, params, ty }
   | _ => none
 
-def parseImport (ast : Ast) : Option Import :=
-  match ast with
+def parseImport : Ast → Option Import
   | .node `Command.import cs =>
       if cs.size != 1 then none else
       some { moduleName := cs[0]!.getName }

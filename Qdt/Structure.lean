@@ -23,26 +23,24 @@ structure Structure where
   tyOpt : Option Ast
   fields : List StructureField
 
-private def parseStructureField (ast : Ast) : Option StructureField :=
-  match ast with
-  | .node `StructureField _ =>
-      let name := (ast.get! 0).getName
-      let paramsNode := ast.get! 1
-      let ty := ast.get! 2
+private def parseStructureField : Ast → Option StructureField
+  | .node `StructureField cs =>
+      let name := cs[0]!.getName
+      let paramsNode := cs[1]!
+      let ty := cs[2]!
       let params := match paramsNode with
         | .node _ cs => cs.toList
         | _ => []
       some { name, params, ty }
   | _ => none
 
-def parseStructure (ast : Ast) : Option Structure :=
-  match ast with
-  | .node `Command.structure _ =>
-      let name := (ast.get! 0).getName
-      let univParamsNode := ast.get! 1
-      let paramsNode := ast.get! 2
-      let tyOpt := ast.get! 3
-      let fieldsNode := ast.get! 4
+def parseStructure : Ast → Option Structure
+  | .node `Command.structure cs =>
+      let name := cs[0]!.getName
+      let univParamsNode := cs[1]!
+      let paramsNode := cs[2]!
+      let tyOpt := cs[3]!
+      let fieldsNode := cs[4]!
       let univParams := match univParamsNode with
         | .node _ cs => cs.toList.filterMap fun c => c.name?
         | _ => []
@@ -110,8 +108,8 @@ def elabStructure (info : Structure) : OptionT MetaM StructureResult := do
     | none => pure (Ty.u .zero)
     | some ty =>
         match ty with
-        | .node `Term.u _ =>
-            let level ← withChild 3 (checkAstUniverse (ty.get! 0))
+        | .node `Term.u cs =>
+            let level ← withChild 3 (checkAstUniverse cs[0]!)
             pure (Ty.u level : Ty numParams)
         | _ => raiseError (Error.structureResultTypeMustBeTypeUniverse info.name)
 
