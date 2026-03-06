@@ -9,7 +9,7 @@ import Qdt.Quote
 namespace Qdt
 
 open Lean (Name)
-open Frontend (Ast)
+open Frontend (Ast Path)
 
 structure StructureField where
   name : Name
@@ -25,25 +25,45 @@ structure Structure where
 
 private def parseStructureField (ast : Ast) : Option StructureField :=
   match ast with
-  | .node `StructureField #[.ident name, .node `null paramsAst, ty] =>
-      some { name, params := paramsAst.toList, ty }
+  | .node `StructureField _ =>
+      let name := (ast.get! 0).getName
+      let paramsNode := ast.get! 1
+      let ty := ast.get! 2
+      let params := match paramsNode with
+        | .node _ cs => cs.toList
+        | _ => []
+      some { name, params, ty }
   | _ => none
 
 def parseStructure (ast : Ast) : Option Structure :=
   match ast with
-  | .node `Command.structure #[.ident name, .node `null univParamsAst, .node `null paramsAst, tyOpt, .node `null fieldsAst] =>
-      let univParams := univParamsAst.toList.filterMap fun a => match a with | .ident n => some n | _ => none
-      let tyOpt := if tyOpt.kind? == some `null || tyOpt == .missing then none else some tyOpt
-      let fields := fieldsAst.toList.filterMap parseStructureField
-      some { name, univParams, params := paramsAst.toList, tyOpt, fields }
+  | .node `Command.structure _ =>
+      let name := (ast.get! 0).getName
+      let univParamsNode := ast.get! 1
+      let paramsNode := ast.get! 2
+      let tyOpt := ast.get! 3
+      let fieldsNode := ast.get! 4
+      let univParams := match univParamsNode with
+        | .node _ cs => cs.toList.filterMap fun c => c.name?
+        | _ => []
+      let params := match paramsNode with
+        | .node _ cs => cs.toList
+        | _ => []
+      let tyOpt : Option Ast :=
+        if tyOpt.kind? == some `null || (match tyOpt with | .missing => true | _ => false)
+        then none else some tyOpt
+      let fields := match fieldsNode with
+        | .node _ cs => cs.toList.filterMap fun c => parseStructureField c
+        | _ => []
+      some { name, univParams, params, tyOpt, fields }
   | _ => none
 
 private def mkFieldTyAst (field : StructureField) : Ast :=
   field.params.foldr (fun b acc => .node `Term.pi #[b, acc]) field.ty
 
-private def getAtomicFieldString (structName : Name) (fieldName : Name) : CoreM String := do
+private def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT MetaM String := do
   let .str .anonymous s := fieldName
-    | throw (.msg s!"{structName}: field name must be atomic")
+    | raiseError (.msg s!"{structName}: field name must be atomic")
   return s
 
 private def mkParamEnv : (numParams : Nat) → Env (numParams + 1) numParams
@@ -56,18 +76,32 @@ private def mkPrevEnv
     (univs : List Universe)
     (params : List (VTm (numParams + 1)))
     (x : VTm (numParams + 1)) :
-    {b : Nat} → Ctx numParams b → MetaM (Env (numParams + 1) b)
+    {b : Nat} → Ctx numParams b → OptionT MetaM (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
   | _, .snoc fs ⟨name, _⟩ => do
       let envTail ← mkPrevEnv structName numParams univs params x fs
       let fname ← getAtomicFieldString structName name
       let projName := structName.str fname
-      let proj : VTm (numParams + 1) := VTm.const projName univs
-      let proj ← proj.apps params
-      let proj ← proj.app x
-      return Env.cons proj envTail
+      let ne : Neutral (numParams + 1) := ⟨.const projName univs, .nil⟩
+      let ne := params.foldl Neutral.app ne
+      let ne := ne.app x
+      return Env.cons (.neutral ne) envTail
 
-def elabStructure (info : Structure) : MetaM Unit := do
+private def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT MetaM Unit
+  | [], _ => return ()
+  | field :: rest, j => do
+      let (fieldParamCtx, fieldParamTele) ←
+        withChild (4 + j) (withChild 1 (elabParamsFrom ctx field.params))
+      let fieldRetTy ← withChild (4 + j) (withChild 2 (checkTy fieldParamCtx field.ty))
+      let fullFieldTy := Ty.pis fieldParamTele fieldRetTy
+      let fullFieldTyVal ← fullFieldTy.eval ctx.env
+      reelabFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
+
+structure StructureResult where
+  indResult : InductiveResult
+  projEntries : List (Name × Constant)
+
+def elabStructure (info : Structure) : OptionT MetaM StructureResult := do
   let numParams := info.params.length
 
   let (paramCtx, paramTys) ← withChild 2 (elabParams info.params)
@@ -76,14 +110,14 @@ def elabStructure (info : Structure) : MetaM Unit := do
     | none => pure (Ty.u .zero)
     | some ty =>
         match ty with
-        | .node `Term.u #[astLevel] =>
-            let level ← withChild 3 (withChild 0 (checkAstUniverse astLevel))
+        | .node `Term.u _ =>
+            let level ← withChild 3 (checkAstUniverse (ty.get! 0))
             pure (Ty.u level : Ty numParams)
-        | _ => throw (.structureResultTypeMustBeTypeUniverse info.name)
+        | _ => raiseError (Error.structureResultTypeMustBeTypeUniverse info.name)
 
-  let _structFieldStrs ← info.fields.mapM fun f => getAtomicFieldString info.name f.name
+  let _structFieldStrs ← info.fields.mapM fun field => getAtomicFieldString info.name field.name
   let ctorFieldBinders : List Ast :=
-    info.fields.map fun f => .node `Binder.typed #[.ident f.name, mkFieldTyAst f]
+    info.fields.map fun field => .node `Binder.typed #[.ident field.name, mkFieldTyAst field]
 
   let indSynth : Inductive :=
     {
@@ -91,18 +125,13 @@ def elabStructure (info : Structure) : MetaM Unit := do
       univParams := info.univParams
       params := info.params
       tyOpt := info.tyOpt
-      ctors :=
-        [
-          {
-            name := `mk
-            fields := ctorFieldBinders
-            tyOpt := none
-          }
-        ]
+      ctors := [⟨`mk, ctorFieldBinders, none⟩]
     }
-  Qdt.elabInductive indSynth
+  let indResult ← Qdt.elabInductive indSynth
 
-  let (_fieldCtx, fieldTele) ← elabParamsFrom ctorFieldBinders paramCtx
+  let (_fieldCtx, fieldTele) ← elabParamsFrom paramCtx ctorFieldBinders
+
+  let _ ← OptionT.lift (OptionT.run (reelabFields paramCtx info.fields 0))
 
   let np1 := numParams + 1
   let numFields := ctorFieldBinders.length
@@ -113,7 +142,7 @@ def elabStructure (info : Structure) : MetaM Unit := do
 
   let x : VTm np1 := VTm.varAt numParams
 
-  let univParams := (← getThe MetaState).univParams
+  let univParams ← getUnivParams
   let structUnivs := univParams.map Universe.level
   let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps paramsVal
@@ -121,13 +150,14 @@ def elabStructure (info : Structure) : MetaM Unit := do
   let majorTy : Ty numParams := Ty.el majorTy
 
   let rec goProj
-      {b}
-      (hb : b ≤ numParamsFields) :
+      {b : Nat}
+      (hb : b ≤ numParamsFields)
+      (acc : List (Name × Constant)) :
       Ctx numParams b →
-      MetaM Unit
-    | .nil => return
+      OptionT MetaM (List (Name × Constant))
+    | .nil => return acc
     | .snoc (b := idx) fs ⟨name, ty⟩ => do
-        goProj (Nat.le_of_succ_le hb) fs
+        let acc ← goProj (Nat.le_of_succ_le hb) acc fs
 
         let fname ← getAtomicFieldString info.name name
         let projName := info.name.str fname
@@ -141,15 +171,19 @@ def elabStructure (info : Structure) : MetaM Unit := do
         let fieldIdx := idx - numParams
         let projBody : Tm np1 := Tm.proj fieldIdx pVar
 
-        let projBodyTy : Ty numParams := Ty.pi ⟨`p, majorTy⟩ ftyTy
+        let projBodyTy : Ty numParams := Ty.pi ⟨`self, majorTy⟩ ftyTy
         let projTy : Ty 0 := Ty.pis paramTys projBodyTy
         let projTm : Tm 0 :=
           Tm.lams paramTys <|
-          Tm.lam ⟨`p, majorTy⟩ projBody
+          Tm.lam ⟨`self, majorTy⟩ projBody
 
-        let univParams := (← getThe MetaState).univParams
-        let _ ← Global.addEntry projName (.definition { univParams, ty := projTy, tm := projTm })
+        let univParams ← getUnivParams
+        let entry : Name × Constant := (projName, .definition { univParams, ty := projTy, tm := projTm })
+        let _ ← addConstant projName entry.2
+        withChild (4 + fieldIdx) (emitHover (.signature projName (paramTys.snoc ⟨`self, majorTy⟩) ftyTy))
+        return acc ++ [entry]
 
-  goProj (Nat.le_refl numParamsFields) fieldTele
+  let projEntries ← goProj (Nat.le_refl numParamsFields) [] fieldTele
+  return { indResult, projEntries }
 
 end Qdt

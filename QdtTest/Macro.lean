@@ -2,41 +2,23 @@ import Qdt
 import Qdt.Incremental
 
 open Qdt
-open Incremental (Engine Key Val TaskM BaseContext)
+open Qdt.Incremental
 open Lean (Term MacroM)
+open System (FilePath)
+open Std (DHashMap)
 
 private def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
-  let cst := match Frontend.Parser.parse src with
-    | .ok cst => cst
-    | .error e => panic! s!"parse error at {e.pos}: {e.msg}"
-  let config : Config := Config.empty
-  let ctx : BaseContext := { config, overrides := ∅ }
-  let engine : Engine Val := Incremental.newEngine
-  let (asts, _) := Frontend.desugarProgram cst
-  let task : TaskM Val (Array Diagnostic × Global) := do
-    let coreCtx : CoreContext := CoreContext.empty
-    let init : CoreState := {
-      modules := Std.HashMap.emptyWithCapacity 8
-      importedEnv := Std.HashMap.emptyWithCapacity 128
-      localEnv := Std.HashMap.emptyWithCapacity 128
-      errors := #[]
-    }
-    let action : CoreM CoreState := do
-      for ast in asts do
-        if let some d := parseDefinition ast then elabDefinition d
-        else if let some ex := parseExample ast then elabExample ex
-        else if let some a := parseAxiom ast then elabAxiom a
-        else if let some i := parseInductive ast then elabInductiveCmd i
-        else if let some s := parseStructure ast then elabStructureCmd s
-      get
-    let ((result, elabInfo), st) ← ((action.run coreCtx).run.run).run init
-    let diagnostics := elabInfo.diagnostics
-    match result with
-    | .ok s => return (diagnostics, s.localEnv)
-    | .error e => return (diagnostics.push { path := [], error := e }, st.localEnv)
-  match ← (Incremental.run ctx engine task).toIO' with
-  | .ok ((diagnostics, env), _) => pure (diagnostics, env)
-  | .error () => pure (#[{ path := [], error := .msg "cycle detected" }], ∅)
+  let dummyPath : FilePath := "test.qdt"
+  let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅, hash := hash src }
+  let inputFiles : Std.HashSet System.FilePath := Std.HashSet.emptyWithCapacity 1 |>.insert dummyPath
+  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅, hash := hash inputFiles }
+  let store : Store Key Val := { cache := DHashMap.emptyWithCapacity 2 }
+  let store := { store with cache := store.cache.insert (.text dummyPath) memo }
+  let store := { store with cache := store.cache.insert .inputFiles inputMemo }
+
+  match ← (Incremental.run (Build.shake Key Val) store (Incremental.Task.fetch (Key.checkFile dummyPath))).toIO' with
+  | .ok (diags, _) => return (diags, ∅)
+  | .error () => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
 private def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src

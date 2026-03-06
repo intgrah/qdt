@@ -17,8 +17,8 @@ open Std (HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Qdt
-open Incremental (Engine fetchQ Key TaskM Val)
-open Frontend (Ast Cst Path SourceMap Span)
+open Qdt.Incremental
+open Frontend (Cst Path SourceMap Span)
 
 private partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
   go 0 0
@@ -99,8 +99,7 @@ private def normaliseConfig (cfg : Config) : IO Config := do
 
 structure ProjectState where
   config : Config
-  engine : Engine Val
-  overrides : HashMap FilePath String
+  store : Store Key Val
 
 structure ServerState where
   projects : HashMap FilePath ProjectState := ∅
@@ -124,7 +123,7 @@ private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerStat
         | none => pure { Config.empty with projectRoot := some root }
       let cfg := { cfg with projectRoot := some root }
       let cfg ← normaliseConfig cfg
-      let ps : ProjectState := { config := cfg, engine := Incremental.newEngine, overrides := ∅ }
+      let ps : ProjectState := { config := cfg, store := {} }
       let st := { st with projects := st.projects.insert root ps }
       return (st, ps)
 
@@ -142,15 +141,24 @@ private def publishDiagnostics
   | Except.ok s =>
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
-def elaborateFile (filepath : FilePath) : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := do
-  let (env, info) ← fetchQ (Key.elabModule filepath)
-  let sourceMap ← fetchQ (Key.sourceMap filepath)
-  let text ← fetchQ (Key.fileText filepath)
-  let astProg ← fetchQ (Key.astProgram filepath)
-  let cst := match Frontend.Parser.parse text with
-    | .ok c => c
-    | .error _ => .node `error #[]
-  return (env, info, sourceMap, cst, astProg)
+def elaborateFile (filepath : FilePath) : Task Key Val (Global × ElabInfo × SourceMap × Cst) := do
+  let (cst, _) ← Incremental.Task.fetch (Key.cst filepath)
+  let (_, sourceMap, _) ← Incremental.Task.fetch (Key.astSourceMap filepath)
+  let declIndex ← Incremental.Task.fetch (Key.declarationIndex filepath)
+  let mut combinedInfo : ElabInfo := 1
+  let mut combinedGlobal : Global := ∅
+
+  for (name, _) in declIndex.toList do
+    let info ← Incremental.Task.fetch (Key.lookupInfo filepath name)
+    combinedInfo := combinedInfo * info
+    if let some (constant, _) ← Incremental.Task.fetch (Key.lookup filepath name) then
+       combinedGlobal := combinedGlobal.insert name constant
+
+  let (_, _, astDiags) ← Incremental.Task.fetch (Key.astSourceMap filepath)
+  let allDiags := astDiags ++ combinedInfo.diagnostics
+  combinedInfo := { combinedInfo with diagnostics := allDiags }
+
+  return (combinedGlobal, combinedInfo, sourceMap, cst)
 
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
@@ -161,11 +169,14 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
         if let some cstPath := sourceMap.astToCst[astPrefix]? then
           return some cstPath
       return none
-    match cstPath? with
-    | some cstPath =>
-        match cst.spanAtPath cstPath with
-        | some span => mkDiagnostic text span d.error
-        | none => mkDiagnosticNoSpan d.error
+    let span? :=
+      match cstPath? with
+      | some cstPath => cst.spanAtPath cstPath
+      | none =>
+          if !d.path.isEmpty then cst.spanAtPath d.path
+          else none
+    match span? with
+    | some span => mkDiagnostic text span d.error
     | none => mkDiagnosticNoSpan d.error
 
 private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
@@ -199,6 +210,11 @@ private def handleShutdown (hOut : IO.FS.Stream) (id : RequestID) (stRef : IO.Re
   stRef.modify fun st => { st with shutdownRequested := true }
   hOut.writeLspMessage <| Message.response id Json.null
 
+private def runElabTask (ps : ProjectState) (filepath : FilePath) :
+    EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
+  let store ← Incremental.populateStore ps.config ps.store
+  Incremental.run (Build.shake Key Val) store (elaborateFile filepath)
+
 private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
     | throw (IO.userError "didOpen: missing params")
@@ -226,16 +242,14 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   let st ← stRef.get
   let (st, ps) ← getProject st file
 
-  let overrides := ps.overrides.insert file text
-  let ps := { ps with overrides }
+  let memo : Memo Key Val (.text file) := { value := text, deps := ∅, hash := hash text }
+  let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
+  let ps := { ps with store }
   stRef.set st
 
-  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
-  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
-
-  match ← (Incremental.run ctx ps.engine task).toIO' with
-  | .ok ((_, info, sourceMap, cst, _), engine') =>
-      let ps' : ProjectState := { ps with engine := engine' }
+  match ← (runElabTask ps file).toIO' with
+  | .ok ((_, info, sourceMap, cst), store') =>
+      let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
       let diagnostics := buildDiagnostics text info sourceMap cst
@@ -265,16 +279,14 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   let st ← stRef.get
   let (st, ps) ← getProject st file
 
-  let overrides := ps.overrides.insert file text
-  let ps := { ps with overrides }
+  let memo : Memo Key Val (.text file) := { value := text, deps := ∅, hash := hash text }
+  let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
+  let ps := { ps with store }
   stRef.set st
 
-  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
-  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
-
-  match ← (Incremental.run ctx ps.engine task).toIO' with
-  | .ok ((_, info, sourceMap, cst, _), engine') =>
-      let ps' : ProjectState := { ps with engine := engine' }
+  match ← (runElabTask ps file).toIO' with
+  | .ok ((_, info, sourceMap, cst), store') =>
+      let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
       let diagnostics := buildDiagnostics text info sourceMap cst
@@ -293,8 +305,11 @@ private def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (p
   if let some file ← uriToPath? uri then
     let st ← stRef.get
     let (st, ps) ← getProject st file
-    let overrides := ps.overrides.erase file
-    let ps := { ps with overrides }
+
+    let cache := ps.store.cache.erase (.text file)
+    let store := { ps.store with cache }
+
+    let ps := { ps with store }
     let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
     let st := setProject st root ps
     stRef.set st
@@ -322,46 +337,46 @@ private def handleHover
   let (st, ps) ← getProject st file
   stRef.set st
 
-  let text := ps.overrides.getD file (← IO.FS.readFile file)
+  let text ←
+    match ps.store.cache.get? (.text file) with
+    | some memo => pure memo.value
+    | none => IO.FS.readFile file
+
   let fileMap := Lean.FileMap.ofString text
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let task : TaskM Val (Global × ElabInfo × SourceMap × Cst × Array Ast) := elaborateFile file
-  let ctx : Incremental.BaseContext := { config := ps.config, overrides := ps.overrides }
-
-  match ← (Incremental.run ctx ps.engine task).toIO' with
+  match ← (runElabTask ps file).toIO' with
   | .error () =>
       hOut.writeLspMessage <| Message.response id Json.null
-  | .ok ((_, info, sourceMap, cst, astProg), engine') =>
-      let ps' : ProjectState := { ps with engine := engine' }
+  | .ok ((_, info, sourceMap, cst), store') =>
+      let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
 
       let cstPath := cst.pathAtPosition codepointPos
 
-      let typeInfos := info.types.map fun t => (t.path.reverse, t.ty)
+      let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
 
-      let mut best : Option (Path × Path × String) := none
+      let mut best : Option (Path × Path × HoverContent) := none
       for len in (List.range cstPath.length).reverse do
         let cstPrefix := cstPath.take (len + 1)
         if let some astPath := sourceMap.cstToAst[cstPrefix]? then
-          for (tyPath, ty) in typeInfos do
+          for (tyPath, hover) in hoverInfos do
             if tyPath == astPath then
               match best with
-              | none => best := some (cstPrefix, astPath, ty)
+              | none => best := some (cstPrefix, astPath, hover)
               | some (_, prevAstPath, _) =>
                   if astPath.length > prevAstPath.length then
-                    best := some (cstPrefix, astPath, ty)
+                    best := some (cstPrefix, astPath, hover)
               break
 
       match best with
       | none =>
           hOut.writeLspMessage <| Message.response id Json.null
-      | some (cstPath, astPath, ty) =>
+      | some (cstPath, _, hover) =>
           let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
-          let ast := Lsp.astAtPath astProg astPath
-          let content := Lsp.formatHover ast ty
+          let content := Lsp.formatHover hover
           let range := mkRange text span
           let markupContent : MarkupContent := {
             kind := MarkupKind.markdown
@@ -411,7 +426,7 @@ partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) 
 def main : IO UInt32 := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
-  let stRef ← IO.mkRef { : ServerState}
+  let stRef ← IO.mkRef ({ : ServerState} : ServerState)
   try
     mainLoop stdin stdout stRef
     pure 0

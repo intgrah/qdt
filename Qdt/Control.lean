@@ -12,74 +12,22 @@ import Qdt.Incremental.Query
 namespace Qdt
 
 open Lean (Name)
-open Incremental (BaseM Key Val TaskM)
+open Incremental (Key Val Task)
 open Frontend (Path SourceMap)
+open System (FilePath)
 
 open Std (HashMap HashSet)
 
-/--
-Topological sort of modules using DFS
-Temporary-permanent mark algorithm
--/
-inductive ModuleStatus : Type
-  | importing
-  | imported
-deriving Repr, Inhabited
-
-structure CoreContext where
-  file : Option System.FilePath
-  selfNames : List Name
-  imports : HashSet System.FilePath
-  sourceMap : SourceMap
-
-def CoreContext.empty : CoreContext where
-  file := none
-  selfNames := []
-  imports := ∅
-  sourceMap := ⟨∅, ∅⟩
-
-structure CoreState where
-  modules : HashMap Name ModuleStatus
-  /-- Entries from imported modules. -/
-  importedEnv : Global
-  /-- Entries produced while elaborating the current top-level declaration -/
-  localEnv : Global
-  errors : Array Error
-deriving Inhabited
-
-structure MetaContext where
-  currentDecl : Name
-  path : Path
-deriving Repr, Inhabited
-
-def MetaContext.empty : MetaContext where
-  currentDecl := .anonymous
-  path := []
-
-structure MetaState where
-  sorryId : Nat := 0
-  univParams : List Name
-deriving Inhabited
-
-instance {ε ω M} [Monad M] [Monoid ω] [MonadExcept ε M] : MonadExcept ε (WriterT ω M) where
-  throw e := (throw e : M _)
-  tryCatch m h := tryCatch m h
-
-instance {ε ρ M} [Monad M] [MonadExcept ε M] : MonadExcept ε (ReaderT ρ M) where
-  throw e := fun _ => throw e
-  tryCatch m h := fun r => tryCatch (m r) (fun e => h e r)
-
-instance {ε ω M} [Monad M] [Monoid ω] [MonadWriter ω M] : MonadWriter ω (ExceptT ε M) where
-  tell w := ExceptT.lift (tell w)
+instance {ω M} [Monad M] [Monoid ω] [MonadWriter ω M] : MonadWriter ω (OptionT M) where
+  tell w := OptionT.lift (tell w)
   listen m := do
-    let (result, w) ← ExceptT.lift (listen m.run)
+    let (result, w) ← OptionT.lift (listen m)
     match result with
-    | .ok a => return (a, w)
-    | .error e => throw e
+    | some a => return (a, w)
+    | none => failure
   pass m := do
-    let result ← m
-    let (a, f) := result
-    ExceptT.lift (tell (f 1))
+    let (a, f) ← m
+    OptionT.lift (tell (f 1))
     return a
 
 instance {ρ ω M} [Monad M] [MonadWriter ω M] : MonadWriter ω (ReaderT ρ M) where
@@ -87,149 +35,143 @@ instance {ρ ω M} [Monad M] [MonadWriter ω M] : MonadWriter ω (ReaderT ρ M) 
   listen m := fun r => listen (m r)
   pass m := fun r => pass (m r)
 
-section Monads
+structure CoreContext where
+  filepath : FilePath
+  univParams : List Name
+  selfNames : List Name := []
+  collectHovers : Bool
 
--- abbrev BaseM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
---   StateRefT (RunState ε R) (EIO ε)
+structure MetaContext where
+  currentDecl : Name
+  path : Path := []
+deriving Repr, Inhabited
 
--- abbrev Task
---     (c : (Type u → Type u) → Type (u + 1))
---     (Q : Type u)
---     (R : Q → Type u)
---     (f : Type u → Type u) [c f] :=
---   ReaderT (∀ q : Q, f (R q)) f
+structure MetaState where
+  localEnv : Global
+  sorryId : Nat := 0
+  entryCache : Std.HashMap Lean.Name (Option Constant) := {}
+deriving Inhabited
 
--- abbrev TaskT := Task Monad
+abbrev CoreM := ReaderT CoreContext (WriterT ElabInfo (Task Key Val))
+abbrev MetaM := ReaderT MetaContext (StateT MetaState CoreM)
+abbrev TermM (n : Nat) := ReaderT (TermContext n) MetaM
+abbrev SemM (n c : Nat) := ReaderT (Env n c) MetaM
 
--- abbrev TaskM (ε : Type) {Q : Type} (R : Q → Type) [BEq Q] [Hashable Q] : Type → Type :=
---   TaskT Q R (BaseM ε R)
+instance {n} : MonadLiftT (SemM n n) (TermM n) where
+  monadLift m n := m n.env
 
-/-- QueryM provides the ability to make queries. -/
-abbrev QueryM : Type → Type :=
-  TaskM Val
-
-/-- CoreM provides context at the global scope. -/
-abbrev CoreM : Type → Type :=
-  ReaderT CoreContext (ExceptT Error (WriterT ElabInfo (StateT CoreState QueryM)))
-
-/-- MetaM provides context at the definition scope. -/
-abbrev MetaM : Type → Type :=
-  ReaderT MetaContext (ExceptT Error (StateT MetaState CoreM))
-
-/-- TermM provides context for type checking. -/
-abbrev TermM (n : Nat) : Type → Type :=
-  ReaderT (TermContext n) MetaM
-
-/-- SemM provides the environment for NbE. -/
-abbrev SemM (n c : Nat) : Type → Type :=
-  ReaderT (Env n c) MetaM
-
-protected instance {n} : MonadLiftT (SemM n n) (TermM n) where
-  monadLift := (· ·.env)
-
-end Monads
-
-def withChild {α} (i : Nat) (action : MetaM α) : MetaM α :=
-  ReaderT.adapt (fun ctx => { ctx with path := i :: ctx.path }) action
+def currentDecl : MetaM Name := do
+  return (← read).currentDecl
 
 def currentPath : MetaM Path := do
   return (← read).path
 
-def pathToDisplay (p : Path) : Path := p.reverse
+def withChild {α : Type} (i : Nat) : MetaM α → MetaM α :=
+  ReaderT.adapt (fun ctx => { ctx with path := i :: ctx.path })
+
+def getUnivParams : MetaM (List Name) := do
+  return (← readThe CoreContext).univParams
 
 def emitDiagnostic (err : Error) : MetaM Unit := do
   let path ← currentPath
-  (tell { diagnostics := #[{ path, error := err }], types := #[] } : WriterT ElabInfo (StateT CoreState QueryM) Unit)
+  tell { diagnostics := #[{ path, error := err }], hovers := #[] }
 
-def emitTypeInfo (ty : String) : MetaM Unit := do
+def raiseError {α : Type} (err : Error) : OptionT MetaM α := do
+  emitDiagnostic err
+  failure
+
+def emitHover (hover : HoverContent) : MetaM Unit := do
+  if !(← readThe CoreContext).collectHovers then return
   let path ← currentPath
-  (tell { diagnostics := #[], types := #[{ path, ty }] } : WriterT ElabInfo (StateT CoreState QueryM) Unit)
+  tell { diagnostics := #[], hovers := #[{ path, hover }] }
 
-def runMetaM {α} (action : MetaM α) (mctx : MetaContext) (mst : MetaState) :
-    CoreM (Option α) := do
-  let result ← (action mctx).run.run' mst
-  match result with
-  | .ok a => return some a
-  | .error err =>
-      tell { diagnostics := #[{ path := mctx.path, error := err }], types := #[] }
-      return none
+def getLocalEnv : MetaM Global := do
+  return (← get).localEnv
 
-def getLocalEnv : CoreM Global := do
-  let genv ← getThe CoreState
-  return genv.localEnv
-
-/-!
-These are intentionally fine-grained to make it possible to
-incrementalise without treating the whole global environment as a dependency.
--/
-
-def fetchEntry (name : Name) : CoreM (Option Entry) := do
-  let st ← getThe CoreState
+def fetchConstant (name : Name) : MetaM (Option Constant) := do
+  let st ← get
   if let some e := st.localEnv[name]? then
     return some e
-  if let some e := st.importedEnv[name]? then
-    if let some file := e.file then
-      let _ ← fetchQ (.entry ⟨file⟩ name)
-    return some e
-  let ctx ← read
+  let ctx ← readThe CoreContext
   if name ∈ ctx.selfNames then
     return none
-  match ctx.file with
-  | none => return none
-  | some file =>
-      if let some e ← fetchQ (.entry file name) then
-        modify fun st => { st with importedEnv := st.importedEnv.insert name e }
-        return some e
-      for importFile in ctx.imports do
-        if let some e ← fetchQ (.entry importFile name) then
-          modify fun st => { st with importedEnv := st.importedEnv.insert name e }
-          return some e
-      return none
+  if let some result := st.entryCache[name]? then
+    return result
+  let declIndex : Std.HashMap Lean.Name Nat ←
+    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Key Val _)
+  let currentDeclName := (← read).currentDecl
+  if let some idx := declIndex[name]? then
+    if let some currentIdx := declIndex[currentDeclName]? then
+      if idx >= currentIdx then
+        modify fun st => { st with entryCache := st.entryCache.insert name none }
+        return none
+  let result : Val (Key.constant ctx.filepath name) ←
+    liftM (Task.fetch (Key.constant ctx.filepath name) : Task Key Val _)
+  let result : Option Constant := result.map Prod.fst
+  modify fun st => { st with entryCache := st.entryCache.insert name result }
+  return result
 
-def fetchTy (name : Name) : CoreM (Option (Ty 0)) := do
-  let some e ← fetchEntry name | return none
+def fetchTy (name : Name) : MetaM (Option (Ty 0)) := do
+  let some e ← fetchConstant name | return none
   return some (match e with
     | .definition info | .opaque info | .axiom info
     | .recursor info | .constructor info | .inductive info => info.ty)
 
-def fetchConstantInfo (name : Name) : CoreM (Option ConstantInfo) := do
-  let some e ← fetchEntry name | return none
+def fetchConstantInfo (name : Name) : MetaM (Option ConstantInfo) := do
+  let some e ← fetchConstant name | return none
   return some (match e with
     | .definition info | .opaque info | .axiom info
     | .recursor info | .constructor info | .inductive info => info.toConstantInfo)
 
-def fetchDefinition (name : Name) : CoreM (Option (Tm 0)) := do
-  let some (.definition info) ← fetchEntry name | return none
+def fetchDefinition (name : Name) : MetaM (Option (Tm 0)) := do
+  let some (.definition info) ← fetchConstant name | return none
   return some info.tm
 
-def fetchInductive (name : Name) : CoreM (Option InductiveInfo) := do
-  let some (.inductive info) ← fetchEntry name | return none
+def fetchInductive (name : Name) : MetaM (Option InductiveInfo) := do
+  let some (.inductive info) ← fetchConstant name | return none
   return some info
 
-def fetchRecursor (name : Name) : CoreM (Option RecursorInfo) := do
-  let some (.recursor info) ← fetchEntry name | return none
+def fetchRecursor (name : Name) : MetaM (Option RecursorInfo) := do
+  let some (.recursor info) ← fetchConstant name | return none
   return some info
 
-def fetchConstructor (name : Name) : CoreM (Option ConstructorInfo) := do
-  let some (.constructor info) ← fetchEntry name | return none
+def fetchConstructor (name : Name) : MetaM (Option ConstructorInfo) := do
+  let some (.constructor info) ← fetchConstant name | return none
   return some info
 
-def Global.addEntry (name : Name) (entry : Entry) : CoreM Bool := do
-  let st ← getThe CoreState
+def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
+  let st ← get
   if name ∈ st.localEnv then
-    tell { diagnostics := #[{ path := [], error := .msg s!"{name} is already defined" }], types := #[] }
+    emitDiagnostic (.msg s!"{name} is already defined")
     return false
-  let ctx ← read
-  let file := ctx.file.map toString
-  let entry := entry.setFile file
-  set { st with localEnv := st.localEnv.insert name entry }
+  let ctx ← readThe CoreContext
+  let currentDeclName := (← read).currentDecl
+  let declIndex : Std.HashMap Lean.Name Nat ←
+    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Key Val _)
+  match declIndex[name]? with
+  | some nameIdx =>
+      match declIndex[currentDeclName]? with
+      | some currentIdx =>
+          if nameIdx != currentIdx then
+            emitDiagnostic (.msg s!"{name} is already defined")
+            return false
+      | none => pure ()
+  | none =>
+      let existing : Val (Key.constant ctx.filepath name) ←
+        liftM (Task.fetch (Key.constant ctx.filepath name) : Task Key Val _)
+      if existing.isSome then
+        emitDiagnostic (.msg s!"{name} is already defined")
+        return false
+  set { st with localEnv := st.localEnv.insert name constant }
   return true
 
-def Global.replaceEntry (name : Name) (entry : Entry) : CoreM Unit := do
-  let st ← getThe CoreState
-  let ctx ← read
-  let file := ctx.file.map toString
-  let entry := entry.setFile file
-  set { st with localEnv := st.localEnv.insert name entry }
+def replaceEntry (name : Name) (constant : Constant) : MetaM Unit := do
+  let st ← get
+  set { st with localEnv := st.localEnv.insert name constant }
+
+def elabRun {α : Type} (coreCtx : CoreContext) (metaCtx : MetaContext) (action : OptionT MetaM α) :
+    Task Key Val (Option α × Global × ElabInfo) := do
+  let ((optResult, metaSt), info) ← WriterT.run ((StateT.run (action metaCtx) { localEnv := {} }) coreCtx)
+  return (optResult, metaSt.localEnv, info)
 
 end Qdt

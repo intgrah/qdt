@@ -2,6 +2,7 @@ import Qdt.Nbe
 
 namespace Qdt
 
+
 mutual
 
 partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool

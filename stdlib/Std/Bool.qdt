@@ -2,7 +2,7 @@ inductive Bool where
   | true
   | false
 
-def Bool.ite.{u} (A : Type u) (b : Bool) (t f : A) : A :=
+def Bool.ite.{u} (A : Type u) (b : Bool) (t f : A) :=
   Bool.rec.{u} (fun _ => A) t f b
 
 def Bool.dite.{u} (A : Bool → Type u) (b : Bool) (t : A Bool.true) (f : A Bool.false) : A b :=

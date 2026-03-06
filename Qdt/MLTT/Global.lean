@@ -3,14 +3,13 @@ import Std.Data.HashMap
 import Qdt.MLTT.Syntax
 
 instance {α n} [Hashable α] : Hashable (Vector α n) where
-  hash as := as.foldl (fun r a => mixHash r (hash a)) 7
+  hash as := hash as.toList
 
 namespace Qdt
 
 open Lean (Name)
 
 structure ConstantInfo where
-  file : Option String := none
   univParams : List Name
   ty : Ty 0
 deriving Repr, Hashable
@@ -51,7 +50,7 @@ structure RecursorInfo extends ConstantInfo where
   recRules : Vector (RecursorRule (numParams + numMotives + numMinors)) numMinors
 deriving Repr, Hashable
 
-inductive Entry : Type
+inductive Constant : Type
   | definition (info : DefinitionInfo)
   | opaque (info : OpaqueInfo)
   | axiom (info : AxiomInfo)
@@ -60,23 +59,25 @@ inductive Entry : Type
   | constructor (info : ConstructorInfo)
 deriving Repr, Hashable
 
-def Entry.setFile (file : Option String) : Entry → Entry
-  | .definition info => .definition { info with file }
-  | .opaque info => .opaque { info with file }
-  | .axiom info => .axiom { info with file }
-  | .inductive info => .inductive { info with file }
-  | .recursor info => .recursor { info with file }
-  | .constructor info => .constructor { info with file }
-
-def Entry.file : Entry → Option String
+def Constant.ty : Constant → Ty 0
   | .definition info
   | .opaque info
   | .axiom info
-  | .inductive info
   | .recursor info
-  | .constructor info => info.file
+  | .constructor info
+  | .inductive info =>
+      info.ty
 
-abbrev Global := Std.HashMap Name Entry
+def Constant.toConstantInfo : Constant → ConstantInfo
+  | .definition info
+  | .opaque info
+  | .axiom info
+  | .recursor info
+  | .constructor info
+  | .inductive info =>
+      info.toConstantInfo
+
+abbrev Global := Std.HashMap Name Constant
 
 namespace Global
 
@@ -96,25 +97,11 @@ def findInductive (name : Name) (g : Global) : Option InductiveInfo := do
   let .inductive info ← g[name]? | none
   return info
 
-def findConstantInfo (name : Name) (g : Global) : Option ConstantInfo := do
-  match ← g[name]? with
-  | .definition info
-  | .opaque info
-  | .axiom info
-  | .recursor info
-  | .constructor info
-  | .inductive info =>
-      return info.toConstantInfo
+def findConstantInfo (name : Name) (g : Global) : Option ConstantInfo :=
+  Constant.toConstantInfo <$> g[name]?
 
-def findTy (name : Name) (g : Global) : Option (Ty 0) := do
-  match ← g[name]? with
-  | .definition info
-  | .opaque info
-  | .axiom info
-  | .recursor info
-  | .constructor info
-  | .inductive info =>
-      return info.ty
+def findTy (name : Name) (g : Global) : Option (Ty 0) :=
+  Constant.ty <$> g[name]?
 
 end Global
 end Qdt

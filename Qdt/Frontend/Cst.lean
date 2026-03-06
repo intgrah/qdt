@@ -9,18 +9,21 @@ open Std (HashMap)
 inductive Cst : Type
   | token (kind : SyntaxNodeKind) (val : String)
   | node (kind : SyntaxNodeKind) (children : Array Cst)
-deriving Repr, Inhabited
+deriving Hashable
 
 structure Span where
   startPos : Nat
   endPos : Nat
-deriving Repr, Inhabited
 
 namespace Cst
 
 def width : Cst → Nat
   | .token _ val => val.length
   | .node _ children => children.foldl (· + ·.width) 0
+
+def reconstruct : Cst → String
+  | .token _ val => val
+  | .node _ children => children.foldl (fun acc c => acc ++ c.reconstruct) ""
 
 def spanAtPath (root : Cst) (path : Path) : Option Span := do
   let mut current := root
@@ -38,7 +41,7 @@ def spanAtPath (root : Cst) (path : Path) : Option Span := do
     | .token _ _ => failure
   return { startPos, endPos := startPos + current.width }
 
-partial def pathAtPosition (root : Cst) (pos : Nat) : Path :=
+def pathAtPosition (root : Cst) (pos : Nat) : Path :=
   go root pos []
 where
   go (cst : Cst) (pos : Nat) (acc : Path) : Path :=
@@ -62,19 +65,16 @@ def ofLeanSyntax : Syntax → Cst
 
 end Cst
 
-abbrev CstPath := Path
-abbrev AstPath := Path
-
 structure SourceMap where
-  cstToAst : HashMap CstPath AstPath
-  astToCst : HashMap AstPath CstPath
+  cstToAst : HashMap Path Path
+  astToCst : HashMap Path Path
 
 instance : Hashable SourceMap where
   hash sm := mixHash (hash sm.cstToAst.size) (hash sm.astToCst.size)
 
 namespace SourceMap
 
-def insert (m : SourceMap) (cstPath : CstPath) (astPath : AstPath) : SourceMap where
+def insert (m : SourceMap) (cstPath : Path) (astPath : Path) : SourceMap where
   cstToAst := m.cstToAst.insert cstPath astPath
   astToCst := m.astToCst.insert astPath cstPath
 

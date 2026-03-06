@@ -5,65 +5,90 @@ import Qdt.Incremental
 
 open Cli
 open Qdt
-open Incremental (Engine TaskM Key Val)
+open Qdt.Incremental
 open System (FilePath)
 
-partial def forceElaborateModule (visited : Std.HashSet FilePath) (filepath : FilePath) :
-    TaskM Val (Nat × Std.HashSet FilePath) := do
-  if filepath ∈ visited then
-    return (0, visited)
-  let mut count := 0
-  let mut visited := visited.insert filepath
-  let importNames ← fetchQ (Key.moduleImports filepath)
-  for modName in importNames.toArray do
-    match ← fetchQ (Key.moduleFile modName) with
-    | none =>
-        IO.toEIO (fun _ => ()) <| IO.eprintln s!"[warn] Module not found: {modName}"
-    | some depFile =>
-        let (c, v) ← forceElaborateModule visited depFile
-        count := count + c
-        visited := v
-  let (env, _info) ← fetchQ (Key.elabModule filepath)
-  let importedEnv ← fetchQ (Key.importedEnv filepath)
-  let fileCount := env.size - importedEnv.size
-  IO.toEIO (fun _ => ()) <| IO.eprintln s!"[count] {filepath}: {fileCount} entries"
-  count := count + fileCount
-  return (count, visited)
+private def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
+  let mut line := 1
+  let mut col := 1
+  let mut i := 0
+  for c in text.toList do
+    if i >= pos then return (line, col)
+    i := i + 1
+    if c == '\n' then
+      line := line + 1
+      col := 1
+    else
+      col := col + 1
+  return (line, col)
 
-private def countModuleEntries (filepath : FilePath) :
-    TaskM Val Nat := do
-  let (count, _) ← forceElaborateModule (Std.HashSet.emptyWithCapacity 256) filepath
-  return count
+private def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.Path) :
+    Option Frontend.Span := Id.run do
+  let fwd := path.reverse
+  for len in (List.range fwd.length).reverse do
+    if let some cstPath := sm.astToCst[fwd.take (len + 1)]? then
+      return cst.spanAtPath cstPath
+  return none
 
-private def runModuleOnce (ctx : Incremental.BaseContext) (engine : Engine Val) (filepath : FilePath) : IO (Engine Val) := do
-  let t0 ← IO.monoMsNow
-  match ← (Incremental.run ctx engine (countModuleEntries filepath)).toIO' with
-  | .ok (count, engine') =>
-      let t1 ← IO.monoMsNow
-      println!"{count} entries, {t1 - t0}ms"
-      pure engine'
-  | .error () =>
-      let t1 ← IO.monoMsNow
-      println!"[error] cycle detected"
-      println!"{t1 - t0}ms"
-      pure engine
+private def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
+    (cst : Frontend.Cst) (d : Diagnostic) : String :=
+  match resolveSpan sm cst d.path with
+  | some span =>
+      let (line, col) := posToLineCol text span.startPos
+      s!"{file}:{line}:{col}: error: {d.error}"
+  | none =>
+      s!"{file}: error: {d.error}"
 
-def watchLoop (ctx : Incremental.BaseContext) (engine : Engine Val) (entryFile : FilePath) : IO Unit := do
-  let engine ← IO.mkRef (← runModuleOnce ctx engine entryFile)
-  let pending ← IO.mkRef []
+private def checkModule (filepath : FilePath) : Task Key Val (Array String) := do
+  let transImports ← Incremental.Task.fetch (Key.transitiveImports filepath)
+  let allFiles := transImports.toList ++ [filepath]
+  let mut msgs : Array String := #[]
+  for file in allFiles do
+    let diags ← Incremental.Task.fetch (Key.checkFile file)
+    if diags.isEmpty then continue
+    let text ← Incremental.Task.fetch (Key.text file)
+    let (cst, _) ← Incremental.Task.fetch (Key.cst file)
+    let sm ← Incremental.Task.fetch (Key.sourceMap file)
+    for d in diags do
+      msgs := msgs.push (formatDiag file text sm cst d)
+  return msgs
+
+private def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath)
+    (profile : Bool := false) : IO (Array String × Store Key Val) := do
+  let store ← match ← (Incremental.populateStore config store).toIO' with
+    | .ok s => pure s
+    | .error () => pure store
+  if profile then
+    try Incremental.runWithProfile store (checkModule filepath)
+    catch _ => return (#["[error] cycle detected"], store)
+  else
+    match ← (Incremental.run (Build.shake Key Val Key.tag) store (checkModule filepath)).toIO' with
+    | .ok r => return r
+    | .error () => return (#["[error] cycle detected"], store)
+
+def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
+  let (msgs, initialStore) ← runOnce config store entryFile
+  for msg in msgs do IO.println msg
+  let storeRef ← IO.mkRef initialStore
+  let pending ← IO.mkRef #[]
 
   FSWatch.Manager.withManager fun m => do
-    for dir in ctx.config.sourceDirectories do
+    for dir in config.sourceDirectories do
       let _ ← m.watchTree dir (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
-        pending.modify (e.path :: ·)
+        pending.modify (·.push e.path)
 
     while true do
       IO.sleep 50
-      let pending ← pending.modifyGet (·, [])
-      if !pending.isEmpty then
-        let eng ← engine.get
-        let eng' ← runModuleOnce ctx eng entryFile
-        engine.set eng'
+      let pendingFiles ← pending.modifyGet (·, #[])
+      if !pendingFiles.isEmpty then
+        let mut s ← storeRef.get
+        for file in pendingFiles do
+          let text ← IO.FS.readFile file
+          let memo : Memo Key Val (.text file) := { value := text, deps := ∅, hash := hash text }
+          s := { s with cache := s.cache.insert (.text file) memo }
+        let (msgs, s') ← runOnce config s entryFile
+        for msg in msgs do IO.println msg
+        storeRef.set s'
 
 def resolveEntryFile (config : Config) (cliArg : Option String) : IO FilePath := do
   let projectRoot := config.projectRoot.getD "."
@@ -83,8 +108,9 @@ def run (parsed : Parsed) : IO UInt32 := do
   let sourceDir := parsed.flag? "source" |>.map (·.as! String)
   let watchMode := parsed.hasFlag "watch"
 
-  let cliArg := parsed.variableArgsAs? String |>.bind (·[0]?)
+  let cliArg := parsed.variableArgsAs? String >>= (·[0]?)
 
+  let profileMode := parsed.hasFlag "profile"
   let mut config ← Config.load
 
   if let some dir := sourceDir then
@@ -92,20 +118,29 @@ def run (parsed : Parsed) : IO UInt32 := do
   if watchMode then
     config := { config with watchMode := true }
 
-  let filePath ← resolveEntryFile config cliArg
+  let mut filePath ← resolveEntryFile config cliArg
+  filePath ← IO.FS.realPath filePath
 
-  println!"[config] Entry: {filePath}"
-  println!"[config] Source directories: {config.sourceDirectories}"
+  IO.eprintln s!"[config] Entry: {filePath}"
+  IO.eprintln s!"[config] Source directories: {config.sourceDirectories}"
 
-  let engine : Engine Val := Incremental.newEngine
-
-  let ctx : Incremental.BaseContext := { config, overrides := ∅ }
+  let store : Store Key Val := {}
 
   if config.watchMode then
-    watchLoop ctx engine filePath
+    watchLoop config store filePath
+    return 0
   else
-    let _ ← runModuleOnce ctx engine filePath
-  return 0
+    let t0 ← IO.monoMsNow
+    let (msgs, _) ← runOnce config store filePath profileMode
+    for msg in msgs do
+      IO.println msg
+    let t1 ← IO.monoMsNow
+    if msgs.isEmpty then
+      IO.eprintln s!"OK ({t1 - t0}ms)"
+      return 0
+    else
+      IO.eprintln s!"{msgs.size} error(s) ({t1 - t0}ms)"
+      return 1
 
 def cmd : Cmd :=
   Cmd.mk
@@ -115,9 +150,10 @@ def cmd : Cmd :=
     (flags := #[
       ⟨some "s", "source", "source directory", String⟩,
       Flag.paramless (longName := "watch") (description := "Enable watch mode"),
-      { longName := "watch-dir", description := "Add directory to watch", «type» := String }
+      { longName := "watch-dir", description := "Add directory to watch", «type» := String },
+      Flag.paramless (longName := "profile") (description := "Print query profile table after build")
     ])
-    (positionalArgs := #[])
+    (variableArg? := some { name := "module", description := "Entry module", «type» := String })
     (run := run)
 
 def main : List String → IO UInt32 :=
