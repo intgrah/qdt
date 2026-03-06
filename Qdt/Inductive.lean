@@ -218,7 +218,7 @@ def elabCtor
         if numIndices > 0 then
           raiseError (Error.typeFamilyCtorReturnTypeRequired ctorName)
         let indVar : VTm (numParams + 1 + numFields) := VTm.varAt numParams
-        let res ← (indVar.apps (weaken params))
+        let res ← indVar.apps (weaken params)
         let res ← res.quote
         pure (Ty.el res)
   let ctorTyWithInd : Ty (numParams + 1) := Ty.pis fieldTys retTy
@@ -260,8 +260,8 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
     List.finRange numIndices |>.map fun i => VTm.varAt (numParams + i.val)
 
   let motiveInd : VTm numParamsIndices := indVal.weaken
-  let motiveInd ← (motiveInd.apps (weaken params indexTys.le))
-  let motiveInd ← (motiveInd.apps motiveIndices)
+  let motiveInd ← motiveInd.apps (weaken params indexTys.le)
+  let motiveInd ← motiveInd.apps motiveIndices
   let motiveInd ← motiveInd.quote
 
   let motiveUnivName := Universe.freshName univParams
@@ -272,7 +272,7 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
   let motiveVal : VTm numParamsMotives := VTm.varAt numParams
 
   let numMinors := ind.ctors.length
-  let indTyVal : VTy 0 ← (indTy.eval .nil)
+  let indTyVal : VTy 0 ← indTy.eval .nil
   let indTyVal : VTy numParams := indTyVal.weaken
   let ctors ← (Vector.finRange numMinors).mapM fun i =>
     withChild (4 + i.val) (
@@ -302,7 +302,7 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
       (ctorFieldsTy : Ty numParams) :
       OptionT MetaM (Param (numParamsMotives + ithMinor) × RuleSeed numParamsMotivesMinors) := do
     let numParamsMotivesIthMinor : Nat := numParamsMotives + ithMinor
-    let ctorFieldsTy ← (ctorFieldsTy.eval Env.infer)
+    let ctorFieldsTy ← ctorFieldsTy.eval Env.infer
     let ctorFieldsTy : VTy numParamsMotivesIthMinor := ctorFieldsTy.weaken
     let ctorFieldsTy : Ty numParamsMotivesIthMinor ← ctorFieldsTy.quote
     let ⟨numParamsMotivesIthMinorFields, fieldTele, ctorRetTy⟩ := ctorFieldsTy.getTele
@@ -348,11 +348,11 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
           let fieldVar : VTm nestedEnd₁ := VTm.varAt idx
           let nestedArgs : List (VTm nestedEnd₁) :=
             List.finRange numNested |>.map fun j => VTm.varAt (numParamsMotivesIthMinorFields + j.val)
-          let recVal ← (fieldVar.apps nestedArgs)
+          let recVal ← fieldVar.apps nestedArgs
 
           let ih : VTm nestedEnd₁ := motiveVal.weaken
-          let ih ← (ih.apps indices₁)
-          let ih ← (ih.app recVal)
+          let ih ← ih.apps indices₁
+          let ih ← ih.app recVal
           let ih ← ih.quote
           let ih := Ty.el ih
           let ih := Ty.pis nestedTele₁ ih
@@ -392,8 +392,8 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
       List.finRange numFields |>.map fun i => VTm.varAt (numParamsMotivesIthMinor + i.val)
 
     let ctorApp : VTm resultCtx := VTm.const ctorName indUnivs
-    let ctorApp ← (ctorApp.apps (weaken params))
-    let ctorApp ← (ctorApp.apps fieldsVars)
+    let ctorApp ← ctorApp.apps (weaken params)
+    let ctorApp ← ctorApp.apps fieldsVars
 
     let ctorIdxVals ←
       match ctorRetTy with
@@ -410,8 +410,8 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
     let ctorIdxVals := ctorIdxVals.map VTm.weaken
 
     let minorTy : VTm resultCtx := motiveVal.weaken
-    let minorTy ← (minorTy.apps ctorIdxVals)
-    let minorTy ← (minorTy.app ctorApp)
+    let minorTy ← minorTy.apps ctorIdxVals
+    let minorTy ← minorTy.app ctorApp
     let minorTy ← minorTy.quote
     let minorTy := Ty.el minorTy
     let minorTy := Ty.pis ihTele minorTy
@@ -471,15 +471,15 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
         List.finRange numNested |>.map fun j => VTm.varAt (numParamsMotivesMinorsFields + j.val)
 
       let majorArg : VTm numParamsMotivesMinorsFieldsNested := VTm.varAt (numParamsMotivesMinors + rf.fieldIdx.val)
-      let majorArg ← (majorArg.apps nestedArgs)
+      let majorArg ← majorArg.apps nestedArgs
 
       let recUnivs := .level motiveUnivName :: indUnivs
       let recVal : VTm numParamsMotivesMinorsFieldsNested := VTm.const recName recUnivs
-      let recVal ← (recVal.apps (weaken params (by omega)))
-      let recVal ← (recVal.app (motiveVal.weaken (by omega)))
-      let recVal ← (recVal.apps minors)
-      let recVal ← (recVal.apps indices)
-      let recVal ← (recVal.app majorArg)
+      let recVal ← recVal.apps (weaken params (by omega))
+      let recVal ← recVal.app (motiveVal.weaken (by omega))
+      let recVal ← recVal.apps minors
+      let recVal ← recVal.apps indices
+      let recVal ← recVal.app majorArg
       let recVal ← recVal.quote
       let recVal := Tm.lams rf.nestedTele recVal
       (recVal.eval Env.infer)
@@ -488,8 +488,8 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
       List.finRange numFields |>.map fun j => VTm.varAt (numParamsMotivesMinors + j.val)
 
     let rhsVal : VTm numParamsMotivesMinorsFields := VTm.varAt (numParamsMotives + i.val)
-    let rhsVal ← (rhsVal.apps fieldsVals)
-    let rhsVal ← (rhsVal.apps ihVals)
+    let rhsVal ← rhsVal.apps fieldsVals
+    let rhsVal ← rhsVal.apps ihVals
     let rhsVal ← rhsVal.quote
 
     return {
@@ -503,15 +503,15 @@ def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
     List.finRange numIndices |>.map fun j => VTm.varAt (numParamsMotivesMinors + j.val)
 
   let majorTy : VTm numParamsMotivesMinorsIndices := indVal.weaken
-  let majorTy ← (majorTy.apps (weaken params))
-  let majorTy ← (majorTy.apps indicesVals)
+  let majorTy ← majorTy.apps (weaken params)
+  let majorTy ← majorTy.apps indicesVals
   let majorTy ← majorTy.quote
   let majorTy := Ty.el majorTy
   let majorVal : VTm (numParamsMotivesMinorsIndices + 1) := VTm.varAt numParamsMotivesMinorsIndices
 
   let conclusionTy : VTm (numParamsMotivesMinorsIndices + 1) := motiveVal.weaken
-  let conclusionTy ← (conclusionTy.apps (weaken indicesVals))
-  let conclusionTy ← (conclusionTy.app majorVal)
+  let conclusionTy ← conclusionTy.apps (weaken indicesVals)
+  let conclusionTy ← conclusionTy.app majorVal
   let conclusionTy ← conclusionTy.quote
   let conclusionTy := Ty.el conclusionTy
 
