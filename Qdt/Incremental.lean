@@ -1,3 +1,5 @@
-import Qdt.Incremental.Basic
-import Qdt.Incremental.Query
-import Qdt.Incremental.Rules
+module
+
+public import Qdt.Incremental.Basic
+public import Qdt.Incremental.Query
+public import Qdt.Incremental.Rules

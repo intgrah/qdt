@@ -1,12 +1,16 @@
-import Std.Data.HashMap
-import Std.Data.HashSet
+module
 
-import Qdt.Error
-import Qdt.MLTT.Global
-import Qdt.Frontend.Ast
-import Qdt.Frontend.Cst
-import Qdt.Frontend.Parser
-import Qdt.Incremental.Basic
+public import Std.Data.HashMap
+public import Std.Data.HashSet
+
+public import Qdt.Error
+public import Qdt.MLTT.Global
+public import Qdt.Frontend.Ast
+public import Qdt.Frontend.Cst
+public import Qdt.Frontend.Parser
+public import Qdt.Incremental.Basic
+
+@[expose] public section
 
 namespace Qdt
 

@@ -1,9 +1,12 @@
-import Qdt.Control
-import Qdt.MLTT.Syntax
-import Qdt.Nbe
+module
+
+public import Qdt.Control
+public import Qdt.MLTT.Syntax
+public import Qdt.Nbe
+
+@[expose] public section
 
 namespace Qdt
-
 
 mutual
 

@@ -1,10 +1,14 @@
-import Qdt.Bidirectional
-import Qdt.Control
-import Qdt.Frontend.Ast
-import Qdt.Inductive
-import Qdt.Nbe
-import Qdt.Params
-import Qdt.Quote
+module
+
+public import Qdt.Bidirectional
+public import Qdt.Control
+public import Qdt.Frontend.Ast
+public import Qdt.Inductive
+public import Qdt.Nbe
+public import Qdt.Params
+public import Qdt.Quote
+
+@[expose] public section
 
 namespace Qdt
 
@@ -23,7 +27,7 @@ structure Structure where
   tyOpt : Option Ast
   fields : List StructureField
 
-private def parseStructureField : Ast → Option StructureField
+def parseStructureField : Ast → Option StructureField
   | .node `StructureField cs =>
       let name := cs[0]!.getName
       let paramsNode := cs[1]!
@@ -56,19 +60,19 @@ def parseStructure : Ast → Option Structure
       some { name, univParams, params, tyOpt, fields }
   | _ => none
 
-private def mkFieldTyAst (field : StructureField) : Ast :=
+def mkFieldTyAst (field : StructureField) : Ast :=
   field.params.foldr (fun b acc => .node `Term.pi #[b, acc]) field.ty
 
-private def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT MetaM String := do
+def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT MetaM String := do
   let .str .anonymous s := fieldName
     | raiseError (.msg s!"{structName}: field name must be atomic")
   return s
 
-private def mkParamEnv : (numParams : Nat) → Env (numParams + 1) numParams
+def mkParamEnv : (numParams : Nat) → Env (numParams + 1) numParams
   | 0 => .nil
   | numParams + 1 => Env.cons (VTm.varAt numParams) (mkParamEnv numParams).weaken
 
-private def mkPrevEnv
+def mkPrevEnv
     (structName : Name)
     (numParams : Nat)
     (univs : List Universe)
@@ -85,7 +89,7 @@ private def mkPrevEnv
       let ne := ne.app x
       return Env.cons (.neutral ne) envTail
 
-private def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT MetaM Unit
+def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT MetaM Unit
   | [], _ => return ()
   | field :: rest, j => do
       let (fieldParamCtx, fieldParamTele) ←

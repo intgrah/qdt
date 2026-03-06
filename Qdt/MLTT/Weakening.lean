@@ -1,4 +1,6 @@
+module
 -- import Qdt.MLTT.Declarative
+@[expose] public section
 
 -- namespace Qdt
 

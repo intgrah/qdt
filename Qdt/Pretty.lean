@@ -1,6 +1,10 @@
-import Qdt.MLTT.Syntax
-import Lean.Data.Format
-import Lean.Data.Name
+module
+
+public import Qdt.MLTT.Syntax
+public import Lean.Data.Format
+public import Lean.Data.Name
+
+@[expose] public section
 
 namespace Qdt
 

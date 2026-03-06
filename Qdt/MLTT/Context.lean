@@ -1,5 +1,9 @@
-import Qdt.MLTT.Substitution.Basic
-import Qdt.Tele
+module
+
+public import Qdt.MLTT.Substitution.Basic
+public import Qdt.Tele
+
+@[expose] public section
 
 namespace Qdt
 

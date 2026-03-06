@@ -1,5 +1,9 @@
-import Qdt.Tele
-import Qdt.MLTT.Universe
+module
+
+public import Qdt.Tele
+public import Qdt.MLTT.Universe
+
+@[expose] public section
 
 namespace Qdt
 
@@ -74,7 +78,7 @@ def Tm.lams {a b} : Ctx a b → Tm b → Tm a
   | .nil => id
   | .snoc bs param => lams bs ∘ lam param
 
-private def lookup (subst : List (Name × Universe)) (n : Name) : Universe :=
+def lookup (subst : List (Name × Universe)) (n : Name) : Universe :=
   match subst.find? (·.fst == n) with
   | some (_, u) => u
   | none => .level n
@@ -162,7 +166,7 @@ instance {n} : Hashable (Ty n) := ⟨Ty.hash⟩
 instance {n} : Hashable (Tm n) := ⟨Tm.hash⟩
 instance {n} : Hashable (Param n) := ⟨Param.hash⟩
 
-private def hashCtx {a b} : Ctx a b → UInt64
+def hashCtx {a b} : Ctx a b → UInt64
   | .nil => 0
   | .snoc ts t => mixHash (hashCtx ts) (hash t)
 

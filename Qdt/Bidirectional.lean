@@ -1,7 +1,11 @@
-import Qdt.Control
-import Qdt.Frontend.Ast
-import Qdt.DefinitionalEquality
-import Qdt.Quote
+module
+
+public import Qdt.Control
+public import Qdt.Frontend.Ast
+public import Qdt.DefinitionalEquality
+public import Qdt.Quote
+
+@[expose] public section
 
 namespace Qdt
 
@@ -12,7 +16,7 @@ def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : MetaM Unit := do
   if !(← readThe CoreContext).collectHovers then return
   emitHover (.typeOnly ctx.names (← ty.quote))
 
-private def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : MetaM Unit := do
+def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : MetaM Unit := do
   if let .const constName _ := tm then
     if let some info ← fetchConstantInfo constName then
       emitHover (.signature constName .nil info.ty)
@@ -30,19 +34,19 @@ def checkAstUniverses : Ast → OptionT MetaM (List Universe)
   | .node _ cs => cs.toList.mapM checkAstUniverse
   | _ => return []
 
-private def checkUniverseLevel (level : Universe) : OptionT MetaM Unit := do
+def checkUniverseLevel (level : Universe) : OptionT MetaM Unit := do
   let univParams ← getUnivParams
   for name in level.levelNames do
     if name ∉ univParams then
       raiseError (.unboundUniverseVariable name)
 
-private def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
+def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
     OptionT MetaM (Ty 0) := do
   if univs.length != declParams.length then
     raiseError (.universeArgCountMismatch name declParams.length univs.length)
   return ty.substLevels (declParams.zip univs)
 
-private def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Universe) :
+def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Universe) :
     OptionT MetaM (Tm n × VTy n) := do
   if let some (i, ty) := ctx.findName? name then
     return (.var i, ty)
@@ -57,7 +61,7 @@ private def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : Li
         return (.const name univs, ← ty.eval .nil)
     | none => raiseError (.unboundVariable name)
 
-private def emitSorryTm {n : Nat}
+def emitSorryTm {n : Nat}
     (ctx : TermContext n)
     (expected : VTy n) :
     MetaM (Tm n) := do
@@ -76,7 +80,7 @@ private def emitSorryTm {n : Nat}
 
 mutual
 
-private partial def processLetRhs {n : Nat}
+partial def processLetRhs {n : Nat}
     (ctx : TermContext n)
     (name : Name)
     (tyOpt : Ast)
@@ -96,12 +100,12 @@ private partial def processLetRhs {n : Nat}
   let ctx' := ctx.define name rhsTyVal rhsVal
   return (rhs, rhsTySyn, rhsVal, ctx')
 
-private partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT MetaM (Tm n × VTy n) := do
+partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT MetaM (Tm n × VTy n) := do
   let ann ← withChild 1 (checkTy ctx ann)
   let annVal ← ann.eval ctx.env
   return (← withChild 0 (checkTmCore ctx annVal e), annVal)
 
-private partial def checkEq {n : Nat}
+partial def checkEq {n : Nat}
     (ctx : TermContext n)
     (a : Ast)
     (b : Ast) :
@@ -112,7 +116,7 @@ private partial def checkEq {n : Nat}
   let level ← ty.inferLevel ctx.ctx
   return (Tm.const `Eq [level] |>.apps [tyTm, aTm, bTm], level)
 
-private partial def inferPi {n : Nat}
+partial def inferPi {n : Nat}
     (ctx : TermContext n)
     (x : Name)
     (dom : Ast)

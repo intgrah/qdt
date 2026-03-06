@@ -1,6 +1,10 @@
-import Qdt.MLTT.Context
-import Qdt.MLTT.Substitution.Basic
-import Qdt.MLTT.Global
+module
+
+public import Qdt.MLTT.Context
+public import Qdt.MLTT.Substitution.Basic
+public import Qdt.MLTT.Global
+
+@[expose] public section
 
 namespace Qdt
 
@@ -182,32 +186,32 @@ end Definitions
 -/
 
 @[app_unexpander Global.WF]
-def Global.WF.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Global.WF.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ) => `(⊢ $Δ)
   | _ => throw ()
 
 @[app_unexpander Ctx.WF]
-def Ctx.WF.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Ctx.WF.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ) => `($Δ; $Γ ⊢)
   | _ => throw ()
 
 @[app_unexpander Ty.WF]
-def Ty.WF.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Ty.WF.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ $A) => `($Δ; $Γ ⊢ $A type)
   | _ => throw ()
 
 @[app_unexpander Ty.Eq]
-def Ty.Eq.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Ty.Eq.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ $A $B) => `($Δ; $Γ ⊢ $A ≡ $B type)
   | _ => throw ()
 
 @[app_unexpander Tm.Eq]
-def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ $e₁ $e₂ $A) => `($Δ; $Γ ⊢ $e₁ ≡ $e₂ : $A)
   | _ => throw ()
 
 @[app_unexpander Tm.HasType]
-def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
+meta def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ $e $A) => `($Δ; $Γ ⊢ $e : $A)
   | _ => throw ()
 

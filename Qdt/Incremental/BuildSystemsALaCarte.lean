@@ -1,5 +1,9 @@
-import Batteries.Control.AlternativeMonad
-import Mathlib.Control.Monad.Writer
+module
+
+public import Batteries.Control.AlternativeMonad
+public import Mathlib.Control.Monad.Writer
+
+@[expose] public section
 
 /-!
 # Build Systems à la Carte
@@ -186,7 +190,6 @@ def CT := List (Σ q, R q × List (Σ d, Hash (R d)))
 
 variable {Q : Type u} [DecidableEq Q] {R : Q → Type u} {Hash : Type u → Type u} [∀ α, DecidableEq (Hash α)] {m} [Monad m]
 
-
 def VT.record (q : Q) (h : Hash (R q)) (deps : List (Σ d, Hash (R d))) : VT Q R Hash → VT Q R Hash :=
   List.cons ⟨q, h, deps⟩
 
@@ -208,7 +211,6 @@ def VT.verify (q : Q) (h : Hash (R q)) (fetchHash : ∀ d, m (Hash (R d))) (vt :
       else
         matchTrace rest
   matchTrace vt
-
 
 def CT.record (q : Q) (v : R q) (deps : List (Σ d, Hash (R d))) : CT Q R Hash → CT Q R Hash :=
   List.cons ⟨q, v, deps⟩

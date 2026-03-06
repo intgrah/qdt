@@ -1,6 +1,10 @@
-import Std.Data.HashMap
+module
 
-import Qdt.MLTT.Syntax
+public import Std.Data.HashMap
+
+public import Qdt.MLTT.Syntax
+
+@[expose] public section
 
 instance {α n} [Hashable α] : Hashable (Vector α n) where
   hash as := hash as.toList

@@ -1,4 +1,8 @@
-import Lake.Toml
+module
+
+public import Lake.Toml
+
+@[expose] public section
 
 namespace Qdt
 

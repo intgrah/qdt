@@ -1,16 +1,20 @@
-import Std.Data.HashMap
-import Std.Data.HashSet
+module
 
-import Qdt.Bidirectional
-import Qdt.Error
-import Qdt.Frontend.Ast
-import Qdt.MLTT.Global
-import Qdt.Nbe
-import Qdt.Params
-import Qdt.Quote
-import Qdt.Frontend.Desugar
-import Qdt.Inductive
-import Qdt.Structure
+public import Std.Data.HashMap
+public import Std.Data.HashSet
+
+public import Qdt.Bidirectional
+public import Qdt.Error
+public import Qdt.Frontend.Ast
+public import Qdt.MLTT.Global
+public import Qdt.Nbe
+public import Qdt.Params
+public import Qdt.Quote
+public import Qdt.Frontend.Desugar
+public import Qdt.Inductive
+public import Qdt.Structure
+
+@[expose] public section
 
 namespace Qdt
 
@@ -96,7 +100,7 @@ def parseImport : Ast → Option Import
       some { moduleName := cs[0]!.getName }
   | _ => none
 
-private def checkDuplicateUnivParams (params : List Name) : Option Error :=
+def checkDuplicateUnivParams (params : List Name) : Option Error :=
   let rec loop (seen : Std.HashSet Name) : List Name → Option Error
     | [] => none
     | n :: ns =>

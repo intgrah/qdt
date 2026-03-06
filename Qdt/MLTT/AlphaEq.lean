@@ -1,4 +1,8 @@
-import Qdt.MLTT.Syntax
+module
+
+public import Qdt.MLTT.Syntax
+
+@[expose] public section
 
 namespace Qdt
 

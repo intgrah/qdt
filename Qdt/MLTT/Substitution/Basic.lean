@@ -1,5 +1,9 @@
-import Qdt.MLTT.Syntax
-import Qdt.MLTT.Substitution.Ren
+module
+
+public import Qdt.MLTT.Syntax
+public import Qdt.MLTT.Substitution.Ren
+
+@[expose] public section
 
 namespace Qdt
 
@@ -120,20 +124,20 @@ theorem Subst.shift_cons {n m} (s : Tm m) (σ : Subst n m) :
   funext ⟨i, hi⟩
   rfl
 
-private theorem Subst.comp_ren_up {l m n} (σ : Subst m n) (ξ : Ren l m) :
+theorem Subst.comp_ren_up {l m n} (σ : Subst m n) (ξ : Ren l m) :
     Subst.up (σ ∘ ξ) = σ.up ∘ ξ.up := by
   funext ⟨i, hi⟩
   cases i <;> rfl
 
 mutual
 
-private theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
+theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     (A : Ty l) → (A.ren ξ).subst σ = A.subst (σ ∘ ξ)
   | .u .. => rfl
   | .pi ⟨_, _⟩ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
   | .el .. => by simp only [Ty.ren, Ty.subst, Tm.ren_subst]
 
-private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
+theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     ∀ t : Tm l, (t.ren ξ).subst σ = t.subst (σ ∘ ξ)
   | .u' .. => rfl
   | .var _ => rfl
@@ -146,7 +150,7 @@ private theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
 
 end
 
-private theorem Subst.ren_comp_up {l m n} (σ : Subst l m) (ξ : Ren m n) :
+theorem Subst.ren_comp_up {l m n} (σ : Subst l m) (ξ : Ren m n) :
     Subst.up (Tm.ren ξ ∘ σ) = Tm.ren ξ.up ∘ σ.up := by
   funext ⟨i, hi⟩
   cases i with
@@ -155,13 +159,13 @@ private theorem Subst.ren_comp_up {l m n} (σ : Subst l m) (ξ : Ren m n) :
 
 mutual
 
-private theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
+theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ A : Ty l, (A.subst σ).ren ξ = A.subst (Tm.ren ξ ∘ σ)
   | .u .. => rfl
   | .pi ⟨_, _⟩ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
   | .el .. => by simp only [Ty.subst, Ty.ren, Tm.subst_ren]
 
-private theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
+theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ t : Tm l, (t.subst σ).ren ξ = t.subst (Tm.ren ξ ∘ σ)
   | .u' .. => rfl
   | .var _ => rfl
@@ -398,11 +402,11 @@ theorem Subst.shift_upN_beta {n : Nat} (s : Tm n) :
       congr 1
       exact Subst.shift_upN_beta s k
 
-private def Ren.shiftN {a} : (s : Nat) → Ren a (a + s)
+def Ren.shiftN {a} : (s : Nat) → Ren a (a + s)
   | 0 => Ren.id a
   | s + 1 => Ren.comp (Ren.shiftN s) Ren.shift
 
-private def Idx.shiftAfter (n k s : Nat) : Ren n (n + s) :=
+def Idx.shiftAfter (n k s : Nat) : Ren n (n + s) :=
   match k with
   | 0 => Ren.shiftN s
   | k + 1 => match n with
@@ -418,8 +422,8 @@ def Tm.shiftAfter {n : Nat} (k s : Nat) : Tm n → Tm (n + s) :=
 abbrev Ty.shift {n : Nat} : ∀ s, Ty n → Ty (n + s) := Ty.shiftAfter 0
 abbrev Tm.shift {n : Nat} : ∀ s, Tm n → Tm (n + s) := Tm.shiftAfter 0
 
-private unsafe def Tm.wkClosed_impl {n : Nat} : Tm 0 → Tm n := unsafeCast
-private unsafe def Ty.wkClosed_impl {n : Nat} : Ty 0 → Ty n := unsafeCast
+unsafe def Tm.wkClosed_impl {n : Nat} : Tm 0 → Tm n := unsafeCast
+unsafe def Ty.wkClosed_impl {n : Nat} : Ty 0 → Ty n := unsafeCast
 
 @[implemented_by Tm.wkClosed_impl]
 def Tm.wkClosed {n : Nat} (t : Tm 0) : Tm n := Nat.zero_add n ▸ t.shift n
@@ -428,13 +432,13 @@ def Tm.wkClosed {n : Nat} (t : Tm 0) : Tm n := Nat.zero_add n ▸ t.shift n
 def Ty.wkClosed {n : Nat} (t : Ty 0) : Ty n := Nat.zero_add n ▸ t.shift n
 
 @[simp]
-private theorem Ren.shiftN_zero {a} : Ren.shiftN 0 = Ren.id a := rfl
+theorem Ren.shiftN_zero {a} : Ren.shiftN 0 = Ren.id a := rfl
 
 @[simp]
-private theorem Ren.shiftN_one {a} : Ren.shiftN 1 = (Ren.shift : Ren a (a + 1)) := by
+theorem Ren.shiftN_one {a} : Ren.shiftN 1 = (Ren.shift : Ren a (a + 1)) := by
   simp [Ren.shiftN, Ren.id_comp]
 
-private theorem Ren.shiftN_succ {a} (s : Nat) :
+theorem Ren.shiftN_succ {a} (s : Nat) :
     (Ren.shiftN (s + 1) : Ren a (a + s + 1)) = Ren.comp (Ren.shiftN s) Ren.shift := rfl
 
 def Subst.shiftN {n} : (s : Nat) → Subst n (n + s)

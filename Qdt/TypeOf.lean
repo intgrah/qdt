@@ -1,28 +1,31 @@
-import Qdt.Control
-import Qdt.Nbe
-import Qdt.Quote
+module
+
+public import Qdt.Control
+public import Qdt.Nbe
+public import Qdt.Quote
+
+@[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
 
 
-
-private def ClosTy.openAt {n} (clos : ClosTy n) : MetaM (VTy (n + 1)) :=
+def ClosTy.openAt {n} (clos : ClosTy n) : MetaM (VTy (n + 1)) :=
   let ⟨env, body⟩ := clos
   body.eval (env.weaken.cons (VTm.varAt n))
 
-private def ClosTm.openAt {n} (clos : ClosTm n) : MetaM (VTm (n + 1)) :=
+def ClosTm.openAt {n} (clos : ClosTm n) : MetaM (VTm (n + 1)) :=
   let ⟨env, body⟩ := clos
   body.eval (env.weaken.cons (VTm.varAt n))
 
-private def ClosTy.applyArg {n} (clos : ClosTy n) (arg : VTm n) : MetaM (VTy n) :=
+def ClosTy.applyArg {n} (clos : ClosTy n) (arg : VTm n) : MetaM (VTy n) :=
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 
 mutual
 
-private partial def VTm.typeOf {n} (ctx : TermContext n) : VTm n → MetaM (VTy n)
+partial def VTm.typeOf {n} (ctx : TermContext n) : VTm n → MetaM (VTy n)
   | .u' i => return .u i.succ
   | .pi' x dom cod => do
       let domTy ← dom.typeOf ctx
@@ -43,12 +46,12 @@ private partial def VTm.typeOf {n} (ctx : TermContext n) : VTm n → MetaM (VTy 
       return .pi ⟨x, dom⟩ clos
   | .neutral ne => ne.typeOf ctx
 
-private partial def Neutral.typeOf {n} (ctx : TermContext n) : Neutral n → MetaM (VTy n)
+partial def Neutral.typeOf {n} (ctx : TermContext n) : Neutral n → MetaM (VTy n)
   | ⟨hd, sp⟩ => do
       let hdTy ← hd.typeOf ctx
       sp.typeOf ctx (.neutral ⟨hd, .nil⟩) hdTy
 
-private partial def Head.typeOf {n} (ctx : TermContext n) : Head n → MetaM (VTy n)
+partial def Head.typeOf {n} (ctx : TermContext n) : Head n → MetaM (VTy n)
   | .var lvl => do
       return ctx.ctx.lookup lvl.rev
   | .const name us => do
@@ -57,7 +60,7 @@ private partial def Head.typeOf {n} (ctx : TermContext n) : Head n → MetaM (VT
       let ty := info.ty.substLevels (info.univParams.zip us)
       ty.eval .nil
 
-private partial def Spine.typeOf {n} (ctx : TermContext n) (currentVal : VTm n) (headTy : VTy n) : Spine n → MetaM (VTy n)
+partial def Spine.typeOf {n} (ctx : TermContext n) (currentVal : VTm n) (headTy : VTy n) : Spine n → MetaM (VTy n)
   | .nil => return headTy
   | .app sp arg => do
       let .neutral ne := currentVal
@@ -73,7 +76,7 @@ private partial def Spine.typeOf {n} (ctx : TermContext n) (currentVal : VTm n) 
       let structTy ← sp.typeOf ctx partialVal headTy
       structTy.projTy ctx partialVal i
 
-private partial def VTy.projTy {n} (ctx : TermContext n) (structVal : VTm n) (i : Nat) : VTy n → MetaM (VTy n)
+partial def VTy.projTy {n} (ctx : TermContext n) (structVal : VTm n) (i : Nat) : VTy n → MetaM (VTy n)
   | .el ⟨.const indName us, sp⟩ => do
       let some indInfo ← fetchInductive indName
         | raiseError (.msg s!"projTy: unknown inductive {indName}")
@@ -94,7 +97,7 @@ private partial def VTy.projTy {n} (ctx : TermContext n) (structVal : VTm n) (i 
       else raiseError (.msg "projTy: no constructors")
   | _ => raiseError (.msg "projTy: expected inductive type")
 
-private partial def getFieldTy {n} (structVal : VTm n) (ty : VTy n) (i : Nat) : MetaM (VTy n) :=
+partial def getFieldTy {n} (structVal : VTm n) (ty : VTy n) (i : Nat) : MetaM (VTy n) :=
   go 0 ty i
 where
   go (fieldIdx : Nat) (ty : VTy n) : Nat → MetaM (VTy n)

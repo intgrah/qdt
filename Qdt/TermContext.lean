@@ -1,8 +1,12 @@
-import Std.Data.TreeMap
+module
 
-import Qdt.MLTT.Syntax
-import Qdt.Semantics
-import Qdt.Tele
+public import Std.Data.TreeMap
+
+public import Qdt.MLTT.Syntax
+public import Qdt.Semantics
+public import Qdt.Tele
+
+@[expose] public section
 
 namespace Qdt
 

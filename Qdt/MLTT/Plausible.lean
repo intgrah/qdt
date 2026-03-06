@@ -1,6 +1,10 @@
-import Qdt.MLTT.Syntax
+module
 
-import Plausible
+public meta import Qdt.MLTT.Syntax
+public meta import Qdt.MLTT.Universe
+meta import Plausible
+
+@[expose] meta section
 
 namespace Qdt
 

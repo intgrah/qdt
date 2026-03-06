@@ -7,7 +7,7 @@ open Lean (Term MacroM)
 open System (FilePath)
 open Std (DHashMap)
 
-private def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
+def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let dummyPath : FilePath := "test.qdt"
   let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅, hash := hash src }
   let inputFiles : Std.HashSet System.FilePath := Std.HashSet.emptyWithCapacity 1 |>.insert dummyPath
@@ -20,14 +20,14 @@ private def elabProgFromString (src : String) : IO (Array Diagnostic × Global) 
   | .ok (diags, _) => return (diags, ∅)
   | .error () => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
-private def shouldPass (src : String) : IO Unit := do
+def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
   if diagnostics.isEmpty then
     pure ()
   else
     throw (IO.userError s!"expected success, got: {diagnostics[0]!.error}")
 
-private def shouldFail (check : Error → Bool) (src : String) : IO Unit := do
+def shouldFail (check : Error → Bool) (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
   if diagnostics.isEmpty then
     throw (IO.userError "expected error, got success")

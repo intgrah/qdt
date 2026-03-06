@@ -1,14 +1,18 @@
-import Std.Data.HashMap
-import Std.Data.HashSet
+module
 
-import Qdt.Config
-import Qdt.Control
-import Qdt.Elab
-import Qdt.Error
-import Qdt.Frontend.Desugar
-import Qdt.Frontend.Parser
-import Qdt.Incremental.Basic
-import Qdt.Incremental.Query
+public import Std.Data.HashMap
+public import Std.Data.HashSet
+
+public import Qdt.Config
+public import Qdt.Control
+public import Qdt.Elab
+public import Qdt.Error
+public import Qdt.Frontend.Desugar
+public import Qdt.Frontend.Parser
+public import Qdt.Incremental.Basic
+public import Qdt.Incremental.Query
+
+@[expose] public section
 
 namespace Qdt.Incremental
 
@@ -19,7 +23,7 @@ open Frontend (Ast Cst Path SourceMap)
 open Frontend.Parser (ParseError)
 open Task (fetch)
 
-private def getFieldString (_structName fieldName : Name) : Option String :=
+def getFieldString (_structName fieldName : Name) : Option String :=
   if !fieldName.isAtomic then none
   else match fieldName with
   | .str .anonymous s => some s
@@ -27,7 +31,7 @@ private def getFieldString (_structName fieldName : Name) : Option String :=
 
 open Qdt (parseDefinition parseExample parseAxiom parseImport parseInductive parseStructure)
 
-private def buildOwnerIndex (prog : Ast) : HashMap Name Nat := Id.run do
+def buildOwnerIndex (prog : Ast) : HashMap Name Nat := Id.run do
   let .node _ progCs := prog | return HashMap.emptyWithCapacity 0
   let mut m : HashMap Name Nat := HashMap.emptyWithCapacity 4096
   for idx in [:progCs.size] do
@@ -69,7 +73,7 @@ partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
 
 open Qdt (CoreContext MetaContext MetaM elabRun elabDefinition elabExample elabAxiom elabInductiveCmd elabStructureCmd)
 
-private def getDeclName (cmd : Ast) (idx : Nat) : Name :=
+def getDeclName (cmd : Ast) (idx : Nat) : Name :=
   if let some d := parseDefinition cmd then d.name
   else if let some a := parseAxiom cmd then a.name
   else if let some i := parseInductive cmd then i.name
@@ -77,14 +81,14 @@ private def getDeclName (cmd : Ast) (idx : Nat) : Name :=
   else if (parseExample cmd).isSome then (`_example).num idx
   else .anonymous
 
-private def getCommandUnivParams (cmd : Ast) : List Name :=
+def getCommandUnivParams (cmd : Ast) : List Name :=
   if let some d := parseDefinition cmd then d.univParams
   else if let some a := parseAxiom cmd then a.univParams
   else if let some i := parseInductive cmd then i.univParams
   else if let some s := parseStructure cmd then s.univParams
   else []
 
-private def elabAction (cmd : Ast) : OptionT MetaM Unit :=
+def elabAction (cmd : Ast) : OptionT MetaM Unit :=
   if let some d := parseDefinition cmd then elabDefinition d
   else if let some e := parseExample cmd then elabExample e
   else if let some a := parseAxiom cmd then elabAxiom a
@@ -92,7 +96,7 @@ private def elabAction (cmd : Ast) : OptionT MetaM Unit :=
   else if let some s := parseStructure cmd then elabStructureCmd s
   else pure ()
 
-private def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option FilePath :=
+def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option FilePath :=
   let expectedPath : FilePath :=
     modName.componentsRev.reverse.map toString
     |> String.intercalate "/"
@@ -101,10 +105,10 @@ private def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Opt
   inputFiles.toList.find? fun file =>
     file.toString.endsWith expectedPath.toString
 
-private def toDiagnostic (cst : Cst) (err : ParseError) : Diagnostic :=
+def toDiagnostic (cst : Cst) (err : ParseError) : Diagnostic :=
   { path := cst.pathAtPosition err.pos, error := .msg err.msg }
 
-private partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FilePath)) : List FilePath :=
+partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FilePath)) : List FilePath :=
   let rec visit (f : FilePath) (visited : HashSet FilePath) (sorted : List FilePath) : (HashSet FilePath × List FilePath) :=
     if visited.contains f then (visited, sorted)
     else
@@ -266,7 +270,7 @@ protected def run {α : Type} (build : Build Key Val) (store : Store Key Val)
 protected def runWithProfile {α : Type} (store : Store Key Val)
     (task : Task Key Val α) : IO (α × Store Key Val) := do
   let prof ← IO.mkRef (Std.HashMap.emptyWithCapacity 32)
-  let result ← (Build.shake Key Val Key.tag prof tasks store task).toIO'
+  let result ← (Build.shake Key Val Key.tag prof (onBuildEvent := none) tasks store task).toIO'
   Profile.print prof
   match result with
   | .ok r => return r

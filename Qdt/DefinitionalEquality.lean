@@ -1,7 +1,10 @@
-import Qdt.Nbe
+module
+
+public import Qdt.Nbe
+
+@[expose] public section
 
 namespace Qdt
-
 
 mutual
 
@@ -37,7 +40,7 @@ partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
       b₁Val.defEq b₂Val
   | _, _ => return false
 
-private partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : MetaM Bool := do
+partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : MetaM Bool := do
   let ⟨.const ctorName _us, sp⟩ := ne
     | return false
   let some ctorInfo ← fetchConstructor ctorName
