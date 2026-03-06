@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "8e441852e48d3f61ef547a0a4156a3787dcab3a0",
+   "rev": "276d47f09087a35c216a95bdcbd64086f0247445",
    "name": "FSWatch",
    "manifestFile": "lake-manifest.json",
    "inputRev": "master",
