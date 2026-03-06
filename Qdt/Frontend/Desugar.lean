@@ -446,24 +446,22 @@ where
             withCstChild nameIc.idx <| withAstChild 0 <| recordMapping
             match assignIdx, semiIdx with
             | some aIdx, some sIdx =>
-                let hasType := match colonIdx with
-                  | some c => decide (c < aIdx)
-                  | none => false
-                if hasType then
-                  match nonTrivia[colonIdx.get! + 1]?, nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
-                  | some tyIc, some rhsIc, some bodyIc =>
-                      let ty ← withCstChild tyIc.idx <| withAstChild 1 <| desugarTerm tyIc.cst
-                      let rhs ← withCstChild rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
-                      let body ← withCstChild bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
-                      return .node `Term.letE #[.ident nameVal.toName, ty, rhs, body]
-                  | _, _, _ => return .missing
-                else
-                  match nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
-                  | some rhsIc, some bodyIc =>
-                      let rhs ← withCstChild rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
-                      let body ← withCstChild bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
-                      return .node `Term.letE #[.ident nameVal.toName, .missing, rhs, body]
-                  | _, _ => return .missing
+                match colonIdx.filter (· < aIdx) with
+                | some colonPos =>
+                    match nonTrivia[colonPos + 1]?, nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
+                    | some tyIc, some rhsIc, some bodyIc =>
+                        let ty ← withCstChild tyIc.idx <| withAstChild 1 <| desugarTerm tyIc.cst
+                        let rhs ← withCstChild rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
+                        let body ← withCstChild bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
+                        return .node `Term.letE #[.ident nameVal.toName, ty, rhs, body]
+                    | _, _, _ => return .missing
+                | none =>
+                    match nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
+                    | some rhsIc, some bodyIc =>
+                        let rhs ← withCstChild rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
+                        let body ← withCstChild bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
+                        return .node `Term.letE #[.ident nameVal.toName, .missing, rhs, body]
+                    | _, _ => return .missing
             | _, _ => return .missing
         | none => return .missing
     | none => return .missing

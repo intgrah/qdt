@@ -28,10 +28,10 @@ private def getFieldString (_structName fieldName : Name) : Option String :=
 open Qdt (parseDefinition parseExample parseAxiom parseImport parseInductive parseStructure)
 
 private def buildOwnerIndex (prog : Ast) : HashMap Name Nat := Id.run do
+  let .node _ progCs := prog | return HashMap.emptyWithCapacity 0
   let mut m : HashMap Name Nat := HashMap.emptyWithCapacity 4096
-  let n := prog.numChildren
-  for idx in [:n] do
-    let cmd := prog.get! idx
+  for idx in [:progCs.size] do
+    let cmd := progCs[idx]!
     if let some d := parseDefinition cmd then
       m := m.insert d.name idx
     else if let some a := parseAxiom cmd then
@@ -135,10 +135,10 @@ def tasks : Tasks Key Val
     return sourceMap
   | .imports filepath => some do
     let prog ← fetch (Key.ast filepath)
-    let n := prog.numChildren
+    let .node _ progCs := prog | return #[]
     let mut result : Array Name := #[]
-    for idx in [:n] do
-      let cmd := prog.get! idx
+    for idx in [:progCs.size] do
+      let cmd := progCs[idx]!
       if let some imp := parseImport cmd then
         result := result.push imp.moduleName
     return result
@@ -163,11 +163,12 @@ def tasks : Tasks Key Val
     match indexMap[name]? with
     | some idx =>
         let prog ← fetch (Key.ast filepath)
-        return some (prog.get! idx, idx)
+        let .node _ progCs := prog | return none
+        return some (progCs[idx]!, idx)
     | none => return none
   | .elabCmdAt filepath idx => some do
     let prog ← fetch (Key.ast filepath)
-    let ast := prog.get! idx
+    let ast := match prog with | .node _ cs => cs[idx]! | _ => .missing
     let name := getDeclName ast idx
     let univParams := getCommandUnivParams ast
     let coreCtx : CoreContext := { filepath, univParams, collectHovers := true }
