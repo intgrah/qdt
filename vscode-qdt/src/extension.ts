@@ -7,6 +7,21 @@ import {
 } from "vscode-languageclient/node";
 import { AbbreviationFeature } from "./abbreviation/AbbreviationFeature";
 
+interface LspRange {
+  start: { line: number; character: number };
+  end: { line: number; character: number };
+}
+
+interface FileProgressProcessingInfo {
+  range: LspRange;
+  kind?: number;
+}
+
+interface FileProgressParams {
+  textDocument: { uri: string; version?: number };
+  processing: FileProgressProcessingInfo[];
+}
+
 let client: LanguageClient | undefined;
 
 export async function activate(
@@ -16,6 +31,20 @@ export async function activate(
   context.subscriptions.push(output);
 
   context.subscriptions.push(new AbbreviationFeature());
+
+  const processingDecoration = VSCode.window.createTextEditorDecorationType({
+    overviewRulerLane: VSCode.OverviewRulerLane.Left,
+    overviewRulerColor: "rgba(255, 165, 0, 0.5)",
+    dark: {
+      gutterIconPath: context.asAbsolutePath("media/progress-dark.svg"),
+      gutterIconSize: "contain",
+    },
+    light: {
+      gutterIconPath: context.asAbsolutePath("media/progress-light.svg"),
+      gutterIconSize: "contain",
+    },
+  });
+  context.subscriptions.push(processingDecoration);
 
   const serverOptions: ServerOptions = {
     command: "qdt-lsp",
@@ -46,6 +75,20 @@ export async function activate(
 
   try {
     await client.start();
+    client.onNotification("$/lean/fileProgress", (params: FileProgressParams) => {
+      const uri = VSCode.Uri.parse(params.textDocument.uri);
+      const decos: VSCode.DecorationOptions[] = params.processing
+        .filter((i) => i.kind === undefined || i.kind === 1)
+        .map((i) => ({
+          range: new VSCode.Range(i.range.start.line, 0, i.range.end.line, 0),
+          hoverMessage: "Processing...",
+        }));
+      for (const editor of VSCode.window.visibleTextEditors) {
+        if (editor.document.uri.toString() === uri.toString()) {
+          editor.setDecorations(processingDecoration, decos);
+        }
+      }
+    });
   } catch (err: unknown) {
     output.appendLine(`[qdt] Failed to start: ${String(err)}`);
     output.show(true);
