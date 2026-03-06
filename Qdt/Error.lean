@@ -32,6 +32,7 @@ inductive Error
   | ctorMustReturnInductive (ctorName : Name) (indName : Name)
   | ctorParamMismatch (ctorName : Name)
   | fieldUniverseTooLarge (ctorName : Name) (fieldName : Name) (fieldUniv : Universe) (indUniv : Universe)
+  | ctorNameNotAtomic (ctorName : Name)
 deriving Inhabited, Hashable
 
 instance : ToString Error where toString
@@ -75,6 +76,8 @@ instance : ToString Error where toString
     s!"{ctorName}: inductive type parameters must be constant throughout the definition"
   | .fieldUniverseTooLarge ctorName fieldName fieldUniv indUniv =>
     s!"{ctorName}: field '{fieldName}' has type in universe {fieldUniv}, but inductive lives in {indUniv}"
+  | .ctorNameNotAtomic ctorName =>
+    s!"{ctorName}: constructor name must be atomic"
 
 @[pp_using_anonymous_constructor]
 structure Diagnostic where

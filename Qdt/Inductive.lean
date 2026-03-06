@@ -202,7 +202,7 @@ def elabCtor
     (ctor : InductiveConstructor) :
     OptionT MetaM (Name × Ty numParams) := do
   if !ctor.name.isAtomic then
-    raiseError (.msg s!"{ctor.name}: constructor name must be atomic")
+    raiseError (.ctorNameNotAtomic ctor.name)
   let ctorName := indName.append ctor.name
   let indParamCtx : TermContext (numParams + 1) := paramCtx.bind indName indTyVal
   let params : List (VTm (numParams + 1)) := List.finRange numParams |>.map fun i => VTm.varAt i.val
