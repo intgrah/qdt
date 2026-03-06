@@ -25,11 +25,13 @@ inductive Error
   | unboundVariable (name : Name)
   | unboundUniverseVariable (name : Name)
   | typeFamilyCtorReturnTypeRequired (ctorName : Name)
+  | inductiveReturnTypeMustBeTypeUniverse (indName : Name)
   | structureResultTypeMustBeTypeUniverse (structName : Name)
   | universeArgCountMismatch (name : Name) (expected : Nat) (got : Nat)
   | nonPositiveOccurrence (indName : Name)
   | ctorMustReturnInductive (ctorName : Name) (indName : Name)
   | ctorParamMismatch (ctorName : Name)
+  | fieldUniverseTooLarge (ctorName : Name) (fieldName : Name) (fieldUniv : Universe) (indUniv : Universe)
 deriving Inhabited, Hashable
 
 instance : ToString Error where toString
@@ -59,8 +61,10 @@ instance : ToString Error where toString
     s!"Unbound universe variable {name}"
   | .typeFamilyCtorReturnTypeRequired ctorName =>
     s!"{ctorName}: constructor must specify return type for inductive type family"
+  | .inductiveReturnTypeMustBeTypeUniverse indName =>
+    s!"{indName}: inductive return type must be a Type universe"
   | .structureResultTypeMustBeTypeUniverse structName =>
-    s!"{structName}: structure result type must be of the form Type u"
+    s!"{structName}: structure result type must be a Type universe"
   | .universeArgCountMismatch name expected got =>
     s!"{name}: expected {expected} universe arguments, got {got}"
   | .nonPositiveOccurrence indName =>
@@ -69,6 +73,8 @@ instance : ToString Error where toString
     s!"{ctorName} must return {indName}"
   | .ctorParamMismatch ctorName =>
     s!"{ctorName}: inductive type parameters must be constant throughout the definition"
+  | .fieldUniverseTooLarge ctorName fieldName fieldUniv indUniv =>
+    s!"{ctorName}: field '{fieldName}' has type in universe {fieldUniv}, but inductive lives in {indUniv}"
 
 @[pp_using_anonymous_constructor]
 structure Diagnostic where
