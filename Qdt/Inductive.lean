@@ -1,10 +1,14 @@
-import Qdt.MLTT.Context
-import Qdt.MLTT.Substitution.Basic
-import Qdt.Control
-import Qdt.Frontend.Ast
-import Qdt.Params
-import Qdt.Nbe
-import Qdt.Quote
+module
+
+public import Qdt.MLTT.Context
+public import Qdt.MLTT.Substitution.Basic
+public import Qdt.Control
+public import Qdt.Frontend.Ast
+public import Qdt.Params
+public import Qdt.Nbe
+public import Qdt.Quote
+
+@[expose] public section
 
 namespace Qdt
 
@@ -25,7 +29,7 @@ structure Inductive where
   tyOpt : Option Ast
   ctors : List InductiveConstructor
 
-private def parseConstructor  : Ast → Option InductiveConstructor
+def parseConstructor  : Ast → Option InductiveConstructor
   | .node `Constructor cs =>
       let name := cs[0]!.getName
       let fieldsNode := cs[1]!
@@ -61,7 +65,7 @@ def parseInductive : Ast → Option Inductive
       some { name, univParams, params, tyOpt, ctors }
   | _ => none
 
-private def Tm.getAppArgs {n : Nat} : Tm n → Tm n × List (Tm n) :=
+def Tm.getAppArgs {n : Nat} : Tm n → Tm n × List (Tm n) :=
   let rec go {n : Nat} (spine : List (Tm n)) : Tm n → Tm n × List (Tm n)
     | .app f a => go (a :: spine) f
     | t => (t, spine)
@@ -76,20 +80,20 @@ def Ty.getTele {a : Nat} : Ty a → Σ b, Ctx a b × Ty b :=
     | t => ⟨b, acc, t⟩
   go Tele.nil
 
-private unsafe def weaken_impl {n m : Nat} : List (VTm n) → (_ : n ≤ m) → List (VTm m) := unsafeCast
+unsafe def weaken_impl {n m : Nat} : List (VTm n) → (_ : n ≤ m) → List (VTm m) := unsafeCast
 
-private def weaken' {n m : Nat} (ts : List (VTm n)) (h : n ≤ m) : List (VTm m) :=
+def weaken' {n m : Nat} (ts : List (VTm n)) (h : n ≤ m) : List (VTm m) :=
   ts.map (VTm.weaken h)
 
 def weaken {n m : Nat} (ts : List (VTm n)) (h : n ≤ m := by omega) : List (VTm m) := weaken' ts h
 
-private def Env.infer : {n : Nat} → Env n n
+def Env.infer : {n : Nat} → Env n n
   | 0 => Env.nil
   | n + 1 => Env.infer.weaken.cons (VTm.varAt n)
 
 mutual
 
-private def Tm.hasIndOcc {n : Nat} (ind : Name) : Tm n → Bool
+def Tm.hasIndOcc {n : Nat} (ind : Name) : Tm n → Bool
   | .u' _ => false
   | .var _ => false
   | .const name _ => name == ind
@@ -99,40 +103,40 @@ private def Tm.hasIndOcc {n : Nat} (ind : Name) : Tm n → Bool
   | .proj _ a => a.hasIndOcc ind
   | .letE _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
 
-private def Ty.hasIndOcc {n : Nat} (ind : Name) : Ty n → Bool
+def Ty.hasIndOcc {n : Nat} (ind : Name) : Ty n → Bool
   | .u _ => false
   | .pi ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
   | .el a => a.hasIndOcc ind
 
 end
 
-private structure RecFieldInfo (n : Nat) where
+structure RecFieldInfo (n : Nat) where
   nestedEnd : Nat
   nestedTele : Ctx n nestedEnd
   indices : List (Tm nestedEnd)
 
-private structure ParamRec (n : Nat) where
+structure ParamRec (n : Nat) where
   name : Name
   ty : Ty n
   recOpt : Option (RecFieldInfo n)
 
-private structure RecFieldSeed (numParamsMotivesMinors numFields : Nat) where
+structure RecFieldSeed (numParamsMotivesMinors numFields : Nat) where
   fieldIdx : Fin numFields
   nestedEnd : Nat
   nestedTele : Ctx (numParamsMotivesMinors + numFields) nestedEnd
   indices : List (Tm nestedEnd)
 
-private structure RuleSeed (numParamsMotivesMinors : Nat) where
+structure RuleSeed (numParamsMotivesMinors : Nat) where
   ctorName : Name
   numFields : Nat
   recFields : List (RecFieldSeed numParamsMotivesMinors numFields)
 
-private def Ctx.shiftAt {a b : Nat} (cutoff s : Nat) (tele : Ctx a b) : Ctx (a + s) (b + s) :=
+def Ctx.shiftAt {a b : Nat} (cutoff s : Nat) (tele : Ctx a b) : Ctx (a + s) (b + s) :=
   tele.dmap s fun {n : Nat} ⟨name, ty⟩ => ⟨name, ty.shiftAfter (n + cutoff) s⟩
 
-private def Ctx.shift {m k : Nat} := @Ctx.shiftAt m k 0
+def Ctx.shift {m k : Nat} := @Ctx.shiftAt m k 0
 
-private def indConsistency {n : Nat}
+def indConsistency {n : Nat}
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (args : List (Tm n)) :
@@ -150,7 +154,7 @@ private def indConsistency {n : Nat}
       raiseError (.nonPositiveOccurrence indName)
   return indices
 
-private def analyseRecField
+def analyseRecField
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (jthFieldCtx : Nat)
@@ -178,11 +182,11 @@ private def analyseRecField
         return none
   | .pi .. => raiseError (.msg "Internal error")
 
-private def getTypedBinder' : Ast → Option (Name × Ast)
+def getTypedBinder' : Ast → Option (Name × Ast)
   | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
   | _ => none
 
-private def getFieldName' : Ast → Option Name
+def getFieldName' : Ast → Option Name
   | .node _ cs => cs[0]!.name?
   | _ => none
 

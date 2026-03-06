@@ -1,4 +1,6 @@
+module
 universe u v w
+@[expose] public section
 
 inductive Tele (T : Nat → Type u) (a : Nat) : Nat → Type u
   | nil : Tele T a a
@@ -83,7 +85,6 @@ def map
     Tele U a b :=
   dmap 0
 
-
 @[specialize]
 def mapM
     {a b : Nat}
@@ -109,7 +110,7 @@ meta def snoc.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $ts $t) => `($ts ++ $t)
   | _ => throw ()
 
-private def hash [∀ n, Hashable (T n)] {a b} : Tele T a b → UInt64
+def hash [∀ n, Hashable (T n)] {a b} : Tele T a b → UInt64
   | .nil => 0
   | .snoc ts t => mixHash (hash ts) (Hashable.hash t)
 

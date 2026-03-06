@@ -1,14 +1,17 @@
-import Lean.Data.Name
+module
 
-import Qdt.Control
-import Qdt.MLTT.Global
-import Qdt.Semantics
-import Qdt.MLTT.Syntax
+public import Lean.Data.Name
+
+public import Qdt.Control
+public import Qdt.MLTT.Global
+public import Qdt.Semantics
+public import Qdt.MLTT.Syntax
+
+@[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
-
 
 mutual
 

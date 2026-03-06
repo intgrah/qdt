@@ -1,6 +1,10 @@
-import Mathlib.Algebra.Group.Defs
-import Qdt.Frontend.Ast
-import Qdt.Pretty
+module
+
+public import Mathlib.Algebra.Group.Defs
+public import Qdt.Frontend.Ast
+public import Qdt.Pretty
+
+@[expose] public section
 
 namespace Qdt
 

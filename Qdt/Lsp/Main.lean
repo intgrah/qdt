@@ -1,17 +1,21 @@
-import Std.Data.HashMap
+module
 
-import Lean.Data.Json
-import Lean.Data.JsonRpc
-import Lean.Data.Lsp
-import Lean.Data.Lsp.Communication
-import Lean.Data.Lsp.Utf16
+public import Std.Data.HashMap
 
-import Qdt.Config
-import Qdt.Error
-import Qdt.Frontend.Cst
-import Qdt.Frontend.Parser
-import Qdt.Incremental
-import Qdt.Lsp.Hover
+public import Lean.Data.Json
+public import Lean.Data.JsonRpc
+public import Lean.Data.Lsp
+public import Lean.Data.Lsp.Communication
+public import Lean.Data.Lsp.Utf16
+
+public import Qdt.Config
+public import Qdt.Error
+public import Qdt.Frontend.Cst
+public import Qdt.Frontend.Parser
+public import Qdt.Incremental
+public import Qdt.Lsp.Hover
+
+@[expose] public section
 
 open Std (HashMap)
 open Lean JsonRpc Lsp
@@ -20,7 +24,7 @@ open Qdt
 open Qdt.Incremental
 open Frontend (Cst Path SourceMap Span)
 
-private partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
+partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
   go 0 0
 where
   go (cp : Nat) (bp : Nat) : Nat :=
@@ -29,7 +33,7 @@ where
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else cp
 
-private partial def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
+partial def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
   go 0 0
 where
   go (cp : Nat) (bp : Nat) : Nat :=
@@ -38,7 +42,7 @@ where
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else bp
 
-private def mkRange (text : String) (span : Span) : Range :=
+def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
   let startByte := codepointPosToUtf8Pos text span.startPos
   let endByte := codepointPosToUtf8Pos text span.endPos
@@ -47,7 +51,7 @@ private def mkRange (text : String) (span : Span) : Range :=
     «end» := fileMap.utf8PosToLspPos ⟨endByte⟩
   }
 
-private def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic :=
+def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic :=
   {
     range := mkRange text span
     severity? := some DiagnosticSeverity.error
@@ -55,7 +59,7 @@ private def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagn
     message := toString err
   }
 
-private def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic :=
+def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic :=
   {
     range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
     severity? := some DiagnosticSeverity.error
@@ -63,7 +67,7 @@ private def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic :=
     message := toString err
   }
 
-private def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
+def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
   match System.Uri.fileUriToPath? uri with
   | none => pure none
   | some p =>
@@ -73,7 +77,7 @@ private def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
       catch _ =>
         pure (some p)
 
-private def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
+def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
   | 0 => return none
   | fuel + 1 => do
       let candidate := dir / "qdt.toml"
@@ -86,7 +90,7 @@ private def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
         return none
       findTomlUp parent fuel
 
-private def normaliseConfig (cfg : Config) : IO Config := do
+def normaliseConfig (cfg : Config) : IO Config := do
   let cwd ← IO.currentDir
   let root := cfg.projectRoot.getD cwd
   let root ← IO.FS.realPath root
@@ -105,7 +109,7 @@ structure ServerState where
   projects : HashMap FilePath ProjectState := ∅
   shutdownRequested : Bool := false
 
-private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × ProjectState) := do
+def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × ProjectState) := do
   let dir : FilePath := filepath.parent.getD (FilePath.mk ".")
   let tomlPath? ← findTomlUp dir 100
   let root0 : FilePath :=
@@ -127,10 +131,10 @@ private def getProject (st : ServerState) (filepath : FilePath) : IO (ServerStat
       let st := { st with projects := st.projects.insert root ps }
       return (st, ps)
 
-private def setProject (st : ServerState) (root : FilePath) (ps : ProjectState) : ServerState :=
+def setProject (st : ServerState) (root : FilePath) (ps : ProjectState) : ServerState :=
   { st with projects := st.projects.insert root ps }
 
-private def publishDiagnostics
+def publishDiagnostics
     (hOut : IO.FS.Stream)
     (uri : DocumentUri)
     (version? : Option Int)
@@ -179,7 +183,7 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | some span => mkDiagnostic text span d.error
     | none => mkDiagnosticNoSpan d.error
 
-private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
+def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
     | throw (IO.userError "initialize: missing params")
   let _params : InitializeParams ←
@@ -206,16 +210,27 @@ private def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : O
   }
   hOut.writeLspMessage <| Message.response id (toJson result)
 
-private def handleShutdown (hOut : IO.FS.Stream) (id : RequestID) (stRef : IO.Ref ServerState) : IO Unit := do
+def handleShutdown (hOut : IO.FS.Stream) (id : RequestID) (stRef : IO.Ref ServerState) : IO Unit := do
   stRef.modify fun st => { st with shutdownRequested := true }
   hOut.writeLspMessage <| Message.response id Json.null
 
-private def runElabTask (ps : ProjectState) (filepath : FilePath) :
+def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array Range) : IO Unit := do
+  let processing := ranges.map fun r => Json.mkObj [("range", toJson r)]
+  let params := Json.mkObj [
+    ("textDocument", Json.mkObj [("uri", toJson uri)]),
+    ("processing", toJson processing)
+  ]
+  match Json.toStructured? params with
+  | .ok s => hOut.writeLspMessage <| Message.notification "$/lean/fileProgress" (some s)
+  | .error _ => pure ()
+
+def runElabTask (ps : ProjectState) (filepath : FilePath)
+    (onBuildEvent : Option (Key → Bool → IO Unit) := none) :
     EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
   let store ← Incremental.populateStore ps.config ps.store
-  Incremental.run (Build.shake Key Val) store (elaborateFile filepath)
+  Incremental.run (Build.shake Key Val (onBuildEvent := onBuildEvent)) store (elaborateFile filepath)
 
-private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
     | throw (IO.userError "didOpen: missing params")
   let params ←
@@ -247,17 +262,30 @@ private def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (pa
   let ps := { ps with store }
   stRef.set st
 
-  match ← (runElabTask ps file).toIO' with
+  let (progressCst, _) := Frontend.Parser.parse text
+  let onBuildEvent : Key → Bool → IO Unit := fun q isStart => do
+    if !isStart then return
+    match q with
+    | .elabCmdAt fp idx =>
+        if fp == file then
+          match progressCst.spanAtPath [idx] with
+          | some span => sendFileProgress hOut uri #[mkRange text span]
+          | none => pure ()
+    | _ => pure ()
+
+  match ← (runElabTask ps file (onBuildEvent := some onBuildEvent)).toIO' with
   | .ok ((_, info, sourceMap, cst), store') =>
       let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
       let diagnostics := buildDiagnostics text info sourceMap cst
       publishDiagnostics hOut uri version? diagnostics
+      sendFileProgress hOut uri #[]
   | Except.error () =>
       publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
+      sendFileProgress hOut uri #[]
 
-private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
     | throw (IO.userError "didChange: missing params")
   let params ←
@@ -284,17 +312,30 @@ private def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (
   let ps := { ps with store }
   stRef.set st
 
-  match ← (runElabTask ps file).toIO' with
+  let (progressCst, _) := Frontend.Parser.parse text
+  let onBuildEvent : Key → Bool → IO Unit := fun q isStart => do
+    if !isStart then return
+    match q with
+    | .elabCmdAt fp idx =>
+        if fp == file then
+          match progressCst.spanAtPath [idx] with
+          | some span => sendFileProgress hOut uri #[mkRange text span]
+          | none => pure ()
+    | _ => pure ()
+
+  match ← (runElabTask ps file (onBuildEvent := some onBuildEvent)).toIO' with
   | .ok ((_, info, sourceMap, cst), store') =>
       let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
       stRef.modify fun st => setProject st root ps'
       let diagnostics := buildDiagnostics text info sourceMap cst
       publishDiagnostics hOut uri version? diagnostics
+      sendFileProgress hOut uri #[]
   | Except.error () =>
       publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
+      sendFileProgress hOut uri #[]
 
-private def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
     | throw (IO.userError "hover: missing params")
   let params ←
@@ -315,7 +356,7 @@ private def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (p
     stRef.set st
   publishDiagnostics hOut uri none #[]
 
-private def handleHover
+def handleHover
     (hOut : IO.FS.Stream)
     (id : RequestID)
     (stRef : IO.Ref ServerState)

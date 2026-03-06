@@ -1,14 +1,18 @@
-import Cli
-import FSWatch
-import Qdt
-import Qdt.Incremental
+module
+
+public import Cli
+public import FSWatch
+public import Qdt
+public import Qdt.Incremental
+
+@[expose] public section
 
 open Cli
 open Qdt
 open Qdt.Incremental
 open System (FilePath)
 
-private def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
+def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
   let mut line := 1
   let mut col := 1
   let mut i := 0
@@ -22,7 +26,7 @@ private def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
       col := col + 1
   return (line, col)
 
-private def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.Path) :
+def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.Path) :
     Option Frontend.Span := Id.run do
   let fwd := path.reverse
   for len in (List.range fwd.length).reverse do
@@ -30,7 +34,7 @@ private def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : F
       return cst.spanAtPath cstPath
   return none
 
-private def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
+def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
     (cst : Frontend.Cst) (d : Diagnostic) : String :=
   match resolveSpan sm cst d.path with
   | some span =>
@@ -39,7 +43,7 @@ private def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMa
   | none =>
       s!"{file}: error: {d.error}"
 
-private def checkModule (filepath : FilePath) : Task Key Val (Array String) := do
+def checkModule (filepath : FilePath) : Task Key Val (Array String) := do
   let transImports ← Incremental.Task.fetch (Key.transitiveImports filepath)
   let allFiles := transImports.toList ++ [filepath]
   let mut msgs : Array String := #[]
@@ -53,7 +57,7 @@ private def checkModule (filepath : FilePath) : Task Key Val (Array String) := d
       msgs := msgs.push (formatDiag file text sm cst d)
   return msgs
 
-private def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath)
+def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath)
     (profile : Bool := false) : IO (Array String × Store Key Val) := do
   let store ← match ← (Incremental.populateStore config store).toIO' with
     | .ok s => pure s

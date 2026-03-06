@@ -1,13 +1,17 @@
-import Std.Data.HashMap
-import Std.Data.HashSet
-import Mathlib.Control.Monad.Writer
+module
 
-import Qdt.Frontend.Cst
-import Qdt.Error
-import Qdt.MLTT.Global
-import Qdt.TermContext
-import Qdt.Incremental.Basic
-import Qdt.Incremental.Query
+public import Std.Data.HashMap
+public import Std.Data.HashSet
+public import Mathlib.Control.Monad.Writer
+
+public import Qdt.Frontend.Cst
+public import Qdt.Error
+public import Qdt.MLTT.Global
+public import Qdt.TermContext
+public import Qdt.Incremental.Basic
+public import Qdt.Incremental.Query
+
+@[expose] public section
 
 namespace Qdt
 

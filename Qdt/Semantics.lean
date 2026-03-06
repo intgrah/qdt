@@ -1,4 +1,8 @@
-import Qdt.MLTT.Syntax
+module
+
+public import Qdt.MLTT.Syntax
+
+@[expose] public section
 
 namespace Qdt
 
@@ -109,55 +113,55 @@ we use unsafe casts to implement the weakenings with no runtime overhead.
 
 variable {n m : Nat}
 
-private unsafe def VTy.weaken_impl (_ : n ≤ m) : VTy n → VTy m := unsafeCast
-private unsafe def VTm.weaken_impl (_ : n ≤ m) : VTm n → VTm m := unsafeCast
-private unsafe def Neutral.weaken_impl (_ : n ≤ m) : Neutral n → Neutral m := unsafeCast
-private unsafe def Head.weaken_impl (_ : n ≤ m) : Head n → Head m := unsafeCast
-private unsafe def Spine.weaken_impl (_ : n ≤ m) : Spine n → Spine m := unsafeCast
-private unsafe def ClosTy.weaken_impl (_ : n ≤ m) : ClosTy n → ClosTy m := unsafeCast
-private unsafe def ClosTm.weaken_impl (_ : n ≤ m) : ClosTm n → ClosTm m := unsafeCast
-private unsafe def Env.weaken_impl {c} (_ : n ≤ m) : Env n c → Env m c := unsafeCast
+unsafe def VTy.weaken_impl (_ : n ≤ m) : VTy n → VTy m := unsafeCast
+unsafe def VTm.weaken_impl (_ : n ≤ m) : VTm n → VTm m := unsafeCast
+unsafe def Neutral.weaken_impl (_ : n ≤ m) : Neutral n → Neutral m := unsafeCast
+unsafe def Head.weaken_impl (_ : n ≤ m) : Head n → Head m := unsafeCast
+unsafe def Spine.weaken_impl (_ : n ≤ m) : Spine n → Spine m := unsafeCast
+unsafe def ClosTy.weaken_impl (_ : n ≤ m) : ClosTy n → ClosTy m := unsafeCast
+unsafe def ClosTm.weaken_impl (_ : n ≤ m) : ClosTm n → ClosTm m := unsafeCast
+unsafe def Env.weaken_impl {c} (_ : n ≤ m) : Env n c → Env m c := unsafeCast
 
 mutual
 
 @[implemented_by VTy.weaken_impl]
-private def VTy.weaken' (h : n ≤ m) : VTy n → VTy m
+def VTy.weaken' (h : n ≤ m) : VTy n → VTy m
   | .u i => .u i
   | .pi ⟨x, dom⟩ codom => .pi ⟨x, dom.weaken' h⟩ (codom.weaken' h)
   | .el ne => .el (ne.weaken' h)
 
 @[implemented_by VTm.weaken_impl]
-private def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
+def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
   | .u' i => .u' i
   | .neutral ne => .neutral (ne.weaken' h)
   | .lam ⟨x, ty⟩ body => .lam ⟨x, ty.weaken' h⟩ (body.weaken' h)
   | .pi' name dom codom => .pi' name (dom.weaken' h) (codom.weaken' h)
 
 @[implemented_by Head.weaken_impl]
-private def Head.weaken' (h : n ≤ m) : Head n → Head m
+def Head.weaken' (h : n ≤ m) : Head n → Head m
   | .var lvl => .var (lvl.castLE h)
   | .const name us => .const name us
 
 @[implemented_by Neutral.weaken_impl]
-private def Neutral.weaken' (h : n ≤ m) : Neutral n → Neutral m
+def Neutral.weaken' (h : n ≤ m) : Neutral n → Neutral m
   | ⟨head, spine⟩ => ⟨head.weaken' h, spine.weaken' h⟩
 
 @[implemented_by Spine.weaken_impl]
-private def Spine.weaken' (h : n ≤ m) : Spine n → Spine m
+def Spine.weaken' (h : n ≤ m) : Spine n → Spine m
   | .nil => .nil
   | .app sp t => .app (sp.weaken' h) (t.weaken' h)
   | .proj sp i => .proj (sp.weaken' h) i
 
 @[implemented_by ClosTy.weaken_impl]
-private def ClosTy.weaken' (h : n ≤ m) : ClosTy n → ClosTy m
+def ClosTy.weaken' (h : n ≤ m) : ClosTy n → ClosTy m
   | ⟨env, ty⟩ => ⟨env.weaken' h, ty⟩
 
 @[implemented_by ClosTm.weaken_impl]
-private def ClosTm.weaken' (h : n ≤ m) : ClosTm n → ClosTm m
+def ClosTm.weaken' (h : n ≤ m) : ClosTm n → ClosTm m
   | ⟨env, tm⟩ => ⟨env.weaken' h, tm⟩
 
 @[implemented_by Env.weaken_impl]
-private def Env.weaken' {c} (h : n ≤ m) : Env n c → Env m c
+def Env.weaken' {c} (h : n ≤ m) : Env n c → Env m c
   | .nil => .nil
   | .cons t rest => .cons (t.weaken' h) (rest.weaken' h)
 

@@ -1,4 +1,8 @@
-import Lean.Data.Name
+module
+
+public import Lean.Data.Name
+
+@[expose] public section
 
 namespace Qdt.Frontend
 

@@ -1,4 +1,8 @@
-import Qdt.MLTT.Context
+module
+
+public import Qdt.MLTT.Context
+
+@[expose] public section
 
 namespace Qdt
 
@@ -65,6 +69,5 @@ notation:50 Γ " ⊩ " A " type" => Ty.WF.Alg Γ A
 --       (Γ ⊩ e ∈ .pi ⟨x, A⟩ B ⇒ C)
 
 -- end
-
 
 end Qdt

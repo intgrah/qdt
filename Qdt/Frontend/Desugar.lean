@@ -1,5 +1,9 @@
-import Qdt.Frontend.Ast
-import Qdt.Frontend.Cst
+module
+
+public import Qdt.Frontend.Ast
+public import Qdt.Frontend.Cst
+
+@[expose] public section
 
 namespace Qdt.Frontend
 
@@ -12,34 +16,34 @@ structure DesugarState where
 
 abbrev DesugarM := StateM DesugarState
 
-private def recordMapping : DesugarM Unit := do
+def recordMapping : DesugarM Unit := do
   let st ← get
   set { st with sourceMap := st.sourceMap.insert st.cstPath.reverse st.astPath.reverse }
 
-private def withCstChild {α : Type} (idx : Nat) (m : DesugarM α) : DesugarM α := do
+def withCstChild {α : Type} (idx : Nat) (m : DesugarM α) : DesugarM α := do
   let st ← get
   set { st with cstPath := idx :: st.cstPath }
   let result ← m
   modify fun s => { s with cstPath := st.cstPath }
   return result
 
-private def withAstChild {α : Type} (idx : Nat) (m : DesugarM α) : DesugarM α := do
+def withAstChild {α : Type} (idx : Nat) (m : DesugarM α) : DesugarM α := do
   let st ← get
   set { st with astPath := idx :: st.astPath }
   let result ← m
   modify fun s => { s with astPath := st.astPath }
   return result
 
-private def isTrivia (cst : Cst) : Bool :=
+def isTrivia (cst : Cst) : Bool :=
   match cst with
   | .token `ws _ => true
   | .token `comment _ => true
   | _ => false
 
-private def filterTrivia (args : Array Cst) : Array Cst :=
+def filterTrivia (args : Array Cst) : Array Cst :=
   args.filter (!isTrivia ·)
 
-private def childrenNoTrivia (cst : Cst) : Array Cst :=
+def childrenNoTrivia (cst : Cst) : Array Cst :=
   match cst with
   | .node _ args => filterTrivia args
   | _ => #[]
@@ -48,7 +52,7 @@ structure IndexedCst where
   idx : Nat
   cst : Cst
 
-private def nonTriviaIndices (args : Array Cst) : Array IndexedCst := Id.run do
+def nonTriviaIndices (args : Array Cst) : Array IndexedCst := Id.run do
   let mut result : Array IndexedCst := #[]
   for h : i in [0:args.size] do
     let cst := args[i]
@@ -56,17 +60,17 @@ private def nonTriviaIndices (args : Array Cst) : Array IndexedCst := Id.run do
       result := result.push ⟨i, cst⟩
   return result
 
-private def getIdentVal (cst : Cst) : Option String :=
+def getIdentVal (cst : Cst) : Option String :=
   match cst with
   | .token `ident val => some val
   | _ => none
 
-private def getNumVal (cst : Cst) : Option String :=
+def getNumVal (cst : Cst) : Option String :=
   match cst with
   | .token `num val => some val
   | _ => none
 
-private def isAtom (s : String) (cst : Cst) : Bool :=
+def isAtom (s : String) (cst : Cst) : Bool :=
   match cst with
   | .token `atom val => val == s
   | _ => false
@@ -726,14 +730,38 @@ partial def desugarCommand (cst : Cst) : DesugarM Ast := do
       else return .missing
   | _ => return .missing
 
+def desugarHeader (header : Cst) : DesugarM (Array Ast) := do
+  recordMapping
+  match header with
+  | .node `Lean.Parser.Module.header args =>
+      let nonTrivia := nonTriviaIndices args
+      let mut result : Array Ast := #[]
+      for ic in nonTrivia do
+        let ast ← withCstChild ic.idx <| desugarImport ic.cst
+        result := result.push ast
+      return result
+  | _ => return #[]
+
 def desugarProgram (module : Cst) : (Ast × SourceMap) :=
   let action : DesugarM Ast := do
     match module with
     | .node `Lean.Parser.Module args =>
         let nonTrivia := nonTriviaIndices args
-        let result ← nonTrivia.toList.mapIdxM fun i ic => do
-          withCstChild ic.idx <| withAstChild i <| desugarCommand ic.cst
-        return .node `Module result.toArray
+        let mut result : Array Ast := #[]
+        let mut astIdx := 0
+        for ic in nonTrivia do
+          match ic.cst with
+          | .node `Lean.Parser.Module.header _ =>
+              let imports ← withCstChild ic.idx <| desugarHeader ic.cst
+              for imp in imports do
+                withAstChild astIdx (pure ())
+                result := result.push imp
+                astIdx := astIdx + 1
+          | _ =>
+              let ast ← withCstChild ic.idx <| withAstChild astIdx <| desugarCommand ic.cst
+              result := result.push ast
+              astIdx := astIdx + 1
+        return .node `Module result
     | .node _ _
     | .token _ _ => return .node `missing #[]
   let init : DesugarState := { sourceMap := ⟨∅, ∅⟩, cstPath := [], astPath := [] }

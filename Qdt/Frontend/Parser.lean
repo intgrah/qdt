@@ -1,5 +1,9 @@
-import Lean
-import Qdt.Frontend.Cst
+module
+
+public import Lean
+public import Qdt.Frontend.Cst
+
+@[expose] public section
 
 namespace Qdt.Frontend.Parser
 
@@ -11,37 +15,37 @@ structure ParseError where
   pos : Nat
 deriving Repr, Inhabited, Hashable
 
-private structure State where
+structure State where
   input : String
   pos : Nat
   errors : Array ParseError
 deriving Inhabited
 
-private abbrev ParserM := StateT State (Except ParseError)
+abbrev ParserM := StateT State (Except ParseError)
 
-private def getPos : ParserM Nat := return (← get).pos
-private def setPos (pos : Nat) : ParserM Unit := modify fun st => { st with pos }
-private def isEof : ParserM Bool := do let st ← get; return st.pos ≥ st.input.utf8ByteSize
-private def fail {α} (msg : String) : ParserM α := do throw ⟨msg, ← getPos⟩
+def getPos : ParserM Nat := return (← get).pos
+def setPos (pos : Nat) : ParserM Unit := modify fun st => { st with pos }
+def isEof : ParserM Bool := do let st ← get; return st.pos ≥ st.input.utf8ByteSize
+def fail {α} (msg : String) : ParserM α := do throw ⟨msg, ← getPos⟩
 
-private def peekChar? : ParserM (Option Char) := do
+def peekChar? : ParserM (Option Char) := do
   let st ← get
   if st.pos ≥ st.input.utf8ByteSize then return none
   else return some (String.Pos.Raw.get st.input ⟨st.pos⟩)
 
-private def peekString (n : Nat) : ParserM String := do
+def peekString (n : Nat) : ParserM String := do
   let st ← get
   let endPos := min (st.pos + n) st.input.utf8ByteSize
   return String.Pos.Raw.extract st.input ⟨st.pos⟩ ⟨endPos⟩
 
-private def advanceChar : ParserM Unit := do
+def advanceChar : ParserM Unit := do
   let st ← get
   if st.pos ≥ st.input.utf8ByteSize then fail "unexpected end of input"
   else
     let c := String.Pos.Raw.get st.input ⟨st.pos⟩
     set { st with pos := st.pos + c.utf8Size }
 
-private partial def ws : ParserM Cst := do
+partial def ws : ParserM Cst := do
   let some c ← peekChar? | fail "expected whitespace"
   if !c.isWhitespace then fail "expected whitespace"
   go ""
@@ -51,7 +55,7 @@ where
     | some c => if c.isWhitespace then advanceChar; go (acc.push c) else return .token `ws acc
     | none => return .token `ws acc
 
-private def lineComment : ParserM Cst := do
+def lineComment : ParserM Cst := do
   let mut acc := "--"
   advanceChar; advanceChar
   while true do
@@ -61,7 +65,7 @@ private def lineComment : ParserM Cst := do
     | none => break
   return .token `comment acc
 
-private partial def blockComment : ParserM Cst := do
+partial def blockComment : ParserM Cst := do
   advanceChar; advanceChar
   go "/-" 1
 where
@@ -75,7 +79,7 @@ where
         | some c => advanceChar; go (acc.push c) depth
         | none => fail "unterminated block comment"
 
-private def trivia : ParserM (Array Cst) := do
+def trivia : ParserM (Array Cst) := do
   let mut arr : Array Cst := #[]
   while true do
     match ← peekChar? with
@@ -93,15 +97,14 @@ private def trivia : ParserM (Array Cst) := do
     | none => break
   return arr
 
-
-private def atomRaw (s : String) : ParserM Cst := do
+def atomRaw (s : String) : ParserM Cst := do
   for c in s.toList do
     match ← peekChar? with
     | some c' => if c == c' then advanceChar else fail s!"expected '{s}'"
     | none => fail s!"expected '{s}'"
   return .token `atom s
 
-private def readIdentChars : ParserM String := do
+def readIdentChars : ParserM String := do
   let some c ← peekChar? | fail "expected identifier"
   if !Lean.isIdFirst c then fail "expected identifier"
   let mut acc := ""
@@ -124,14 +127,14 @@ private def readIdentChars : ParserM String := do
     | none => break
   return acc
 
-private def keywords : List String := ["fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import", "sorry", "Type"]
+def keywords : List String := ["fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import", "sorry", "Type"]
 
-private def identRaw : ParserM Cst := do
+def identRaw : ParserM Cst := do
   let name ← readIdentChars
   if name ∈ keywords then fail "keyword in identifier position"
   return .token `ident name
 
-private def numRaw : ParserM Cst := do
+def numRaw : ParserM Cst := do
   let some c ← peekChar? | fail "expected number"
   if !c.isDigit then fail "expected number"
   let mut s := ""
@@ -143,7 +146,7 @@ private def numRaw : ParserM Cst := do
     | none => break
   return .token `num s
 
-private def tryParse {α} (p : ParserM α) : ParserM (Option α) := do
+def tryParse {α} (p : ParserM α) : ParserM (Option α) := do
   let pos ← getPos
   (do let a ← p; return some a) <|> (do setPos pos; return none)
 
@@ -153,7 +156,7 @@ instance {α} : OrElse (ParserM α) where
     | some a => return a
     | none => q ()
 
-private def peekIdentStr : ParserM (Option String) := do
+def peekIdentStr : ParserM (Option String) := do
   let pos ← getPos
   match ← peekChar? with
   | some c =>
@@ -164,9 +167,9 @@ private def peekIdentStr : ParserM (Option String) := do
       else return none
   | none => return none
 
-private def one (p : ParserM Cst) : ParserM (Array Cst) := do return #[← p]
+def one (p : ParserM Cst) : ParserM (Array Cst) := do return #[← p]
 
-private def opt (p : ParserM Cst) : ParserM (Array Cst) := do
+def opt (p : ParserM Cst) : ParserM (Array Cst) := do
   match ← tryParse p with
   | some c => return #[c]
   | none => return #[]
@@ -174,18 +177,18 @@ private def opt (p : ParserM Cst) : ParserM (Array Cst) := do
 instance : Append (ParserM (Array Cst)) where
   append p q := return (← p) ++ (← q)
 
-private def node (kind : SyntaxNodeKind) (p : ParserM (Array Cst)) : ParserM Cst := do
+def node (kind : SyntaxNodeKind) (p : ParserM (Array Cst)) : ParserM Cst := do
   return Cst.node kind (← p)
 
-private partial def many (p : ParserM (Array Cst)) : ParserM (Array Cst) := do
+partial def many (p : ParserM (Array Cst)) : ParserM (Array Cst) := do
   match ← tryParse p with
   | some cs => return cs ++ (← many p)
   | none => return #[]
 
-private def wsSep1 (p : ParserM Cst) : ParserM (Array Cst) := do
+def wsSep1 (p : ParserM Cst) : ParserM (Array Cst) := do
   one p ++ many (trivia ++ one p)
 
-private def commaSep1 (p : ParserM Cst) : ParserM (Array Cst) := do
+def commaSep1 (p : ParserM Cst) : ParserM (Array Cst) := do
   one p ++ many (trivia ++ one (atomRaw ",") ++ trivia ++ one p)
 
 mutual
@@ -431,18 +434,17 @@ partial def parseCommand : ParserM Cst := do
   | some "axiom" => parseAxiom
   | some "inductive" => parseInductive
   | some "structure" => parseStructure
-  | some "import" => parseImport
   | _ => fail "expected command"
 
 end
 
-private def skipUntilRecovery : ParserM Unit := do
+def skipUntilRecovery : ParserM Unit := do
   while ! (← isEof) do
     match ← peekIdentStr with
     | some k => if k ∈ keywords then break else advanceChar
     | none => advanceChar
 
-private def manyRecover (p : ParserM Cst) : ParserM (Array Cst) := do
+def manyRecover (p : ParserM Cst) : ParserM (Array Cst) := do
   let mut arr : Array Cst := #[]
   while ! (← isEof) do
     arr := arr ++ (← trivia)
@@ -462,9 +464,12 @@ private def manyRecover (p : ParserM Cst) : ParserM (Array Cst) := do
         arr := arr.push (.token `skipped skipped)
   return arr
 
+def parseHeader : ParserM Cst :=
+  node `Lean.Parser.Module.header <| many (trivia ++ one parseImport)
+
 def parseProgram : ParserM Cst :=
   node `Lean.Parser.Module <|
-    manyRecover parseCommand
+    one parseHeader ++ manyRecover parseCommand
 
 def parse (input : String) : Cst × Array ParseError :=
   let init : State := { input, pos := 0, errors := #[] }

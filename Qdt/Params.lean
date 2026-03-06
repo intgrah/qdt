@@ -1,13 +1,17 @@
-import Qdt.Bidirectional
-import Qdt.Control
-import Qdt.Frontend.Ast
+module
+
+public import Qdt.Bidirectional
+public import Qdt.Control
+public import Qdt.Frontend.Ast
+
+@[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
 open Frontend (Ast Path)
 
-private def getTypedBinder : Ast → Option (Name × Ast)
+def getTypedBinder : Ast → Option (Name × Ast)
   | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
   | _ => none
 

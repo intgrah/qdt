@@ -1,5 +1,9 @@
-import Qdt.Frontend.Ast
-import Std.Data.HashMap
+module
+
+public import Qdt.Frontend.Ast
+public import Std.Data.HashMap
+
+@[expose] public section
 
 namespace Qdt.Frontend
 

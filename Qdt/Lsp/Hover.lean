@@ -1,4 +1,8 @@
-import Qdt.Error
+module
+
+public import Qdt.Error
+
+@[expose] public section
 
 namespace Qdt.Lsp
 

@@ -1,14 +1,16 @@
-import Qdt.MLTT
-import Qdt.Semantics
-import Qdt.Error
-import Qdt.TermContext
-import Qdt.Nbe
-import Qdt.DefinitionalEquality
-import Qdt.Quote
-import Qdt.Bidirectional
-import Qdt.Params
-import Qdt.Inductive
-import Qdt.Pretty
-import Qdt.Elab
-import Qdt.Frontend
-import Qdt.Config
+module
+
+public import Qdt.MLTT
+public import Qdt.Semantics
+public import Qdt.Error
+public import Qdt.TermContext
+public import Qdt.Nbe
+public import Qdt.DefinitionalEquality
+public import Qdt.Quote
+public import Qdt.Bidirectional
+public import Qdt.Params
+public import Qdt.Inductive
+public import Qdt.Pretty
+public import Qdt.Elab
+public import Qdt.Frontend
+public import Qdt.Config

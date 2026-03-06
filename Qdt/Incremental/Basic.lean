@@ -1,8 +1,12 @@
-import Std.Data.DHashMap
-import Std.Data.HashMap
-import Std.Data.HashSet
+module
 
-import Qdt.Config
+public import Std.Data.DHashMap
+public import Std.Data.HashMap
+public import Std.Data.HashSet
+
+public import Qdt.Config
+
+@[expose] public section
 
 namespace Qdt.Incremental
 
@@ -116,7 +120,7 @@ partial def busy : Build Q R :=
     let s ← storeRef.get
     pure (a, s)
 
-private structure ShakeState where
+structure ShakeState where
   store : Store Q R
   started : DHashMap Q (Memo Q R)
   stack : List Q
@@ -124,7 +128,8 @@ private structure ShakeState where
 
 def shake [∀ q, Hashable (R q)]
     (label : Q → String := fun _ => "?")
-    (prof : Option Profile := none) : Build Q R :=
+    (prof : Option Profile := none)
+    (onBuildEvent : Option (Q → Bool → IO Unit) := none) : Build Q R :=
   fun {α} tasks store task => do
     let init : ShakeState Q R := {
       store
@@ -201,6 +206,8 @@ def shake [∀ q, Hashable (R q)]
                       catch _ => pure false
 
                   let recompute : StateRefT (ShakeState Q R) (EIO Unit) (R q) := do
+                    if let some cb := onBuildEvent then
+                      (cb q true).catchExceptions fun _ => pure ()
                     let t0 ← IO.monoNanosNow
                     let (value, deps) ← compute
                     let t1 ← IO.monoNanosNow
@@ -213,6 +220,8 @@ def shake [∀ q, Hashable (R q)]
                       { st with
                         started := st.started.insert q memo
                         store := { st.store with cache := st.store.cache.insert q memo } }
+                    if let some cb := onBuildEvent then
+                      (cb q false).catchExceptions fun _ => pure ()
                     pure value
 
                   match st.store.cache.get? q with
@@ -244,8 +253,8 @@ def shake [∀ q, Hashable (R q)]
 
 end Build
 
-private def padR (s : String) (n : Nat) : String := s ++ String.ofList (List.replicate (n - s.length) ' ')
-private def padL (s : String) (n : Nat) : String := String.ofList (List.replicate (n - s.length) ' ') ++ s
+def padR (s : String) (n : Nat) : String := s ++ String.ofList (List.replicate (n - s.length) ' ')
+def padL (s : String) (n : Nat) : String := String.ofList (List.replicate (n - s.length) ' ') ++ s
 
 def Profile.print (p : Profile) : IO Unit := do
   let m ← p.get

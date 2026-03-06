@@ -1,4 +1,8 @@
-import Lean.Data.Name
+module
+
+public import Lean.Data.Name
+
+@[expose] public section
 
 namespace Qdt
 
@@ -19,7 +23,7 @@ instance {n} : OfNat Universe n where
 instance : HAdd Universe Nat Universe where
   hAdd i n := n.repeat .succ i
 
-private def parenIf (p : Bool) : Std.Format → Std.Format :=
+def parenIf (p : Bool) : Std.Format → Std.Format :=
   if p then .paren else id
 
 protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
@@ -45,25 +49,25 @@ instance : ToString Universe where
 
 /- This code is copied from Lean 4 `src/Lean/Level.lean` -/
 
-private def addOffset (u : Universe) : Nat → Universe
+def addOffset (u : Universe) : Nat → Universe
   | 0 => u
   | n + 1 => addOffset u.succ n
 
-private def getOffset : Universe → Nat
+def getOffset : Universe → Nat
   | .succ u => getOffset u + 1
   | _ => 0
 
-private def getLevelOffset : Universe → Universe
+def getLevelOffset : Universe → Universe
   | .succ u => getLevelOffset u
   | u => u
 
-private def ctorToNat : Universe → Nat
+def ctorToNat : Universe → Nat
   | .zero   => 0
   | .level _ => 1
   | .succ _ => 2
   | .max _ _ => 3
 
-private def normLtAux : Universe → Nat → Universe → Nat → Bool
+def normLtAux : Universe → Nat → Universe → Nat → Bool
   | .succ l₁, k₁, l₂, k₂ => normLtAux l₁ (k₁+1) l₂ k₂
   | l₁, k₁, .succ l₂, k₂ => normLtAux l₁ k₁ l₂ (k₂+1)
   | l₁@(.max l₁₁ l₁₂), k₁, l₂@(.max l₂₁ l₂₂), k₂ =>
@@ -73,10 +77,10 @@ private def normLtAux : Universe → Nat → Universe → Nat → Bool
   | .level n₁, k₁, .level n₂, k₂ => if n₁ == n₂ then k₁ < k₂ else Name.lt n₁ n₂
   | l₁, k₁, l₂, k₂ => if l₁ == l₂ then k₁ < k₂ else ctorToNat l₁ < ctorToNat l₂
 
-private def normLt (l₁ l₂ : Universe) : Bool :=
+def normLt (l₁ l₂ : Universe) : Bool :=
   normLtAux l₁ 0 l₂ 0
 
-@[specialize] private partial def getMaxArgsAux (normalise : Universe → Universe)
+@[specialize] partial def getMaxArgsAux (normalise : Universe → Universe)
     : Universe → Bool → Array Universe → Array Universe
   | .max l₁ l₂, alreadyNorm, lvls =>
       lvls
@@ -85,11 +89,11 @@ private def normLt (l₁ l₂ : Universe) : Bool :=
   | l, false, lvls  => getMaxArgsAux normalise (normalise l) true lvls
   | l, true,  lvls  => lvls.push l
 
-private def accMax (result : Universe) (prev : Universe) (offset : Nat) : Universe :=
+def accMax (result : Universe) (prev : Universe) (offset : Nat) : Universe :=
   if result = .zero then addOffset prev offset
   else .max result (addOffset prev offset)
 
-private def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
+def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
     (prev : Universe) (prevK : Nat) (result : Universe) : Universe :=
   if h : i < lvls.size then
     let lvl := lvls[i]
@@ -102,14 +106,14 @@ private def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
   else
     accMax result prev (extraK + prevK)
 
-private def skipExplicit (lvls : Array Universe) (i : Nat) : Nat :=
+def skipExplicit (lvls : Array Universe) (i : Nat) : Nat :=
   if h : i < lvls.size then
     let lvl := lvls[i]
     if getLevelOffset lvl = .zero then skipExplicit lvls (i + 1) else i
   else
     i
 
-private def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i : Nat) : Bool :=
+def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i : Nat) : Bool :=
   if h : i < lvls.size then
     let lvl := lvls[i]
     if getOffset lvl ≥ maxExplicit then true
@@ -117,7 +121,7 @@ private def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i
   else
     false
 
-private def isExplicitSubsumed (lvls : Array Universe) (firstNonExplicit : Nat) : Bool :=
+def isExplicitSubsumed (lvls : Array Universe) (firstNonExplicit : Nat) : Bool :=
   if firstNonExplicit = 0 then false
   else
     let max := getOffset (lvls[firstNonExplicit - 1]!)
@@ -184,8 +188,8 @@ where
 
 section Tests
 
-private abbrev u : Universe := .level `u
-private abbrev v : Universe := .level `v
+abbrev u : Universe := .level `u
+abbrev v : Universe := .level `v
 
 #guard le 0 0
 #guard le 0 u
