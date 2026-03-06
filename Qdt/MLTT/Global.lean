@@ -89,21 +89,6 @@ def findDefinition (name : Name) (g : Global) : Option DefinitionInfo := do
   let .definition info ← g[name]? | none
   return info
 
-def findRecursor (name : Name) (g : Global) : Option RecursorInfo := do
-  let .recursor info ← g[name]? | none
-  return info
-
-def findConstructor (name : Name) (g : Global) : Option ConstructorInfo := do
-  let .constructor info ← g[name]? | none
-  return info
-
-def findInductive (name : Name) (g : Global) : Option InductiveInfo := do
-  let .inductive info ← g[name]? | none
-  return info
-
-def findConstantInfo (name : Name) (g : Global) : Option ConstantInfo :=
-  Constant.toConstantInfo <$> g[name]?
-
 def findTy (name : Name) (g : Global) : Option (Ty 0) :=
   Constant.ty <$> g[name]?
 
