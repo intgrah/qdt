@@ -145,7 +145,7 @@ def publishDiagnostics
   | Except.ok s =>
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
-def elaborateFile (filepath : FilePath) : Task Key Val (Global × ElabInfo × SourceMap × Cst) := do
+def elaborateFile (filepath : FilePath) : Task Monad Key Val (Global × ElabInfo × SourceMap × Cst) := do
   let (cst, _) ← Incremental.Task.fetch (Key.cst filepath)
   let (_, sourceMap, _) ← Incremental.Task.fetch (Key.astSourceMap filepath)
   let declIndex ← Incremental.Task.fetch (Key.declarationIndex filepath)

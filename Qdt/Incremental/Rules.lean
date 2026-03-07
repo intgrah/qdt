@@ -120,7 +120,7 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
   let (_, sorted) := files.foldl (fun (v, s) f => visit f v s) (HashSet.emptyWithCapacity 0, [])
   sorted.reverse
 
-def tasks : Tasks Key Val
+def tasks : Tasks Monad Key Val
   | .text _ => none
   | .inputFiles => none
   | .cst filepath => some do
@@ -263,12 +263,12 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   store := { store with cache := store.cache.insert .inputFiles inputMemo }
   return store
 
-protected def run {α : Type} (build : Build Key Val) (store : Store Key Val)
-    (task : Task Key Val α) : EIO Unit (α × Store Key Val) :=
+protected def run {α : Type} (build : Build Monad Key Val) (store : Store Key Val)
+    (task : Task Monad Key Val α) : EIO Unit (α × Store Key Val) :=
   build tasks store task
 
 protected def runWithProfile {α : Type} (store : Store Key Val)
-    (task : Task Key Val α) : IO (α × Store Key Val) := do
+    (task : Task Monad Key Val α) : IO (α × Store Key Val) := do
   let prof ← IO.mkRef (Std.HashMap.emptyWithCapacity 32)
   let result ← (Build.shake Key Val Key.tag prof (onBuildEvent := none) tasks store task).toIO'
   Profile.print prof

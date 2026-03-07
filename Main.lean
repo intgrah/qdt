@@ -43,7 +43,7 @@ def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
   | none =>
       s!"{file}: error: {d.error}"
 
-def checkModule (filepath : FilePath) : Task Key Val (Array String) := do
+def checkModule (filepath : FilePath) : Task Monad Key Val (Array String) := do
   let transImports ← Incremental.Task.fetch (Key.transitiveImports filepath)
   let allFiles := transImports.toList ++ [filepath]
   let mut msgs : Array String := #[]
