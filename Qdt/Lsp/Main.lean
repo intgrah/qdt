@@ -10,7 +10,7 @@ public import Lean.Data.Lsp.InitShutdown
 
 namespace Qdt
 
-open Std (HashMap)
+open Std (DHashMap HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
@@ -120,7 +120,7 @@ def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × Pro
         | none => pure { Config.empty with projectRoot := some root }
       let cfg := { cfg with projectRoot := some root }
       let cfg ← normaliseConfig cfg
-      let ps : ProjectState := { config := cfg, store := {} }
+      let ps : ProjectState := { config := cfg, store := DHashMap.emptyWithCapacity 1024 }
       let st := { st with projects := st.projects.insert root ps }
       return (st, ps)
 
@@ -140,9 +140,9 @@ def publishDiagnostics
 
 def elaborateFile (store : Store Key Val) (filepath : FilePath) :
     Option (Global × ElabInfo × SourceMap × Cst) := Id.run do
-  let some cstMemo := store.cache.get? (Key.cst filepath) | return none
-  let some smMemo := store.cache.get? (Key.astSourceMap filepath) | return none
-  let some declMemo := store.cache.get? (Key.declarationIndex filepath) | return none
+  let some cstMemo := store.get? (Key.cst filepath) | return none
+  let some smMemo := store.get? (Key.astSourceMap filepath) | return none
+  let some declMemo := store.get? (Key.declarationIndex filepath) | return none
   let (cst, _) := cstMemo.value
   let (_, sourceMap, _) := smMemo.value
   let declIndex := declMemo.value
@@ -150,9 +150,9 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
   let mut combinedGlobal : Global := ∅
 
   for (name, _) in declIndex.toList do
-    if let some infoMemo := store.cache.get? (Key.lookupInfo filepath name) then
+    if let some infoMemo := store.get? (Key.lookupInfo filepath name) then
       combinedInfo := combinedInfo * infoMemo.value
-    if let some lookupMemo := store.cache.get? (Key.lookup filepath name) then
+    if let some lookupMemo := store.get? (Key.lookup filepath name) then
       if let some (constant, _) := lookupMemo.value then
         combinedGlobal := combinedGlobal.insert name constant
 
@@ -260,7 +260,7 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
   let (st, ps) ← getProject st file
 
   let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
+  let store := ps.store.insert (.text file) memo
   let ps := { ps with store }
   stRef.set st
 
@@ -299,7 +299,7 @@ def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? 
   let (st, ps) ← getProject st file
 
   let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
+  let store := ps.store.insert (.text file) memo
   let ps := { ps with store }
   stRef.set st
 
@@ -327,9 +327,7 @@ def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? :
     let st ← stRef.get
     let (st, ps) ← getProject st file
 
-    let cache := ps.store.cache.erase (.text file)
-    let store := { ps.store with cache }
-
+    let store := ps.store.erase (.text file)
     let ps := { ps with store }
     let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
     let st := setProject st root ps
@@ -359,7 +357,7 @@ def handleHover
   stRef.set st
 
   let text ←
-    match ps.store.cache.get? (.text file) with
+    match ps.store.get? (.text file) with
     | some memo => pure memo.value
     | none => IO.FS.readFile file
 

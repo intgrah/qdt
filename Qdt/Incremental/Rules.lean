@@ -250,15 +250,15 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   for file in rawFiles do
     let absPath ← (IO.FS.realPath file).toEIO (fun _ => ())
     inputFiles := inputFiles.insert absPath
-    match store.cache.get? (.text absPath) with
+    match store.get? (.text absPath) with
     | some _ => continue
     | none =>
         let text ← (IO.FS.readFile absPath).toEIO (fun _ => ())
         let memo : Memo Key Val (.text absPath) :=
           { value := text, deps := ∅ }
-        store := { store with cache := store.cache.insert (.text absPath) memo }
+        store := store.insert (.text absPath) memo
   let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  store := { store with cache := store.cache.insert .inputFiles inputMemo }
+  store := store.insert .inputFiles inputMemo
   return store
 
 end Qdt

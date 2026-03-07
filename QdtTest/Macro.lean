@@ -14,9 +14,9 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅ }
   let inputFiles : Std.HashSet System.FilePath := {dummyPath}
   let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  let store : Store Key Val := { cache := DHashMap.emptyWithCapacity 2 }
-  let store := { store with cache := store.cache.insert (.text dummyPath) memo }
-  let store := { store with cache := store.cache.insert .inputFiles inputMemo }
+  let store : Store Key Val := DHashMap.emptyWithCapacity 64
+  let store := store.insert (.text dummyPath) memo
+  let store := store.insert .inputFiles inputMemo
 
   match Shake.build tasks (Key.checkFile dummyPath) store with
   | .ok (diags, _) => return (diags, ∅)
