@@ -27,7 +27,7 @@ variable {Q : Type} {R : Q → Type}
 partial def build : Build Monad (Store Q R) Q R :=
   fun tasks target store => runEST fun σ => do
     let store ← ST.mkRef (σ := σ) store
-    let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024 : DHashMap Q (Memo Q R))
+    let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
     let stack ← ST.mkRef (σ := σ) (#[] : Array Q)
     let rec fetch (q : Q) : EST Cycle σ (R q) := do
       match (← started.get).get? q with
@@ -65,7 +65,7 @@ partial def build : Build Monad (Store Q R) Q R :=
                 let _ ← fetch depKey
                 let h := match (← started.get).get? depKey with
                   | some memo => memo.hash
-                  | none => hash 0
+                  | none => 0
                 if h != oldHash then throw Cycle.mk
 
             let recompute : EST Cycle σ (R q) := do
