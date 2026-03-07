@@ -2,7 +2,7 @@ module
 
 public import Std.Data.TreeMap
 
-public import Qdt.MLTT.Syntax
+public import Qdt.Theory.Syntax
 public import Qdt.Semantics
 public import Qdt.Tele
 

@@ -3,9 +3,9 @@ module
 public import Lean.Data.Name
 
 public import Qdt.Control
-public import Qdt.MLTT.Global
+public import Qdt.Theory.Global
 public import Qdt.Semantics
-public import Qdt.MLTT.Syntax
+public import Qdt.Theory.Syntax
 
 @[expose] public section
 

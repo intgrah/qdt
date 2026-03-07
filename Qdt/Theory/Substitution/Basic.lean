@@ -1,7 +1,7 @@
 module
 
-public import Qdt.MLTT.Syntax
-public import Qdt.MLTT.Substitution.Ren
+public import Qdt.Theory.Syntax
+public import Qdt.Theory.Substitution.Ren
 
 @[expose] public section
 

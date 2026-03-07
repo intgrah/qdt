@@ -1,5 +1,5 @@
 module
--- import Qdt.MLTT.Declarative
+-- import Qdt.Theory.Declarative
 @[expose] public section
 
 -- namespace Qdt
@@ -123,7 +123,7 @@ module
 -- end Qdt
 
 -- /-
--- import Qdt.MLTT.Declarative
+-- import Qdt.Theory.Declarative
 
 -- namespace Qdt
 

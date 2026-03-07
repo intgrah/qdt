@@ -1,7 +1,7 @@
 module
 
-public meta import Qdt.MLTT.Syntax
-public meta import Qdt.MLTT.Universe
+public meta import Qdt.Theory.Syntax
+public meta import Qdt.Theory.Universe
 meta import Plausible
 
 @[expose] meta section

@@ -6,7 +6,7 @@ public import Mathlib.Control.Monad.Writer
 
 public import Qdt.Frontend.Cst
 public import Qdt.Error
-public import Qdt.MLTT.Global
+public import Qdt.Theory.Global
 public import Qdt.TermContext
 public import Qdt.Incremental.Basic
 public import Qdt.Incremental.Query

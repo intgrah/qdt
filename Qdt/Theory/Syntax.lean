@@ -1,7 +1,7 @@
 module
 
 public import Qdt.Tele
-public import Qdt.MLTT.Universe
+public import Qdt.Theory.Universe
 
 @[expose] public section
 

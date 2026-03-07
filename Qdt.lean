@@ -1,6 +1,6 @@
 module
 
-public import Qdt.MLTT
+public import Qdt.Theory
 public import Qdt.Semantics
 public import Qdt.Error
 public import Qdt.TermContext
