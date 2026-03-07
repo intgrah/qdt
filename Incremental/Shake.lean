@@ -56,8 +56,6 @@ partial def build : Build Monad (Store Q R) Q R :=
     let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024 : DHashMap Q (Memo Q R))
     let stack ← ST.mkRef (σ := σ) (#[] : Array Q)
-    let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64 : HashMap Q UInt64)
-
     let rec fetch (q : Q) : EST Cycle σ (R q) := do
       if let some dependent := (← stack.get).back? then
         rdeps.modify fun rd =>
@@ -79,8 +77,7 @@ partial def build : Build Monad (Store Q R) Q R :=
             | none => throw Cycle.mk
           | some task =>
             let compute : EST Cycle σ (R q × HashMap Q UInt64) := do
-              let oldDeps ← deps.get
-              deps.set (HashMap.emptyWithCapacity 64)
+              let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64 : HashMap Q UInt64)
               let fetch' : ∀ q, EST Cycle σ (R q) := fun q => do
                 let v ← fetch q
                 let ds ← deps.get
@@ -91,9 +88,7 @@ partial def build : Build Monad (Store Q R) Q R :=
                   deps.modify (·.insert q h)
                 pure v
               let a ← task _ fetch'
-              let ds ← deps.get
-              deps.set oldDeps
-              pure (a, ds)
+              pure (a, ← deps.get)
 
             let verifyDeps (deps : HashMap Q UInt64) : EST Cycle σ PUnit := do
               for (depKey, oldHash) in deps.toList do
