@@ -48,14 +48,15 @@ end Task
 
 export Task (fetch)
 
-inductive Cycle
-  | mk
+inductive BuildError
+  | cycle
+  | missingInput
 deriving Inhabited
 
 def Tasks : Type 1 :=
   ∀ q, Option (Task c Q R (R q))
 
 def Build : Type 1 :=
-  Tasks c Q R → ∀ q, StateT σ (Except Cycle) (R q)
+  Tasks c Q R → ∀ q, StateT σ (Except BuildError) (R q)
 
 end Incremental

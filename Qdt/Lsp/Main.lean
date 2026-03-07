@@ -139,7 +139,7 @@ def publishDiagnostics
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
 def elaborateFile (store : Store Key Val) (filepath : FilePath) :
-    Option (Global × ElabInfo × SourceMap × Cst) := Id.run do
+    Option (ElabInfo × SourceMap × Cst) := Id.run do
   let some cstMemo := store.get? (Key.cst filepath) | return none
   let some smMemo := store.get? (Key.astSourceMap filepath) | return none
   let some declMemo := store.get? (Key.declarationIndex filepath) | return none
@@ -147,20 +147,16 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
   let (_, sourceMap, _) := smMemo.value
   let declIndex := declMemo.value
   let mut combinedInfo : ElabInfo := 1
-  let mut combinedGlobal : Global := ∅
 
   for (name, _) in declIndex.toList do
     if let some infoMemo := store.get? (Key.lookupInfo filepath name) then
       combinedInfo := combinedInfo * infoMemo.value
-    if let some lookupMemo := store.get? (Key.lookup filepath name) then
-      if let some (constant, _) := lookupMemo.value then
-        combinedGlobal := combinedGlobal.insert name constant
 
   let (_, _, astDiags) := smMemo.value
   let allDiags := astDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
 
-  return some (combinedGlobal, combinedInfo, sourceMap, cst)
+  return some (combinedInfo, sourceMap, cst)
 
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
@@ -223,14 +219,15 @@ def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array R
   | .error _ => pure ()
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
+    IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
   let store ← populateStore ps.config ps.store
   let store ← match Shake.build tasks (Key.checkFile filepath) store with
     | .ok (_, s) => pure s
-    | .error _ => throw ()
+    | .error .cycle => throw (IO.userError "cycle detected")
+    | .error .missingInput => throw (IO.userError "missing input")
   match elaborateFile store filepath with
   | some result => pure (result, store)
-  | none => throw ()
+  | none => throw (IO.userError "elaboration failed")
 
 def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -264,17 +261,13 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
   let ps := { ps with store }
   stRef.set st
 
-  match ← (runElabTask ps file).toIO' with
-  | .ok ((_, info, sourceMap, cst), store') =>
-      let ps' : ProjectState := { ps with store := store' }
-      let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-      stRef.modify fun st => setProject st root ps'
-      let diagnostics := buildDiagnostics text info sourceMap cst
-      publishDiagnostics hOut uri version? diagnostics
-      sendFileProgress hOut uri #[]
-  | Except.error () =>
-      publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
-      sendFileProgress hOut uri #[]
+  let ((info, sourceMap, cst), store') ← runElabTask ps file
+  let ps' : ProjectState := { ps with store := store' }
+  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
+  stRef.modify fun st => setProject st root ps'
+  let diagnostics := buildDiagnostics text info sourceMap cst
+  publishDiagnostics hOut uri version? diagnostics
+  sendFileProgress hOut uri #[]
 
 def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -303,17 +296,13 @@ def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? 
   let ps := { ps with store }
   stRef.set st
 
-  match ← (runElabTask ps file).toIO' with
-  | .ok ((_, info, sourceMap, cst), store') =>
-      let ps' : ProjectState := { ps with store := store' }
-      let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-      stRef.modify fun st => setProject st root ps'
-      let diagnostics := buildDiagnostics text info sourceMap cst
-      publishDiagnostics hOut uri version? diagnostics
-      sendFileProgress hOut uri #[]
-  | Except.error () =>
-      publishDiagnostics hOut uri version? #[mkDiagnosticNoSpan (.msg "cycle detected")]
-      sendFileProgress hOut uri #[]
+  let ((info, sourceMap, cst), store') ← runElabTask ps file
+  let ps' : ProjectState := { ps with store := store' }
+  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
+  stRef.modify fun st => setProject st root ps'
+  let diagnostics := buildDiagnostics text info sourceMap cst
+  publishDiagnostics hOut uri version? diagnostics
+  sendFileProgress hOut uri #[]
 
 def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -365,47 +354,44 @@ def handleHover
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  match ← (runElabTask ps file).toIO' with
-  | .error () =>
+  let ((info, sourceMap, cst), store') ← runElabTask ps file
+  let ps' : ProjectState := { ps with store := store' }
+  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
+  stRef.modify fun st => setProject st root ps'
+
+  let cstPath := cst.pathAtPosition codepointPos
+
+  let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
+
+  let mut best : Option (Path × Path × HoverContent) := none
+  for len in (List.range cstPath.length).reverse do
+    let cstPrefix := cstPath.take (len + 1)
+    if let some astPath := sourceMap.cstToAst[cstPrefix]? then
+      for (tyPath, hover) in hoverInfos do
+        if tyPath == astPath then
+          match best with
+          | none => best := some (cstPrefix, astPath, hover)
+          | some (_, prevAstPath, _) =>
+              if astPath.length > prevAstPath.length then
+                best := some (cstPrefix, astPath, hover)
+          break
+
+  match best with
+  | none =>
       hOut.writeLspMessage <| Message.response id Json.null
-  | .ok ((_, info, sourceMap, cst), store') =>
-      let ps' : ProjectState := { ps with store := store' }
-      let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-      stRef.modify fun st => setProject st root ps'
-
-      let cstPath := cst.pathAtPosition codepointPos
-
-      let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
-
-      let mut best : Option (Path × Path × HoverContent) := none
-      for len in (List.range cstPath.length).reverse do
-        let cstPrefix := cstPath.take (len + 1)
-        if let some astPath := sourceMap.cstToAst[cstPrefix]? then
-          for (tyPath, hover) in hoverInfos do
-            if tyPath == astPath then
-              match best with
-              | none => best := some (cstPrefix, astPath, hover)
-              | some (_, prevAstPath, _) =>
-                  if astPath.length > prevAstPath.length then
-                    best := some (cstPrefix, astPath, hover)
-              break
-
-      match best with
-      | none =>
-          hOut.writeLspMessage <| Message.response id Json.null
-      | some (cstPath, _, hover) =>
-          let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
-          let content := Lsp.formatHover hover
-          let range := mkRange text span
-          let markupContent : MarkupContent := {
-            kind := MarkupKind.markdown
-            value := s!"```qdt\n{content}\n```"
-          }
-          let hover : Hover := {
-            contents := markupContent
-            range? := some range
-          }
-          hOut.writeLspMessage <| Message.response id (toJson hover)
+  | some (cstPath, _, hover) =>
+      let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
+      let content := Lsp.formatHover hover
+      let range := mkRange text span
+      let markupContent : MarkupContent := {
+        kind := MarkupKind.markdown
+        value := s!"```qdt\n{content}\n```"
+      }
+      let hover : Hover := {
+        contents := markupContent
+        range? := some range
+      }
+      hOut.writeLspMessage <| Message.response id (toJson hover)
 
 partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) : IO Unit := do
   while true do

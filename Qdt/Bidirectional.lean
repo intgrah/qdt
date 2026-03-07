@@ -22,11 +22,11 @@ def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty
   emitHover (.localVar name ctx.names (← ty.quote))
 
 partial def checkAstUniverse : Ast → OptionT ElabM Universe
-  | .node `Level.zero _ => return .zero
+  | .node `Level.zero _ => do return .zero
   | .node `Level.succ cs => do return .succ (← checkAstUniverse cs[0]!)
   | .node `Level.max cs => do return .max (← checkAstUniverse cs[0]!) (← checkAstUniverse cs[1]!)
-  | .node `Level.name cs => return .level cs[0]!.getName
-  | _ => raiseError .syntaxError
+  | .node `Level.name cs => do return .level cs[0]!.getName
+  | _ => failure
 
 def checkAstUniverses : Ast → OptionT ElabM (List Universe)
   | .node _ cs => cs.toList.mapM checkAstUniverse
@@ -133,14 +133,14 @@ partial def inferPi {n : Nat}
   return (.pi' ⟨x, domTm⟩ codTm, .max domLevel codLevel)
 
 partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
-  | .missing => raiseError .syntaxError
+  | .missing => failure
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
       checkUniverseLevel level
       emitType ctx (.u level.succ)
       return (.u level, level.succ)
   | .node `Term.pi cs => do
-      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let .node `Binder.typed bs := cs[0]! | failure
       let x := bs[0]!.getName
       let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevel ctx bs[1]!))
       let domVal ← dom.eval ctx.env
@@ -161,7 +161,7 @@ partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT ElabM 
   return (← checkTyWithLevel ctx ast).fst
 
 partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
-  | .missing => raiseError .syntaxError
+  | .missing => failure
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
       let result ← inferIdent ctx cs[0]!.getName univs
@@ -194,7 +194,7 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
       emitType ctx resultTy
       return (.lam ⟨x, aTy⟩ bodyTm, resultTy)
   | .node `Term.pi cs => do
-      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       let ty : VTy n := .u level
       emitType ctx ty
@@ -217,10 +217,10 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
       emitType ctx result.snd
       return result
   | .node `Term.sorry _ => raiseError .inferSorry
-  | _ => raiseError .syntaxError
+  | _ => failure
 
 partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT ElabM (Tm n)
-  | .missing => raiseError .syntaxError
+  | .missing => failure
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
       let (tm, ty) ← inferIdent ctx cs[0]!.getName univs
@@ -253,7 +253,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let body ← withChild 1 (checkTmCore ctx' b body)
         emitType ctx expected
         return .lam ⟨x, ← a.quote⟩ body
-      | _ => raiseError .syntaxError
+      | _ => failure
   | .node `Term.letE cs => do
       let name := cs[0]!.getName
       let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
@@ -262,7 +262,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return .letE name rhsTySyn rhsTm body
   | .node `Term.sorry _ => emitSorryTm ctx expected
   | .node `Term.pi cs => do
-      let .node `Binder.typed bs := cs[0]! | raiseError .syntaxError
+      let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       if !(← expected.defEq (.u level)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
@@ -297,7 +297,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         raiseError (.typeMismatch ctx.names (← expected.quote) (← tyVal.quote))
       emitType ctx expected
       return .app fTm aTm
-  | _ => raiseError .syntaxError
+  | _ => failure
 
 partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM (Tm n) := do
   match ← OptionT.run (checkTmCore ctx expected ast) with
