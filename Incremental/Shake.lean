@@ -51,75 +51,61 @@ def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
   let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
   { store with cache }
 
-structure State where
-  store : Store Q R
-  started : DHashMap Q (Memo Q R)
-  stack : List Q
-  currentDeps : HashMap Q UInt64
-
 partial def build : Build Monad (Store Q R) Q R :=
-  fun tasks target store => runEST fun σ => do
-    let stRef ← ST.mkRef (σ := σ) ({
-      store
-      started := DHashMap.emptyWithCapacity 1024
-      stack := []
-      currentDeps := HashMap.emptyWithCapacity 64
-    } : State (Q := Q) (R := R))
+  fun tasks target ⟨cache, reverseDeps⟩ => runEST fun σ => do
+    let cache ← ST.mkRef (σ := σ) cache
+    let rdeps ← ST.mkRef (σ := σ) reverseDeps
+    let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024 : DHashMap Q (Memo Q R))
+    let stack ← ST.mkRef (σ := σ) (#[] : Array Q)
+    let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64 : HashMap Q UInt64)
 
     let rec buildRule (q : Q) : EST Cycle σ (R q) := do
-      let st ← stRef.get
-
-      match st.started.get? q with
+      match (← started.get).get? q with
       | some memo =>
-          match st.stack.head? with
-          | some dependent =>
-              stRef.modify fun st =>
-                { st with store := addReverseDep st.store q dependent  }
-          | none => pure ()
+          if let some dependent := (← stack.get).back? then
+            rdeps.modify fun rd =>
+              rd.insert q ((rd.getD q ∅).insert dependent)
           pure memo.value
       | none =>
-          match st.stack.head? with
-          | some dependent =>
-              stRef.modify fun st =>
-                { st with store := addReverseDep st.store q dependent }
-          | none => pure ()
-          if st.stack.contains q then
+          if let some dependent := (← stack.get).back? then
+            rdeps.modify fun rd =>
+              rd.insert q ((rd.getD q ∅).insert dependent)
+          let s ← stack.get
+          if s.contains q then
             throw Cycle.mk
-          stRef.modify fun st => { st with stack := q :: st.stack }
+          stack.set (s.push q)
           try
-            let st ← stRef.get
-
             match tasks q with
             | none =>
-                match st.store.cache.get? q with
+                match (← cache.get).get? q with
                 | some memo =>
-                    stRef.modify fun st => { st with started := st.started.insert q memo }
+                    started.modify (·.insert q memo)
                     pure memo.value
                 | none =>
                     throw Cycle.mk
             | some task =>
                 let compute : EST Cycle σ (R q × HashMap Q UInt64) := do
-                  let oldDeps := (← stRef.get).currentDeps
-                  stRef.modify fun st => { st with currentDeps := HashMap.emptyWithCapacity 64 }
+                  let oldDeps ← deps.get
+                  deps.set (HashMap.emptyWithCapacity 64)
                   let fetch' : ∀ q, EST Cycle σ (R q) := fun q => do
                     let v ← buildRule q
-                    let ds := (← stRef.get).currentDeps
+                    let ds ← deps.get
                     if !ds.contains q then
-                      let h := match (← stRef.get).started.get? q with
+                      let h := match (← started.get).get? q with
                         | some memo => memo.hash
                         | none => hash v
-                      stRef.modify fun st => { st with currentDeps := st.currentDeps.insert q h }
+                      deps.modify (·.insert q h)
                     pure v
                   let a ← task _ fetch'
-                  let deps := (← stRef.get).currentDeps
-                  stRef.modify fun st => { st with currentDeps := oldDeps }
-                  pure (a, deps)
+                  let ds ← deps.get
+                  deps.set oldDeps
+                  pure (a, ds)
 
                 let verifyDeps (deps : HashMap Q UInt64) : EST Cycle σ PUnit := do
                   for (depKey, oldHash) in deps.toList do
                     try
                       let _ ← buildRule depKey
-                      let h := match (← stRef.get).started.get? depKey with
+                      let h := match (← started.get).get? depKey with
                         | some memo => memo.hash
                         | none => hash 0
                       if h != oldHash then throw Cycle.mk
@@ -128,28 +114,23 @@ partial def build : Build Monad (Store Q R) Q R :=
                 let recompute : EST Cycle σ (R q) := do
                   let (value, deps) ← compute
                   let memo : Memo Q R q := { value, deps }
-                  stRef.modify fun st =>
-                    { st with
-                      started := st.started.insert q memo
-                      store := { st.store with cache := st.store.cache.insert q memo } }
+                  started.modify (·.insert q memo)
+                  cache.modify (·.insert q memo)
                   pure value
 
-                match st.store.cache.get? q with
+                match (← cache.get).get? q with
                 | some memo =>
                     try
                       verifyDeps memo.deps
-                      stRef.modify fun st => { st with started := st.started.insert q memo }
+                      started.modify (·.insert q memo)
                       pure memo.value
                     catch _ => recompute
                 | none =>
                     recompute
           finally
-            stRef.modify fun st =>
-              match st.stack with
-              | [] => st
-              | _ :: rest => { st with stack := rest }
+            stack.modify Array.pop
 
     let _ ← buildRule target
-    return (← stRef.get).store
+    return ⟨← cache.get, ← rdeps.get⟩
 
 end Shake
