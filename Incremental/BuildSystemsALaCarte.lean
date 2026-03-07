@@ -151,11 +151,11 @@ some ["B1"]
 #eval (sprsh₁ "B2").map dependencies
 
 def track {m} [Monad m] {q} (task : Task Monad Q R q) (fetch : ∀ q, m (R q)) : m (R q × List (Σ q, R q)) :=
-  let trackingFetch (q : Q) : WriterT (List (Σ q, R q)) m (R q) := do
+  WriterT.run (task trackingFetch)
+  where trackingFetch (q : Q) : WriterT (List (Σ q, R q)) m (R q) := do
     let r ← fetch q
     tell [⟨q, r⟩]
     return r
-  WriterT.run (task trackingFetch)
 
 def fetchIO (mock : String → Nat) (q : String) : IO Nat := do
   let r := mock q
