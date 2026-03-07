@@ -78,15 +78,10 @@ def Tm.lams {a b} : Ctx a b → Tm b → Tm a
   | .nil => id
   | .snoc bs param => lams bs ∘ lam param
 
-def lookup (subst : List (Name × Universe)) (n : Name) : Universe :=
-  match subst.find? (·.fst == n) with
-  | some (_, u) => u
-  | none => .level n
-
 mutual
 
 def Universe.subst (subst : List (Name × Universe)) : Universe → Universe
-  | .level n => lookup subst n
+  | .level n => subst.lookup n |>.getD (.level n)
   | .zero => .zero
   | .succ u => .succ (u.subst subst)
   | .max u v => .max (u.subst subst) (v.subst subst)
