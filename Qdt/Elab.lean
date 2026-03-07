@@ -110,7 +110,7 @@ def checkDuplicateUnivParams (params : List Name) : Option Error :=
           loop (seen.insert n) ns
   loop ∅ params
 
-def elabDefinition (d : Definition) : OptionT MetaM Unit := do
+def elabDefinition (d : Definition) : OptionT ElabM Unit := do
   if let some e := checkDuplicateUnivParams d.univParams then
     raiseError e
   let (paramCtx, paramTys) ← withChild 2 (elabParams d.params)
@@ -130,7 +130,7 @@ def elabDefinition (d : Definition) : OptionT MetaM Unit := do
   let ty := Ty.pis paramTys ty
   let _ ← addConstant d.name (.definition { univParams := d.univParams, ty, tm })
 
-def elabExample (e : Example) : OptionT MetaM Unit := do
+def elabExample (e : Example) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
     raiseError err
   let (paramCtx, _paramTys) ← withChild 0 (elabParams e.params)
@@ -142,7 +142,7 @@ def elabExample (e : Example) : OptionT MetaM Unit := do
   | none =>
       let (_term, _tyVal) ← withChild 2 (inferTm paramCtx e.body)
 
-def elabAxiom (a : Axiom) : OptionT MetaM Unit := do
+def elabAxiom (a : Axiom) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams a.univParams then
     raiseError err
   let (paramCtx, paramTys) ← withChild 2 (elabParams a.params)
@@ -151,7 +151,7 @@ def elabAxiom (a : Axiom) : OptionT MetaM Unit := do
   let ty := Ty.pis paramTys ty
   let _ ← addConstant a.name (.axiom { univParams := a.univParams, ty })
 
-def elabInductiveCmd (info : Inductive) : OptionT MetaM Unit := do
+def elabInductiveCmd (info : Inductive) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError err
   let result ← elabInductive info
@@ -159,7 +159,7 @@ def elabInductiveCmd (info : Inductive) : OptionT MetaM Unit := do
     withChild (4 + i) (emitHover (.signature ctorName .nil ctorConst.ty))
     return i + 1
 
-def elabStructureCmd (info : Structure) : OptionT MetaM Unit := do
+def elabStructureCmd (info : Structure) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError err
   let _ ← elabStructure info

@@ -63,7 +63,7 @@ def parseStructure : Ast → Option Structure
 def mkFieldTyAst (field : StructureField) : Ast :=
   field.params.foldr (fun b acc => .node `Term.pi #[b, acc]) field.ty
 
-def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT MetaM String := do
+def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT ElabM String := do
   let .str .anonymous s := fieldName
     | raiseError (.fieldNameNotAtomic structName)
   return s
@@ -78,7 +78,7 @@ def mkPrevEnv
     (univs : List Universe)
     (params : List (VTm (numParams + 1)))
     (x : VTm (numParams + 1)) :
-    {b : Nat} → Ctx numParams b → OptionT MetaM (Env (numParams + 1) b)
+    {b : Nat} → Ctx numParams b → OptionT ElabM (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
   | _, .snoc fs ⟨name, _⟩ => do
       let envTail ← mkPrevEnv structName numParams univs params x fs
@@ -89,7 +89,7 @@ def mkPrevEnv
       let ne := ne.app x
       return Env.cons (.neutral ne) envTail
 
-def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT MetaM Unit
+def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT ElabM Unit
   | [], _ => return ()
   | field :: rest, j => do
       let (fieldParamCtx, fieldParamTele) ←
@@ -103,7 +103,7 @@ structure StructureResult where
   indResult : InductiveResult
   projEntries : List (Name × Constant)
 
-def elabStructure (info : Structure) : OptionT MetaM StructureResult := do
+def elabStructure (info : Structure) : OptionT ElabM StructureResult := do
   let numParams := info.params.length
 
   let (paramCtx, paramTys) ← withChild 2 (elabParams info.params)
@@ -156,7 +156,7 @@ def elabStructure (info : Structure) : OptionT MetaM StructureResult := do
       (hb : b ≤ numParamsFields)
       (acc : List (Name × Constant)) :
       Ctx numParams b →
-      OptionT MetaM (List (Name × Constant))
+      OptionT ElabM (List (Name × Constant))
     | .nil => return acc
     | .snoc (b := idx) fs ⟨name, ty⟩ => do
         let acc ← goProj (Nat.le_of_succ_le hb) acc fs

@@ -20,7 +20,7 @@ partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
   | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
-partial def doEl {n} : VTm n → MetaM (VTy n)
+partial def doEl {n} : VTm n → ElabM (VTy n)
   | .u' i => return .u i.normalise
   | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
   | .neutral ne => return .el ne
@@ -36,7 +36,7 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
-partial def VTm.app {n} (fn arg : VTm n) : MetaM (VTm n) :=
+partial def VTm.app {n} (fn arg : VTm n) : ElabM (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _param clos => betaReduction clos arg
@@ -46,7 +46,7 @@ partial def VTm.app {n} (fn arg : VTm n) : MetaM (VTm n) :=
     | none => return .neutral (ne.app arg)
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
-partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
+partial def VTm.proj {n} (i : Nat) : VTm n → ElabM (VTm n)
   | .u' .. => panic! "VTm.proj: expected neutral"
   | .lam .. => panic! "VTm.proj: expected neutral"
   | .neutral ne => do
@@ -56,7 +56,7 @@ partial def VTm.proj {n} (i : Nat) : VTm n → MetaM (VTm n)
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
 @[inline]
-partial def deltaReduction {n} (name : Name) (us : List Universe) : MetaM (VTm n) := do
+partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM (VTm n) := do
   match ← fetchDefinition name, ← fetchConstantInfo name with
   | some tm, some info =>
     let subst := info.univParams.zip us
@@ -64,7 +64,7 @@ partial def deltaReduction {n} (name : Name) (us : List Universe) : MetaM (VTm n
   | _, _ => return .neutral ⟨.const name us, .nil⟩
 
 @[inline]
-partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : MetaM (VTm n) :=
+partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM (VTm n) :=
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 
@@ -72,7 +72,7 @@ partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : MetaM (VTm n) :=
 partial def iotaReduction {n}
     (ne : Neutral n)
     (arg : VTm n) :
-    MetaM (Option (VTm n)) := do
+    ElabM (Option (VTm n)) := do
   let ⟨.const recName recUs, sp⟩ := ne
     | return none
   let some info ← fetchRecursor recName
@@ -108,7 +108,7 @@ partial def iotaReduction {n}
 partial def projReduction {n}
     (ne : Neutral n)
     (i : Nat) :
-    MetaM (Option (VTm n)) := do
+    ElabM (Option (VTm n)) := do
   let ⟨.const ctor _us, sp⟩ := ne
     | return none
   let some ctorInfo ← fetchConstructor ctor
@@ -121,7 +121,7 @@ partial def projReduction {n}
 
 end
 
-def VTm.apps {n} : VTm n → List (VTm n) → MetaM (VTm n) :=
+def VTm.apps {n} : VTm n → List (VTm n) → ElabM (VTm n) :=
   List.foldlM VTm.app
 
 end Qdt

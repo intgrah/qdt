@@ -12,42 +12,42 @@ namespace Qdt
 open Lean (Name)
 open Frontend (Ast Path)
 
-def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : MetaM Unit := do
-  if !(← readThe CoreContext).collectHovers then return
+def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM Unit := do
+  if !(← readThe ElabContext).collectHovers then return
   emitHover (.typeOnly ctx.names (← ty.quote))
 
-def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : MetaM Unit := do
+def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : ElabM Unit := do
   if let .const constName _ := tm then
     if let some info ← fetchConstantInfo constName then
       emitHover (.signature constName .nil info.ty)
       return
   emitHover (.localVar name ctx.names (← ty.quote))
 
-partial def checkAstUniverse : Ast → OptionT MetaM Universe
+partial def checkAstUniverse : Ast → OptionT ElabM Universe
   | .node `Level.zero _ => return .zero
   | .node `Level.succ cs => do return .succ (← checkAstUniverse cs[0]!)
   | .node `Level.max cs => do return .max (← checkAstUniverse cs[0]!) (← checkAstUniverse cs[1]!)
   | .node `Level.name cs => return .level cs[0]!.getName
   | _ => raiseError .syntaxError
 
-def checkAstUniverses : Ast → OptionT MetaM (List Universe)
+def checkAstUniverses : Ast → OptionT ElabM (List Universe)
   | .node _ cs => cs.toList.mapM checkAstUniverse
   | _ => return []
 
-def checkUniverseLevel (level : Universe) : OptionT MetaM Unit := do
+def checkUniverseLevel (level : Universe) : OptionT ElabM Unit := do
   let univParams ← getUnivParams
   match level.checkLevels univParams with
   | .error name => raiseError (.unboundUniverseVariable name)
   | .ok () => return
 
 def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
-    OptionT MetaM (Ty 0) := do
+    OptionT ElabM (Ty 0) := do
   if univs.length != declParams.length then
     raiseError (.universeArgCountMismatch name declParams.length univs.length)
   return ty.substLevels (declParams.zip univs)
 
 def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Universe) :
-    OptionT MetaM (Tm n × VTy n) := do
+    OptionT ElabM (Tm n × VTy n) := do
   if let some (i, ty) := ctx.findName? name then
     return (.var i, ty)
   else
@@ -64,7 +64,7 @@ def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Unive
 def emitSorryTm {n : Nat}
     (ctx : TermContext n)
     (expected : VTy n) :
-    MetaM (Tm n) := do
+    ElabM (Tm n) := do
   let decl ← currentDecl
   let id ← modifyGet fun s => (s.sorryId, { s with sorryId := s.sorryId + 1 })
   let sorryName := decl.str "_sorry" |>.num id
@@ -86,7 +86,7 @@ partial def processLetRhs {n : Nat}
     (name : Name)
     (tyOpt : Ast)
     (rhs : Ast) :
-    OptionT MetaM (Tm n × Ty n × VTm n × TermContext (n + 1)) := do
+    OptionT ElabM (Tm n × Ty n × VTm n × TermContext (n + 1)) := do
   let (rhs, rhsTyVal, rhsTySyn) ←
     match tyOpt with
     | .missing =>
@@ -101,7 +101,7 @@ partial def processLetRhs {n : Nat}
   let ctx' := ctx.define name rhsTyVal rhsVal
   return (rhs, rhsTySyn, rhsVal, ctx')
 
-partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT MetaM (Tm n × VTy n) := do
+partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT ElabM (Tm n × VTy n) := do
   let ann ← withChild 1 (checkTy ctx ann)
   let annVal ← ann.eval ctx.env
   return (← withChild 0 (checkTmCore ctx annVal e), annVal)
@@ -110,7 +110,7 @@ partial def checkEq {n : Nat}
     (ctx : TermContext n)
     (a : Ast)
     (b : Ast) :
-    OptionT MetaM (Tm n × Universe) := do
+    OptionT ElabM (Tm n × Universe) := do
   let (aTm, ty) ← withChild 0 (inferTm ctx a)
   let bTm ← withChild 1 (checkTmCore ctx ty b)
   let tyTm ← ty.reify
@@ -122,7 +122,7 @@ partial def inferPi {n : Nat}
     (x : Name)
     (dom : Ast)
     (cod : Ast) :
-    OptionT MetaM (Tm n × Universe) := do
+    OptionT ElabM (Tm n × Universe) := do
   let (domTm, domTy) ← withChild 0 (withChild 1 (inferTm ctx dom))
   let .u domLevel := domTy
     | raiseError (.expectedType ctx.names (← domTy.quote))
@@ -134,7 +134,7 @@ partial def inferPi {n : Nat}
     | raiseError (.expectedType ctx'.names (← codTy.quote))
   return (.pi' ⟨x, domTm⟩ codTm, .max domLevel codLevel)
 
-partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT MetaM (Ty n × Universe)
+partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
   | .missing => raiseError .syntaxError
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
@@ -159,10 +159,10 @@ partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT M
       let .u level := ty | raiseError (.expectedType ctx.names (← ty.quote))
       return (.el tm, level)
 
-partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT MetaM (Ty n) :=
+partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT ElabM (Ty n) :=
   return (← checkTyWithLevel ctx ast).fst
 
-partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT MetaM (Tm n × VTy n)
+partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
   | .missing => raiseError .syntaxError
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
@@ -221,7 +221,7 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT MetaM (Tm 
   | .node `Term.sorry _ => raiseError .inferSorry
   | _ => raiseError .syntaxError
 
-partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT MetaM (Tm n)
+partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT ElabM (Tm n)
   | .missing => raiseError .syntaxError
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
@@ -301,7 +301,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return .app fTm aTm
   | _ => raiseError .syntaxError
 
-partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : MetaM (Tm n) := do
+partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM (Tm n) := do
   match ← OptionT.run (checkTmCore ctx expected ast) with
   | some tm => return tm
   | none => emitSorryTm ctx expected

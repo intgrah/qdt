@@ -71,7 +71,7 @@ partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
         result := path :: result
   return result
 
-open Qdt (CoreContext MetaContext MetaM elabRun elabDefinition elabExample elabAxiom elabInductiveCmd elabStructureCmd)
+open Qdt (ElabContext ElabM ElabM.run elabDefinition elabExample elabAxiom elabInductiveCmd elabStructureCmd)
 
 def getDeclName (cmd : Ast) (idx : Nat) : Name :=
   if let some d := parseDefinition cmd then d.name
@@ -88,7 +88,7 @@ def getCommandUnivParams (cmd : Ast) : List Name :=
   else if let some s := parseStructure cmd then s.univParams
   else []
 
-def elabAction (cmd : Ast) : OptionT MetaM Unit :=
+def elabAction (cmd : Ast) : ElabM (Option Unit) :=
   if let some d := parseDefinition cmd then elabDefinition d
   else if let some e := parseExample cmd then elabExample e
   else if let some a := parseAxiom cmd then elabAxiom a
@@ -175,9 +175,14 @@ def tasks : Tasks Monad Key Val
     let ast := match prog with | .node _ cs => cs[idx]! | _ => .missing
     let name := getDeclName ast idx
     let univParams := getCommandUnivParams ast
-    let coreCtx : CoreContext := { filepath, univParams, collectHovers := true }
-    let metaCtx : MetaContext := { currentDecl := name, path := [idx] }
-    let (_, globalEnv, info) ← elabRun coreCtx metaCtx (elabAction ast)
+    let elabCtx : ElabContext := {
+      filepath
+      univParams
+      collectHovers := true
+      currentDecl := name
+      path := [idx]
+    }
+    let (_, globalEnv, info) ← (elabAction ast).run elabCtx
     return (globalEnv, info)
   | .elabDecl filepath name => some do
     let indexMap ← fetch (Key.declarationIndex filepath)
