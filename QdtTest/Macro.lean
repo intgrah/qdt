@@ -23,23 +23,23 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
         | some memo => memo.value
         | none => #[]
       return (diags, ∅)
-  | .error _ => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
+  | .error Cycle.mk => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
 def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
-  if diagnostics.isEmpty then
-    pure ()
-  else
-    throw (IO.userError s!"expected success, got: {diagnostics[0]!.error}")
+  match diagnostics[0]? with
+  | none => return
+  | some err =>
+    throw (IO.userError s!"expected success, got: {err.error}")
 
 def shouldFail (check : Error → Bool) (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
-  if diagnostics.isEmpty then
+  match diagnostics[0]? with
+  | none =>
     throw (IO.userError "expected error, got success")
-  else
-    let err := diagnostics[0]!.error
-    if check err then pure ()
-    else throw (IO.userError s!"wrong error: {err}")
+  | some err =>
+    let err := err.error
+    if !check err then throw (IO.userError s!"wrong error: {err}")
 
 /--
 `#pass (prog)` expects `prog` to elaborate successfully.
