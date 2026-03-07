@@ -261,10 +261,4 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   store := { store with cache := store.cache.insert .inputFiles inputMemo }
   return store
 
-def buildKey (store : Store Key Val) (key : Key) : Except Cycle (Store Key Val) :=
-  Shake.build tasks key store
-
-def buildKeys (keys : List Key) : Store Key Val → Except Cycle (Store Key Val) :=
-  keys.foldlM buildKey
-
 end Qdt

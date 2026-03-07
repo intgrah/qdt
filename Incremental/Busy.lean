@@ -32,8 +32,7 @@ partial def build : Build Applicative (Store Q R) Q R :=
           let v ← t _ fetch
           stRef.modify fun s => { s with cache := s.cache.insert q v }
           return v
-    let _ ← fetch target
-    return (← stRef.get)
+    return (← fetch target, ← stRef.get)
 
 end Busy
 

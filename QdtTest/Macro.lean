@@ -18,12 +18,8 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let store := { store with cache := store.cache.insert (.text dummyPath) memo }
   let store := { store with cache := store.cache.insert .inputFiles inputMemo }
 
-  match buildKey store (Key.checkFile dummyPath) with
-  | .ok store =>
-      let diags := match store.cache.get? (Key.checkFile dummyPath) with
-        | some memo => memo.value
-        | none => #[]
-      return (diags, ∅)
+  match Shake.build tasks (Key.checkFile dummyPath) store with
+  | .ok (diags, _) => return (diags, ∅)
   | .error Cycle.mk => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
 def shouldPass (src : String) : IO Unit := do

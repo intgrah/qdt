@@ -225,8 +225,8 @@ def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array R
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
     EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
   let store ← populateStore ps.config ps.store
-  let store ← match buildKey store (Key.checkFile filepath) with
-    | .ok s => pure s
+  let store ← match Shake.build tasks (Key.checkFile filepath) store with
+    | .ok (_, s) => pure s
     | .error _ => throw ()
   match elaborateFile store filepath with
   | some result => pure (result, store)
