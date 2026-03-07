@@ -23,7 +23,7 @@ def elabParamsWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | [] => return (ctx, acc, levels.reverse)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
-          | raiseError .syntaxError
+          | failure
         let (ty, level) ← withChild idx (withChild 1 (checkTyWithLevel ctx tyAst))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))
@@ -50,7 +50,7 @@ def elabVParamsFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | [] => return (ctx, acc)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
-          | raiseError .syntaxError
+          | failure
         let ty ← withChild idx (withChild 1 (checkTy ctx tyAst))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))

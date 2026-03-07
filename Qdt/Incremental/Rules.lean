@@ -99,9 +99,6 @@ def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option File
   inputFiles.toList.find? fun file =>
     file.toString.endsWith expectedPath.toString
 
-def toDiagnostic (cst : Cst) (err : ParseError) : Diagnostic :=
-  { path := cst.pathAtPosition err.pos, error := .msg err.msg }
-
 partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FilePath)) : List FilePath :=
   let rec visit (f : FilePath) (visited : HashSet FilePath) (sorted : List FilePath) : (HashSet FilePath × List FilePath) :=
     if visited.contains f then (visited, sorted)
@@ -123,7 +120,8 @@ def tasks : Tasks Monad Key Val
   | .astSourceMap filepath => some do
     let (cst, parseErrors) ← fetch (Key.cst filepath)
     let (ast, sourceMap) := Frontend.desugarProgram cst
-    let diagnostics := parseErrors.map (toDiagnostic cst)
+    let diagnostics : Array Diagnostic := parseErrors.map fun err =>
+      ⟨cst.pathAtPosition err.pos, .syntaxError err⟩
     return (ast, sourceMap, diagnostics)
   | .ast filepath => some do
     let (ast, _, _) ← fetch (Key.astSourceMap filepath)
@@ -135,8 +133,7 @@ def tasks : Tasks Monad Key Val
     let prog ← fetch (Key.ast filepath)
     let .node _ progCs := prog | return #[]
     let mut result : Array Name := #[]
-    for idx in [:progCs.size] do
-      let cmd := progCs[idx]!
+    for cmd in progCs do
       if let some imp := parseImport cmd then
         result := result.push imp.moduleName
     return result
@@ -241,19 +238,19 @@ def tasks : Tasks Monad Key Val
 
       return allDiags
 
-def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Key Val) := do
+def populateStore (config : Config) (store : Store Key Val) : IO (Store Key Val) := do
   let mut rawFiles : List FilePath := []
   for dir in config.sourceDirectories do
-    rawFiles := rawFiles ++ (← (listSrcFiles dir).toEIO (fun _ => ()))
+    rawFiles := rawFiles ++ (← listSrcFiles dir)
   let mut inputFiles : HashSet FilePath := HashSet.emptyWithCapacity rawFiles.length
   let mut store := store
   for file in rawFiles do
-    let absPath ← (IO.FS.realPath file).toEIO (fun _ => ())
+    let absPath ← IO.FS.realPath file
     inputFiles := inputFiles.insert absPath
     match store.get? (.text absPath) with
     | some _ => continue
     | none =>
-        let text ← (IO.FS.readFile absPath).toEIO (fun _ => ())
+        let text ← IO.FS.readFile absPath
         let memo : Memo Key Val (.text absPath) :=
           { value := text, deps := ∅ }
         store := store.insert (.text absPath) memo

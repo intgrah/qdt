@@ -2,8 +2,8 @@ module
 
 public import Mathlib.Algebra.Group.Defs
 public import Qdt.Frontend.Ast
+public import Qdt.Frontend.Parser
 public import Qdt.Pretty
-import Std.Tactic.BVDecide.Normalize.Prop
 
 @[expose] public section
 
@@ -17,7 +17,7 @@ inductive Error
   | notImplemented (msg : String)
   | importCycle (modules : List Name)
   | expectedType {c} (names : List Name) (got : Ty c)
-  | syntaxError
+  | syntaxError (err : Frontend.Parser.ParseError)
   | duplicateUniverseParam (name : Name)
   | inferUnannotatedLambda
   | inferSorry
@@ -47,8 +47,8 @@ instance : ToString Error where toString
     s!"Import cycle: {modules}"
   | .expectedType names got =>
     s!"Expected type, got {got.fmt names Prec.min}"
-  | .syntaxError =>
-    "Syntax error"
+  | .syntaxError err =>
+    s!"Syntax error: {err.msg}"
   | .duplicateUniverseParam name =>
     s!"Duplicate universe parameter {name}"
   | .inferUnannotatedLambda =>

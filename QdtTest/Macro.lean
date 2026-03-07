@@ -20,7 +20,8 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
 
   match Shake.build tasks (Key.checkFile dummyPath) store with
   | .ok (diags, _) => return (diags, ∅)
-  | .error Cycle.mk => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
+  | .error .cycle => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
+  | .error .missingInput => return (#[{ path := [], error := .msg "missing input" }], ∅)
 
 def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src

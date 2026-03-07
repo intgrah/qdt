@@ -67,19 +67,19 @@ def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := 
 
 def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
     IO (Array String × Store Key Val) := do
-  let store ← match ← (populateStore config store).toIO' with
-    | .ok s => pure s
-    | .error () => pure store
+  let store ← populateStore config store
   let (transImports, store) ← match Shake.build tasks (Key.transitiveImports filepath) store with
     | .ok (v, s) => pure (v, s)
-    | .error _ => return (#["[error] cycle detected"], store)
+    | .error .cycle => return (#["[error] cycle detected"], store)
+    | .error .missingInput => return (#["[error] missing input"], store)
   let allFiles := transImports.toList ++ [filepath]
   let keys := allFiles.map Key.checkFile
   match keys.foldlM (fun s k => Prod.snd <$> Shake.build tasks k s) store with
   | .ok store =>
       let msgs := checkModule store filepath
       return (msgs, store)
-  | .error _ => return (#["[error] cycle detected"], store)
+  | .error .cycle => return (#["[error] cycle detected"], store)
+  | .error .missingInput => return (#["[error] missing input"], store)
 
 def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
   let (msgs, initialStore) ← runOnce config store entryFile

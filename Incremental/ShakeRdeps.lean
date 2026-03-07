@@ -56,7 +56,7 @@ partial def build : Build Monad (Store Q R) Q R :=
     let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
     let stack ← ST.mkRef (σ := σ) (#[] : Array Q)
-    let rec fetch (q : Q) : EST Cycle σ (R q) := do
+    let rec fetch (q : Q) : EST BuildError σ (R q) := do
       if let some dependent := (← stack.get).back? then
         rdeps.modify fun rd =>
           rd.alter q (·.getD ∅ |>.insert dependent)
@@ -65,7 +65,7 @@ partial def build : Build Monad (Store Q R) Q R :=
       | none =>
         let s ← stack.get
         if s.contains q then
-          throw Cycle.mk
+          throw .cycle
         stack.set (s.push q)
         try
           match tasks q with
@@ -74,11 +74,11 @@ partial def build : Build Monad (Store Q R) Q R :=
             | some memo =>
               started.modify (·.insert q memo)
               pure memo.value
-            | none => throw Cycle.mk
+            | none => throw .missingInput
           | some task =>
-            let compute : EST Cycle σ (R q × HashMap Q UInt64) := do
+            let compute : EST BuildError σ (R q × HashMap Q UInt64) := do
               let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64)
-              let fetch' (q : Q) : EST Cycle σ (R q) := do
+              let fetch' (q : Q) : EST BuildError σ (R q) := do
                 let v ← fetch q
                 let ds ← deps.get
                 if !ds.contains q then
@@ -90,15 +90,16 @@ partial def build : Build Monad (Store Q R) Q R :=
               let a ← task _ fetch'
               pure (a, ← deps.get)
 
-            let verifyDeps (deps : HashMap Q UInt64) : EST Cycle σ PUnit := do
+            let verifyDeps (deps : HashMap Q UInt64) : EST BuildError σ Bool := do
               for (depKey, oldHash) in deps do
                 let _ ← fetch depKey
                 let h := match (← started.get).get? depKey with
                   | some memo => memo.hash
                   | none => 0
-                if h != oldHash then throw Cycle.mk
+                if h != oldHash then return false
+              return true
 
-            let recompute : EST Cycle σ (R q) := do
+            let recompute : EST BuildError σ (R q) := do
               let (value, deps) ← compute
               let memo : Memo Q R q := { value, deps }
               started.modify (·.insert q memo)
@@ -107,11 +108,10 @@ partial def build : Build Monad (Store Q R) Q R :=
 
             match (← cache.get).get? q with
             | some memo =>
-              try
-                verifyDeps memo.deps
+              if ← verifyDeps memo.deps then
                 started.modify (·.insert q memo)
                 pure memo.value
-              catch _ => recompute
+              else recompute
             | none => recompute
         finally
           stack.modify Array.pop
