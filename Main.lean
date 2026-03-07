@@ -12,6 +12,7 @@ open Cli
 open Qdt
 open Incremental
 open Incremental.Shake (Store Memo)
+open Std (DHashMap)
 open System (FilePath)
 
 def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
@@ -46,19 +47,19 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
       s!"{file}: error: {d.error}"
 
 def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := Id.run do
-  let some transImports := store.cache.get? (Key.transitiveImports filepath)
+  let some transImports := store.get? (Key.transitiveImports filepath)
     | return #[s!"{filepath}: error: missing transitive imports"]
   let allFiles := transImports.value.toList ++ [filepath]
   let mut msgs : Array String := #[]
   for file in allFiles do
-    let some diagsMemo := store.cache.get? (Key.checkFile file) | continue
+    let some diagsMemo := store.get? (Key.checkFile file) | continue
     let diags := diagsMemo.value
     if diags.isEmpty then continue
-    let some textMemo := store.cache.get? (Key.text file) | continue
-    let some asmMemo := store.cache.get? (Key.astSourceMap file) | continue
+    let some textMemo := store.get? (Key.text file) | continue
+    let some asmMemo := store.get? (Key.astSourceMap file) | continue
     let text := textMemo.value
     let (_, sm, _) := asmMemo.value
-    let some cstMemo := store.cache.get? (Key.cst file) | continue
+    let some cstMemo := store.get? (Key.cst file) | continue
     let (cst, _) := cstMemo.value
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
@@ -99,7 +100,7 @@ def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) :
         for file in pendingFiles do
           let text ← IO.FS.readFile file
           let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-          s := { s with cache := s.cache.insert (.text file) memo }
+          s := s.insert (.text file) memo
         let (msgs, s') ← runOnce config s entryFile
         for msg in msgs do IO.println msg
         storeRef.set s'
@@ -138,7 +139,7 @@ def run (parsed : Parsed) : IO UInt32 := do
   IO.eprintln s!"[config] Entry: {filePath}"
   IO.eprintln s!"[config] Source directories: {config.sourceDirectories}"
 
-  let store : Store Key Val := {}
+  let store : Store Key Val := DHashMap.emptyWithCapacity 1024
 
   if config.watchMode then
     watchLoop config store filePath

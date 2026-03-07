@@ -6,7 +6,7 @@ public import Incremental.Basic
 
 namespace Incremental
 
-namespace Shake
+namespace ShakeRdeps
 
 open Std (DHashMap HashMap HashSet)
 
@@ -19,17 +19,47 @@ structure Memo (q : Q) where
   hash : UInt64 := hash value
   hash_value : Hashable.hash value = hash := by rfl
 
-def Store := DHashMap Q (Memo Q R)
+structure Store where
+  cache : DHashMap Q (Memo Q R) := DHashMap.emptyWithCapacity 1024
+  rdeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
 
 variable {Q : Type} {R : Q → Type}
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
+def Store.addRdep (store : Store Q R) (dependency dependent : Q) : Store Q R :=
+  let existing := store.rdeps.getD dependency ∅
+  let rdeps := store.rdeps.insert dependency (existing.insert dependent)
+  { store with rdeps }
+
+partial def getTransitiveDependents (info : Store Q R) (keys : HashSet Q) : HashSet Q :=
+  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
+    match worklist with
+    | [] => visited
+    | k :: rest =>
+        if visited.contains k then
+          go rest visited
+        else
+          let visited := visited.insert k
+          let dependents := info.rdeps.getD k (HashSet.emptyWithCapacity 0)
+          let newWork := dependents.toList.filter (!visited.contains ·)
+          go (newWork ++ rest) visited
+  go keys.toList (HashSet.emptyWithCapacity keys.size)
+
+def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
+  let toInvalidate := getTransitiveDependents store changedKeys
+  let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
+  { store with cache }
+
 partial def build : Build Monad (Store Q R) Q R :=
   fun tasks target store => runEST fun σ => do
-    let store ← ST.mkRef (σ := σ) store
+    let cache ← ST.mkRef (σ := σ) store.cache
+    let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024 : DHashMap Q (Memo Q R))
     let stack ← ST.mkRef (σ := σ) (#[] : Array Q)
     let rec fetch (q : Q) : EST Cycle σ (R q) := do
+      if let some dependent := (← stack.get).back? then
+        rdeps.modify fun rd =>
+          rd.alter q (·.getD ∅ |>.insert dependent)
       match (← started.get).get? q with
       | some memo => pure memo.value
       | none =>
@@ -40,7 +70,7 @@ partial def build : Build Monad (Store Q R) Q R :=
         try
           match tasks q with
           | none =>
-            match (← store.get).get? q with
+            match (← cache.get).get? q with
             | some memo =>
               started.modify (·.insert q memo)
               pure memo.value
@@ -72,10 +102,10 @@ partial def build : Build Monad (Store Q R) Q R :=
               let (value, deps) ← compute
               let memo : Memo Q R q := { value, deps }
               started.modify (·.insert q memo)
-              store.modify (·.insert q memo)
+              cache.modify (·.insert q memo)
               pure value
 
-            match (← store.get).get? q with
+            match (← cache.get).get? q with
             | some memo =>
               try
                 verifyDeps memo.deps
@@ -85,6 +115,6 @@ partial def build : Build Monad (Store Q R) Q R :=
             | none => recompute
         finally
           stack.modify Array.pop
-    return (← fetch target, ← store.get)
+    return (← fetch target, ⟨← cache.get, ← rdeps.get⟩)
 
-end Shake
+end ShakeRdeps
