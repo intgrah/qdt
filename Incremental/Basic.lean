@@ -27,8 +27,7 @@ def Task
     Type 1 :=
   ∀ (f : Type → Type) [c f], (∀ q, f (R q)) → f α
 
-variable (c : (Type → Type) → Type 1) (Q : Type) (R : Q → Type)
-  [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
+variable (c : (Type → Type) → Type 1) (σ : Type) (Q : Type) (R : Q → Type)
 
 namespace Task
 
@@ -56,47 +55,7 @@ deriving Inhabited
 def Tasks : Type 1 :=
   ∀ q, Option (Task c Q R (R q))
 
-structure Memo (q : Q) where
-  value : R q
-  deps : HashMap Q UInt64
-  hash : UInt64 := hash value
-  hash_value : Hashable.hash value = hash := by rfl
-
-structure Store where
-  cache : DHashMap Q (Memo Q R) := DHashMap.emptyWithCapacity 1024
-  reverseDeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
-deriving Inhabited
-
-namespace Store
-
-def addReverseDep (store : Store Q R) (dependency dependent : Q) : Store Q R :=
-  let existing := store.reverseDeps.getD dependency ∅
-  let existing := existing.insert dependent
-  let reverseDeps := store.reverseDeps.insert dependency existing
-  { store with reverseDeps }
-
-partial def getTransitiveDependents (store : Store Q R) (keys : HashSet Q) : HashSet Q :=
-  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
-    match worklist with
-    | [] => visited
-    | k :: rest =>
-        if visited.contains k then
-          go rest visited
-        else
-          let visited := visited.insert k
-          let dependents := store.reverseDeps.getD k (HashSet.emptyWithCapacity 0)
-          let newWork := dependents.toList.filter (!visited.contains ·)
-          go (newWork ++ rest) visited
-  go keys.toList (HashSet.emptyWithCapacity keys.size)
-
-def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
-  let toInvalidate := store.getTransitiveDependents Q R changedKeys
-  let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
-  { store with cache }
-
-end Store
-
 def Build : Type 1 :=
-  Tasks c Q R → Q → Store Q R → Except Cycle (Store Q R)
+  Tasks c Q R → Q → σ → Except Cycle σ
 
 end Incremental

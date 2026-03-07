@@ -11,6 +11,7 @@ namespace Qdt
 open Cli
 open Qdt
 open Incremental
+open Incremental.Shake (Store Memo)
 open System (FilePath)
 
 def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do

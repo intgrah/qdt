@@ -4,6 +4,7 @@ import Incremental.Basic
 
 open Qdt
 open Incremental
+open Incremental.Shake (Store Memo)
 open Lean (Term MacroM)
 open System (FilePath)
 open Std (DHashMap)

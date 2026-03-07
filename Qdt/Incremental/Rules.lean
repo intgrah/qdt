@@ -15,6 +15,7 @@ open System (FilePath)
 open Frontend (Ast Cst Path SourceMap)
 open Frontend.Parser (ParseError)
 open Incremental
+open Incremental.Shake (Store Memo)
 
 def getFieldString (_structName fieldName : Name) : Option String :=
   if !fieldName.isAtomic then none

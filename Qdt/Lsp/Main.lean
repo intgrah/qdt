@@ -14,6 +14,7 @@ open Std (HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
+open Incremental.Shake (Store Memo)
 open Frontend (Cst Path SourceMap Span)
 
 partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
