@@ -12,7 +12,7 @@ public import Qdt.Quote
 
 namespace Qdt
 
-export Lean (Name)
+open Lean (Name)
 
 open Frontend (Ast Path)
 

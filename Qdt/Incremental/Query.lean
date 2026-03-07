@@ -8,13 +8,11 @@ public import Qdt.Theory.Global
 public import Qdt.Frontend.Ast
 public import Qdt.Frontend.Cst
 public import Qdt.Frontend.Parser
-public import Qdt.Incremental.Basic
+public import Incremental.Basic
 
 @[expose] public section
 
 namespace Qdt
-
-namespace Incremental
 
 open Lean (Name)
 open Std (HashMap HashSet)
@@ -162,7 +160,5 @@ instance {α} [BEq α] [Hashable α] : Hashable (HashSet α) where
 
 instance : ∀ q, Hashable (Val q) := by
   rintro (_ | _) <;> infer_instance
-
-end Incremental
 
 end Qdt

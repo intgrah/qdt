@@ -9,19 +9,19 @@ public import Qdt.Elab
 public import Qdt.Error
 public import Qdt.Frontend.Desugar
 public import Qdt.Frontend.Parser
-public import Qdt.Incremental.Basic
 public import Qdt.Incremental.Query
+public import Incremental.Basic
 
 @[expose] public section
 
-namespace Qdt.Incremental
+namespace Qdt
 
 open Lean (Name)
 open Std (HashMap HashSet)
 open System (FilePath)
 open Frontend (Ast Cst Path SourceMap)
 open Frontend.Parser (ParseError)
-open Task (fetch)
+open Incremental
 
 def getFieldString (_structName fieldName : Name) : Option String :=
   if !fieldName.isAtomic then none
@@ -263,17 +263,19 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   store := { store with cache := store.cache.insert .inputFiles inputMemo }
   return store
 
-protected def run {α : Type} (build : Build Monad Key Val) (store : Store Key Val)
-    (task : Task Monad Key Val α) : EIO Unit (α × Store Key Val) :=
-  build tasks store task
+def runTask {α : Type} (build : Build Monad Key Val) :
+    Store Key Val →
+    Task Monad Key Val α →
+    EIO Unit (α × Store Key Val) :=
+  build tasks
 
-protected def runWithProfile {α : Type} (store : Store Key Val)
+def runWithProfile {α : Type} (store : Store Key Val)
     (task : Task Monad Key Val α) : IO (α × Store Key Val) := do
   let prof ← IO.mkRef (Std.HashMap.emptyWithCapacity 32)
-  let result ← (Build.shake Key Val Key.tag prof (onBuildEvent := none) tasks store task).toIO'
+  let result ← (Shake.build Key Val Key.tag prof (onBuildEvent := none) tasks store task).toIO'
   Profile.print prof
   match result with
   | .ok r => return r
   | .error () => throw (IO.Error.userError "cycle detected")
 
-end Qdt.Incremental
+end Qdt
