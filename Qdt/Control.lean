@@ -39,69 +39,66 @@ instance {ρ ω M} [Monad M] [MonadWriter ω M] : MonadWriter ω (ReaderT ρ M) 
   listen m := fun r => listen (m r)
   pass m := fun r => pass (m r)
 
-structure CoreContext where
+structure ElabContext where
   filepath : FilePath
   univParams : List Name
   selfNames : List Name := []
   collectHovers : Bool
-
-structure MetaContext where
   currentDecl : Name
   path : Path := []
 deriving Repr, Inhabited
 
-structure MetaState where
+structure ElabState where
   localEnv : Global
   sorryId : Nat := 0
   entryCache : Std.HashMap Lean.Name (Option Constant) := {}
 deriving Inhabited
 
-abbrev MetaM :=
+abbrev ElabM :=
   Task Monad Key Val
   |> WriterT ElabInfo
-  |> ReaderT CoreContext
-  |> StateT MetaState
-  |> ReaderT MetaContext
+  |> StateT ElabState
+  |> ReaderT ElabContext
 
-abbrev TermM (n : Nat) := ReaderT (TermContext n) MetaM
-abbrev SemM (n c : Nat) := ReaderT (Env n c) MetaM
+abbrev TermM (n : Nat) := ReaderT (TermContext n) ElabM
+abbrev SemM (n c : Nat) := ReaderT (Env n c) ElabM
 
 instance {n} : MonadLiftT (SemM n n) (TermM n) where
   monadLift m n := m n.env
 
-def currentDecl : MetaM Name := do
+def currentDecl : ElabM Name := do
   return (← read).currentDecl
 
-def currentPath : MetaM Path := do
+def currentPath : ElabM Path := do
   return (← read).path
 
-def withChild {α : Type} (i : Nat) : MetaM α → MetaM α :=
-  ReaderT.adapt (fun ctx => { ctx with path := i :: ctx.path })
+def withChild {α : Type} (i : Nat) : ElabM α → ElabM α :=
+  ReaderT.adapt fun ctx => { ctx with path := i :: ctx.path }
 
-def getUnivParams : MetaM (List Name) := do
-  return (← readThe CoreContext).univParams
+def getUnivParams : ElabM (List Name) := do
+  return (← readThe ElabContext).univParams
 
-def emitDiagnostic (err : Error) : MetaM Unit := do
+def emitDiagnostic (err : Error) : ElabM Unit := do
   let path ← currentPath
   tell { diagnostics := #[{ path, error := err }], hovers := #[] }
 
-def raiseError {α : Type} (err : Error) : OptionT MetaM α := do
+def raiseError {α : Type} (err : Error) : OptionT ElabM α := do
   emitDiagnostic err
   failure
 
-def emitHover (hover : HoverContent) : MetaM Unit := do
-  if !(← readThe CoreContext).collectHovers then return
+def emitHover (hover : HoverContent) : ElabM Unit := do
+  if !(← readThe ElabContext).collectHovers then return
   let path ← currentPath
   tell { diagnostics := #[], hovers := #[{ path, hover }] }
 
-def getLocalEnv : MetaM Global := do
+def getLocalEnv : ElabM Global := do
   return (← get).localEnv
 
-def fetchConstant (name : Name) : MetaM (Option Constant) := do
+def fetchConstant (name : Name) : ElabM (Option Constant) := do
   let st ← get
   if let some e := st.localEnv[name]? then
     return some e
-  let ctx ← readThe CoreContext
+  let ctx ← readThe ElabContext
   if name ∈ ctx.selfNames then
     return none
   if let some result := st.entryCache[name]? then
@@ -120,40 +117,40 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
 
-def fetchTy (name : Name) : MetaM (Option (Ty 0)) := do
+def fetchTy (name : Name) : ElabM (Option (Ty 0)) := do
   let some e ← fetchConstant name | return none
   return some (match e with
     | .definition info | .opaque info | .axiom info
     | .recursor info | .constructor info | .inductive info => info.ty)
 
-def fetchConstantInfo (name : Name) : MetaM (Option ConstantInfo) := do
+def fetchConstantInfo (name : Name) : ElabM (Option ConstantInfo) := do
   let some e ← fetchConstant name | return none
   return some (match e with
     | .definition info | .opaque info | .axiom info
     | .recursor info | .constructor info | .inductive info => info.toConstantInfo)
 
-def fetchDefinition (name : Name) : MetaM (Option (Tm 0)) := do
+def fetchDefinition (name : Name) : ElabM (Option (Tm 0)) := do
   let some (.definition info) ← fetchConstant name | return none
   return some info.tm
 
-def fetchInductive (name : Name) : MetaM (Option InductiveInfo) := do
+def fetchInductive (name : Name) : ElabM (Option InductiveInfo) := do
   let some (.inductive info) ← fetchConstant name | return none
   return some info
 
-def fetchRecursor (name : Name) : MetaM (Option RecursorInfo) := do
+def fetchRecursor (name : Name) : ElabM (Option RecursorInfo) := do
   let some (.recursor info) ← fetchConstant name | return none
   return some info
 
-def fetchConstructor (name : Name) : MetaM (Option ConstructorInfo) := do
+def fetchConstructor (name : Name) : ElabM (Option ConstructorInfo) := do
   let some (.constructor info) ← fetchConstant name | return none
   return some info
 
-def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
+def addConstant (name : Name) (constant : Constant) : ElabM Bool := do
   let st ← get
   if name ∈ st.localEnv then
     emitDiagnostic (.alreadyDefined name)
     return false
-  let ctx ← readThe CoreContext
+  let ctx ← readThe ElabContext
   let currentDeclName := (← read).currentDecl
   let declIndex : Std.HashMap Lean.Name Nat ←
     liftM (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
@@ -174,13 +171,13 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
   set { st with localEnv := st.localEnv.insert name constant }
   return true
 
-def replaceEntry (name : Name) (constant : Constant) : MetaM Unit := do
+def replaceEntry (name : Name) (constant : Constant) : ElabM Unit := do
   let st ← get
   set { st with localEnv := st.localEnv.insert name constant }
 
-def elabRun {α : Type} (coreCtx : CoreContext) (metaCtx : MetaContext) (action : OptionT MetaM α) :
-    Task Monad Key Val (Option α × Global × ElabInfo) := do
-  let ((optResult, metaSt), info) ← WriterT.run ((StateT.run (action metaCtx) { localEnv := {} }) coreCtx)
-  return (optResult, metaSt.localEnv, info)
+def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM α) :
+    Task Monad Key Val (α × Global × ElabInfo) := do
+  let ((result, st), info) ← WriterT.run (StateT.run (action ctx) { localEnv := {} })
+  return (result, st.localEnv, info)
 
 end Qdt

@@ -8,7 +8,7 @@ namespace Qdt
 
 mutual
 
-partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
+partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
   | .u' i₁, .u' i₂ => return i₁.normalise == i₂.normalise
   | .neutral n₁, .neutral n₂ => n₁.defEq n₂
   | .lam _ ⟨env₁, body₁⟩, .lam _ ⟨env₂, body₂⟩ => do
@@ -40,7 +40,7 @@ partial def VTm.defEq {n} : VTm n → VTm n → MetaM Bool
       b₁Val.defEq b₂Val
   | _, _ => return false
 
-partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : MetaM Bool := do
+partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : ElabM Bool := do
   let ⟨.const ctorName _us, sp⟩ := ne
     | return false
   let some ctorInfo ← fetchConstructor ctorName
@@ -59,7 +59,7 @@ partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : MetaM Bool := do
     proj.defEq fields[i]
   )
 
-partial def Neutral.defEq {n} : Neutral n → Neutral n → MetaM Bool
+partial def Neutral.defEq {n} : Neutral n → Neutral n → ElabM Bool
   | ne₁@⟨h₁, sp₁⟩, ne₂@⟨h₂, sp₂⟩ => do
       match h₁, h₂ with
       | .var v₁, .var v₂ =>
@@ -74,7 +74,7 @@ partial def Neutral.defEq {n} : Neutral n → Neutral n → MetaM Bool
       | .const _ _, .var _ => etaDefEq ne₁ (.neutral ne₂)
       | .var _, .const _ _ => etaDefEq ne₂ (.neutral ne₁)
 
-partial def Spine.defEq {n} : Spine n → Spine n → MetaM Bool
+partial def Spine.defEq {n} : Spine n → Spine n → ElabM Bool
   | .nil, .nil => return true
   | .app sp₁ t₁, .app sp₂ t₂ => return (← t₁.defEq t₂) && (← sp₁.defEq sp₂)
   | .proj sp₁ i₁, .proj sp₂ i₂ => return i₁ == i₂ && (← sp₁.defEq sp₂)
@@ -82,7 +82,7 @@ partial def Spine.defEq {n} : Spine n → Spine n → MetaM Bool
 
 end
 
-partial def VTy.defEq {n} : VTy n → VTy n → MetaM Bool
+partial def VTy.defEq {n} : VTy n → VTy n → ElabM Bool
   | .u i₁, .u i₂ => return i₁.normalise == i₂.normalise
   | .pi ⟨_, a₁⟩ ⟨env₁, b₁⟩, .pi ⟨_, a₂⟩ ⟨env₂, b₂⟩ => do
       if !(← a₁.defEq a₂) then return false

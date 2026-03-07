@@ -16,12 +16,12 @@ def getTypedBinder : Ast → Option (Name × Ast)
   | _ => none
 
 def elabParamsWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
-    OptionT MetaM (TermContext (n + params.length) × Ctx n (n + params.length) × List Universe) :=
+    OptionT ElabM (TermContext (n + params.length) × Ctx n (n + params.length) × List Universe) :=
   Nat.zero_add params.length ▸ go n 0 ctx .nil [] params
   where
     go {a : Nat} (b : Nat) (idx : Nat) (ctx : TermContext b) (acc : Ctx a b) (levels : List Universe) :
       (params : List Ast) →
-        OptionT MetaM (TermContext (b + params.length) × Ctx a (b + params.length) × List Universe)
+        OptionT ElabM (TermContext (b + params.length) × Ctx a (b + params.length) × List Universe)
     | [] => return (ctx, acc, levels.reverse)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
@@ -34,21 +34,21 @@ def elabParamsWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih
 
 def elabParamsFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
-    OptionT MetaM (TermContext (n + params.length) × Ctx n (n + params.length)) := do
+    OptionT ElabM (TermContext (n + params.length) × Ctx n (n + params.length)) := do
   let (ctx, tele, _) ← elabParamsWithLevels ctx params
   return (ctx, tele)
 
 def elabParams (params : List Ast) :
-    OptionT MetaM (TermContext params.length × Ctx 0 params.length) :=
+    OptionT ElabM (TermContext params.length × Ctx 0 params.length) :=
   Nat.zero_add params.length ▸ elabParamsFrom TermContext.empty params
 
 def elabVParamsFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
-    OptionT MetaM (TermContext (n + params.length) × Tele VParam n (n + params.length)) :=
+    OptionT ElabM (TermContext (n + params.length) × Tele VParam n (n + params.length)) :=
   Nat.zero_add params.length ▸ go n 0 ctx .nil params
   where
     go {a : Nat} (b : Nat) (idx : Nat) (ctx : TermContext b) (acc : Tele VParam a b) :
       (params : List Ast) →
-      OptionT MetaM (TermContext (b + params.length) × Tele VParam a (b + params.length))
+      OptionT ElabM (TermContext (b + params.length) × Tele VParam a (b + params.length))
     | [] => return (ctx, acc)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
@@ -61,7 +61,7 @@ def elabVParamsFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih
 
 def elabVParams (params : List Ast) :
-    OptionT MetaM (TermContext params.length × Tele VParam 0 params.length) := by
+    OptionT ElabM (TermContext params.length × Tele VParam 0 params.length) := by
   simpa only [Nat.zero_add] using elabVParamsFrom TermContext.empty params
 
 end Qdt

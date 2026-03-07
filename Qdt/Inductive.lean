@@ -142,7 +142,7 @@ def indConsistency {n : Nat}
     (numParams numIndices : Nat)
     (indName ctorName : Name)
     (args : List (Tm n)) :
-    OptionT MetaM (List (Tm n)) := do
+    OptionT ElabM (List (Tm n)) := do
   if args.length != numParams + numIndices then
     raiseError (.nonPositiveOccurrence indName)
   let (params, indices) := args.splitAt numParams
@@ -161,7 +161,7 @@ def analyseRecField
     (indName ctorName : Name)
     (jthFieldCtx : Nat)
     (fty : Ty jthFieldCtx) :
-    OptionT MetaM (Option (RecFieldInfo jthFieldCtx)) := do
+    OptionT ElabM (Option (RecFieldInfo jthFieldCtx)) := do
   let ⟨nb, nestedTele, endTy⟩ := fty.getTele
   if nestedTele.any (fun ⟨_, t⟩ => t.hasIndOcc indName) then
     raiseError (.nonPositiveOccurrence indName)
@@ -200,7 +200,7 @@ def elabCtor
     (resultUniv : Universe)
     (paramCtx : TermContext numParams)
     (ctor : InductiveConstructor) :
-    OptionT MetaM (Name × Ty numParams) := do
+    OptionT ElabM (Name × Ty numParams) := do
   if !ctor.name.isAtomic then
     raiseError (.ctorNameNotAtomic ctor.name)
   let ctorName := indName.append ctor.name
@@ -250,7 +250,7 @@ def buildIhs
     (ihTele : Ctx numParamsMotivesIthMinorFields k)
     (recFields : List (RecFieldSeed (numParamsMotives + numMinors) numFields)) :
     Tele ParamRec (numParamsMotives + ithMinor) j →
-    MetaM (Σ nRec : Nat, Ctx numParamsMotivesIthMinorFields nRec × List (RecFieldSeed (numParamsMotives + numMinors) numFields))
+    ElabM (Σ nRec : Nat, Ctx numParamsMotivesIthMinorFields nRec × List (RecFieldSeed (numParamsMotives + numMinors) numFields))
   | .nil => return ⟨k, ihTele, recFields⟩
   | .snoc (b := idx) fs f => do
       have hIdx : idx < numParamsMotivesIthMinorFields := by omega
@@ -324,7 +324,7 @@ def buildMinorTy
     (ithMinor : Nat)
     (him : ithMinor ≤ numMinors)
     (ctorFieldsTy : Ty numParams) :
-    OptionT MetaM (Param (numParams + 1 + ithMinor) × RuleSeed (numParams + 1 + numMinors)) := do
+    OptionT ElabM (Param (numParams + 1 + ithMinor) × RuleSeed (numParams + 1 + numMinors)) := do
   let numParamsMotivesIthMinor : Nat := numParams + 1 + ithMinor
   let numParamsMotivesMinors := numParams + 1 + numMinors
   let ctorFieldsTy ← ctorFieldsTy.eval Env.infer
@@ -387,7 +387,7 @@ def buildRecRule
     (params : List (VTm numParams))
     (i : Fin numMinors)
     (seed : RuleSeed (numParams + 1 + numMinors)) :
-    OptionT MetaM (RecursorRule (numParams + 1 + numMinors)) := do
+    OptionT ElabM (RecursorRule (numParams + 1 + numMinors)) := do
   let numParamsMotives := numParams + 1
   let numParamsMotivesMinors := numParamsMotives + numMinors
   let numFields := seed.numFields
@@ -447,7 +447,7 @@ def goMinors
     (hi : ithMinor ≤ numMinors)
     (acc : Ctx (numParams + 1) (numParams + 1 + ithMinor))
     (seeds : Vector (RuleSeed (numParams + 1 + numMinors)) ithMinor) :
-    OptionT MetaM (Ctx (numParams + 1) (numParams + 1 + numMinors) × Vector (RuleSeed (numParams + 1 + numMinors)) numMinors) := do
+    OptionT ElabM (Ctx (numParams + 1) (numParams + 1 + numMinors) × Vector (RuleSeed (numParams + 1 + numMinors)) numMinors) := do
   if h' : ithMinor < numMinors then
     let (ctorName, ctorFieldsTy) := ctors[ithMinor]
     let (p, seed) ← buildMinorTy numParams numIndices numMinors indName indUnivs motiveVal params ctorName ithMinor (Nat.le_of_lt h') ctorFieldsTy
@@ -458,7 +458,7 @@ def goMinors
     have hk : numParams + 1 + ithMinor = numParams + 1 + numMinors := by omega
     return (hk ▸ acc, hEq ▸ seeds)
 
-def elabInductive (ind : Inductive) : OptionT MetaM InductiveResult := do
+def elabInductive (ind : Inductive) : OptionT ElabM InductiveResult := do
   let numParams := ind.params.length
   let numMotives := 1
   let numParamsMotives := numParams + numMotives

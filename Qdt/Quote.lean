@@ -10,7 +10,7 @@ namespace Qdt
 
 mutual
 
-partial def VTy.quote {n} : VTy n → MetaM (Ty n)
+partial def VTy.quote {n} : VTy n → ElabM (Ty n)
   | .u i => return .u i
   | .pi ⟨x, a⟩ ⟨env, b⟩ => do
       let a ← a.quote
@@ -19,7 +19,7 @@ partial def VTy.quote {n} : VTy n → MetaM (Ty n)
       return .pi ⟨x, a⟩ b
   | .el n => return .el (← n.quote)
 
-partial def VTm.quote {n} : VTm n → MetaM (Tm n)
+partial def VTm.quote {n} : VTm n → ElabM (Tm n)
   | .u' i => return .u' i
   | .neutral n => n.quote
   | .lam ⟨x, a⟩ ⟨env, b⟩ => do
@@ -33,19 +33,19 @@ partial def VTm.quote {n} : VTm n → MetaM (Tm n)
       let b ← b.quote
       return .pi' ⟨x, a⟩ b
 
-partial def Head.quote {n} : Head n → MetaM (Tm n)
+partial def Head.quote {n} : Head n → ElabM (Tm n)
   | .var i => return .var i.rev
   | .const name us => return .const name us
 
-partial def Neutral.quote {n} (ne : Neutral n) : MetaM (Tm n) := do
+partial def Neutral.quote {n} (ne : Neutral n) : ElabM (Tm n) := do
   let ⟨h, sp⟩ := ne
-  let rec go : Spine n → MetaM (Tm n)
+  let rec go : Spine n → ElabM (Tm n)
     | .nil => h.quote
     | .app sp t => return .app (← go sp) (← t.quote)
     | .proj sp i => return .proj i (← go sp)
   go sp
 
-partial def VTy.reify {n} : VTy n → MetaM (Tm n)
+partial def VTy.reify {n} : VTy n → ElabM (Tm n)
   | .u i => return .u' i
   | .pi ⟨x, a⟩ ⟨env, b⟩ => do
       let a ← a.reify
@@ -54,7 +54,7 @@ partial def VTy.reify {n} : VTy n → MetaM (Tm n)
       return .pi' ⟨x, a⟩ b
   | .el n => n.quote
 
-partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → MetaM Universe
+partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM Universe
   | .u i => return i.succ
   | .pi ⟨_x, a⟩ ⟨env, b⟩ => do
       let aLevel ← a.inferLevel ctx
