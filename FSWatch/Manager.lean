@@ -66,20 +66,17 @@ def linuxLoop (m : Manager) : IO Unit := do
     let wds ← m.linuxWds.get
     let watches ← m.watches.get
     for raw in rawEvents do
-      match wds.find? (fun (wd, _) => wd.toNat == raw.wd) with
-      | some (_, idx) =>
-          if h : idx < watches.size then
-            let entry := watches[idx]
-            let event := convertINotifyEvent entry.path time raw
-            if entry.predicate event then
-              try entry.callback event catch _ => pure ()
-            if event.kind == .added && event.isDirectory == .directory then
-              if let some onNewDir := entry.onNewDir then
-                try onNewDir event.path catch _ => pure ()
-            if event.kind == .movedIn && event.isDirectory == .directory then
-              if let some onNewDir := entry.onNewDir then
-                try onNewDir event.path catch _ => pure ()
-      | none => pure ()
+      if let some idx := wds.toList.lookup raw.wd then
+        if let some entry := watches[idx]? then
+          let event := convertINotifyEvent entry.path time raw
+          if entry.predicate event then
+            try entry.callback event catch _ => pure ()
+          if event.kind == .added && event.isDirectory == .directory then
+            if let some onNewDir := entry.onNewDir then
+              try onNewDir event.path catch _ => pure ()
+          if event.kind == .movedIn && event.isDirectory == .directory then
+            if let some onNewDir := entry.onNewDir then
+              try onNewDir event.path catch _ => pure ()
     IO.sleep 10
 
 def windowsLoop (m : Manager) : IO Unit := do
@@ -89,7 +86,7 @@ def windowsLoop (m : Manager) : IO Unit := do
     for (handle, idx) in handles do
       if hBound : idx < watches.size then
         let entry := watches[idx]
-        let rawEvents ← RDCW.read handle 0 RDCW.Filter.fileChanges.val
+        let rawEvents ← RDCW.read handle 0 RDCW.Filter.fileChanges
         let time ← Std.Time.Timestamp.now
         for raw in rawEvents do
           let event := convertRDCWEvent entry.path time raw
@@ -131,7 +128,7 @@ def addSingleWatch (m : Manager) (absPath : FilePath) (idx : Nat) : IO StopListe
       try RDCW.close h catch _ => pure ()
   else
     let some fd := m.linuxFd | throw (IO.userError "Manager not initialized")
-    let wd ← INotify.addWatch fd absPath.toString INotify.Mask.fileChanges.val
+    let wd ← INotify.addWatch fd absPath.toString INotify.Mask.fileChanges
     m.linuxWds.modify (·.push (wd, idx))
     return do
       m.linuxWds.modify (·.filter (·.2 != idx))

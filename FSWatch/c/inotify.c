@@ -48,11 +48,11 @@ LEAN_EXPORT lean_obj_res fswatch_inotify_close(uint32_t fd,
 
 static lean_object *mk_raw_event(int32_t wd, uint32_t mask, uint32_t cookie,
                                  const char *name) {
-  lean_object *obj = lean_alloc_ctor(0, 4, 0);
-  lean_ctor_set(obj, 0, lean_usize_to_nat((size_t)wd));
-  lean_ctor_set(obj, 1, lean_usize_to_nat((size_t)mask));
-  lean_ctor_set(obj, 2, lean_usize_to_nat((size_t)cookie));
-  lean_ctor_set(obj, 3, lean_mk_string(name ? name : ""));
+  lean_object *obj = lean_alloc_ctor(0, 1, 12);
+  lean_ctor_set(obj, 0, lean_mk_string(name ? name : ""));
+  lean_ctor_set_uint32(obj, sizeof(void *), (uint32_t)wd);
+  lean_ctor_set_uint32(obj, sizeof(void *) + 4, mask);
+  lean_ctor_set_uint32(obj, sizeof(void *) + 8, cookie);
   return obj;
 }
 
