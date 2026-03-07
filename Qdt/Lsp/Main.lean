@@ -261,7 +261,6 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
 
   let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
   let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
-  let store := Shake.invalidate store {.text file}
   let ps := { ps with store }
   stRef.set st
 
@@ -301,7 +300,6 @@ def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? 
 
   let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
   let store := { ps.store with cache := ps.store.cache.insert (.text file) memo }
-  let store := Shake.invalidate store {.text file}
   let ps := { ps with store }
   stRef.set st
 
