@@ -106,7 +106,7 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
   let currentDeclName := (← read).currentDecl
   if let some idx := declIndex[name]? then
     if let some currentIdx := declIndex[currentDeclName]? then
-      if idx >= currentIdx then
+      if idx ≥ currentIdx then
         modify fun st => { st with entryCache := st.entryCache.insert name none }
         return none
   let result : Val (Key.constant ctx.filepath name) ←

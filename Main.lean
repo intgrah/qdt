@@ -17,7 +17,7 @@ def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
   let mut col := 1
   let mut i := 0
   for c in text.toList do
-    if i >= pos then return (line, col)
+    if i ≥ pos then return (line, col)
     i := i + 1
     if c == '\n' then
       line := line + 1

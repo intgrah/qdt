@@ -28,7 +28,7 @@ partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
   go 0 0
 where
   go (cp : Nat) (bp : Nat) : Nat :=
-    if bp >= bytePos then cp
+    if bp ≥ bytePos then cp
     else if bp < s.utf8ByteSize then
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else cp
