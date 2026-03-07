@@ -1,8 +1,8 @@
 import Qdt
-import Qdt.Incremental
+import Incremental.Basic
 
 open Qdt
-open Qdt.Incremental
+open Incremental
 open Lean (Term MacroM)
 open System (FilePath)
 open Std (DHashMap)
@@ -16,7 +16,7 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let store := { store with cache := store.cache.insert (.text dummyPath) memo }
   let store := { store with cache := store.cache.insert .inputFiles inputMemo }
 
-  match ← (Incremental.run (Build.shake Key Val) store (Incremental.Task.fetch (Key.checkFile dummyPath))).toIO' with
+  match ← (Incremental.run (Build.shake Key Val) store (fetch (Key.checkFile dummyPath))).toIO' with
   | .ok (diags, _) => return (diags, ∅)
   | .error () => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 

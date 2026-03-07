@@ -8,15 +8,15 @@ public import Qdt.Frontend.Cst
 public import Qdt.Error
 public import Qdt.Theory.Global
 public import Qdt.TermContext
-public import Qdt.Incremental.Basic
 public import Qdt.Incremental.Query
+public import Incremental.Basic
 
 @[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
-open Incremental (Key Val Task)
+open Incremental
 open Frontend (Path SourceMap)
 open System (FilePath)
 
@@ -107,7 +107,7 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
   if let some result := st.entryCache[name]? then
     return result
   let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
+    liftM (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   let currentDeclName := (← read).currentDecl
   if let some idx := declIndex[name]? then
     if let some currentIdx := declIndex[currentDeclName]? then
@@ -115,7 +115,7 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
         modify fun st => { st with entryCache := st.entryCache.insert name none }
         return none
   let result : Val (Key.constant ctx.filepath name) ←
-    liftM (Task.fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
+    liftM (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
   let result : Option Constant := result.map Prod.fst
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
@@ -156,7 +156,7 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
   let ctx ← readThe CoreContext
   let currentDeclName := (← read).currentDecl
   let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
+    liftM (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   match declIndex[name]? with
   | some nameIdx =>
       match declIndex[currentDeclName]? with
@@ -167,7 +167,7 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
       | none => pure ()
   | none =>
       let existing : Val (Key.constant ctx.filepath name) ←
-        liftM (Task.fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
+        liftM (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
       if existing.isSome then
         emitDiagnostic (.alreadyDefined name)
         return false

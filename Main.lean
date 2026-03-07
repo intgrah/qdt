@@ -3,13 +3,15 @@ module
 public import Cli
 public import FSWatch
 public import Qdt
-public import Qdt.Incremental
+public import Qdt.Incremental.Rules
 
 @[expose] public section
 
+namespace Qdt
+
 open Cli
 open Qdt
-open Qdt.Incremental
+open Incremental
 open System (FilePath)
 
 def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
@@ -44,29 +46,29 @@ def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
       s!"{file}: error: {d.error}"
 
 def checkModule (filepath : FilePath) : Task Monad Key Val (Array String) := do
-  let transImports ← Incremental.Task.fetch (Key.transitiveImports filepath)
+  let transImports ← fetch (Key.transitiveImports filepath)
   let allFiles := transImports.toList ++ [filepath]
   let mut msgs : Array String := #[]
   for file in allFiles do
-    let diags ← Incremental.Task.fetch (Key.checkFile file)
+    let diags ← fetch (Key.checkFile file)
     if diags.isEmpty then continue
-    let text ← Incremental.Task.fetch (Key.text file)
-    let (cst, _) ← Incremental.Task.fetch (Key.cst file)
-    let sm ← Incremental.Task.fetch (Key.sourceMap file)
+    let text ← fetch (Key.text file)
+    let (cst, _) ← fetch (Key.cst file)
+    let sm ← fetch (Key.sourceMap file)
     for d in diags do
       msgs := msgs.push (formatDiag file text sm cst d)
   return msgs
 
 def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath)
     (profile : Bool := false) : IO (Array String × Store Key Val) := do
-  let store ← match ← (Incremental.populateStore config store).toIO' with
+  let store ← match ← (populateStore config store).toIO' with
     | .ok s => pure s
     | .error () => pure store
   if profile then
-    try Incremental.runWithProfile store (checkModule filepath)
+    try runWithProfile store (checkModule filepath)
     catch _ => return (#["[error] cycle detected"], store)
   else
-    match ← (Incremental.run (Build.shake Key Val Key.tag) store (checkModule filepath)).toIO' with
+    match ← (runTask (Shake.build Key Val Key.tag) store (checkModule filepath)).toIO' with
     | .ok r => return r
     | .error () => return (#["[error] cycle detected"], store)
 
@@ -160,5 +162,7 @@ def cmd : Cmd :=
     (variableArg? := some { name := "module", description := "Entry module", «type» := String })
     (run := run)
 
+end Qdt
+
 def main : List String → IO UInt32 :=
-  cmd.validate
+  Qdt.cmd.validate

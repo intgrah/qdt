@@ -12,16 +12,17 @@ public import Qdt.Config
 public import Qdt.Error
 public import Qdt.Frontend.Cst
 public import Qdt.Frontend.Parser
-public import Qdt.Incremental
 public import Qdt.Lsp.Hover
+public import Qdt.Incremental.Rules
 
 @[expose] public section
+
+namespace Qdt
 
 open Std (HashMap)
 open Lean JsonRpc Lsp
 open System (FilePath)
-open Qdt
-open Qdt.Incremental
+open Incremental
 open Frontend (Cst Path SourceMap Span)
 
 partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
@@ -146,19 +147,19 @@ def publishDiagnostics
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
 def elaborateFile (filepath : FilePath) : Task Monad Key Val (Global × ElabInfo × SourceMap × Cst) := do
-  let (cst, _) ← Incremental.Task.fetch (Key.cst filepath)
-  let (_, sourceMap, _) ← Incremental.Task.fetch (Key.astSourceMap filepath)
-  let declIndex ← Incremental.Task.fetch (Key.declarationIndex filepath)
+  let (cst, _) ← fetch (Key.cst filepath)
+  let (_, sourceMap, _) ← fetch (Key.astSourceMap filepath)
+  let declIndex ← fetch (Key.declarationIndex filepath)
   let mut combinedInfo : ElabInfo := 1
   let mut combinedGlobal : Global := ∅
 
   for (name, _) in declIndex.toList do
-    let info ← Incremental.Task.fetch (Key.lookupInfo filepath name)
+    let info ← fetch (Key.lookupInfo filepath name)
     combinedInfo := combinedInfo * info
-    if let some (constant, _) ← Incremental.Task.fetch (Key.lookup filepath name) then
+    if let some (constant, _) ← fetch (Key.lookup filepath name) then
        combinedGlobal := combinedGlobal.insert name constant
 
-  let (_, _, astDiags) ← Incremental.Task.fetch (Key.astSourceMap filepath)
+  let (_, _, astDiags) ← fetch (Key.astSourceMap filepath)
   let allDiags := astDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
 
@@ -227,8 +228,8 @@ def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array R
 def runElabTask (ps : ProjectState) (filepath : FilePath)
     (onBuildEvent : Option (Key → Bool → IO Unit) := none) :
     EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
-  let store ← Incremental.populateStore ps.config ps.store
-  Incremental.run (Build.shake Key Val (onBuildEvent := onBuildEvent)) store (elaborateFile filepath)
+  let store ← populateStore ps.config ps.store
+  runTask (Shake.build Key Val (onBuildEvent := onBuildEvent)) store (elaborateFile filepath)
 
 def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -464,6 +465,9 @@ partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) 
         | _ => pure ()
     | _ => pure ()
 
+end Qdt
+
+open Qdt in
 def main : IO UInt32 := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout

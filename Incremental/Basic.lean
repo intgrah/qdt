@@ -6,7 +6,7 @@ public import Std.Data.HashSet
 
 @[expose] public section
 
-namespace Qdt.Incremental
+namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
 open System (FilePath)
@@ -50,6 +50,8 @@ instance {Q : Type} {R : Q → Type} : Monad (Task Monad Q R) where
   map f t := fun g [_] fetch => f <$> t g fetch
 
 end Task
+
+export Task (fetch)
 
 structure Memo (q : Q) where
   value : R q
@@ -103,9 +105,9 @@ abbrev Profile := IO.Ref (HashMap String ProfEntry)
 def Build : Type 1 :=
   ∀ {α}, Tasks c Q R → Store Q R → Task c Q R α → EIO Unit (α × Store Q R)
 
-namespace Build
+namespace Busy
 
-partial def busy : Build Applicative Q R :=
+partial def build : Build Applicative Q R :=
   fun tasks store task => do
     let storeRef : ST.Ref IO.RealWorld (Store Q R) ← ST.mkRef store
     let rec fetch (q : Q) : EIO Unit (R q) := do
@@ -125,29 +127,33 @@ partial def busy : Build Applicative Q R :=
     let s ← storeRef.get
     pure (a, s)
 
-structure ShakeState where
+end Busy
+
+namespace Shake
+
+structure State where
   store : Store Q R
   started : DHashMap Q (Memo Q R)
   stack : List Q
   currentDeps : HashMap Q UInt64
 
-def shake [∀ q, Hashable (R q)]
+def build [∀ q, Hashable (R q)]
     (label : Q → String := fun _ => "?")
     (prof : Option Profile := none)
     (onBuildEvent : Option (Q → Bool → IO Unit) := none) : Build Monad Q R :=
   fun {α} tasks store task => do
-    let init : ShakeState Q R := {
+    let init : State Q R := {
       store
       started := DHashMap.emptyWithCapacity 1024
       stack := []
       currentDeps := HashMap.emptyWithCapacity 64
     }
 
-    let action : StateRefT (ShakeState Q R) (EIO Unit) (α × Store Q R) := do
-      let fetchRef : ST.Ref IO.RealWorld (∀ q, StateRefT (ShakeState Q R) (EIO Unit) (R q)) ←
+    let action : StateRefT (State Q R) (EIO Unit) (α × Store Q R) := do
+      let fetchRef : ST.Ref IO.RealWorld (∀ q, StateRefT (State Q R) (EIO Unit) (R q)) ←
         ST.mkRef fun _ => throw ()
 
-      let rec buildRule (q : Q) : StateRefT (ShakeState Q R) (EIO Unit) (R q) := do
+      let rec buildRule (q : Q) : StateRefT (State Q R) (EIO Unit) (R q) := do
         let st ← get
 
         match st.started.get? q with
@@ -183,10 +189,10 @@ def shake [∀ q, Hashable (R q)]
                   | none =>
                       throw ()
               | some taskQ =>
-                  let compute : StateRefT (ShakeState Q R) (EIO Unit) (R q × HashMap Q UInt64) := do
+                  let compute : StateRefT (State Q R) (EIO Unit) (R q × HashMap Q UInt64) := do
                     let oldDeps := (← get).currentDeps
                     modify fun st => { st with currentDeps := HashMap.emptyWithCapacity 64 }
-                    let fetch' : ∀ q, StateRefT (ShakeState Q R) (EIO Unit) (R q) := fun q => do
+                    let fetch' : ∀ q, StateRefT (State Q R) (EIO Unit) (R q) := fun q => do
                       let v ← (← fetchRef.get) q
                       let ds := (← get).currentDeps
                       if !ds.contains q then
@@ -200,7 +206,7 @@ def shake [∀ q, Hashable (R q)]
                     modify fun st => { st with currentDeps := oldDeps }
                     pure (a, deps)
 
-                  let verifyDeps (deps : HashMap Q UInt64) : StateRefT (ShakeState Q R) (EIO Unit) Bool := do
+                  let verifyDeps (deps : HashMap Q UInt64) : StateRefT (State Q R) (EIO Unit) Bool := do
                     deps.toList.allM fun (depKey, oldHash) => do
                       try
                         let _ ← (← fetchRef.get) depKey
@@ -210,7 +216,7 @@ def shake [∀ q, Hashable (R q)]
                         pure (h == oldHash)
                       catch _ => pure false
 
-                  let recompute : StateRefT (ShakeState Q R) (EIO Unit) (R q) := do
+                  let recompute : StateRefT (State Q R) (EIO Unit) (R q) := do
                     if let some cb := onBuildEvent then
                       (cb q true).catchExceptions fun _ => pure ()
                     let t0 ← IO.monoNanosNow
@@ -256,7 +262,7 @@ def shake [∀ q, Hashable (R q)]
 
     action.run' init
 
-end Build
+end Shake
 
 def padR (s : String) (n : Nat) : String := s ++ String.ofList (List.replicate (n - s.length) ' ')
 def padL (s : String) (n : Nat) : String := String.ofList (List.replicate (n - s.length) ' ') ++ s
@@ -270,4 +276,4 @@ def Profile.print (p : Profile) : IO Unit := do
   for (k, hits, misses, ms) in rows do
     IO.println s!"{padR k 22} {padL (toString hits) 8} {padL (toString misses) 8} {padL (toString ms) 10}"
 
-end Qdt.Incremental
+end Incremental
