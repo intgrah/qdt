@@ -36,9 +36,9 @@ def checkAstUniverses : Ast → OptionT MetaM (List Universe)
 
 def checkUniverseLevel (level : Universe) : OptionT MetaM Unit := do
   let univParams ← getUnivParams
-  for name in level.levelNames do
-    if name ∉ univParams then
-      raiseError (.unboundUniverseVariable name)
+  match level.checkLevels univParams with
+  | .error name => raiseError (.unboundUniverseVariable name)
+  | .ok () => return
 
 def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
     OptionT MetaM (Ty 0) := do

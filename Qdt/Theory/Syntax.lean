@@ -107,27 +107,6 @@ def Param.substLevels {n} (subst : List (Name × Universe)) : Param n → Param 
 
 end
 
-mutual
-
-def Ty.levelNames {n} : Ty n → List Name
-  | .u u => u.levelNames
-  | .pi ⟨_, ty⟩ b => ty.levelNames ++ b.levelNames
-  | .el t => t.levelNames
-
-def Tm.levelNames {n} : Tm n → List Name
-  | .u' u => u.levelNames
-  | .var _ => []
-  | .const _ us => us.flatMap Universe.levelNames
-  | .lam ⟨_, ty⟩ b => ty.levelNames ++ b.levelNames
-  | .app f a => f.levelNames ++ a.levelNames
-  | .pi' ⟨_, a⟩ b => a.levelNames ++ b.levelNames
-  | .proj _ t => t.levelNames
-  | .letE _ ty rhs body => ty.levelNames ++ rhs.levelNames ++ body.levelNames
-
-def Param.levelNames {n} : Param n → List Name
-  | ⟨_, ty⟩ => ty.levelNames
-
-end
 
 /-!
 ## Hashable instances

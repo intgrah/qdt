@@ -145,11 +145,11 @@ partial def normalise (l : Universe) : Universe :=
   | .level n   => addOffset (.level n) k
   | .succ u    => addOffset (normalise u) (k+1)
 
-def levelNames : Universe → List Name
-  | .level n => [n]
-  | .zero => []
-  | .succ u => u.levelNames
-  | .max u v => u.levelNames ++ v.levelNames
+def checkLevels (allowed : List Name) : Universe → Except Name Unit
+  | .level n => do if n ∉ allowed then throw n else return
+  | .zero => do return
+  | .succ u => do u.checkLevels allowed
+  | .max u v => do u.checkLevels allowed; v.checkLevels allowed
 
 /-- Fresh universe name of the form `u`, `u_1`, `u_2` -/
 def freshName (existing : List Name) : Name :=
