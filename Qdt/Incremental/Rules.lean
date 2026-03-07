@@ -254,10 +254,9 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
     | none =>
         let text ← (IO.FS.readFile absPath).toEIO (fun _ => ())
         let memo : Memo Key Val (.text absPath) :=
-          { value := text, deps := ∅, hash := hash text }
+          { value := text, deps := ∅ }
         store := { store with cache := store.cache.insert (.text absPath) memo }
-  let inputMemo : Memo Key Val .inputFiles :=
-    { value := inputFiles, deps := ∅, hash := hash inputFiles }
+  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
   store := { store with cache := store.cache.insert .inputFiles inputMemo }
   return store
 

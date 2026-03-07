@@ -10,9 +10,9 @@ open Std (DHashMap)
 
 def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let dummyPath : FilePath := "test.qdt"
-  let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅, hash := hash src }
-  let inputFiles : Std.HashSet System.FilePath := Std.HashSet.emptyWithCapacity 1 |>.insert dummyPath
-  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅, hash := hash inputFiles }
+  let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅ }
+  let inputFiles : Std.HashSet System.FilePath := {dummyPath}
+  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
   let store : Store Key Val := { cache := DHashMap.emptyWithCapacity 2 }
   let store := { store with cache := store.cache.insert (.text dummyPath) memo }
   let store := { store with cache := store.cache.insert .inputFiles inputMemo }

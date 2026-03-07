@@ -23,7 +23,7 @@ partial def build : Build Applicative Q R :=
       | some t =>
           let v ← t _ fetch
           stRef.modify fun s =>
-            let memo := { value := v, deps := ∅, hash := hash v }
+            let memo := { value := v, deps := ∅ }
             let cache := s.cache.insert q memo
             { s with cache }
           return v
