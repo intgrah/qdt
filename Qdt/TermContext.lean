@@ -1,10 +1,6 @@
 module
 
-public import Std.Data.TreeMap
-
-public import Qdt.Theory.Syntax
 public import Qdt.Semantics
-public import Qdt.Tele
 
 @[expose] public section
 

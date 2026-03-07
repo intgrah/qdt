@@ -1,12 +1,7 @@
 module
 
-public import Std.Data.HashMap
-public import Std.Data.HashSet
 public import Mathlib.Control.Monad.Writer
 
-public import Qdt.Frontend.Cst
-public import Qdt.Error
-public import Qdt.Theory.Global
 public import Qdt.TermContext
 public import Qdt.Incremental.Query
 public import Incremental.Basic

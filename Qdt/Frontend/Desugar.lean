@@ -1,6 +1,5 @@
 module
 
-public import Qdt.Frontend.Ast
 public import Qdt.Frontend.Cst
 
 @[expose] public section

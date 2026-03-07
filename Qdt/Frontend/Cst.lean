@@ -1,7 +1,7 @@
 module
 
 public import Qdt.Frontend.Ast
-public import Std.Data.HashMap
+public import Std.Data.HashMap.Basic
 
 @[expose] public section
 

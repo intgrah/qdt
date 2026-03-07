@@ -1,8 +1,7 @@
 module
 
-public import Std.Data.HashMap
-
 public import Qdt.Theory.Syntax
+public import Std.Data.HashMap.Basic
 
 @[expose] public section
 

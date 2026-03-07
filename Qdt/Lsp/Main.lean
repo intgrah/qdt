@@ -1,19 +1,10 @@
 module
 
-public import Std.Data.HashMap
-
-public import Lean.Data.Json
-public import Lean.Data.JsonRpc
-public import Lean.Data.Lsp
 public import Lean.Data.Lsp.Communication
-public import Lean.Data.Lsp.Utf16
 
-public import Qdt.Config
-public import Qdt.Error
-public import Qdt.Frontend.Cst
-public import Qdt.Frontend.Parser
 public import Qdt.Lsp.Hover
 public import Qdt.Incremental.Rules
+public import Lean.Data.Lsp.InitShutdown
 
 @[expose] public section
 

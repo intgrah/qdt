@@ -1,8 +1,10 @@
 module
 
-public meta import Qdt.Theory.Syntax
-public meta import Qdt.Theory.Universe
-meta import Plausible
+import Plausible.Arbitrary
+import Plausible.Gen
+import Plausible.Sampleable
+meta import Qdt.Theory.Syntax
+import Qdt.Theory.Syntax
 
 @[expose] meta section
 

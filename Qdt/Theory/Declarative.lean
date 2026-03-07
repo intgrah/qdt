@@ -1,7 +1,6 @@
 module
 
 public import Qdt.Theory.Context
-public import Qdt.Theory.Substitution.Basic
 public import Qdt.Theory.Global
 
 @[expose] public section

@@ -3,6 +3,7 @@ module
 public import Mathlib.Algebra.Group.Defs
 public import Qdt.Frontend.Ast
 public import Qdt.Pretty
+import Std.Tactic.BVDecide.Normalize.Prop
 
 @[expose] public section
 

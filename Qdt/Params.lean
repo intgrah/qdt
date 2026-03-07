@@ -1,8 +1,6 @@
 module
 
 public import Qdt.Bidirectional
-public import Qdt.Control
-public import Qdt.Frontend.Ast
 
 @[expose] public section
 

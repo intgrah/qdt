@@ -1,6 +1,5 @@
 module
 
-public import Qdt.Theory.Syntax
 public import Qdt.Theory.Substitution.Ren
 
 @[expose] public section

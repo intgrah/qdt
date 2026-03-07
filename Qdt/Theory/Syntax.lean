@@ -107,7 +107,6 @@ def Param.substLevels {n} (subst : List (Name × Universe)) : Param n → Param 
 
 end
 
-
 /-!
 ## Hashable instances
 

@@ -1,7 +1,5 @@
 module
 
-public import Qdt.Control
-public import Qdt.Frontend.Ast
 public import Qdt.DefinitionalEquality
 public import Qdt.Quote
 
