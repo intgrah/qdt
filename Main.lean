@@ -36,7 +36,7 @@ def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.
       return cst.spanAtPath cstPath
   return none
 
-def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
+def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap)
     (cst : Frontend.Cst) (d : Diagnostic) : String :=
   match resolveSpan sm cst d.path with
   | some span =>
@@ -61,7 +61,7 @@ def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := 
     let (cst, _) := cstMemo.value
     let sm := smMemo.value
     for d in diags do
-      msgs := msgs.push (formatDiag file text sm cst d)
+      msgs := msgs.push (d.format file text sm cst)
   return msgs
 
 def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
@@ -69,15 +69,12 @@ def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
   let store ← match ← (populateStore config store).toIO' with
     | .ok s => pure s
     | .error () => pure store
-  let store ← match buildKey store (Key.transitiveImports filepath) with
-    | .ok s => pure s
+  let (transImports, store) ← match Shake.build tasks (Key.transitiveImports filepath) store with
+    | .ok (v, s) => pure (v, s)
     | .error _ => return (#["[error] cycle detected"], store)
-  let transImports := match store.cache.get? (Key.transitiveImports filepath) with
-    | some memo => memo.value.toList
-    | none => []
-  let allFiles := transImports ++ [filepath]
+  let allFiles := transImports.toList ++ [filepath]
   let keys := allFiles.map Key.checkFile
-  match buildKeys keys store with
+  match keys.foldlM (fun s k => Prod.snd <$> Shake.build tasks k s) store with
   | .ok store =>
       let msgs := checkModule store filepath
       return (msgs, store)

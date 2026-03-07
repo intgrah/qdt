@@ -56,6 +56,6 @@ def Tasks : Type 1 :=
   ∀ q, Option (Task c Q R (R q))
 
 def Build : Type 1 :=
-  Tasks c Q R → Q → σ → Except Cycle σ
+  Tasks c Q R → ∀ q, StateT σ (Except Cycle) (R q)
 
 end Incremental
