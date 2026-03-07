@@ -3,6 +3,7 @@ module
 public import Qdt.Config
 public import Qdt.Elab
 public import Qdt.Frontend.Desugar
+public import Incremental.Shake
 
 @[expose] public section
 
@@ -261,9 +262,9 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   return store
 
 def buildKey (store : Store Key Val) (key : Key) : Except Cycle (Store Key Val) :=
-  Shake.build Key Val tasks key store
+  Shake.build tasks key store
 
-def buildKeys (keys : List Key) (store : Store Key Val) : Except Cycle (Store Key Val) :=
-  keys.foldlM buildKey store
+def buildKeys (keys : List Key) : Store Key Val → Except Cycle (Store Key Val) :=
+  keys.foldlM buildKey
 
 end Qdt
