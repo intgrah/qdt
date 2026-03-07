@@ -263,19 +263,10 @@ def populateStore (config : Config) (store : Store Key Val) : EIO Unit (Store Ke
   store := { store with cache := store.cache.insert .inputFiles inputMemo }
   return store
 
-def runTask {α : Type} (build : Build Monad Key Val) :
-    Store Key Val →
-    Task Monad Key Val α →
-    EIO Unit (α × Store Key Val) :=
-  build tasks
+def buildKey (store : Store Key Val) (key : Key) : Except Cycle (Store Key Val) :=
+  Shake.build Key Val tasks key store
 
-def runWithProfile {α : Type} (store : Store Key Val)
-    (task : Task Monad Key Val α) : IO (α × Store Key Val) := do
-  let prof ← IO.mkRef (Std.HashMap.emptyWithCapacity 32)
-  let result ← (Shake.build Key Val Key.tag prof (onBuildEvent := none) tasks store task).toIO'
-  Profile.print prof
-  match result with
-  | .ok r => return r
-  | .error () => throw (IO.Error.userError "cycle detected")
+def buildKeys (keys : List Key) (store : Store Key Val) : Except Cycle (Store Key Val) :=
+  keys.foldlM buildKey store
 
 end Qdt

@@ -146,24 +146,29 @@ def publishDiagnostics
   | Except.ok s =>
       hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
 
-def elaborateFile (filepath : FilePath) : Task Monad Key Val (Global × ElabInfo × SourceMap × Cst) := do
-  let (cst, _) ← fetch (Key.cst filepath)
-  let (_, sourceMap, _) ← fetch (Key.astSourceMap filepath)
-  let declIndex ← fetch (Key.declarationIndex filepath)
+def elaborateFile (store : Store Key Val) (filepath : FilePath) :
+    Option (Global × ElabInfo × SourceMap × Cst) := Id.run do
+  let some cstMemo := store.cache.get? (Key.cst filepath) | return none
+  let some smMemo := store.cache.get? (Key.astSourceMap filepath) | return none
+  let some declMemo := store.cache.get? (Key.declarationIndex filepath) | return none
+  let (cst, _) := cstMemo.value
+  let (_, sourceMap, _) := smMemo.value
+  let declIndex := declMemo.value
   let mut combinedInfo : ElabInfo := 1
   let mut combinedGlobal : Global := ∅
 
   for (name, _) in declIndex.toList do
-    let info ← fetch (Key.lookupInfo filepath name)
-    combinedInfo := combinedInfo * info
-    if let some (constant, _) ← fetch (Key.lookup filepath name) then
-       combinedGlobal := combinedGlobal.insert name constant
+    if let some infoMemo := store.cache.get? (Key.lookupInfo filepath name) then
+      combinedInfo := combinedInfo * infoMemo.value
+    if let some lookupMemo := store.cache.get? (Key.lookup filepath name) then
+      if let some (constant, _) := lookupMemo.value then
+        combinedGlobal := combinedGlobal.insert name constant
 
-  let (_, _, astDiags) ← fetch (Key.astSourceMap filepath)
+  let (_, _, astDiags) := smMemo.value
   let allDiags := astDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
 
-  return (combinedGlobal, combinedInfo, sourceMap, cst)
+  return some (combinedGlobal, combinedInfo, sourceMap, cst)
 
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
@@ -225,11 +230,15 @@ def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array R
   | .ok s => hOut.writeLspMessage <| Message.notification "$/lean/fileProgress" (some s)
   | .error _ => pure ()
 
-def runElabTask (ps : ProjectState) (filepath : FilePath)
-    (onBuildEvent : Option (Key → Bool → IO Unit) := none) :
+def runElabTask (ps : ProjectState) (filepath : FilePath) :
     EIO Unit ((Global × ElabInfo × SourceMap × Cst) × Store Key Val) := do
   let store ← populateStore ps.config ps.store
-  runTask (Shake.build Key Val (onBuildEvent := onBuildEvent)) store (elaborateFile filepath)
+  let store ← match buildKey store (Key.checkFile filepath) with
+    | .ok s => pure s
+    | .error _ => throw ()
+  match elaborateFile store filepath with
+  | some result => pure (result, store)
+  | none => throw ()
 
 def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
   let some params := params?
@@ -263,18 +272,7 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
   let ps := { ps with store }
   stRef.set st
 
-  let (progressCst, _) := Frontend.Parser.parse text
-  let onBuildEvent : Key → Bool → IO Unit := fun q isStart => do
-    if !isStart then return
-    match q with
-    | .elabCmdAt fp idx =>
-        if fp == file then
-          match progressCst.spanAtPath [idx] with
-          | some span => sendFileProgress hOut uri #[mkRange text span]
-          | none => pure ()
-    | _ => pure ()
-
-  match ← (runElabTask ps file (onBuildEvent := some onBuildEvent)).toIO' with
+  match ← (runElabTask ps file).toIO' with
   | .ok ((_, info, sourceMap, cst), store') =>
       let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
@@ -313,18 +311,7 @@ def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? 
   let ps := { ps with store }
   stRef.set st
 
-  let (progressCst, _) := Frontend.Parser.parse text
-  let onBuildEvent : Key → Bool → IO Unit := fun q isStart => do
-    if !isStart then return
-    match q with
-    | .elabCmdAt fp idx =>
-        if fp == file then
-          match progressCst.spanAtPath [idx] with
-          | some span => sendFileProgress hOut uri #[mkRange text span]
-          | none => pure ()
-    | _ => pure ()
-
-  match ← (runElabTask ps file (onBuildEvent := some onBuildEvent)).toIO' with
+  match ← (runElabTask ps file).toIO' with
   | .ok ((_, info, sourceMap, cst), store') =>
       let ps' : ProjectState := { ps with store := store' }
       let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))

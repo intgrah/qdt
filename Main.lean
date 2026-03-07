@@ -45,32 +45,43 @@ def formatDiag (file : FilePath) (text : String) (sm : Frontend.SourceMap)
   | none =>
       s!"{file}: error: {d.error}"
 
-def checkModule (filepath : FilePath) : Task Monad Key Val (Array String) := do
-  let transImports ← fetch (Key.transitiveImports filepath)
-  let allFiles := transImports.toList ++ [filepath]
+def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := Id.run do
+  let some transImports := store.cache.get? (Key.transitiveImports filepath)
+    | return #[s!"{filepath}: error: missing transitive imports"]
+  let allFiles := transImports.value.toList ++ [filepath]
   let mut msgs : Array String := #[]
   for file in allFiles do
-    let diags ← fetch (Key.checkFile file)
+    let some diagsMemo := store.cache.get? (Key.checkFile file) | continue
+    let diags := diagsMemo.value
     if diags.isEmpty then continue
-    let text ← fetch (Key.text file)
-    let (cst, _) ← fetch (Key.cst file)
-    let sm ← fetch (Key.sourceMap file)
+    let some textMemo := store.cache.get? (Key.text file) | continue
+    let some cstMemo := store.cache.get? (Key.cst file) | continue
+    let some smMemo := store.cache.get? (Key.sourceMap file) | continue
+    let text := textMemo.value
+    let (cst, _) := cstMemo.value
+    let sm := smMemo.value
     for d in diags do
       msgs := msgs.push (formatDiag file text sm cst d)
   return msgs
 
-def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath)
-    (profile : Bool := false) : IO (Array String × Store Key Val) := do
+def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
+    IO (Array String × Store Key Val) := do
   let store ← match ← (populateStore config store).toIO' with
     | .ok s => pure s
     | .error () => pure store
-  if profile then
-    try runWithProfile store (checkModule filepath)
-    catch _ => return (#["[error] cycle detected"], store)
-  else
-    match ← (runTask (Shake.build Key Val Key.tag) store (checkModule filepath)).toIO' with
-    | .ok r => return r
-    | .error () => return (#["[error] cycle detected"], store)
+  let store ← match buildKey store (Key.transitiveImports filepath) with
+    | .ok s => pure s
+    | .error _ => return (#["[error] cycle detected"], store)
+  let transImports := match store.cache.get? (Key.transitiveImports filepath) with
+    | some memo => memo.value.toList
+    | none => []
+  let allFiles := transImports ++ [filepath]
+  let keys := allFiles.map Key.checkFile
+  match buildKeys keys store with
+  | .ok store =>
+      let msgs := checkModule store filepath
+      return (msgs, store)
+  | .error _ => return (#["[error] cycle detected"], store)
 
 def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
   let (msgs, initialStore) ← runOnce config store entryFile
@@ -137,7 +148,7 @@ def run (parsed : Parsed) : IO UInt32 := do
     return 0
   else
     let t0 ← IO.monoMsNow
-    let (msgs, _) ← runOnce config store filePath profileMode
+    let (msgs, _) ← runOnce config store filePath
     for msg in msgs do
       IO.println msg
     let t1 ← IO.monoMsNow
