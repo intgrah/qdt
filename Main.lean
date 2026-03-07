@@ -100,7 +100,7 @@ def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) :
         let mut s ← storeRef.get
         for file in pendingFiles do
           let text ← IO.FS.readFile file
-          let memo : Memo Key Val (.text file) := { value := text, deps := ∅, hash := hash text }
+          let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
           s := { s with cache := s.cache.insert (.text file) memo }
         let (msgs, s') ← runOnce config s entryFile
         for msg in msgs do IO.println msg

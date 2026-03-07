@@ -91,7 +91,7 @@ partial def build : Build Monad Q R :=
 
                 let recompute : EST Cycle σ (R q) := do
                   let (value, deps) ← compute
-                  let memo : Memo Q R q := { value, deps, hash := hash value }
+                  let memo : Memo Q R q := { value, deps }
                   stRef.modify fun st =>
                     { st with
                       started := st.started.insert q memo

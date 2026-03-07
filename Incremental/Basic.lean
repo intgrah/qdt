@@ -59,7 +59,7 @@ def Tasks : Type 1 :=
 structure Memo (q : Q) where
   value : R q
   deps : HashMap Q UInt64
-  hash : UInt64
+  hash : UInt64 := hash value
   hash_value : Hashable.hash value = hash := by rfl
 
 structure Store where
