@@ -55,11 +55,11 @@ def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := 
     let diags := diagsMemo.value
     if diags.isEmpty then continue
     let some textMemo := store.cache.get? (Key.text file) | continue
-    let some cstMemo := store.cache.get? (Key.cst file) | continue
-    let some smMemo := store.cache.get? (Key.sourceMap file) | continue
+    let some asmMemo := store.cache.get? (Key.astSourceMap file) | continue
     let text := textMemo.value
+    let (_, sm, _) := asmMemo.value
+    let some cstMemo := store.cache.get? (Key.cst file) | continue
     let (cst, _) := cstMemo.value
-    let sm := smMemo.value
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
   return msgs
