@@ -69,10 +69,11 @@ def emitSorryTm {n : Nat}
   let id ← modifyGet fun s => (s.sorryId, { s with sorryId := s.sorryId + 1 })
   let sorryName := decl.str "_sorry" |>.num id
   let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote⟩
-  let ty ← expected.quote
-  let ty := Ty.pis locals ty
   let univParams ← getUnivParams
-  let _ ← addConstant sorryName (.axiom { univParams, ty })
+  let _ ← addConstant sorryName (.axiom {
+    univParams
+    ty := Ty.pis locals (← expected.quote)
+  })
   let args := List.finRange n |>.map (fun i => Tm.var i.rev)
   let sorryUnivs := univParams.map Universe.level
   emitType ctx expected

@@ -503,14 +503,15 @@ partial def desugarTypedBinderGroupCmd (args : Array Cst) (binderStartIdx : Nat 
     let isFirst := i == 0
     withCstChild ic.idx <| withAstChild (binderStartIdx + i) <| withAstChild 0 do
       recordMapping
-    let ty ← if isFirst then
-      match typeIc? with
-      | some tyIc => do
+    let ty ←
+      if isFirst then
+        match typeIc? with
+        | some tyIc => do
           let r ← withCstChild tyIc.idx <| withAstChild (binderStartIdx + i) <| withAstChild 1 <| desugarTerm tyIc.cst
           pure r
-      | none => pure Ast.missing
-    else
-      pure tyAst
+        | none => pure Ast.missing
+      else
+        pure tyAst
     if isFirst then
       tyAst := ty
     results := results ++ [(.node `Binder.typed #[.ident name, ty], isFirst)]
@@ -714,20 +715,18 @@ def desugarImport (cst : Cst) : DesugarM Ast := do
 partial def desugarCommand (cst : Cst) : DesugarM Ast := do
   recordMapping
   match cst with
-  | .node kind args =>
-      if kind = `Lean.Parser.Command.declaration then
-        let nonTrivia := nonTriviaIndices args
-        if h : nonTrivia.size ≥ 2 then
-          desugarCommand nonTrivia[1].cst
-        else
-          return .missing
-      else if kind = `Lean.Parser.Command.definition then desugarDefinition cst
-      else if kind = `Lean.Parser.Command.axiom then desugarAxiom cst
-      else if kind = `Lean.Parser.Command.inductive then desugarInductive cst
-      else if kind = `Lean.Parser.Command.structure then desugarStructure cst
-      else if kind = `Lean.Parser.Command.example then desugarExample cst
-      else if kind = `Lean.Parser.Command.import then desugarImport cst
-      else return .missing
+  | .node `Lean.Parser.Command.declaration args =>
+    let nonTrivia := nonTriviaIndices args
+    if h : nonTrivia.size ≥ 2 then
+      desugarCommand nonTrivia[1].cst
+    else
+      return .missing
+  | .node `Lean.Parser.Command.definition args => desugarDefinition cst
+  | .node `Lean.Parser.Command.axiom args => desugarAxiom cst
+  | .node `Lean.Parser.Command.inductive args => desugarInductive cst
+  | .node `Lean.Parser.Command.structure args => desugarStructure cst
+  | .node `Lean.Parser.Command.example args => desugarExample cst
+  | .node `Lean.Parser.Command.import args => desugarImport cst
   | _ => return .missing
 
 def desugarHeader (header : Cst) : DesugarM (Array Ast) := do
@@ -742,7 +741,7 @@ def desugarHeader (header : Cst) : DesugarM (Array Ast) := do
       return result
   | _ => return #[]
 
-def desugarProgram (module : Cst) : (Ast × SourceMap) :=
+def desugarProgram (module : Cst) : Ast × SourceMap :=
   let action : DesugarM Ast := do
     match module with
     | .node `Lean.Parser.Module args =>
