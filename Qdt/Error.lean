@@ -24,6 +24,7 @@ inductive Error
   | typeMismatch {c} (names : List Name) (expected : Ty c) (got : Ty c)
   | unboundVariable (name : Name)
   | unboundUniverseVariable (name : Name)
+  | alreadyDefined (name : Name)
   | typeFamilyCtorReturnTypeRequired (ctorName : Name)
   | inductiveReturnTypeMustBeTypeUniverse (indName : Name)
   | structureResultTypeMustBeTypeUniverse (structName : Name)
@@ -33,6 +34,7 @@ inductive Error
   | ctorParamMismatch (ctorName : Name)
   | fieldUniverseTooLarge (ctorName : Name) (fieldName : Name) (fieldUniv : Universe) (indUniv : Universe)
   | ctorNameNotAtomic (ctorName : Name)
+  | fieldNameNotAtomic (structName : Name)
 deriving Inhabited, Hashable
 
 instance : ToString Error where toString
@@ -60,6 +62,8 @@ instance : ToString Error where toString
     s!"Unbound variable {name}"
   | .unboundUniverseVariable name =>
     s!"Unbound universe variable {name}"
+  | .alreadyDefined name =>
+    s!"{name} is already defined"
   | .typeFamilyCtorReturnTypeRequired ctorName =>
     s!"{ctorName}: constructor must specify return type for inductive type family"
   | .inductiveReturnTypeMustBeTypeUniverse indName =>
@@ -78,6 +82,8 @@ instance : ToString Error where toString
     s!"{ctorName}: field '{fieldName}' has type in universe {fieldUniv}, but inductive lives in {indUniv}"
   | .ctorNameNotAtomic ctorName =>
     s!"{ctorName}: constructor name must be atomic"
+  | .fieldNameNotAtomic structName =>
+    s!"{structName}: field name must be atomic"
 
 @[pp_using_anonymous_constructor]
 structure Diagnostic where

@@ -146,7 +146,7 @@ def fetchConstructor (name : Name) : MetaM (Option ConstructorInfo) := do
 def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
   let st ← get
   if name ∈ st.localEnv then
-    emitDiagnostic (.msg s!"{name} is already defined")
+    emitDiagnostic (.alreadyDefined name)
     return false
   let ctx ← readThe CoreContext
   let currentDeclName := (← read).currentDecl
@@ -157,14 +157,14 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
       match declIndex[currentDeclName]? with
       | some currentIdx =>
           if nameIdx != currentIdx then
-            emitDiagnostic (.msg s!"{name} is already defined")
+            emitDiagnostic (.alreadyDefined name)
             return false
       | none => pure ()
   | none =>
       let existing : Val (Key.constant ctx.filepath name) ←
         liftM (Task.fetch (Key.constant ctx.filepath name) : Task Key Val _)
       if existing.isSome then
-        emitDiagnostic (.msg s!"{name} is already defined")
+        emitDiagnostic (.alreadyDefined name)
         return false
   set { st with localEnv := st.localEnv.insert name constant }
   return true

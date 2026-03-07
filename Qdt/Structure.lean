@@ -65,7 +65,7 @@ def mkFieldTyAst (field : StructureField) : Ast :=
 
 def getAtomicFieldString (structName : Name) (fieldName : Name) : OptionT MetaM String := do
   let .str .anonymous s := fieldName
-    | raiseError (.msg s!"{structName}: field name must be atomic")
+    | raiseError (.fieldNameNotAtomic structName)
   return s
 
 def mkParamEnv : (numParams : Nat) → Env (numParams + 1) numParams
