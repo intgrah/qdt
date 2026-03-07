@@ -145,7 +145,7 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
   let some declMemo := store.get? (Key.declarationIndex filepath) | return none
   let (cst, _) := cstMemo.value
   let (_, sourceMap, _) := smMemo.value
-  let declIndex := declMemo.value
+  let (declIndex, dupDiags) := declMemo.value
   let mut combinedInfo : ElabInfo := 1
 
   for (name, _) in declIndex.toList do
@@ -153,7 +153,7 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
       combinedInfo := combinedInfo * infoMemo.value
 
   let (_, _, astDiags) := smMemo.value
-  let allDiags := astDiags ++ combinedInfo.diagnostics
+  let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
 
   return some (combinedInfo, sourceMap, cst)

@@ -45,8 +45,8 @@ deriving Repr, Inhabited
 
 structure ElabState where
   localEnv : Global
-  sorryId : Nat := 0
-  entryCache : Std.HashMap Lean.Name (Option Constant) := {}
+  sorryId : Nat
+  entryCache : Std.HashMap Name (Option Constant)
 deriving Inhabited
 
 abbrev ElabM :=
@@ -98,8 +98,7 @@ def fetchConstant (name : Name) : ElabM (Option Constant) := do
     return none
   if let some result := st.entryCache[name]? then
     return result
-  let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
+  let (declIndex, _) ← (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   let currentDeclName := (← read).currentDecl
   if let some idx := declIndex[name]? then
     if let some currentIdx := declIndex[currentDeclName]? then
@@ -107,7 +106,7 @@ def fetchConstant (name : Name) : ElabM (Option Constant) := do
         modify fun st => { st with entryCache := st.entryCache.insert name none }
         return none
   let result : Val (Key.constant ctx.filepath name) ←
-    liftM (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
+    (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
   let result : Option Constant := result.map Prod.fst
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
@@ -147,8 +146,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM Bool := do
     return false
   let ctx ← readThe ElabContext
   let currentDeclName := (← read).currentDecl
-  let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
+  let (declIndex, _) ← (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   match declIndex[name]? with
   | some nameIdx =>
       match declIndex[currentDeclName]? with
@@ -159,7 +157,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM Bool := do
       | none => pure ()
   | none =>
       let existing : Val (Key.constant ctx.filepath name) ←
-        liftM (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
+        (fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
       if existing.isSome then
         emitDiagnostic (.alreadyDefined name)
         return false
@@ -172,7 +170,12 @@ def replaceEntry (name : Name) (constant : Constant) : ElabM Unit := do
 
 def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM α) :
     Task Monad Key Val (α × Global × ElabInfo) := do
-  let ((result, st), info) ← WriterT.run (StateT.run (action ctx) { localEnv := {} })
+  let state : ElabState := {
+    localEnv := ∅
+    sorryId := 0
+    entryCache := ∅
+  }
+  let ((result, st), info) ← WriterT.run (StateT.run (action ctx) state)
   return (result, st.localEnv, info)
 
 end Qdt
