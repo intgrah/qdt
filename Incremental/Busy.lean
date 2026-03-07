@@ -19,13 +19,13 @@ partial def build : Build Applicative (DHashMap Q R) Q R :=
     let rec fetch (q : Q) : EST BuildError σ (R q) := do
       match tasks q with
       | none =>
-          match (← stRef.get).get? q with
-          | some v => return v
-          | none => throw .missingInput
+        match (← stRef.get).get? q with
+        | some v => return v
+        | none => throw .missingInput
       | some t =>
-          let v ← t _ fetch
-          stRef.modify (·.insert q v)
-          return v
+        let v ← t _ fetch
+        stRef.modify (·.insert q v)
+        return v
     return (← fetch target, ← stRef.get)
 
 end Busy
