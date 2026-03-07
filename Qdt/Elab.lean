@@ -1,17 +1,5 @@
 module
 
-public import Std.Data.HashMap
-public import Std.Data.HashSet
-
-public import Qdt.Bidirectional
-public import Qdt.Error
-public import Qdt.Frontend.Ast
-public import Qdt.Theory.Global
-public import Qdt.Nbe
-public import Qdt.Params
-public import Qdt.Quote
-public import Qdt.Frontend.Desugar
-public import Qdt.Inductive
 public import Qdt.Structure
 
 @[expose] public section

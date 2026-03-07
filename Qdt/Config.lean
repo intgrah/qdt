@@ -1,6 +1,6 @@
 module
 
-public import Lake.Toml
+public import Lake.Toml.Load
 
 @[expose] public section
 

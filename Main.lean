@@ -1,8 +1,7 @@
 module
 
-public import Cli
-public import FSWatch
-public import Qdt
+public import Cli.Basic
+public import FSWatch.Manager
 public import Qdt.Incremental.Rules
 
 @[expose] public section

@@ -2,7 +2,6 @@ module
 
 public import Qdt.Theory.Syntax
 public import Lean.Data.Format
-public import Lean.Data.Name
 
 @[expose] public section
 

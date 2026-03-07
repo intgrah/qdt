@@ -1,11 +1,6 @@
 module
 
-public import Lean.Data.Name
-
 public import Qdt.Control
-public import Qdt.Theory.Global
-public import Qdt.Semantics
-public import Qdt.Theory.Syntax
 
 @[expose] public section
 

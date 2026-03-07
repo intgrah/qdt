@@ -1,14 +1,8 @@
 module
 
-public import Std.Data.HashMap
-public import Std.Data.HashSet
-
 public import Qdt.Error
 public import Qdt.Theory.Global
-public import Qdt.Frontend.Ast
-public import Qdt.Frontend.Cst
 public import Qdt.Frontend.Parser
-public import Incremental.Basic
 
 @[expose] public section
 

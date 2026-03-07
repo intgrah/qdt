@@ -1,12 +1,6 @@
 module
 
-public import Qdt.Bidirectional
-public import Qdt.Control
-public import Qdt.Frontend.Ast
 public import Qdt.Inductive
-public import Qdt.Nbe
-public import Qdt.Params
-public import Qdt.Quote
 
 @[expose] public section
 

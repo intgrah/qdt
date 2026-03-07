@@ -1,12 +1,7 @@
 module
 
-public import Qdt.Theory.Context
 public import Qdt.Theory.Substitution.Basic
-public import Qdt.Control
-public import Qdt.Frontend.Ast
 public import Qdt.Params
-public import Qdt.Nbe
-public import Qdt.Quote
 
 @[expose] public section
 

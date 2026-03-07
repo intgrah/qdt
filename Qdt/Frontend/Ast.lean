@@ -1,7 +1,5 @@
 module
 
-public import Lean.Data.Name
-
 @[expose] public section
 
 namespace Qdt.Frontend

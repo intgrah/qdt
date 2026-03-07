@@ -1,7 +1,5 @@
 module
 
-public import Qdt.Theory.Context
-
 @[expose] public section
 
 namespace Qdt

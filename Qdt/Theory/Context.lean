@@ -1,7 +1,6 @@
 module
 
 public import Qdt.Theory.Substitution.Basic
-public import Qdt.Tele
 
 @[expose] public section
 
