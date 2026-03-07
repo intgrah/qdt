@@ -1,4 +1,5 @@
 import Qdt
+import Qdt.Incremental.Rules
 import Incremental.Basic
 
 open Qdt
@@ -16,9 +17,13 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let store := { store with cache := store.cache.insert (.text dummyPath) memo }
   let store := { store with cache := store.cache.insert .inputFiles inputMemo }
 
-  match ← (Incremental.run (Build.shake Key Val) store (fetch (Key.checkFile dummyPath))).toIO' with
-  | .ok (diags, _) => return (diags, ∅)
-  | .error () => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
+  match buildKey store (Key.checkFile dummyPath) with
+  | .ok store =>
+      let diags := match store.cache.get? (Key.checkFile dummyPath) with
+        | some memo => memo.value
+        | none => #[]
+      return (diags, ∅)
+  | .error _ => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
 
 def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
