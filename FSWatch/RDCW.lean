@@ -6,12 +6,7 @@ namespace FSWatch.RDCW
 
 abbrev Handle := USize
 
-structure Filter where
-  val : UInt32
-deriving Repr, Inhabited, BEq
-
-instance : OrOp Filter where
-  or a b := ⟨a.val ||| b.val⟩
+abbrev Filter := UInt32
 
 @[extern "fswatch_FILE_NOTIFY_CHANGE_FILE_NAME"] opaque fileNotifyChangeFileName : Unit → UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_DIR_NAME"] opaque fileNotifyChangeDirName : Unit → UInt32
@@ -21,12 +16,12 @@ instance : OrOp Filter where
 @[extern "fswatch_FILE_NOTIFY_CHANGE_SECURITY"] opaque fileNotifyChangeSecurity : Unit → UInt32
 
 namespace Filter
-def fileName : Filter := ⟨fileNotifyChangeFileName ()⟩
-def dirName : Filter := ⟨fileNotifyChangeDirName ()⟩
-def attributes : Filter := ⟨fileNotifyChangeAttributes ()⟩
-def size : Filter := ⟨fileNotifyChangeSize ()⟩
-def lastWrite : Filter := ⟨fileNotifyChangeLastWrite ()⟩
-def security : Filter := ⟨fileNotifyChangeSecurity ()⟩
+def fileName : Filter := fileNotifyChangeFileName ()
+def dirName : Filter := fileNotifyChangeDirName ()
+def attributes : Filter := fileNotifyChangeAttributes ()
+def size : Filter := fileNotifyChangeSize ()
+def lastWrite : Filter := fileNotifyChangeLastWrite ()
+def security : Filter := fileNotifyChangeSecurity ()
 def fileChanges : Filter := fileName ||| dirName ||| attributes ||| size ||| lastWrite
 end Filter
 
@@ -37,15 +32,15 @@ end Filter
 @[extern "fswatch_FILE_ACTION_RENAMED_NEW_NAME"] opaque fileActionRenamedNewName : Unit → UInt32
 
 namespace Action
-def added : Nat := (fileActionAdded ()).toNat
-def removed : Nat := (fileActionRemoved ()).toNat
-def modified : Nat := (fileActionModified ()).toNat
-def renamedOld : Nat := (fileActionRenamedOldName ()).toNat
-def renamedNew : Nat := (fileActionRenamedNewName ()).toNat
+def added : UInt32 := fileActionAdded ()
+def removed : UInt32 := fileActionRemoved ()
+def modified : UInt32 := fileActionModified ()
+def renamedOld : UInt32 := fileActionRenamedOldName ()
+def renamedNew : UInt32 := fileActionRenamedNewName ()
 end Action
 
 structure RawEvent where
-  action : Nat
+  action : UInt32
   name : String
 deriving Repr
 

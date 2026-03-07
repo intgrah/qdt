@@ -10,18 +10,7 @@ deriving Repr, Inhabited, BEq
 def WD := UInt32
 deriving Repr, Inhabited, BEq, Hashable
 
-structure Mask where
-  val : UInt32
-deriving Repr, Inhabited, BEq
-
-instance : OrOp Mask where
-  or a b := ⟨a.val ||| b.val⟩
-
-instance : AndOp Mask where
-  and a b := ⟨a.val &&& b.val⟩
-
-def Mask.isSet (m : Mask) (flags : Nat) : Bool :=
-  (m.val.toNat &&& flags) != 0
+abbrev Mask := UInt32
 
 @[extern "fswatch_IN_ACCESS"] opaque inAccess : Unit → UInt32
 @[extern "fswatch_IN_MODIFY"] opaque inModify : Unit → UInt32
@@ -45,34 +34,37 @@ def Mask.isSet (m : Mask) (flags : Nat) : Bool :=
 
 namespace Mask
 
-def access : Mask := ⟨inAccess ()⟩
-def modify : Mask := ⟨inModify ()⟩
-def attrib : Mask := ⟨inAttrib ()⟩
-def closeWrite : Mask := ⟨inCloseWrite ()⟩
-def closeNoWrite : Mask := ⟨inCloseNoWrite ()⟩
-def openEv : Mask := ⟨inOpen ()⟩
-def movedFrom : Mask := ⟨inMovedFrom ()⟩
-def movedTo : Mask := ⟨inMovedTo ()⟩
-def create : Mask := ⟨inCreate ()⟩
-def delete : Mask := ⟨inDelete ()⟩
-def deleteSelf : Mask := ⟨inDeleteSelf ()⟩
-def moveSelf : Mask := ⟨inMoveSelf ()⟩
-def unmount : Mask := ⟨inUnmount ()⟩
-def qOverflow : Mask := ⟨inQOverflow ()⟩
-def ignored : Mask := ⟨inIgnored ()⟩
-def close : Mask := ⟨inClose ()⟩
-def move : Mask := ⟨inMove ()⟩
-def isDir : Mask := ⟨inIsDir ()⟩
-def allEvents : Mask := ⟨inAllEvents ()⟩
+def isSet (m : Mask) (flags : UInt32) : Bool :=
+  (m &&& flags) != 0
+
+def access : Mask := inAccess ()
+def modify : Mask := inModify ()
+def attrib : Mask := inAttrib ()
+def closeWrite : Mask := inCloseWrite ()
+def closeNoWrite : Mask := inCloseNoWrite ()
+def openEv : Mask := inOpen ()
+def movedFrom : Mask := inMovedFrom ()
+def movedTo : Mask := inMovedTo ()
+def create : Mask := inCreate ()
+def delete : Mask := inDelete ()
+def deleteSelf : Mask := inDeleteSelf ()
+def moveSelf : Mask := inMoveSelf ()
+def unmount : Mask := inUnmount ()
+def qOverflow : Mask := inQOverflow ()
+def ignored : Mask := inIgnored ()
+def close : Mask := inClose ()
+def move : Mask := inMove ()
+def isDir : Mask := inIsDir ()
+def allEvents : Mask := inAllEvents ()
 def fileChanges : Mask :=
   create ||| delete ||| modify ||| movedFrom ||| movedTo ||| attrib ||| closeWrite ||| deleteSelf
 
 end Mask
 
 structure RawEvent where
-  wd : Nat
-  mask : Nat
-  cookie : Nat
+  wd : UInt32
+  mask : UInt32
+  cookie : UInt32
   name : String
 deriving Repr
 
