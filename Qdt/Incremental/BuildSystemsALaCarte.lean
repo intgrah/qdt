@@ -63,7 +63,7 @@ unsafe def busy : Build Applicative PUnit Q R := fun tasks key store =>
     | none => return (← get).values q
     | some task => do
       let r ← task fetch
-      modify (fun st => { st with values := fun x => if h : x = q then h ▸ r else st.values x })
+      modify (fun st => { st with values := Function.update st.values q r })
       return r
   StateT.run (fetch key) store |>.snd
 
@@ -302,7 +302,7 @@ def topological : Scheduler Applicative I I Q R :=
       let newTask : Task (MonadStateM I) Q R q := rebuilder q r task
       let fetch k : StateM I (R k) := return store.values k
       let newValue ← liftInfo (newTask fetch)
-      modify fun s => { s with values := fun k => if h : k = q then h ▸ newValue else s.values k }
+      modify fun s => { s with values := Function.update s.values q newValue }
   StateT.run (order.forM build) store |>.snd
 
 def make : Build Applicative (MakeInfo Q) Q R := topological modTimeRebuilder
@@ -363,7 +363,7 @@ partial def restarting : Scheduler Monad (ExcelInfo Q) (Q → Bool) Q R :=
           let qs := qs.filter (· != dep)
           go done (dep :: qs ++ [q])
         | .ok newVal =>
-          modify fun s => { s with values := fun k => if h : k = q then h ▸ newVal else s.values k }
+          modify fun s => { s with values := Function.update s.values q newVal }
           let qs ← go (done.insert q) qs
           return q :: qs
 
@@ -422,7 +422,7 @@ unsafe def suspending : Scheduler Monad I I Q R :=
           let newValue ← newTask fetch
 
           modifyThe (Store I Q R × HashSet Q) fun (s, d) =>
-            ({ s with values := fun k => if h : k = q then h ▸ newValue else s.values k },
+            ({ s with values := Function.update s.values q newValue },
              d.insert q)
 
           return newValue
