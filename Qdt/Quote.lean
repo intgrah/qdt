@@ -1,7 +1,7 @@
 module
 
 public import Qdt.Control
-public import Qdt.MLTT.Syntax
+public import Qdt.Theory.Syntax
 public import Qdt.Nbe
 
 @[expose] public section

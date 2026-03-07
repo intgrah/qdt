@@ -1,7 +1,7 @@
 module
 
-public import Qdt.MLTT.Context
-public import Qdt.MLTT.Substitution.Basic
+public import Qdt.Theory.Context
+public import Qdt.Theory.Substitution.Basic
 public import Qdt.Control
 public import Qdt.Frontend.Ast
 public import Qdt.Params

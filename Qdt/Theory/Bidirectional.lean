@@ -1,6 +1,6 @@
 module
 
-public import Qdt.MLTT.Context
+public import Qdt.Theory.Context
 
 @[expose] public section
 

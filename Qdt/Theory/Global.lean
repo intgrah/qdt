@@ -2,7 +2,7 @@ module
 
 public import Std.Data.HashMap
 
-public import Qdt.MLTT.Syntax
+public import Qdt.Theory.Syntax
 
 @[expose] public section
 

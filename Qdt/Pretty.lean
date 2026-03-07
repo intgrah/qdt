@@ -1,6 +1,6 @@
 module
 
-public import Qdt.MLTT.Syntax
+public import Qdt.Theory.Syntax
 public import Lean.Data.Format
 public import Lean.Data.Name
 
