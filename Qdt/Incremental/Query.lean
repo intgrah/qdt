@@ -124,7 +124,7 @@ abbrev Val : Key → Type
   /- A list of all the imported modules in a file. Never fails. -/
   | .imports _ => Array Name
   /- A map from names to index within the file -/
-  | .declarationIndex _ => HashMap Name Nat
+  | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
   /- The specific AST node and its index -/
   | .declAst _ _ => Option (Ast × Nat)
   /- Full elaboration result for a command at a given index -/

@@ -25,33 +25,28 @@ def getFieldString (_structName fieldName : Name) : Option String :=
 
 open Qdt (parseDefinition parseExample parseAxiom parseImport parseInductive parseStructure)
 
-def buildOwnerIndex (prog : Ast) : HashMap Name Nat := Id.run do
-  let .node _ progCs := prog | return HashMap.emptyWithCapacity 0
+def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.run do
+  let .node _ progCs := prog | return (HashMap.emptyWithCapacity 0, #[])
   let mut m : HashMap Name Nat := HashMap.emptyWithCapacity 4096
+  let mut diags : Array Diagnostic := #[]
   for idx in [:progCs.size] do
     let cmd := progCs[idx]!
-    if let some d := parseDefinition cmd then
-      m := m.insert d.name idx
-    else if let some a := parseAxiom cmd then
-      m := m.insert a.name idx
-    else if let some ind := parseInductive cmd then
-      m := m.insert ind.name idx
-      m := m.insert (ind.name.str "rec") idx
-      for ctor in ind.ctors do
-        m := m.insert (ind.name.append ctor.name) idx
-    else if let some s := parseStructure cmd then
-      m := m.insert s.name idx
-      m := m.insert (s.name.str "mk") idx
-      m := m.insert (s.name.str "rec") idx
-      for field in s.fields do
-        if let some fname := getFieldString s.name field.name then
-          m := m.insert (s.name.str fname) idx
-    else if let some _ := parseExample cmd then
-      let exName := (`_example).num idx
-      m := m.insert exName idx
-    else
-      continue
-  return m
+    let names : List Name :=
+      if let some d := parseDefinition cmd then [d.name]
+      else if let some a := parseAxiom cmd then [a.name]
+      else if let some ind := parseInductive cmd then
+        ind.name :: ind.name.str "rec" :: ind.ctors.map (ind.name.append ·.name)
+      else if let some s := parseStructure cmd then
+        s.name :: s.name.str "mk" :: s.name.str "rec" ::
+          s.fields.filterMap fun field => (s.name.str ·) <$> getFieldString s.name field.name
+      else if (parseExample cmd).isSome then [(`_example).num idx]
+      else []
+    for name in names do
+      if m.contains name then
+        diags := diags.push ⟨[idx], .alreadyDefined name⟩
+      else
+        m := m.insert name idx
+  return (m, diags)
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []
@@ -154,7 +149,7 @@ def tasks : Tasks Monad Key Val
     let prog ← fetch (Key.ast filepath)
     return buildOwnerIndex prog
   | .declAst filepath name => some do
-    let indexMap ← fetch (Key.declarationIndex filepath)
+    let (indexMap, _) ← fetch (Key.declarationIndex filepath)
     match indexMap[name]? with
     | some idx =>
         let prog ← fetch (Key.ast filepath)
@@ -176,7 +171,7 @@ def tasks : Tasks Monad Key Val
     let (_, globalEnv, info) ← (elabAction ast).run elabCtx
     return (globalEnv, info)
   | .elabDecl filepath name => some do
-    let indexMap ← fetch (Key.declarationIndex filepath)
+    let (indexMap, _) ← fetch (Key.declarationIndex filepath)
     match indexMap[name]? with
     | some idx =>
         let (env, info) ← fetch (Key.elabCmdAt filepath idx)
@@ -207,8 +202,8 @@ def tasks : Tasks Monad Key Val
     | none => return none
   | .checkFile filepath => some do
     let (_, _, parseDiags) ← fetch (Key.astSourceMap filepath)
-    let decls ← fetch (Key.declarationIndex filepath)
-    let mut allDiags := parseDiags
+    let (decls, dupDiags) ← fetch (Key.declarationIndex filepath)
+    let mut allDiags := parseDiags ++ dupDiags
     let mut seenIdx : HashSet Nat := HashSet.emptyWithCapacity decls.size
     for (name, idx) in decls.toList do
       if seenIdx.contains idx then continue
