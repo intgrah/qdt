@@ -56,8 +56,13 @@ structure MetaState where
   entryCache : Std.HashMap Lean.Name (Option Constant) := {}
 deriving Inhabited
 
-abbrev CoreM := ReaderT CoreContext (WriterT ElabInfo (Task Key Val))
-abbrev MetaM := ReaderT MetaContext (StateT MetaState CoreM)
+abbrev MetaM :=
+  Task Monad Key Val
+  |> WriterT ElabInfo
+  |> ReaderT CoreContext
+  |> StateT MetaState
+  |> ReaderT MetaContext
+
 abbrev TermM (n : Nat) := ReaderT (TermContext n) MetaM
 abbrev SemM (n c : Nat) := ReaderT (Env n c) MetaM
 
@@ -102,7 +107,7 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
   if let some result := st.entryCache[name]? then
     return result
   let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Key Val _)
+    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   let currentDeclName := (← read).currentDecl
   if let some idx := declIndex[name]? then
     if let some currentIdx := declIndex[currentDeclName]? then
@@ -110,7 +115,7 @@ def fetchConstant (name : Name) : MetaM (Option Constant) := do
         modify fun st => { st with entryCache := st.entryCache.insert name none }
         return none
   let result : Val (Key.constant ctx.filepath name) ←
-    liftM (Task.fetch (Key.constant ctx.filepath name) : Task Key Val _)
+    liftM (Task.fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
   let result : Option Constant := result.map Prod.fst
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
@@ -151,7 +156,7 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
   let ctx ← readThe CoreContext
   let currentDeclName := (← read).currentDecl
   let declIndex : Std.HashMap Lean.Name Nat ←
-    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Key Val _)
+    liftM (Task.fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
   match declIndex[name]? with
   | some nameIdx =>
       match declIndex[currentDeclName]? with
@@ -162,7 +167,7 @@ def addConstant (name : Name) (constant : Constant) : MetaM Bool := do
       | none => pure ()
   | none =>
       let existing : Val (Key.constant ctx.filepath name) ←
-        liftM (Task.fetch (Key.constant ctx.filepath name) : Task Key Val _)
+        liftM (Task.fetch (Key.constant ctx.filepath name) : Task Monad Key Val _)
       if existing.isSome then
         emitDiagnostic (.alreadyDefined name)
         return false
@@ -174,7 +179,7 @@ def replaceEntry (name : Name) (constant : Constant) : MetaM Unit := do
   set { st with localEnv := st.localEnv.insert name constant }
 
 def elabRun {α : Type} (coreCtx : CoreContext) (metaCtx : MetaContext) (action : OptionT MetaM α) :
-    Task Key Val (Option α × Global × ElabInfo) := do
+    Task Monad Key Val (Option α × Global × ElabInfo) := do
   let ((optResult, metaSt), info) ← WriterT.run ((StateT.run (action metaCtx) { localEnv := {} }) coreCtx)
   return (optResult, metaSt.localEnv, info)
 

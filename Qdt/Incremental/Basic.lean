@@ -4,8 +4,6 @@ public import Std.Data.DHashMap
 public import Std.Data.HashMap
 public import Std.Data.HashSet
 
-public import Qdt.Config
-
 @[expose] public section
 
 namespace Qdt.Incremental
@@ -15,8 +13,6 @@ open System (FilePath)
 
 universe u
 
-variable (Q : Type) (R : Q → Type) [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
-
 /-!
 [Build systems à la carte]
 The choice of the constraint `c` has concrete meanings:
@@ -25,24 +21,33 @@ The choice of the constraint `c` has concrete meanings:
 - `c := Monad` - dynamic dependencies
 -/
 
-structure Task (α : Type) : Type 1 where
-  run : ∀ {f} [Monad f], ReaderT (∀ q, f (R q)) f α
+-- Disable binder annotation checks to allow `[c f]`
+set_option checkBinderAnnotations false in
+def Task
+    (c : (Type → Type) → Type 1)
+    (Q : Type)
+    (R : Q → Type)
+    (α : Type) :
+    Type 1 :=
+  ∀ (f : Type → Type) [c f], (∀ q, f (R q)) → f α
+
+variable (c : (Type → Type) → Type 1) (Q : Type) (R : Q → Type)
+  [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
 namespace Task
 
-variable {Q : Type} {R : Q → Type} {α β : Type}
+def fetch
+    {c : (Type → Type) → Type 1}
+    {Q : Type}
+    {R : Q → Type}
+    (q : Q) :
+    Task c Q R (R q) :=
+  fun _ [_] fetch => fetch q
 
-def pure (a : α) : Task Q R α := ⟨fun {f} [Monad f] => return a⟩
-def bind (t : Task Q R α) (f : α → Task Q R β) : Task Q R β :=
-  ⟨fun {g} [Monad g] => t.run >>= fun a => (f a).run⟩
-def map (f : α → β) (t : Task Q R α) : Task Q R β :=
-  ⟨fun {g} [Monad g] => f <$> t.run⟩
-def fetch (q : Q) : Task Q R (R q) := ⟨fun {f} [Monad f] => do (← read) q⟩
-
-instance : Monad (Task Q R) where
-  pure := pure
-  bind := bind
-  map := map
+instance {Q : Type} {R : Q → Type} : Monad (Task Monad Q R) where
+  pure a := fun _ [_] _ => pure a
+  bind t f := fun g [_] fetch => t g fetch >>= fun a => f a g fetch
+  map f t := fun g [_] fetch => f <$> t g fetch
 
 end Task
 
@@ -86,7 +91,7 @@ def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
 end Store
 
 def Tasks : Type 1 :=
-  ∀ q, Option (Task Q R (R q))
+  ∀ q, Option (Task c Q R (R q))
 
 structure ProfEntry where
   hits    : Nat := 0
@@ -96,11 +101,11 @@ structure ProfEntry where
 abbrev Profile := IO.Ref (HashMap String ProfEntry)
 
 def Build : Type 1 :=
-  ∀ {α}, Tasks Q R → Store Q R → Task Q R α → EIO Unit (α × Store Q R)
+  ∀ {α}, Tasks c Q R → Store Q R → Task c Q R α → EIO Unit (α × Store Q R)
 
 namespace Build
 
-partial def busy : Build Q R :=
+partial def busy : Build Applicative Q R :=
   fun tasks store task => do
     let storeRef : ST.Ref IO.RealWorld (Store Q R) ← ST.mkRef store
     let rec fetch (q : Q) : EIO Unit (R q) := do
@@ -110,13 +115,13 @@ partial def busy : Build Q R :=
           | some memo => return memo.value
           | none => throw ()
       | some t =>
-          let v ← t.run fetch
+          let v ← t _ fetch
           storeRef.modify fun s =>
             let memo := { value := v, deps := ∅, hash := hash v }
             let cache := s.cache.insert q memo
             { s with cache }
           return v
-    let a ← task.run fetch
+    let a ← task _ fetch
     let s ← storeRef.get
     pure (a, s)
 
@@ -129,7 +134,7 @@ structure ShakeState where
 def shake [∀ q, Hashable (R q)]
     (label : Q → String := fun _ => "?")
     (prof : Option Profile := none)
-    (onBuildEvent : Option (Q → Bool → IO Unit) := none) : Build Q R :=
+    (onBuildEvent : Option (Q → Bool → IO Unit) := none) : Build Monad Q R :=
   fun {α} tasks store task => do
     let init : ShakeState Q R := {
       store
@@ -190,7 +195,7 @@ def shake [∀ q, Hashable (R q)]
                           | none => hash v
                         modify fun st => { st with currentDeps := st.currentDeps.insert q h }
                       pure v
-                    let a ← taskQ.run fetch'
+                    let a ← taskQ _ fetch'
                     let deps := (← get).currentDeps
                     modify fun st => { st with currentDeps := oldDeps }
                     pure (a, deps)
@@ -245,7 +250,7 @@ def shake [∀ q, Hashable (R q)]
 
       fetchRef.set buildRule
 
-      let a ← task.run (← fetchRef.get)
+      let a ← task _ (← fetchRef.get)
       let st ← get
       return (a, st.store)
 
