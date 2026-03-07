@@ -8,10 +8,48 @@ namespace Incremental
 
 namespace Shake
 
-open Std (DHashMap HashMap)
+open Std (DHashMap HashMap HashSet)
+
+variable (Q : Type) (R : Q → Type)
+  [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
+
+structure Memo (q : Q) where
+  value : R q
+  deps : HashMap Q UInt64
+  hash : UInt64 := hash value
+  hash_value : Hashable.hash value = hash := by rfl
+
+structure Store where
+  cache : DHashMap Q (Memo Q R) := DHashMap.emptyWithCapacity 1024
+  reverseDeps : HashMap Q (HashSet Q) := HashMap.emptyWithCapacity 1024
 
 variable {Q : Type} {R : Q → Type}
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
+
+def addReverseDep (store : Store Q R) (dependency dependent : Q) : Store Q R :=
+  let existing := store.reverseDeps.getD dependency ∅
+  let reverseDeps :=
+    store.reverseDeps.insert dependency (existing.insert dependent)
+  { store with reverseDeps }
+
+partial def getTransitiveDependents (info : Store Q R) (keys : HashSet Q) : HashSet Q :=
+  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
+    match worklist with
+    | [] => visited
+    | k :: rest =>
+        if visited.contains k then
+          go rest visited
+        else
+          let visited := visited.insert k
+          let dependents := info.reverseDeps.getD k (HashSet.emptyWithCapacity 0)
+          let newWork := dependents.toList.filter (!visited.contains ·)
+          go (newWork ++ rest) visited
+  go keys.toList (HashSet.emptyWithCapacity keys.size)
+
+def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
+  let toInvalidate := getTransitiveDependents store changedKeys
+  let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
+  { store with cache }
 
 structure State where
   store : Store Q R
@@ -19,7 +57,7 @@ structure State where
   stack : List Q
   currentDeps : HashMap Q UInt64
 
-partial def build : Build Monad Q R :=
+partial def build : Build Monad (Store Q R) Q R :=
   fun tasks target store => runEST fun σ => do
     let stRef ← ST.mkRef (σ := σ) ({
       store
@@ -36,16 +74,14 @@ partial def build : Build Monad Q R :=
           match st.stack.head? with
           | some dependent =>
               stRef.modify fun st =>
-                let store := st.store.addReverseDep Q R q dependent
-                { st with store }
+                { st with store := addReverseDep st.store q dependent  }
           | none => pure ()
           pure memo.value
       | none =>
           match st.stack.head? with
           | some dependent =>
               stRef.modify fun st =>
-                let store := st.store.addReverseDep Q R q dependent
-                { st with store }
+                { st with store := addReverseDep st.store q dependent }
           | none => pure ()
           if st.stack.contains q then
             throw Cycle.mk
