@@ -142,9 +142,7 @@ instance {α} : Monoid (Array α) where
 structure ElabInfo where
   diagnostics : Array Diagnostic
   hovers : Array HoverInfo
-
-instance : Hashable ElabInfo where
-  hash info := mixHash (hash info.diagnostics.size) (hash info.hovers.size)
+deriving Hashable
 
 instance : Monoid ElabInfo where
   one := ⟨#[], #[]⟩
