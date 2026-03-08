@@ -1,4 +1,4 @@
-import QdtTest.Macro
+import Qdt.Test
 
 #pass (
   inductive Unit.{u} : Type u where

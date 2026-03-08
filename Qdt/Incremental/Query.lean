@@ -2,7 +2,6 @@ module
 
 public import Qdt.Error
 public import Qdt.Theory.Global
-public import Qdt.Frontend.Parser
 
 @[expose] public section
 

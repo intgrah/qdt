@@ -6,7 +6,6 @@ namespace FSWatch.RDCW
 
 abbrev Handle := USize
 
-
 @[extern "fswatch_FILE_NOTIFY_CHANGE_FILE_NAME"] opaque fileNotifyChangeFileName : Unit → UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_DIR_NAME"] opaque fileNotifyChangeDirName : Unit → UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_ATTRIBUTES"] opaque fileNotifyChangeAttributes : Unit → UInt32

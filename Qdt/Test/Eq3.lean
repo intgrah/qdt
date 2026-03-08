@@ -1,4 +1,4 @@
-import QdtTest.Macro
+import Qdt.Test
 
 #pass (
   inductive Eq3.{u} (A : Type u) (x : A) : A → A → Type u where

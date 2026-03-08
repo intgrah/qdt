@@ -4,7 +4,7 @@ open System Lake DSL
 
 package qdt where
   version := v!"0.1.0"
-  testDriver := "QdtTest"
+  testDriver := "Qdt.Test"
   description := "Query-based Dependent Type Elaborator"
   license := "Apache-2.0"
   leanOptions := #[⟨`autoImplicit, false⟩]
@@ -14,7 +14,8 @@ require "leanprover-community" / mathlib @ git "v4.28.0"
 lean_lib FSWatch
 lean_lib Incremental
 lean_lib Qdt
-lean_lib QdtTest where globs := #[`QdtTest.+]
+lean_lib Qdt.Test where
+  globs := #[`Qdt.Test.*, `Qdt.Lsp.Test.*]
 
 @[default_target]
 lean_exe qdt where root := `Main

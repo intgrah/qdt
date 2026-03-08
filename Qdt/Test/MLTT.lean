@@ -1,4 +1,4 @@
-import QdtTest.Macro
+import Qdt.Test
 
 #pass (
   inductive Empty.{u} : Type u where

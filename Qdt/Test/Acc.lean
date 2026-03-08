@@ -1,4 +1,4 @@
-import QdtTest.Macro
+import Qdt.Test
 
 #pass (
   inductive Acc.{u, v} (A : Type u) (r : A → A → Type v) : A → Type (max u v) where
