@@ -3,7 +3,7 @@ module
 public import Qdt.Config
 public import Qdt.Elab
 public import Qdt.Frontend.Desugar
-public import Incremental.Shake
+public import Incremental.ShakeNative
 
 @[expose] public section
 

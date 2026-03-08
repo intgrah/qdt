@@ -211,7 +211,7 @@ def InductiveConstructor.elab
   let retTy ←
     match ctor.tyOpt with
     | some retTyAst =>
-      withChild 2 (checkTy fieldCtx retTyAst)
+      OptionT.lift (withChild 2 (checkTy fieldCtx retTyAst))
     | none => do
         if numIndices > 0 then
           raiseError (Error.typeFamilyCtorReturnTypeRequired ctorName)
@@ -463,7 +463,7 @@ def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
   let resultTy : Ty numParams ←
     match ind.tyOpt with
     | none => pure (Ty.u .zero)
-    | some ty => withChild 3 (checkTy paramCtx ty)
+    | some ty => OptionT.lift (withChild 3 (checkTy paramCtx ty))
   withChild 0 (emitHover (.signature ind.name paramTys resultTy))
   let indTy : Ty 0 := Ty.pis paramTys resultTy
   let univParams ← getUnivParams

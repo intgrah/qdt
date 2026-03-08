@@ -110,7 +110,7 @@ def Definition.elab (d : Definition) : OptionT ElabM Unit := do
         let ty ← tyVal.quote
         pure (tm, ty)
     | some tyRaw =>
-        let ty ← withChild 3 (checkTy paramCtx tyRaw)
+        let ty ← OptionT.lift (withChild 3 (checkTy paramCtx tyRaw))
         let tyVal ← ty.eval paramCtx.env
         let tm ← OptionT.lift (withChild 4 (checkTm paramCtx tyVal d.body))
         pure (tm, ty)
@@ -125,7 +125,7 @@ def Example.elab (e : Example) : OptionT ElabM Unit := do
   let (paramCtx, _paramTys) ← withChild 0 (Params.elab e.params)
   match e.tyOpt with
   | some tyRaw =>
-      let expected ← withChild 1 (checkTy paramCtx tyRaw)
+      let expected ← OptionT.lift (withChild 1 (checkTy paramCtx tyRaw))
       let expected ← expected.eval paramCtx.env
       let _term ← OptionT.lift (withChild 2 (checkTm paramCtx expected e.body))
   | none =>
@@ -135,7 +135,7 @@ def Axiom.elab (a : Axiom) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams a.univParams then
     raiseError err
   let (paramCtx, paramTys) ← withChild 2 (Params.elab a.params)
-  let ty ← withChild 3 (checkTy paramCtx a.ty)
+  let ty ← OptionT.lift (withChild 3 (checkTy paramCtx a.ty))
   withChild 0 (emitHover (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
   let _ ← addConstant a.name (.axiom { univParams := a.univParams, ty })

@@ -24,7 +24,7 @@ def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
           | failure
-        let (ty, level) ← withChild idx (withChild 1 (checkTyWithLevel ctx tyAst))
+        let (ty, level) ← OptionT.lift (withChild idx (withChild 1 (checkTyWithLevel ctx tyAst)))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))
         let ctx := ctx.bind name tyVal
@@ -51,7 +51,7 @@ def VParams.elabFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
           | failure
-        let ty ← withChild idx (withChild 1 (checkTy ctx tyAst))
+        let ty ← OptionT.lift (withChild idx (withChild 1 (checkTy ctx tyAst)))
         let tyVal ← ty.eval ctx.env
         withChild idx (withChild 0 (emitType ctx tyVal))
         let ctx := ctx.bind name tyVal
