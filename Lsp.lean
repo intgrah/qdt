@@ -251,10 +251,8 @@ def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
 def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "hover: missing params")
-  let params ←
-    match fromJson? (α := HoverParams) (toJson params) with
-    | .ok ps => pure ps
-    | .error e => throw (IO.userError s!"hover: bad params: {e}")
+  let .ok params := fromJson? (α := HoverParams) (toJson params)
+    | throw (IO.userError s!"hover: bad params")
 
   let uri := params.textDocument.uri
   let lspPos := params.position
@@ -273,51 +271,42 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let ((info, sourceMap, cst), store') ← runElabTask ps file
-  setProject { ps with store := store' }
+  let some (info, sourceMap, cst) := elaborateFile ps.store file
+    | sendResponse id Json.null
 
-  match lookupHoverAtPosition cst sourceMap info codepointPos with
-  | none =>
-      sendResponse id Json.null
-  | some hoverContent =>
-      let cstPath := cst.pathAtPosition codepointPos
-      let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
-      let content := hoverContent.format
-      let range := mkRange text span
-      let markupContent : MarkupContent := {
-        kind := MarkupKind.markdown
-        value := s!"```qdt\n{content}\n```"
-      }
-      let hover : Hover := {
-        contents := markupContent
-        range? := some range
-      }
-      sendResponse id (toJson hover)
+  let some hoverContent := lookupHoverAtPosition cst sourceMap info codepointPos
+    | sendResponse id Json.null
+  let cstPath := cst.pathAtPosition codepointPos
+  let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
+  let content := hoverContent.format
+  let range := mkRange text span
+  let markupContent : MarkupContent := {
+    kind := MarkupKind.markdown
+    value := s!"```qdt\n{content}\n```"
+  }
+  let hover : Hover := {
+    contents := markupContent
+    range? := some range
+  }
+  sendResponse id (toJson hover)
 
 def mainLoop (stdin : IO.FS.Stream) : ServerM Unit := do
   while true do
     match ← stdin.readLspMessage with
-    | .request id method params? =>
-      match method with
-      | "initialize" =>
-        try handleInitialize id params?
-        catch e => sendError id ErrorCode.internalError s!"initialize failed: {e}"
-      | "shutdown" => handleShutdown id
-      | "textDocument/hover" =>
-        try handleHover id params?
-        catch e => sendError id ErrorCode.internalError s!"hover failed: {e}"
-      | _ =>
-        sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
-    | .notification method params? =>
-      match method with
-      | "exit" => throw (IO.userError "exit")
-      | "textDocument/didOpen" =>
-        try handleDidOpen params? catch _ => pure ()
-      | "textDocument/didChange" =>
-        try handleDidChange params? catch _ => pure ()
-      | "textDocument/didClose" =>
-        try handleDidClose params? catch _ => pure ()
-      | _ => continue
+    | .request id "initialize" params? =>
+      try handleInitialize id params?
+      catch e => sendError id ErrorCode.internalError s!"initialize failed: {e}"
+    | .request id "shutdown" _ =>
+      handleShutdown id
+    | .request id "textDocument/hover" params? =>
+      try handleHover id params?
+      catch e => sendError id ErrorCode.internalError s!"hover failed: {e}"
+    | .request id method _ =>
+      sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
+    | .notification "exit" _ => throw (IO.userError "exit")
+    | .notification "textDocument/didOpen" params? => handleDidOpen params?
+    | .notification "textDocument/didChange" params? => handleDidChange params?
+    | .notification "textDocument/didClose" params? => handleDidClose params?
     | _ => continue
 
 end Qdt
