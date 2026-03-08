@@ -18,8 +18,7 @@ abbrev TestM := StateRefT (Store Key Val) IO
 def test (action : TestM Unit) : IO Unit :=
   action.run' (DHashMap.emptyWithCapacity 64)
 
-def setText (file : String) (text : String) : TestM Unit := do
-  let filepath : FilePath := ⟨file⟩
+def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store ← get
   let memo : Memo Key Val (.text filepath) := { value := text, deps := ∅ }
   let store := store.insert (.text filepath) memo
@@ -34,8 +33,7 @@ def setText (file : String) (text : String) : TestM Unit := do
   | .error .cycle => throw (IO.userError "cycle detected")
   | .error .missingInput => throw (IO.userError "missing input")
 
-def diagnostics (file : String) (check : Array Diagnostic → Bool) : TestM Unit := do
-  let filepath : FilePath := ⟨file⟩
+def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store ← get
   let diags := match store.get? (Key.checkFile filepath) with
     | some memo => memo.value
@@ -43,8 +41,10 @@ def diagnostics (file : String) (check : Array Diagnostic → Bool) : TestM Unit
   if !check diags then
     throw (IO.userError s!"diagnostics check failed: {diags.map (·.error)}")
 
-def hover (file : String) (pos : Lean.Position) (expected : String) : TestM Unit := do
-  let filepath : FilePath := ⟨file⟩
+def noDiagnostics (filepath : FilePath := "test.qdt") : TestM Unit :=
+  diagnostics Array.isEmpty filepath
+
+def hover (pos : Lean.Position) (expected : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store ← get
   let text := match store.get? (Key.text filepath) with
     | some memo => memo.value
@@ -61,8 +61,7 @@ def hover (file : String) (pos : Lean.Position) (expected : String) : TestM Unit
       if formatted != expected then
         throw (IO.userError s!"hover mismatch at {repr pos}: expected '{expected}', got '{formatted}'")
 
-def noHover (file : String) (pos : Lean.Position) : TestM Unit := do
-  let filepath : FilePath := ⟨file⟩
+def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store ← get
   let text := match store.get? (Key.text filepath) with
     | some memo => memo.value
