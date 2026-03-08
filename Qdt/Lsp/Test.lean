@@ -55,22 +55,30 @@ def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "tes
 def noDiagnostics (filepath : FilePath := "test.qdt") : TestM Unit :=
   diagnostics Array.isEmpty filepath
 
-def hover (pos : Lean.Position) (expected : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
+def hover (pos : Lean.Position) (expected : String)
+    (start stop : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store := (← get).store
   let text := match store.get? (Key.text filepath) with
     | some memo => memo.value
     | none => ""
+  let fileMap := Lean.FileMap.ofString text
   match elaborateFile store filepath with
   | none => fail s!"no elaboration info for {filepath}"
   | some (info, sourceMap, cst) =>
-    let bytePos := (Lean.FileMap.ofString text).ofPosition pos
+    let bytePos := fileMap.ofPosition pos
     let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
     match lookupHoverAtPosition cst sourceMap info codepointPos with
     | none => fail s!"no hover at {repr pos}, expected '{expected}'"
-    | some content =>
+    | some (content, span) =>
       let formatted := content.format
       if formatted != expected then
         fail s!"hover mismatch at {repr pos}: expected '{expected}', got '{formatted}'"
+      let expectedStart := utf8PosToCodepointPos text (fileMap.ofPosition start).byteIdx
+      let expectedStop := utf8PosToCodepointPos text (fileMap.ofPosition stop).byteIdx
+      if span.startPos != expectedStart || span.endPos != expectedStop then
+        let actualStart := fileMap.utf8PosToLspPos ⟨codepointPosToUtf8Pos text span.startPos⟩
+        let actualStop := fileMap.utf8PosToLspPos ⟨codepointPosToUtf8Pos text span.endPos⟩
+        fail s!"hover span mismatch at {repr pos}: expected {repr start}..{repr stop}, got {repr actualStart}..{repr actualStop}"
 
 def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store := (← get).store
@@ -84,7 +92,7 @@ def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Un
     let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
     match lookupHoverAtPosition cst sourceMap info codepointPos with
     | none => return
-    | some content =>
+    | some (content, _) =>
       fail s!"expected no hover at {repr pos}, got '{content.format}'"
 
 end Qdt.Lsp.Test

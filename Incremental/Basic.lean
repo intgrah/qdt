@@ -27,7 +27,11 @@ def Task
     Type 1 :=
   ∀ (f : Type → Type) [c f], (∀ q, f (R q)) → f α
 
-variable (c : (Type → Type) → Type 1) (σ : Type) (Q : Type) (R : Q → Type)
+variable
+  (c : (Type → Type) → Type 1)
+  (σ : Type)
+  (Q : Type)
+  (R : Q → Type)
 
 namespace Task
 

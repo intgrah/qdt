@@ -274,10 +274,8 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
   let some (info, sourceMap, cst) := elaborateFile ps.store file
     | sendResponse id Json.null
 
-  let some hoverContent := lookupHoverAtPosition cst sourceMap info codepointPos
+  let some (hoverContent, span) := lookupHoverAtPosition cst sourceMap info codepointPos
     | sendResponse id Json.null
-  let cstPath := cst.pathAtPosition codepointPos
-  let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
   let content := hoverContent.format
   let range := mkRange text span
   let markupContent : MarkupContent := {
