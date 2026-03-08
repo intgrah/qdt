@@ -16,6 +16,8 @@ structure StructureField where
 
 structure Structure where
   name : Name
+  mkName : Name
+  recName : Name
   univParams : List Name
   params : List Ast
   tyOpt : Option Ast
@@ -51,7 +53,7 @@ def parseStructure : Ast → Option Structure
       let fields := match fieldsNode with
         | .node _ cs => cs.toList.filterMap fun c => parseStructureField c
         | _ => []
-      some { name, univParams, params, tyOpt, fields }
+      some { name, mkName := name.str "mk", recName := name.str "rec", univParams, params, tyOpt, fields }
   | _ => none
 
 def mkFieldTyAst (field : StructureField) : Ast :=
@@ -118,6 +120,7 @@ def elabStructure (info : Structure) : OptionT ElabM StructureResult := do
   let indSynth : Inductive :=
     {
       name := info.name
+      recName := info.recName
       univParams := info.univParams
       params := info.params
       tyOpt := info.tyOpt

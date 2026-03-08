@@ -35,9 +35,9 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
       if let some d := parseDefinition cmd then [d.name]
       else if let some a := parseAxiom cmd then [a.name]
       else if let some ind := parseInductive cmd then
-        ind.name :: ind.name.str "rec" :: ind.ctors.map (ind.name.append ·.name)
+        ind.name :: ind.recName :: ind.ctors.map (ind.name.append ·.name)
       else if let some s := parseStructure cmd then
-        s.name :: s.name.str "mk" :: s.name.str "rec" ::
+        s.name :: s.mkName :: s.recName ::
           s.fields.filterMap fun field => (s.name.str ·) <$> getFieldString s.name field.name
       else if (parseExample cmd).isSome then [(`_example).num idx]
       else []

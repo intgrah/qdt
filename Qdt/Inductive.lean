@@ -19,6 +19,7 @@ deriving Inhabited
 
 structure Inductive where
   name : Name
+  recName : Name
   univParams : List Name
   params : List Ast
   tyOpt : Option Ast
@@ -57,7 +58,7 @@ def parseInductive : Ast → Option Inductive
       let ctors := match ctorsNode with
         | .node _ cs => cs.toList.filterMap fun c => parseConstructor c
         | _ => []
-      some { name, univParams, params, tyOpt, ctors }
+      some { name, recName := name.str "rec", univParams, params, tyOpt, ctors }
   | _ => none
 
 def Tm.getAppArgs {n : Nat} : Tm n → Tm n × List (Tm n) :=
@@ -515,7 +516,7 @@ def elabInductive (ind : Inductive) : OptionT ElabM InductiveResult := do
 
   let indEntry : Name × Constant := (ind.name, .inductive { univParams, ty := indTy, numParams, numIndices, numMinors, ctorNames })
 
-  let recName := ind.name.str "rec"
+  let recName := ind.recName
 
   let (minorTys, seeds) ←
     goMinors numParams numIndices numMinors ind.name indUnivs motiveVal params ctors 0 (Nat.zero_le numMinors) .nil ⟨#[], rfl⟩
