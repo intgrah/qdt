@@ -50,6 +50,7 @@ def invalidate (store : Store Q R) (changedKeys : HashSet Q) : Store Q R :=
   let cache := toInvalidate.fold (init := store.cache) DHashMap.erase
   { store with cache }
 
+@[specialize 7] -- specialize tasks
 partial def build : Build Monad (Store Q R) Q R :=
   fun tasks target store => runEST fun σ => do
     let cache ← ST.mkRef (σ := σ) store.cache
