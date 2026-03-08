@@ -25,7 +25,7 @@ structure Inductive where
   tyOpt : Option Ast
   ctors : List InductiveConstructor
 
-def parseConstructor  : Ast → Option InductiveConstructor
+def InductiveConstructor.parse  : Ast → Option InductiveConstructor
   | .node `Constructor cs =>
       let name := cs[0]!.getName
       let fieldsNode := cs[1]!
@@ -39,7 +39,7 @@ def parseConstructor  : Ast → Option InductiveConstructor
       some { name, fields, tyOpt }
   | _ => none
 
-def parseInductive : Ast → Option Inductive
+def Inductive.parse : Ast → Option Inductive
   | .node `Command.inductive cs =>
       let name := cs[0]!.getName
       let univParamsNode := cs[1]!
@@ -56,7 +56,7 @@ def parseInductive : Ast → Option Inductive
         | .node `null _ | .missing => none
         | _ => some tyOpt
       let ctors := match ctorsNode with
-        | .node _ cs => cs.toList.filterMap fun c => parseConstructor c
+        | .node _ cs => cs.toList.filterMap InductiveConstructor.parse
         | _ => []
       some { name, recName := name.str "rec", univParams, params, tyOpt, ctors }
   | _ => none
@@ -188,7 +188,7 @@ def getFieldName' : Ast → Option Name
   | .node _ cs => cs[0]!.name?
   | _ => none
 
-def elabCtor
+def InductiveConstructor.elab
     (numParams numIndices : Nat)
     (indName : Name)
     (indUnivs : List Universe)
@@ -202,7 +202,7 @@ def elabCtor
   let ctorName := indName.append ctor.name
   let indParamCtx : TermContext (numParams + 1) := paramCtx.bind indName indTyVal
   let params : List (VTm (numParams + 1)) := List.finRange numParams |>.map fun i => VTm.varAt i.val
-  let (fieldCtx, fieldTys, fieldUnivs) ← withChild 1 (elabParamsWithLevels indParamCtx ctor.fields)
+  let (fieldCtx, fieldTys, fieldUnivs) ← withChild 1 (Params.elabWithLevels indParamCtx ctor.fields)
   for (field, fieldUniv) in ctor.fields.zip fieldUnivs do
     let fieldName := getFieldName' field |>.getD .anonymous
     if !Universe.le fieldUniv resultUniv then
@@ -454,11 +454,11 @@ def goMinors
     have hk : numParams + 1 + ithMinor = numParams + 1 + numMinors := by omega
     return (hk ▸ acc, hEq ▸ seeds)
 
-def elabInductive (ind : Inductive) : OptionT ElabM InductiveResult := do
+def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
   let numParams := ind.params.length
   let numMotives := 1
   let numParamsMotives := numParams + numMotives
-  let (paramCtx, paramTys) ← withChild 2 (elabParams ind.params)
+  let (paramCtx, paramTys) ← withChild 2 (Params.elab ind.params)
   let params := List.finRange numParams |>.map VTm.var
   let resultTy : Ty numParams ←
     match ind.tyOpt with
@@ -500,8 +500,8 @@ def elabInductive (ind : Inductive) : OptionT ElabM InductiveResult := do
   let indTyVal : VTy numParams := indTyVal.weaken
   let ctors ← (Vector.finRange numMinors).mapM fun i =>
     withChild (4 + i.val) (
-      elabCtor numParams numIndices ind.name indUnivs indTyVal resultUniv paramCtx
-        (ind.ctors.get ⟨i.val, i.isLt⟩))
+      (ind.ctors.get ⟨i.val, i.isLt⟩).elab numParams numIndices ind.name indUnivs indTyVal resultUniv paramCtx
+        )
 
   let ctorEntries : List (Name × Constant) := ctors.toList.map fun (name, ctorFieldsTy) =>
     let ctorFieldsTy := Ty.pis paramTys ctorFieldsTy
