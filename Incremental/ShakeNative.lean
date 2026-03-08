@@ -14,10 +14,17 @@ variable {Q : Type} {R : Q → Type}
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
 @[extern "lean_shake_build"]
-opaque build :
-    (∀ q, Option (Task Monad Q R (R q))) →
-    (target : Q) →
+opaque build' :
+    Tasks Monad Q R →
+    ∀ q,
     Store Q R →
-    Except BuildError (R target × Store Q R)
+    Except BuildError (R q × Store Q R)
+
+@[always_inline]
+def build :
+    Tasks Monad Q R →
+    ∀ q,
+    StateT (Store Q R) (Except BuildError) (R q) :=
+  build'
 
 end ShakeNative

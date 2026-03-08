@@ -24,7 +24,7 @@ def Store := DHashMap Q (Memo Q R)
 variable {Q : Type} {R : Q → Type}
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-@[specialize 7]
+@[specialize 7] -- specialize tasks
 partial def build : Build Monad (Store Q R) Q R :=
   fun tasks target store => runEST fun σ => do
     let store ← ST.mkRef (σ := σ) store
