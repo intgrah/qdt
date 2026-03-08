@@ -6,7 +6,6 @@ namespace FSWatch.RDCW
 
 abbrev Handle := USize
 
-abbrev Filter := UInt32
 
 @[extern "fswatch_FILE_NOTIFY_CHANGE_FILE_NAME"] opaque fileNotifyChangeFileName : Unit → UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_DIR_NAME"] opaque fileNotifyChangeDirName : Unit → UInt32
@@ -15,7 +14,10 @@ abbrev Filter := UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_LAST_WRITE"] opaque fileNotifyChangeLastWrite : Unit → UInt32
 @[extern "fswatch_FILE_NOTIFY_CHANGE_SECURITY"] opaque fileNotifyChangeSecurity : Unit → UInt32
 
+abbrev Filter := UInt32
+
 namespace Filter
+
 def fileName : Filter := fileNotifyChangeFileName ()
 def dirName : Filter := fileNotifyChangeDirName ()
 def attributes : Filter := fileNotifyChangeAttributes ()
@@ -23,6 +25,7 @@ def size : Filter := fileNotifyChangeSize ()
 def lastWrite : Filter := fileNotifyChangeLastWrite ()
 def security : Filter := fileNotifyChangeSecurity ()
 def fileChanges : Filter := fileName ||| dirName ||| attributes ||| size ||| lastWrite
+
 end Filter
 
 @[extern "fswatch_FILE_ACTION_ADDED"] opaque fileActionAdded : Unit → UInt32
