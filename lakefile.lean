@@ -37,8 +37,19 @@ target rdcw.o pkg : FilePath := do
   let weakArgs := #["-I", (← getLeanIncludeDir).toString]
   buildO oFile srcJob weakArgs #["-fPIC"] "cc" getLeanTrace
 
+target shake.o pkg : FilePath := do
+  let oFile := pkg.buildDir / "c" / "shake.o"
+  let srcJob ← inputTextFile <| pkg.dir / "Incremental" / "c" / "shake.c"
+  let weakArgs := #["-I", (← getLeanIncludeDir).toString]
+  buildO oFile srcJob weakArgs #["-fPIC", "-O2"] "cc" getLeanTrace
+
 extern_lib libleanfswatch pkg := do
   let inotify ← inotify.o.fetch
   let rdcw ← rdcw.o.fetch
   let name := nameToStaticLib "leanfswatch"
   buildStaticLib (pkg.staticLibDir / name) #[inotify, rdcw]
+
+extern_lib libleanshake pkg := do
+  let shake ← shake.o.fetch
+  let name := nameToStaticLib "leanshake"
+  buildStaticLib (pkg.staticLibDir / name) #[shake]
