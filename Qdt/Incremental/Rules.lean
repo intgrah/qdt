@@ -29,8 +29,8 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
   let .node _ progCs := prog | return (HashMap.emptyWithCapacity 0, #[])
   let mut m : HashMap Name Nat := HashMap.emptyWithCapacity 4096
   let mut diags : Array Diagnostic := #[]
-  for idx in [:progCs.size] do
-    let cmd := progCs[idx]!
+  for h : idx in [:progCs.size] do
+    let cmd := progCs[idx]
     let names : List Name :=
       if let some d := parseDefinition cmd then [d.name]
       else if let some a := parseAxiom cmd then [a.name]
@@ -43,7 +43,7 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
       else []
     for name in names do
       if m.contains name then
-        diags := diags.push ⟨[idx], .alreadyDefined name⟩
+        diags := diags.push ⟨[0, idx], .alreadyDefined name⟩
       else
         m := m.insert name idx
   return (m, diags)
