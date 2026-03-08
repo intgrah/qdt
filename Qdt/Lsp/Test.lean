@@ -13,13 +13,25 @@ open Incremental.Shake (Store Memo)
 open Std (DHashMap HashSet)
 open System (FilePath)
 
-abbrev TestM := StateRefT (Store Key Val) IO
+structure TestState where
+  store : Store Key Val
+  errors : Array String := #[]
 
-def test (action : TestM Unit) : IO Unit :=
-  action.run' (DHashMap.emptyWithCapacity 64)
+abbrev TestM := StateRefT TestState IO
+
+def test (action : TestM Unit) : IO Unit := do
+  let check : TestM Unit := do
+    action
+    let errors := (← get).errors
+    if !errors.isEmpty then
+      throw (IO.userError ("\n".intercalate errors.toList))
+  check.run' { store := DHashMap.emptyWithCapacity 64 }
+
+def fail (msg : String) : TestM Unit :=
+  modify fun st => { st with errors := st.errors.push msg }
 
 def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store ← get
+  let store := (← get).store
   let memo : Memo Key Val (.text filepath) := { value := text, deps := ∅ }
   let store := store.insert (.text filepath) memo
   let inputFiles : HashSet FilePath :=
@@ -29,40 +41,39 @@ def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := 
   let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
   let store := store.insert .inputFiles inputMemo
   match Shake.build tasks (Key.checkFile filepath) store with
-  | .ok (_, store) => set store
+  | .ok (_, store) => modify fun st => { st with store }
   | .error .cycle => throw (IO.userError "cycle detected")
   | .error .missingInput => throw (IO.userError "missing input")
 
 def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store ← get
-  let diags := match store.get? (Key.checkFile filepath) with
+  let diags := match (← get).store.get? (Key.checkFile filepath) with
     | some memo => memo.value
     | none => #[]
   if !check diags then
-    throw (IO.userError s!"diagnostics check failed: {diags.map (·.error)}")
+    fail s!"diagnostics check failed: {diags.map (·.error)}"
 
 def noDiagnostics (filepath : FilePath := "test.qdt") : TestM Unit :=
   diagnostics Array.isEmpty filepath
 
 def hover (pos : Lean.Position) (expected : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store ← get
+  let store := (← get).store
   let text := match store.get? (Key.text filepath) with
     | some memo => memo.value
     | none => ""
   match elaborateFile store filepath with
-  | none => throw (IO.userError s!"no elaboration info for {filepath}")
+  | none => fail s!"no elaboration info for {filepath}"
   | some (info, sourceMap, cst) =>
     let bytePos := (Lean.FileMap.ofString text).ofPosition pos
     let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
     match lookupHoverAtPosition cst sourceMap info codepointPos with
-    | none => throw (IO.userError s!"no hover at {repr pos}, expected '{expected}'")
+    | none => fail s!"no hover at {repr pos}, expected '{expected}'"
     | some content =>
       let formatted := content.format
       if formatted != expected then
-        throw (IO.userError s!"hover mismatch at {repr pos}: expected '{expected}', got '{formatted}'")
+        fail s!"hover mismatch at {repr pos}: expected '{expected}', got '{formatted}'"
 
 def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store ← get
+  let store := (← get).store
   let text := match store.get? (Key.text filepath) with
     | some memo => memo.value
     | none => ""
@@ -74,6 +85,6 @@ def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Un
     match lookupHoverAtPosition cst sourceMap info codepointPos with
     | none => return
     | some content =>
-      throw (IO.userError s!"expected no hover at {repr pos}, got '{content.format}'")
+      fail s!"expected no hover at {repr pos}, got '{content.format}'"
 
 end Qdt.Lsp.Test

@@ -9,10 +9,10 @@ namespace Qdt
 open Lean (Name)
 
 inductive Universe where
-  | level : Name → Universe
-  | zero : Universe
-  | succ : Universe → Universe
-  | max : Universe → Universe → Universe
+  | level (n : Name)
+  | zero
+  | succ (u : Universe)
+  | max (u v : Universe)
 deriving Inhabited, Hashable, DecidableEq
 
 namespace Universe
@@ -145,6 +145,12 @@ partial def normalise (l : Universe) : Universe :=
   | .level n   => addOffset (.level n) k
   | .succ u    => addOffset (normalise u) (k+1)
 
+def mkSucc (u : Universe) : Universe :=
+  normalise (.succ u)
+
+def mkMax (u v : Universe) : Universe :=
+  normalise (.max u v)
+
 def checkLevels (allowed : List Name) : Universe → Except Name Unit
   | .level n => do if n ∉ allowed then throw n else return
   | .zero => do return
@@ -170,7 +176,7 @@ where
 #guard freshName [`u, `u_1] == `u_2
 
 def le (u v : Universe) : Bool :=
-  go u.normalise v.normalise
+  go u v
 where
   go (u v : Universe) : Bool :=
     u == v ||
@@ -188,27 +194,38 @@ where
 
 section Tests
 
-abbrev u : Universe := .level `u
-abbrev v : Universe := .level `v
+open Universe
+
+private abbrev u : Universe := .level `u
+private abbrev v : Universe := .level `v
+
+#guard normalise u == u
+#guard normalise 0 == 0
+#guard normalise (max u v) == max u v
+#guard normalise (max v u) == max u v
+#guard normalise (max u v + 1) == max (u + 1) (v + 1)
+#guard normalise (max v (u + 1) + 2) == max (u + 3) (v + 2)
+#guard normalise (max u (u + 1)) == u + 1
+#guard normalise (max 2 3) == 3
 
 #guard le 0 0
 #guard le 0 u
 #guard le 0 1
 #guard le u u
-#guard le u u.succ
+#guard le u (u + 1)
 #guard le 1 2
 #guard le 3 5
 #guard !le u v
-#guard !le u.succ v
-#guard le (.max u v) (.max u v)
-#guard le (.max u v) (.max v u)
-#guard le (.max u v) (.max u.succ v)
-#guard le (.max u v) (.max u v.succ)
-#guard !le (.max u.succ v) (.max u v)
-#guard !le (.max u v.succ) (.max u v)
-#guard !le (.max u v.succ) (.max u.succ v)
-#guard le (.max u v.succ) (.max u v.succ)
-#guard le (.max u v.succ) (.max v.succ u)
+#guard !le (u + 1) v
+#guard le (max u v) (max u v)
+#guard le (max u v) (max v u)
+#guard le (max u v) (max (u + 1) v)
+#guard le (max u v) (max u (v + 1))
+#guard !le (max u.succ v) (max u v)
+#guard !le (max u (v + 1)) (max u v)
+#guard !le (max u (v + 1)) (max (u + 1) v)
+#guard le (max u (v + 1)) (max u (v + 1))
+#guard le (max u (v + 1)) (max (v + 1) u)
 
 end Tests
 

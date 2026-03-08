@@ -11,20 +11,20 @@ open Lean (Name)
 mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
-  | .u i => return .u i.normalise
+  | .u i => return .u i
   | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → ElabM (VTy n)
-  | .u' i => return .u i.normalise
+  | .u' i => return .u i
   | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
   | .neutral ne => return .el ne
   | .lam .. => panic! "doEl: expected type code or neutral"
 
 partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
-  | .u' i => return .u' i.normalise
+  | .u' i => return .u' i
   | .var i => return (← read).get i
-  | .const name us => deltaReduction name (us.map Universe.normalise)
+  | .const name us => deltaReduction name us
   | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
   | .pi' ⟨x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩

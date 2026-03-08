@@ -26,7 +26,8 @@ def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
           | failure
         let (ty, level) ← OptionT.lift (withChild idx (withChild 1 (checkTyWithLevel ctx tyAst)))
         let tyVal ← ty.eval ctx.env
-        withChild idx (withChild 0 (emitType ctx tyVal))
+        let tyQuoted ← tyVal.quote
+        withChild idx (withChild 0 (emitHover (.localVar name ctx.names tyQuoted)))
         let ctx := ctx.bind name tyVal
         let ih ← go (b + 1) (idx + 1) ctx (acc.snoc ⟨name, ty⟩) (level :: levels) bs
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih
@@ -53,7 +54,8 @@ def VParams.elabFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
           | failure
         let ty ← OptionT.lift (withChild idx (withChild 1 (checkTy ctx tyAst)))
         let tyVal ← ty.eval ctx.env
-        withChild idx (withChild 0 (emitType ctx tyVal))
+        let tyQuoted ← tyVal.quote
+        withChild idx (withChild 0 (emitHover (.localVar name ctx.names tyQuoted)))
         let ctx := ctx.bind name tyVal
         let ih ← go (b + 1) (idx + 1) ctx (acc.snoc ⟨name, tyVal⟩) bs
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih

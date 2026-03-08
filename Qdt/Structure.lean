@@ -126,9 +126,12 @@ def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
       tyOpt := info.tyOpt
       ctors := [⟨`mk, ctorFieldBinders, none⟩]
     }
-  let indResult ← indSynth.elab'
+  OptionT.lift (withChild 0 (emitHover (.signature info.name paramTys resultTy)))
+  let suppressHovers {α} : OptionT ElabM α → OptionT ElabM α :=
+    ReaderT.adapt (fun ctx : ElabContext => { ctx with collectHovers := false })
+  let indResult ← suppressHovers indSynth.elab'
 
-  let (_fieldCtx, fieldTele) ← Params.elabFrom paramCtx ctorFieldBinders
+  let (_fieldCtx, fieldTele) ← suppressHovers (Params.elabFrom paramCtx ctorFieldBinders)
 
   checkFields paramCtx info.fields 0
 

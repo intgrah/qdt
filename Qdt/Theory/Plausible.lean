@@ -34,8 +34,8 @@ def Universe.sample : Nat → Gen Universe
       match ← SampleableExt.interpSample (Fin 4) with
       | 0 => return .zero
       | 1 => return .level #[`u, `v, `w, `x][← SampleableExt.interpSample (Fin 4)]
-      | 2 => return .succ (← sample fuel)
-      | 3 => return .max (← sample fuel) (← sample fuel)
+      | 2 => return (← sample fuel).mkSucc
+      | 3 => return (← sample fuel).mkMax (← sample fuel)
 
 instance : Arbitrary Universe where
   arbitrary := Universe.sample 3
