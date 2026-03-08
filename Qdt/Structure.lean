@@ -85,15 +85,15 @@ def mkPrevEnv
       let ne := ne.app x
       return Env.cons (.neutral ne) envTail
 
-def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat → OptionT ElabM Unit
+def checkFields {m} (ctx : TermContext m) : List StructureField → Nat → OptionT ElabM Unit
   | [], _ => return ()
   | field :: rest, j => do
-      let (fieldParamCtx, fieldParamTele) ←
-        withChild (4 + j) (withChild 1 (Params.elabFrom ctx field.params))
-      let fieldRetTy ← withChild (4 + j) (withChild 2 (checkTy fieldParamCtx field.ty))
-      let fullFieldTy := Ty.pis fieldParamTele fieldRetTy
-      let fullFieldTyVal ← fullFieldTy.eval ctx.env
-      reelabFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
+    let (fieldParamCtx, fieldParamTele) ←
+      withChild (4 + j) (withChild 1 (Params.elabFrom ctx field.params))
+    let fieldRetTy ← OptionT.lift (withChild (4 + j) (withChild 2 (checkTy fieldParamCtx field.ty)))
+    let fullFieldTy := Ty.pis fieldParamTele fieldRetTy
+    let fullFieldTyVal ← fullFieldTy.eval ctx.env
+    checkFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
 
 structure StructureResult where
   indResult : InductiveResult
@@ -130,7 +130,7 @@ def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
 
   let (_fieldCtx, fieldTele) ← Params.elabFrom paramCtx ctorFieldBinders
 
-  let _ ← OptionT.lift (OptionT.run (reelabFields paramCtx info.fields 0))
+  checkFields paramCtx info.fields 0
 
   let np1 := numParams + 1
   let numFields := ctorFieldBinders.length

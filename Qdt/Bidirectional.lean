@@ -59,9 +59,9 @@ def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Unive
         return (.const name univs, ← ty.eval .nil)
     | none => raiseError (.unboundVariable name)
 
-def emitSorryTm {n : Nat}
+def emitSorryAxiom {n : Nat}
     (ctx : TermContext n)
-    (expected : VTy n) :
+    (retTy : Ty n) :
     ElabM (Tm n) := do
   let decl ← currentDecl
   let id ← modifyGet fun s => (s.sorryId, { s with sorryId := s.sorryId + 1 })
@@ -70,12 +70,25 @@ def emitSorryTm {n : Nat}
   let univParams ← getUnivParams
   let _ ← addConstant sorryName (.axiom {
     univParams
-    ty := Ty.pis locals (← expected.quote)
+    ty := Ty.pis locals retTy
   })
   let args := List.finRange n |>.map (fun i => Tm.var i.rev)
   let sorryUnivs := univParams.map Universe.level
-  emitType ctx expected
   return Tm.const sorryName sorryUnivs |>.apps args
+
+def emitSorryTm {n : Nat}
+    (ctx : TermContext n)
+    (expected : VTy n) :
+    ElabM (Tm n) := do
+  let tm ← emitSorryAxiom ctx (← expected.quote)
+  emitType ctx expected
+  return tm
+
+def emitSorryTy {n : Nat}
+    (ctx : TermContext n) :
+    ElabM (Ty n × Universe) := do
+  let tm ← emitSorryAxiom ctx (Ty.u .zero)
+  return (.el tm, .zero)
 
 mutual
 
@@ -91,7 +104,7 @@ partial def processLetRhs {n : Nat}
         let (rhsTm, rhsTy) ← withChild 2 (inferTm ctx rhs)
         pure (rhsTm, rhsTy, ← rhsTy.quote)
     | ty =>
-        let ty ← withChild 1 (checkTy ctx ty)
+        let ty ← OptionT.lift (withChild 1 (checkTy ctx ty))
         let tyVal ← ty.eval ctx.env
         pure (← withChild 2 (checkTmCore ctx tyVal rhs), tyVal, ty)
   withChild 0 (emitType ctx rhsTyVal)
@@ -100,7 +113,7 @@ partial def processLetRhs {n : Nat}
   return (rhs, rhsTySyn, rhsVal, ctx')
 
 partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT ElabM (Tm n × VTy n) := do
-  let ann ← withChild 1 (checkTy ctx ann)
+  let ann ← OptionT.lift (withChild 1 (checkTy ctx ann))
   let annVal ← ann.eval ctx.env
   return (← withChild 0 (checkTmCore ctx annVal e), annVal)
 
@@ -132,7 +145,7 @@ partial def inferPi {n : Nat}
     | raiseError (.expectedType ctx'.names (← codTy.quote))
   return (.pi' ⟨x, domTm⟩ codTm, .max domLevel codLevel)
 
-partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
+partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
   | .missing => failure
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
@@ -142,11 +155,11 @@ partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT E
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let x := bs[0]!.getName
-      let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevel ctx bs[1]!))
+      let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevelCore ctx bs[1]!))
       let domVal ← dom.eval ctx.env
       withChild 0 (withChild 0 (emitType ctx domVal))
       let ctx' := ctx.bind x domVal
-      let (cod, codLevel) ← withChild 1 (checkTyWithLevel ctx' cs[1]!)
+      let (cod, codLevel) ← withChild 1 (checkTyWithLevelCore ctx' cs[1]!)
       emitType ctx (.u (.max domLevel codLevel))
       return (.pi ⟨x, dom⟩ cod, .max domLevel codLevel)
   | .node `Term.eq cs => do
@@ -157,7 +170,12 @@ partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) : Ast → OptionT E
       let .u level := ty | raiseError (.expectedType ctx.names (← ty.quote))
       return (.el tm, level)
 
-partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : OptionT ElabM (Ty n) :=
+partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n × Universe) := do
+  match ← OptionT.run (checkTyWithLevelCore ctx ast) with
+  | some result => return result
+  | none => emitSorryTy ctx
+
+partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n) :=
   return (← checkTyWithLevel ctx ast).fst
 
 partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
@@ -184,7 +202,7 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
   | .node `Term.lam cs => do
       let .node `Binder.typed bs := cs[0]! | raiseError .inferUnannotatedLambda
       let x := bs[0]!.getName
-      let aTy ← withChild 0 (withChild 1 (checkTy ctx bs[1]!))
+      let aTy ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
       let aTyVal ← aTy.eval ctx.env
       withChild 0 (withChild 0 (emitType ctx aTyVal))
       let ctx' := ctx.bind x aTyVal
@@ -243,7 +261,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         return .lam ⟨x, ← a.quote⟩ b
       | .node `Binder.typed bs =>
         let x := bs[0]!.getName
-        let ann ← withChild 0 (withChild 1 (checkTy ctx bs[1]!))
+        let ann ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
         let annVal : VTy n ← ann.eval ctx.env
         if !(← annVal.defEq a) then
           raiseError (.typeMismatch ctx.names (← a.quote) (← annVal.quote))

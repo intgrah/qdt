@@ -221,7 +221,7 @@ def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array R
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
     IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
   let store ← populateStore ps.config ps.store
-  let store ← match Shake.build tasks (Key.checkFile filepath) store with
+  let store ← match ShakeNative.build tasks (Key.checkFile filepath) store with
     | .ok (_, s) => pure s
     | .error .cycle => throw (IO.userError "cycle detected")
     | .error .missingInput => throw (IO.userError "missing input")

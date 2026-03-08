@@ -18,7 +18,7 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let store := store.insert (.text dummyPath) memo
   let store := store.insert .inputFiles inputMemo
 
-  match Shake.build tasks (Key.checkFile dummyPath) store with
+  match ShakeNative.build tasks (Key.checkFile dummyPath) store with
   | .ok (diags, _) => return (diags, ∅)
   | .error .cycle => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
   | .error .missingInput => return (#[{ path := [], error := .msg "missing input" }], ∅)
