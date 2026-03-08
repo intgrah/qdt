@@ -71,7 +71,8 @@ LEAN_EXPORT lean_obj_res fswatch_rdcw_read(size_t h, uint8_t watchSubTree,
   FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION *)buffer;
   for (;;) {
     lean_obj_res event = lean_alloc_ctor(0, 1, 4);
-    lean_ctor_set(event, 0,
+    lean_ctor_set(
+        event, 0,
         lean_mk_string_from_wchar(fni->FileName, fni->FileNameLength));
     lean_ctor_set_uint32(event, sizeof(void *), (uint32_t)fni->Action);
     events = lean_array_push(events, event);

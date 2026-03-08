@@ -1,9 +1,7 @@
 module
 
-public import Lean.Data.Lsp.Communication
-
-public import Qdt.Lsp.Hover
 public import Qdt.Incremental.Rules
+public import Lean.Data.Lsp.Communication
 public import Lean.Data.Lsp.InitShutdown
 
 @[expose] public section
@@ -17,7 +15,7 @@ open Incremental
 open Incremental.Shake (Store Memo)
 open Frontend (Cst Path SourceMap Span)
 
-partial def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
+def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
   go 0 0
 where
   go (cp : Nat) (bp : Nat) : Nat :=
@@ -25,8 +23,9 @@ where
     else if bp < s.utf8ByteSize then
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else cp
+  partial_fixpoint
 
-partial def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
+def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
   go 0 0
 where
   go (cp : Nat) (bp : Nat) : Nat :=
@@ -65,78 +64,65 @@ def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
   | none => pure none
   | some p =>
       try
-        let p ← IO.FS.realPath p
-        pure (some p)
+        some <$> IO.FS.realPath p
       catch _ =>
         pure (some p)
 
-def findTomlUp (dir : FilePath) : Nat → IO (Option FilePath)
-  | 0 => return none
-  | fuel + 1 => do
-      let candidate := dir / "qdt.toml"
-      if ← candidate.pathExists then
-        return some candidate
-      let parent := dir / ".."
-      let parentNorm ← IO.FS.realPath parent
-      let dirNorm ← IO.FS.realPath dir
-      if parentNorm == dirNorm then
-        return none
-      findTomlUp parent fuel
-
-def normaliseConfig (cfg : Config) : IO Config := do
-  let cwd ← IO.currentDir
-  let root := cfg.projectRoot.getD cwd
-  let root ← IO.FS.realPath root
-  let sourceDirectories := cfg.sourceDirectories.map (root / ·)
-  return {
-    cfg with
-    projectRoot := some root
-    sourceDirectories
-  }
-
 structure ProjectState where
-  config : Config
+  root : FilePath
   store : Store Key Val
 
 structure ServerState where
+  hOut : IO.FS.Stream
   projects : HashMap FilePath ProjectState := ∅
+  rootUri? : Option FilePath := none
   shutdownRequested : Bool := false
 
-def getProject (st : ServerState) (filepath : FilePath) : IO (ServerState × ProjectState) := do
-  let dir : FilePath := filepath.parent.getD (FilePath.mk ".")
-  let tomlPath? ← findTomlUp dir 100
-  let root0 : FilePath :=
-    match tomlPath? with
-    | some p => p.parent.getD dir
-    | none => dir
-  let root ← IO.FS.realPath root0
+abbrev ServerM := StateRefT ServerState IO
 
+def getProject (filepath : FilePath) : ServerM ProjectState := do
+  let st ← get
+  let root ← IO.FS.realPath (st.rootUri?.getD (filepath.parent.getD (FilePath.mk ".")))
   match st.projects[root]? with
-  | some ps => return (st, ps)
+  | some ps => return ps
   | none =>
-      let cfg ←
-        match tomlPath? with
-        | some p => Config.fromTomlFile p
-        | none => pure { Config.empty with projectRoot := some root }
-      let cfg := { cfg with projectRoot := some root }
-      let cfg ← normaliseConfig cfg
-      let ps : ProjectState := { config := cfg, store := DHashMap.emptyWithCapacity 1024 }
-      let st := { st with projects := st.projects.insert root ps }
-      return (st, ps)
+      let ps : ProjectState := { root, store := DHashMap.emptyWithCapacity 1024 }
+      modify fun st => { st with projects := st.projects.insert root ps }
+      return ps
 
-def setProject (st : ServerState) (root : FilePath) (ps : ProjectState) : ServerState :=
-  { st with projects := st.projects.insert root ps }
+def setProject (ps : ProjectState) : ServerM Unit :=
+  modify fun st => { st with projects := st.projects.insert ps.root ps }
+
+def writeLsp (msg : JsonRpc.Message) : ServerM Unit := do
+  (← get).hOut.writeLspMessage msg
+
+def sendResponse (id : RequestID) (result : Json) : ServerM Unit :=
+  writeLsp <| Message.response id result
+
+def sendError (id : RequestID) (code : ErrorCode) (msg : String) : ServerM Unit :=
+  writeLsp <| Message.responseError id code msg none
+
+def sendNotification (method : String) (params : Json.Structured) : ServerM Unit :=
+  writeLsp <| Message.notification method (some params)
 
 def publishDiagnostics
-    (hOut : IO.FS.Stream)
     (uri : DocumentUri)
     (version? : Option Int)
-    (diags : Array Lsp.Diagnostic) : IO Unit := do
+    (diags : Array Lsp.Diagnostic) : ServerM Unit := do
   let params : PublishDiagnosticsParams := { uri, version?, diagnostics := diags }
   match Json.toStructured? params with
   | Except.error e => throw (IO.userError s!"internal error: cannot encode diagnostics: {e}")
-  | Except.ok s =>
-      hOut.writeLspMessage <| Message.notification "textDocument/publishDiagnostics" (some s)
+  | Except.ok s => sendNotification "textDocument/publishDiagnostics" s
+
+def sendFileProgress (uri : DocumentUri) (ranges : Array Range) : ServerM Unit := do
+  let processing := ranges.map fun r => Json.mkObj [("range", toJson r)]
+  let params := Json.mkObj [
+    ("textDocument", Json.mkObj [("uri", toJson uri)]),
+    ("processing", toJson processing)
+  ]
+  match Json.toStructured? params with
+  | .ok s => sendNotification "$/lean/fileProgress" s
+  | .error _ => pure ()
 
 def elaborateFile (store : Store Key Val) (filepath : FilePath) :
     Option (ElabInfo × SourceMap × Cst) := Id.run do
@@ -148,7 +134,7 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
   let (declIndex, dupDiags) := declMemo.value
   let mut combinedInfo : ElabInfo := 1
 
-  for (name, _) in declIndex.toList do
+  for name in declIndex.keysIter do
     if let some infoMemo := store.get? (Key.lookupInfo filepath name) then
       combinedInfo := combinedInfo * infoMemo.value
 
@@ -177,13 +163,43 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | some span => mkDiagnostic text span d.error
     | none => mkDiagnosticNoSpan d.error
 
-def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Json.Structured) : IO Unit := do
+def runElabTask (ps : ProjectState) (filepath : FilePath) :
+    IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
+  let store ← Store.populate ps.root ps.store
+  let store ← match ShakeNative.build tasks (Key.checkFile filepath) store with
+    | .ok (_, s) => pure s
+    | .error .cycle => throw (IO.userError "cycle detected")
+    | .error .missingInput => throw (IO.userError "missing input")
+  match elaborateFile store filepath with
+  | some result => pure (result, store)
+  | none => throw (IO.userError "elaboration failed")
+
+def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
+  let ps ← getProject file
+  let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
+  setProject { ps with store := ps.store.insert (.text file) memo }
+
+def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
+  let ps ← getProject file
+  let text := match ps.store.get? (.text file) with
+    | some memo => memo.value
+    | none => ""
+  let ((info, sourceMap, cst), store') ← runElabTask ps file
+  setProject { ps with store := store' }
+  let diagnostics := buildDiagnostics text info sourceMap cst
+  publishDiagnostics uri version? diagnostics
+  sendFileProgress uri #[]
+
+def handleInitialize (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "initialize: missing params")
-  let _params : InitializeParams ←
+  let initParams : InitializeParams ←
     match fromJson? (α := InitializeParams) (toJson params) with
     | .ok ps => pure ps
     | Except.error e => throw (IO.userError s!"initialize: bad params: {e}")
+  if let some rootUri := initParams.rootUri? then
+    if let some rootPath ← uriToPath? rootUri then
+      modify fun st => { st with rootUri? := some rootPath }
 
   let sync : TextDocumentSyncOptions :=
     {
@@ -202,34 +218,13 @@ def handleInitialize (hOut : IO.FS.Stream) (id : RequestID) (params? : Option Js
     capabilities := caps
     serverInfo? := some { name := "qdt-lsp", version? := some "0.1.0" }
   }
-  hOut.writeLspMessage <| Message.response id (toJson result)
+  sendResponse id (toJson result)
 
-def handleShutdown (hOut : IO.FS.Stream) (id : RequestID) (stRef : IO.Ref ServerState) : IO Unit := do
-  stRef.modify fun st => { st with shutdownRequested := true }
-  hOut.writeLspMessage <| Message.response id Json.null
+def handleShutdown (id : RequestID) : ServerM Unit := do
+  modify fun st => { st with shutdownRequested := true }
+  sendResponse id Json.null
 
-def sendFileProgress (hOut : IO.FS.Stream) (uri : DocumentUri) (ranges : Array Range) : IO Unit := do
-  let processing := ranges.map fun r => Json.mkObj [("range", toJson r)]
-  let params := Json.mkObj [
-    ("textDocument", Json.mkObj [("uri", toJson uri)]),
-    ("processing", toJson processing)
-  ]
-  match Json.toStructured? params with
-  | .ok s => hOut.writeLspMessage <| Message.notification "$/lean/fileProgress" (some s)
-  | .error _ => pure ()
-
-def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
-  let store ← populateStore ps.config ps.store
-  let store ← match ShakeNative.build tasks (Key.checkFile filepath) store with
-    | .ok (_, s) => pure s
-    | .error .cycle => throw (IO.userError "cycle detected")
-    | .error .missingInput => throw (IO.userError "missing input")
-  match elaborateFile store filepath with
-  | some result => pure (result, store)
-  | none => throw (IO.userError "elaboration failed")
-
-def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidOpen (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "didOpen: missing params")
   let params ←
@@ -242,7 +237,7 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
   let version? : Option Int := some (Int.ofNat params.textDocument.version)
 
   let some file ← uriToPath? uri
-    | publishDiagnostics hOut uri version? #[
+    | publishDiagnostics uri version? #[
         {
           range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
           severity? := some DiagnosticSeverity.error
@@ -253,23 +248,10 @@ def handleDidOpen (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : 
       ]
       return
 
-  let st ← stRef.get
-  let (st, ps) ← getProject st file
+  updateFileText file text
+  elaborateAndPublish file uri version?
 
-  let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  let store := ps.store.insert (.text file) memo
-  let ps := { ps with store }
-  stRef.set st
-
-  let ((info, sourceMap, cst), store') ← runElabTask ps file
-  let ps' : ProjectState := { ps with store := store' }
-  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-  stRef.modify fun st => setProject st root ps'
-  let diagnostics := buildDiagnostics text info sourceMap cst
-  publishDiagnostics hOut uri version? diagnostics
-  sendFileProgress hOut uri #[]
-
-def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "didChange: missing params")
   let params ←
@@ -288,46 +270,24 @@ def handleDidChange (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? 
     | some (.fullChange text) => some text
     | _ => none
   let some text := text? | return
-  let st ← stRef.get
-  let (st, ps) ← getProject st file
 
-  let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  let store := ps.store.insert (.text file) memo
-  let ps := { ps with store }
-  stRef.set st
+  updateFileText file text
+  elaborateAndPublish file uri version?
 
-  let ((info, sourceMap, cst), store') ← runElabTask ps file
-  let ps' : ProjectState := { ps with store := store' }
-  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-  stRef.modify fun st => setProject st root ps'
-  let diagnostics := buildDiagnostics text info sourceMap cst
-  publishDiagnostics hOut uri version? diagnostics
-  sendFileProgress hOut uri #[]
-
-def handleDidClose (hOut : IO.FS.Stream) (stRef : IO.Ref ServerState) (params? : Option Json.Structured) : IO Unit := do
+def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
-    | throw (IO.userError "hover: missing params")
+    | throw (IO.userError "didClose: missing params")
   let params ←
     match fromJson? (α := DidCloseTextDocumentParams) (toJson params) with
     | .ok ps => pure ps
     | .error e => throw (IO.userError s!"didClose: bad params: {e}")
   let uri := params.textDocument.uri
   if let some file ← uriToPath? uri then
-    let st ← stRef.get
-    let (st, ps) ← getProject st file
+    let ps ← getProject file
+    setProject { ps with store := ps.store.erase (.text file) }
+  publishDiagnostics uri none #[]
 
-    let store := ps.store.erase (.text file)
-    let ps := { ps with store }
-    let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-    let st := setProject st root ps
-    stRef.set st
-  publishDiagnostics hOut uri none #[]
-
-def handleHover
-    (hOut : IO.FS.Stream)
-    (id : RequestID)
-    (stRef : IO.Ref ServerState)
-    (params? : Option Json.Structured) : IO Unit := do
+def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "hover: missing params")
   let params ←
@@ -339,11 +299,9 @@ def handleHover
   let lspPos := params.position
 
   let some file ← uriToPath? uri
-    | hOut.writeLspMessage <| Message.response id Json.null
+    | sendResponse id Json.null
 
-  let st ← stRef.get
-  let (st, ps) ← getProject st file
-  stRef.set st
+  let ps ← getProject file
 
   let text ←
     match ps.store.get? (.text file) with
@@ -355,9 +313,7 @@ def handleHover
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
   let ((info, sourceMap, cst), store') ← runElabTask ps file
-  let ps' : ProjectState := { ps with store := store' }
-  let root := ps.config.projectRoot.getD (file.parent.getD (FilePath.mk "."))
-  stRef.modify fun st => setProject st root ps'
+  setProject { ps with store := store' }
 
   let cstPath := cst.pathAtPosition codepointPos
 
@@ -378,10 +334,10 @@ def handleHover
 
   match best with
   | none =>
-      hOut.writeLspMessage <| Message.response id Json.null
+      sendResponse id Json.null
   | some (cstPath, _, hover) =>
       let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
-      let content := Lsp.formatHover hover
+      let content := hover.format
       let range := mkRange text span
       let markupContent : MarkupContent := {
         kind := MarkupKind.markdown
@@ -391,42 +347,33 @@ def handleHover
         contents := markupContent
         range? := some range
       }
-      hOut.writeLspMessage <| Message.response id (toJson hover)
+      sendResponse id (toJson hover)
 
-partial def mainLoop (stdin stdout : IO.FS.Stream) (stRef : IO.Ref ServerState) : IO Unit := do
+def mainLoop (stdin : IO.FS.Stream) : ServerM Unit := do
   while true do
-    let msg ← stdin.readLspMessage
-    match msg with
+    match ← stdin.readLspMessage with
     | .request id method params? =>
-        match method with
-        | "initialize" =>
-            try
-              handleInitialize stdout id params?
-            catch e =>
-              stdout.writeLspMessage <|
-                Message.responseError id ErrorCode.internalError s!"initialize failed: {e}" none
-        | "shutdown" =>
-            handleShutdown stdout id stRef
-        | "textDocument/hover" =>
-            try
-              handleHover stdout id stRef params?
-            catch e =>
-              stdout.writeLspMessage <|
-                Message.responseError id ErrorCode.internalError s!"hover failed: {e}" none
-        | _ =>
-            stdout.writeLspMessage <|
-              Message.responseError id ErrorCode.methodNotFound s!"unknown method: {method}" none
+      match method with
+      | "initialize" =>
+        try handleInitialize id params?
+        catch e => sendError id ErrorCode.internalError s!"initialize failed: {e}"
+      | "shutdown" => handleShutdown id
+      | "textDocument/hover" =>
+        try handleHover id params?
+        catch e => sendError id ErrorCode.internalError s!"hover failed: {e}"
+      | _ =>
+        sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
     | .notification method params? =>
-        match method with
-        | "exit" => throw (IO.userError "exit")
-        | "textDocument/didOpen" =>
-            try handleDidOpen stdout stRef params? catch _ => pure ()
-        | "textDocument/didChange" =>
-            try handleDidChange stdout stRef params? catch _ => pure ()
-        | "textDocument/didClose" =>
-            try handleDidClose stdout stRef params? catch _ => pure ()
-        | _ => pure ()
-    | _ => pure ()
+      match method with
+      | "exit" => throw (IO.userError "exit")
+      | "textDocument/didOpen" =>
+        try handleDidOpen params? catch _ => pure ()
+      | "textDocument/didChange" =>
+        try handleDidChange params? catch _ => pure ()
+      | "textDocument/didClose" =>
+        try handleDidClose params? catch _ => pure ()
+      | _ => continue
+    | _ => continue
 
 end Qdt
 
@@ -434,10 +381,10 @@ open Qdt in
 def main : IO UInt32 := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
-  let stRef ← IO.mkRef ({ : ServerState} : ServerState)
+  let st : ServerState := { hOut := stdout }
   try
-    mainLoop stdin stdout stRef
+    (mainLoop stdin).run' st
     pure 0
   catch e =>
-    IO.println s!"fatal: {e}"
+    println!"fatal: {e}"
     pure 1

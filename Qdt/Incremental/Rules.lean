@@ -230,10 +230,9 @@ def tasks : Tasks Monad Key Val
 
       return allDiags
 
-def populateStore (config : Config) (store : Store Key Val) : IO (Store Key Val) := do
+def Store.populate (root : FilePath) (store : Store Key Val) : IO (Store Key Val) := do
   let mut rawFiles : List FilePath := []
-  for dir in config.sourceDirectories do
-    rawFiles := rawFiles ++ (← listSrcFiles dir)
+  rawFiles := rawFiles ++ (← listSrcFiles root)
   let mut inputFiles : HashSet FilePath := HashSet.emptyWithCapacity rawFiles.length
   let mut store := store
   for file in rawFiles do

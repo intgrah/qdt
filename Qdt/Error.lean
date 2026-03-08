@@ -105,23 +105,21 @@ deriving Hashable
 
 def HoverContent.format : HoverContent → String
   | .signature name params retTy =>
-      let rec collectParams : {a b : Nat} → List Name → Ctx a b → List String × List Name
-        | _, _, names, .nil => ([], names)
-        | _, _, names, .snoc bs ⟨pname, pty⟩ =>
+      let rec collectParams {a b : Nat} (names : List Name) : Ctx a b → List String × List Name
+        | .nil => ([], names)
+        | .snoc bs ⟨pname, pty⟩ =>
             let (prev, prevNames) := collectParams names bs
             let x := freshName prevNames pname
-            let tyStr := toString (pty.fmt prevNames Prec.min)
-            (prev ++ [s!"({x} : {tyStr})"], x :: prevNames)
-      let rec peelPis : {m : Nat} → List Name → Ty m → List String × String
-        | _, names, .pi ⟨pname, dom⟩ cod =>
+            (prev ++ [s!"({x} : {pty.fmt prevNames Prec.min})"], x :: prevNames)
+      let rec peelPis {m : Nat} (names : List Name) : Ty m → List String × String
+        | .pi ⟨pname, dom⟩ cod =>
             if pname.isAnonymous then
               ([], toString ((Ty.pi ⟨pname, dom⟩ cod).fmt names Prec.min))
             else
               let x := freshName names pname
-              let domStr := toString (dom.fmt names Prec.min)
               let (rest, retStr) := peelPis (x :: names) cod
-              (s!"({x} : {domStr})" :: rest, retStr)
-        | _, names, ty => ([], toString (ty.fmt names Prec.min))
+              (s!"({x} : {dom.fmt names Prec.min})" :: rest, retStr)
+        | ty => ([], toString (ty.fmt names Prec.min))
       let (ctxParts, ctxNames) := collectParams [] params
       let (piParts, retStr) := peelPis ctxNames retTy
       let allParts := ctxParts ++ piParts
@@ -129,9 +127,9 @@ def HoverContent.format : HoverContent → String
       if paramsStr.isEmpty then s!"{name} : {retStr}"
       else s!"{name} {paramsStr} : {retStr}"
   | .localVar name ctxNames ty =>
-      s!"{name} : {toString (ty.fmt ctxNames Prec.min)}"
+      s!"{name} : {ty.fmt ctxNames Prec.min}"
   | .typeOnly ctxNames ty =>
-      toString (ty.fmt ctxNames Prec.min)
+      s!"{ty.fmt ctxNames Prec.min}"
 
 instance {α} : Monoid (Array α) where
   one := #[]

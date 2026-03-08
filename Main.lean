@@ -15,19 +15,8 @@ open Incremental.Shake (Store Memo)
 open Std (DHashMap)
 open System (FilePath)
 
-def posToLineCol (text : String) (pos : Nat) : Nat × Nat := Id.run do
-  let mut line := 1
-  let mut col := 1
-  let mut i := 0
-  for c in text.toList do
-    if i ≥ pos then return (line, col)
-    i := i + 1
-    if c == '\n' then
-      line := line + 1
-      col := 1
-    else
-      col := col + 1
-  return (line, col)
+def posToLineCol (text : String) (pos : Nat) : Lean.Position :=
+  (Lean.FileMap.ofString text).toPosition ⟨pos⟩
 
 def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.Path) :
     Option Frontend.Span := Id.run do
@@ -41,7 +30,7 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
     (cst : Frontend.Cst) (d : Diagnostic) : String :=
   match resolveSpan sm cst d.path with
   | some span =>
-      let (line, col) := posToLineCol text span.startPos
+      let ⟨line, col⟩ := posToLineCol text span.startPos
       s!"{file}:{line}:{col}: error: {d.error}"
   | none =>
       s!"{file}: error: {d.error}"
@@ -65,9 +54,9 @@ def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := 
       msgs := msgs.push (d.format file text sm cst)
   return msgs
 
-def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
+def runOnce (root : FilePath) (store : Store Key Val) (filepath : FilePath) :
     IO (Array String × Store Key Val) := do
-  let store ← populateStore config store
+  let store ← Store.populate root store
   let (transImports, store) ← match ShakeNative.build tasks (Key.transitiveImports filepath) store with
     | .ok (v, s) => pure (v, s)
     | .error .cycle => return (#["[error] cycle detected"], store)
@@ -81,16 +70,15 @@ def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
   | .error .cycle => return (#["[error] cycle detected"], store)
   | .error .missingInput => return (#["[error] missing input"], store)
 
-def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
-  let (msgs, initialStore) ← runOnce config store entryFile
+def watchLoop (root : FilePath) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
+  let (msgs, initialStore) ← runOnce root store entryFile
   for msg in msgs do IO.println msg
   let storeRef ← IO.mkRef initialStore
   let pending ← IO.mkRef #[]
 
   FSWatch.Manager.withManager fun m => do
-    for dir in config.sourceDirectories do
-      let _ ← m.watchTree dir (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
-        pending.modify (·.push e.path)
+    let _ ← m.watchTree root (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
+      pending.modify (·.push e.path)
 
     while true do
       IO.sleep 50
@@ -101,60 +89,50 @@ def watchLoop (config : Config) (store : Store Key Val) (entryFile : FilePath) :
           let text ← IO.FS.readFile file
           let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
           s := s.insert (.text file) memo
-        let (msgs, s') ← runOnce config s entryFile
+        let (msgs, s') ← runOnce root s entryFile
         for msg in msgs do IO.println msg
         storeRef.set s'
 
-def resolveEntryFile (config : Config) (cliArg : Option String) : IO FilePath := do
-  let projectRoot := config.projectRoot.getD "."
-
-  if let some arg := cliArg then
-    if arg.endsWith ".qdt" then
-      return arg
-    else
-      return projectRoot / Config.moduleToPath arg
-
-  if let some entry := config.entry then
-    return projectRoot / Config.moduleToPath entry
-
-  throw (IO.userError "No entry point specified. Use 'qdt <module>' or set 'entry' in qdt.toml")
+def resolveFile (root : FilePath) (arg : String) : FilePath :=
+  if arg.endsWith ".qdt" then
+    ⟨arg⟩
+  else
+    root / Config.moduleToPath arg
 
 def run (parsed : Parsed) : IO UInt32 := do
-  let sourceDir := parsed.flag? "source" |>.map (·.as! String)
+  let root ← IO.FS.realPath (parsed.flag? "root" |>.map (·.as! String) |>.getD ".")
   let watchMode := parsed.hasFlag "watch"
 
-  let cliArg := parsed.variableArgsAs? String >>= (·[0]?)
+  let args := parsed.variableArgsAs! String
+  if args.isEmpty then
+    throw (IO.userError "No files specified. Usage: qdt <module>...")
 
-  let profileMode := parsed.hasFlag "profile"
-  let mut config ← Config.load
+  let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
 
-  if let some dir := sourceDir then
-    config := { config with sourceDirectories := #[⟨dir⟩] }
-  if watchMode then
-    config := { config with watchMode := true }
-
-  let mut filePath ← resolveEntryFile config cliArg
-  filePath ← IO.FS.realPath filePath
-
-  IO.eprintln s!"[config] Entry: {filePath}"
-  IO.eprintln s!"[config] Source directories: {config.sourceDirectories}"
+  IO.eprintln s!"[config] Root: {root}"
+  IO.eprintln s!"[config] Files: {files}"
 
   let store : Store Key Val := DHashMap.emptyWithCapacity 1024
 
-  if config.watchMode then
-    watchLoop config store filePath
+  if watchMode then
+    watchLoop root store files[0]!
     return 0
   else
     let t0 ← IO.monoMsNow
-    let (msgs, _) ← runOnce config store filePath
-    for msg in msgs do
+    let mut allMsgs : Array String := #[]
+    let mut store := store
+    for file in files do
+      let (msgs, store') ← runOnce root store file
+      allMsgs := allMsgs ++ msgs
+      store := store'
+    for msg in allMsgs do
       IO.println msg
     let t1 ← IO.monoMsNow
-    if msgs.isEmpty then
+    if allMsgs.isEmpty then
       IO.eprintln s!"OK ({t1 - t0}ms)"
       return 0
     else
-      IO.eprintln s!"{msgs.size} error(s) ({t1 - t0}ms)"
+      IO.eprintln s!"{allMsgs.size} error(s) ({t1 - t0}ms)"
       return 1
 
 def cmd : Cmd :=
@@ -163,12 +141,11 @@ def cmd : Cmd :=
     (version? := none)
     (description := "Query-based Dependent Type elaborator")
     (flags := #[
-      ⟨some "s", "source", "source directory", String⟩,
+      ⟨some "r", "root", "project root directory (default: cwd)", String⟩,
       Flag.paramless (longName := "watch") (description := "Enable watch mode"),
-      { longName := "watch-dir", description := "Add directory to watch", «type» := String },
       Flag.paramless (longName := "profile") (description := "Print query profile table after build")
     ])
-    (variableArg? := some { name := "module", description := "Entry module", «type» := String })
+    (variableArg? := some { name := "module", description := "Modules to check", «type» := String })
     (run := run)
 
 end Qdt
