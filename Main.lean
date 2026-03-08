@@ -68,13 +68,13 @@ def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := 
 def runOnce (config : Config) (store : Store Key Val) (filepath : FilePath) :
     IO (Array String × Store Key Val) := do
   let store ← populateStore config store
-  let (transImports, store) ← match Shake.build tasks (Key.transitiveImports filepath) store with
+  let (transImports, store) ← match ShakeNative.build tasks (Key.transitiveImports filepath) store with
     | .ok (v, s) => pure (v, s)
     | .error .cycle => return (#["[error] cycle detected"], store)
     | .error .missingInput => return (#["[error] missing input"], store)
   let allFiles := transImports.toList ++ [filepath]
   let keys := allFiles.map Key.checkFile
-  match keys.foldlM (fun s k => Prod.snd <$> Shake.build tasks k s) store with
+  match keys.foldlM (fun s k => Prod.snd <$> ShakeNative.build tasks k s) store with
   | .ok store =>
       let msgs := checkModule store filepath
       return (msgs, store)
