@@ -1,4 +1,4 @@
-import QdtTest.Macro
+import Qdt.Test
 
 #pass (
   structure Prod.{u, v} (A : Type u) (B : Type v) : Type (max u v) where

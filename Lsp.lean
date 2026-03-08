@@ -1,6 +1,6 @@
 module
 
-public import Qdt.Incremental.Rules
+public import Qdt.Lsp
 public import Lean.Data.Lsp.Communication
 public import Lean.Data.Lsp.InitShutdown
 
@@ -14,25 +14,6 @@ open System (FilePath)
 open Incremental
 open Incremental.Shake (Store Memo)
 open Frontend (Cst Path SourceMap Span)
-
-def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
-  go 0 0
-where
-  go (cp : Nat) (bp : Nat) : Nat :=
-    if bp ≥ bytePos then cp
-    else if bp < s.utf8ByteSize then
-      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
-    else cp
-  partial_fixpoint
-
-def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
-  go 0 0
-where
-  go (cp : Nat) (bp : Nat) : Nat :=
-    if cp >= cpPos then bp
-    else if bp < s.utf8ByteSize then
-      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
-    else bp
 
 def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
@@ -123,26 +104,6 @@ def sendFileProgress (uri : DocumentUri) (ranges : Array Range) : ServerM Unit :
   match Json.toStructured? params with
   | .ok s => sendNotification "$/lean/fileProgress" s
   | .error _ => pure ()
-
-def elaborateFile (store : Store Key Val) (filepath : FilePath) :
-    Option (ElabInfo × SourceMap × Cst) := Id.run do
-  let some cstMemo := store.get? (Key.cst filepath) | return none
-  let some smMemo := store.get? (Key.astSourceMap filepath) | return none
-  let some declMemo := store.get? (Key.declarationIndex filepath) | return none
-  let (cst, _) := cstMemo.value
-  let (_, sourceMap, _) := smMemo.value
-  let (declIndex, dupDiags) := declMemo.value
-  let mut combinedInfo : ElabInfo := 1
-
-  for name in declIndex.keysIter do
-    if let some infoMemo := store.get? (Key.lookupInfo filepath name) then
-      combinedInfo := combinedInfo * infoMemo.value
-
-  let (_, _, astDiags) := smMemo.value
-  let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
-  combinedInfo := { combinedInfo with diagnostics := allDiags }
-
-  return some (combinedInfo, sourceMap, cst)
 
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
@@ -315,29 +276,13 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
   let ((info, sourceMap, cst), store') ← runElabTask ps file
   setProject { ps with store := store' }
 
-  let cstPath := cst.pathAtPosition codepointPos
-
-  let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
-
-  let mut best : Option (Path × Path × HoverContent) := none
-  for len in (List.range cstPath.length).reverse do
-    let cstPrefix := cstPath.take (len + 1)
-    if let some astPath := sourceMap.cstToAst[cstPrefix]? then
-      for (tyPath, hover) in hoverInfos do
-        if tyPath == astPath then
-          match best with
-          | none => best := some (cstPrefix, astPath, hover)
-          | some (_, prevAstPath, _) =>
-              if astPath.length > prevAstPath.length then
-                best := some (cstPrefix, astPath, hover)
-          break
-
-  match best with
+  match lookupHoverAtPosition cst sourceMap info codepointPos with
   | none =>
       sendResponse id Json.null
-  | some (cstPath, _, hover) =>
+  | some hoverContent =>
+      let cstPath := cst.pathAtPosition codepointPos
       let span := cst.spanAtPath cstPath |>.getD ⟨0, 0⟩
-      let content := hover.format
+      let content := hoverContent.format
       let range := mkRange text span
       let markupContent : MarkupContent := {
         kind := MarkupKind.markdown
