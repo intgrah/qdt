@@ -72,26 +72,25 @@ def runOnce (root : FilePath) (store : Store Key Val) (filepath : FilePath) :
 
 def watchLoop (root : FilePath) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
   let (msgs, initialStore) ← runOnce root store entryFile
-  for msg in msgs do IO.println msg
-  let storeRef ← IO.mkRef initialStore
+  for msg in msgs do println! msg
+  let store ← IO.mkRef initialStore
   let pending ← IO.mkRef #[]
 
   FSWatch.Manager.withManager fun m => do
-    let _ ← m.watchTree root (predicate := fun e => e.path.toString.endsWith ".qdt") fun e => do
+    let _ ← m.watchTree root (·.path.toString.endsWith ".qdt") fun e => do
       pending.modify (·.push e.path)
 
     while true do
       IO.sleep 50
       let pendingFiles ← pending.modifyGet (·, #[])
       if !pendingFiles.isEmpty then
-        let mut s ← storeRef.get
         for file in pendingFiles do
           let text ← IO.FS.readFile file
           let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-          s := s.insert (.text file) memo
-        let (msgs, s') ← runOnce root s entryFile
-        for msg in msgs do IO.println msg
-        storeRef.set s'
+          store.modify (·.insert (.text file) memo)
+        let (msgs, s) ← runOnce root (← store.get) entryFile
+        for msg in msgs do println! msg
+        store.set s
 
 def resolveFile (root : FilePath) (arg : String) : FilePath :=
   if arg.endsWith ".qdt" then
@@ -109,30 +108,27 @@ def run (parsed : Parsed) : IO UInt32 := do
 
   let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
 
-  IO.eprintln s!"[config] Root: {root}"
-  IO.eprintln s!"[config] Files: {files}"
-
   let store : Store Key Val := DHashMap.emptyWithCapacity 1024
 
   if watchMode then
     watchLoop root store files[0]!
     return 0
   else
-    let t0 ← IO.monoMsNow
+    let t₀ ← IO.monoMsNow
     let mut allMsgs : Array String := #[]
     let mut store := store
     for file in files do
       let (msgs, store') ← runOnce root store file
       allMsgs := allMsgs ++ msgs
       store := store'
-    for msg in allMsgs do
-      IO.println msg
-    let t1 ← IO.monoMsNow
+    for msg in allMsgs do println! msg
+    let t₁ ← IO.monoMsNow
+    let δt := t₁ - t₀
     if allMsgs.isEmpty then
-      IO.eprintln s!"OK ({t1 - t0}ms)"
+      println! "OK ({δt}ms)"
       return 0
     else
-      IO.eprintln s!"{allMsgs.size} error(s) ({t1 - t0}ms)"
+      println! "{allMsgs.size} error(s) ({δt}ms)"
       return 1
 
 def cmd : Cmd :=
@@ -145,7 +141,7 @@ def cmd : Cmd :=
       Flag.paramless (longName := "watch") (description := "Enable watch mode"),
       Flag.paramless (longName := "profile") (description := "Print query profile table after build")
     ])
-    (variableArg? := some { name := "module", description := "Modules to check", «type» := String })
+    (variableArg? := some { name := "module", description := "Modules to check", type := String })
     (run := run)
 
 end Qdt

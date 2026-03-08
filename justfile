@@ -17,3 +17,9 @@ compile_commands:
       | jq -Rs --arg dir "{{justfile_directory()}}" --arg inc "{{lean_include}}" \
         'split("\n") | map(select(. != "")) | map({directory: $dir, file: ., arguments: ["cc", "-I", $inc, "-c", .]})' \
       > compile_commands.json
+
+stdlib:
+    qdt --root stdlib Std
+
+normalisation-bench:
+    qdt --root normalisation-bench Bench
