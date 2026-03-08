@@ -3,8 +3,8 @@ import Lake
 open System Lake DSL
 
 package qdt where
-  testDriver := "QdtTest"
   version := v!"0.1.0"
+  testDriver := "QdtTest"
   description := "Query-based Dependent Type Elaborator"
   license := "Apache-2.0"
   leanOptions := #[⟨`autoImplicit, false⟩]
@@ -12,44 +12,27 @@ package qdt where
 require "leanprover-community" / mathlib @ git "v4.28.0"
 
 lean_lib FSWatch
-
 lean_lib Incremental
-
 lean_lib Qdt
-
 lean_lib QdtTest where globs := #[`QdtTest.+]
 
-@[default_target] lean_exe qdt where root := `Main
-
+@[default_target]
+lean_exe qdt where root := `Main
 lean_exe «qdt-lsp» where root := `Lsp
-
 lean_exe «test-parser» where root := `TestParser
 
-target inotify.o pkg : FilePath := do
-  let oFile := pkg.buildDir / "c" / "inotify.o"
-  let srcJob ← inputTextFile <| pkg.dir / "FSWatch" / "c" / "inotify.c"
+def buildCObj (pkg : Package) (src : FilePath) : FetchM (Job FilePath) := do
+  let oFile := pkg.buildDir / "c" / src.withExtension "o"
+  let srcJob ← inputTextFile <| pkg.dir / src
   let weakArgs := #["-I", (← getLeanIncludeDir).toString]
-  buildO oFile srcJob weakArgs #["-fPIC"] "cc" getLeanTrace
-
-target rdcw.o pkg : FilePath := do
-  let oFile := pkg.buildDir / "c" / "rdcw.o"
-  let srcJob ← inputTextFile <| pkg.dir / "FSWatch" / "c" / "rdcw.c"
-  let weakArgs := #["-I", (← getLeanIncludeDir).toString]
-  buildO oFile srcJob weakArgs #["-fPIC"] "cc" getLeanTrace
-
-target shake.o pkg : FilePath := do
-  let oFile := pkg.buildDir / "c" / "shake.o"
-  let srcJob ← inputTextFile <| pkg.dir / "Incremental" / "c" / "shake.c"
-  let weakArgs := #["-I", (← getLeanIncludeDir).toString]
-  buildO oFile srcJob weakArgs #["-fPIC", "-O2"] "cc" getLeanTrace
+  buildO oFile srcJob weakArgs #["-fPIC", "-O3"] "cc" getLeanTrace
 
 extern_lib libleanfswatch pkg := do
-  let inotify ← inotify.o.fetch
-  let rdcw ← rdcw.o.fetch
-  let name := nameToStaticLib "leanfswatch"
-  buildStaticLib (pkg.staticLibDir / name) #[inotify, rdcw]
+  let srcs : Array FilePath := #["FSWatch/c/inotify.c", "FSWatch/c/rdcw.c"]
+  let objs ← srcs.mapM (buildCObj pkg)
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "leanfswatch") objs
 
 extern_lib libleanshake pkg := do
-  let shake ← shake.o.fetch
-  let name := nameToStaticLib "leanshake"
-  buildStaticLib (pkg.staticLibDir / name) #[shake]
+  let srcs : Array FilePath := #["Incremental/c/shake.c"]
+  let objs ← srcs.mapM (buildCObj pkg)
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "leanshake") objs

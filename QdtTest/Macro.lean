@@ -9,7 +9,7 @@ open Lean (Term MacroM)
 open System (FilePath)
 open Std (DHashMap)
 
-def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
+private def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let dummyPath : FilePath := "test.qdt"
   let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅ }
   let inputFiles : Std.HashSet System.FilePath := {dummyPath}
@@ -18,10 +18,10 @@ def elabProgFromString (src : String) : IO (Array Diagnostic × Global) := do
   let store := store.insert (.text dummyPath) memo
   let store := store.insert .inputFiles inputMemo
 
-  match ShakeNative.build tasks (Key.checkFile dummyPath) store with
+  match Shake.build tasks (Key.checkFile dummyPath) store with
   | .ok (diags, _) => return (diags, ∅)
-  | .error .cycle => return (#[{ path := [], error := .msg "cycle detected" }], ∅)
-  | .error .missingInput => return (#[{ path := [], error := .msg "missing input" }], ∅)
+  | .error .cycle => return (#[⟨[], .msg "cycle detected"⟩], ∅)
+  | .error .missingInput => return (#[⟨[], .msg "missing input"⟩], ∅)
 
 def shouldPass (src : String) : IO Unit := do
   let (diagnostics, _) ← elabProgFromString src
