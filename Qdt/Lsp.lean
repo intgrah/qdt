@@ -53,7 +53,7 @@ def elaborateFile (store : Store Key Val) (filepath : FilePath) :
   return some (combinedInfo, sourceMap, cst)
 
 def lookupHoverAtPosition (cst : Cst) (sourceMap : SourceMap) (info : ElabInfo)
-    (codepointPos : Nat) : Option HoverContent := Id.run do
+    (codepointPos : Nat) : Option (HoverContent × Span) := Id.run do
   let cstPath := cst.pathAtPosition codepointPos
   let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
 
@@ -70,6 +70,10 @@ def lookupHoverAtPosition (cst : Cst) (sourceMap : SourceMap) (info : ElabInfo)
                 best := some (cstPrefix, astPath, hover)
           break
 
-  return best.map (·.2.2)
+  match best with
+  | none => none
+  | some (cstPrefix, _, hover) =>
+      let span := cst.spanAtPath cstPrefix |>.getD ⟨0, 0⟩
+      some (hover, span)
 
 end Qdt
