@@ -23,7 +23,7 @@ structure Structure where
   tyOpt : Option Ast
   fields : List StructureField
 
-def parseStructureField : Ast → Option StructureField
+def StructureField.parse : Ast → Option StructureField
   | .node `StructureField cs =>
       let name := cs[0]!.getName
       let paramsNode := cs[1]!
@@ -34,7 +34,7 @@ def parseStructureField : Ast → Option StructureField
       some { name, params, ty }
   | _ => none
 
-def parseStructure : Ast → Option Structure
+def Structure.parse : Ast → Option Structure
   | .node `Command.structure cs =>
       let name := cs[0]!.getName
       let univParamsNode := cs[1]!
@@ -51,7 +51,7 @@ def parseStructure : Ast → Option Structure
         if tyOpt.kind? == some `null || (match tyOpt with | .missing => true | _ => false)
         then none else some tyOpt
       let fields := match fieldsNode with
-        | .node _ cs => cs.toList.filterMap fun c => parseStructureField c
+        | .node _ cs => cs.toList.filterMap StructureField.parse
         | _ => []
       some { name, mkName := name.str "mk", recName := name.str "rec", univParams, params, tyOpt, fields }
   | _ => none
@@ -89,7 +89,7 @@ def reelabFields {m : Nat} (ctx : TermContext m) : List StructureField → Nat �
   | [], _ => return ()
   | field :: rest, j => do
       let (fieldParamCtx, fieldParamTele) ←
-        withChild (4 + j) (withChild 1 (elabParamsFrom ctx field.params))
+        withChild (4 + j) (withChild 1 (Params.elabFrom ctx field.params))
       let fieldRetTy ← withChild (4 + j) (withChild 2 (checkTy fieldParamCtx field.ty))
       let fullFieldTy := Ty.pis fieldParamTele fieldRetTy
       let fullFieldTyVal ← fullFieldTy.eval ctx.env
@@ -99,10 +99,10 @@ structure StructureResult where
   indResult : InductiveResult
   projEntries : List (Name × Constant)
 
-def elabStructure (info : Structure) : OptionT ElabM StructureResult := do
+def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
   let numParams := info.params.length
 
-  let (paramCtx, paramTys) ← withChild 2 (elabParams info.params)
+  let (paramCtx, paramTys) ← withChild 2 (Params.elab info.params)
   let resultTy : Ty numParams ←
     match info.tyOpt with
     | none => pure (Ty.u .zero)
@@ -126,9 +126,9 @@ def elabStructure (info : Structure) : OptionT ElabM StructureResult := do
       tyOpt := info.tyOpt
       ctors := [⟨`mk, ctorFieldBinders, none⟩]
     }
-  let indResult ← Qdt.elabInductive indSynth
+  let indResult ← indSynth.elab'
 
-  let (_fieldCtx, fieldTele) ← elabParamsFrom paramCtx ctorFieldBinders
+  let (_fieldCtx, fieldTele) ← Params.elabFrom paramCtx ctorFieldBinders
 
   let _ ← OptionT.lift (OptionT.run (reelabFields paramCtx info.fields 0))
 

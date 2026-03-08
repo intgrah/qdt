@@ -9,6 +9,16 @@ namespace Qdt
 open Lean (Name)
 open Frontend (Ast Path)
 
+
+structure Import where
+  moduleName : Name
+
+def Import.parse : Ast → Option Import
+  | .node `Command.import cs =>
+      if cs.size != 1 then none else
+      some { moduleName := cs[0]!.getName }
+  | _ => none
+
 structure Definition where
   name : Name
   univParams : List Name
@@ -28,10 +38,7 @@ structure Axiom where
   params : List Ast
   ty : Ast
 
-structure Import where
-  moduleName : Name
-
-def parseDefinition : Ast → Option Definition
+def Definition.parse : Ast → Option Definition
   | .node `Command.definition cs =>
       if cs.size != 5 then none else
       let name := cs[0]!.getName
@@ -51,7 +58,7 @@ def parseDefinition : Ast → Option Definition
       some { name, univParams, params, tyOpt, body }
   | _ => none
 
-def parseExample : Ast → Option Example
+def Example.parse : Ast → Option Example
   | .node `Command.example cs =>
       if cs.size != 3 then none else
       let paramsAst := cs[0]!
@@ -66,7 +73,7 @@ def parseExample : Ast → Option Example
       some { univParams := [], params, tyOpt, body }
   | _ => none
 
-def parseAxiom : Ast → Option Axiom
+def Axiom.parse : Ast → Option Axiom
   | .node `Command.axiom cs =>
       if cs.size != 4 then none else
       let name := cs[0]!.getName
@@ -82,12 +89,6 @@ def parseAxiom : Ast → Option Axiom
       some { name, univParams, params, ty }
   | _ => none
 
-def parseImport : Ast → Option Import
-  | .node `Command.import cs =>
-      if cs.size != 1 then none else
-      some { moduleName := cs[0]!.getName }
-  | _ => none
-
 def checkDuplicateUnivParams (params : List Name) : Option Error :=
   let rec loop (seen : Std.HashSet Name) : List Name → Option Error
     | [] => none
@@ -98,10 +99,10 @@ def checkDuplicateUnivParams (params : List Name) : Option Error :=
           loop (seen.insert n) ns
   loop ∅ params
 
-def elabDefinition (d : Definition) : OptionT ElabM Unit := do
+def Definition.elab (d : Definition) : OptionT ElabM Unit := do
   if let some e := checkDuplicateUnivParams d.univParams then
     raiseError e
-  let (paramCtx, paramTys) ← withChild 2 (elabParams d.params)
+  let (paramCtx, paramTys) ← withChild 2 (Params.elab d.params)
   let (tm, ty) ←
     match d.tyOpt with
     | none =>
@@ -118,10 +119,10 @@ def elabDefinition (d : Definition) : OptionT ElabM Unit := do
   let ty := Ty.pis paramTys ty
   let _ ← addConstant d.name (.definition { univParams := d.univParams, ty, tm })
 
-def elabExample (e : Example) : OptionT ElabM Unit := do
+def Example.elab (e : Example) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
     raiseError err
-  let (paramCtx, _paramTys) ← withChild 0 (elabParams e.params)
+  let (paramCtx, _paramTys) ← withChild 0 (Params.elab e.params)
   match e.tyOpt with
   | some tyRaw =>
       let expected ← withChild 1 (checkTy paramCtx tyRaw)
@@ -130,26 +131,26 @@ def elabExample (e : Example) : OptionT ElabM Unit := do
   | none =>
       let (_term, _tyVal) ← withChild 2 (inferTm paramCtx e.body)
 
-def elabAxiom (a : Axiom) : OptionT ElabM Unit := do
+def Axiom.elab (a : Axiom) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams a.univParams then
     raiseError err
-  let (paramCtx, paramTys) ← withChild 2 (elabParams a.params)
+  let (paramCtx, paramTys) ← withChild 2 (Params.elab a.params)
   let ty ← withChild 3 (checkTy paramCtx a.ty)
   withChild 0 (emitHover (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
   let _ ← addConstant a.name (.axiom { univParams := a.univParams, ty })
 
-def elabInductiveCmd (info : Inductive) : OptionT ElabM Unit := do
+def Inductive.elab (info : Inductive) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError err
-  let result ← elabInductive info
+  let result ← Inductive.elab' info
   let _ ← result.ctorEntries.foldlM (init := 0) fun i (ctorName, ctorConst) => do
     withChild (4 + i) (emitHover (.signature ctorName .nil ctorConst.ty))
     return i + 1
 
-def elabStructureCmd (info : Structure) : OptionT ElabM Unit := do
+def Structure.elab (info : Structure) : OptionT ElabM Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError err
-  let _ ← elabStructure info
+  let _ ← Structure.elab' info
 
 end Qdt

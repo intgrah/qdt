@@ -23,8 +23,6 @@ def getFieldString (_structName fieldName : Name) : Option String :=
   | .str .anonymous s => some s
   | _ => none
 
-open Qdt (parseDefinition parseExample parseAxiom parseImport parseInductive parseStructure)
-
 def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.run do
   let .node _ progCs := prog | return (HashMap.emptyWithCapacity 0, #[])
   let mut m : HashMap Name Nat := HashMap.emptyWithCapacity 4096
@@ -32,14 +30,14 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
   for h : idx in [:progCs.size] do
     let cmd := progCs[idx]
     let names : List Name :=
-      if let some d := parseDefinition cmd then [d.name]
-      else if let some a := parseAxiom cmd then [a.name]
-      else if let some ind := parseInductive cmd then
+      if let some d := Definition.parse cmd then [d.name]
+      else if let some a := Axiom.parse cmd then [a.name]
+      else if let some ind := Inductive.parse cmd then
         ind.name :: ind.recName :: ind.ctors.map (ind.name.append ·.name)
-      else if let some s := parseStructure cmd then
+      else if let some s := Structure.parse cmd then
         s.name :: s.mkName :: s.recName ::
           s.fields.filterMap fun field => (s.name.str ·) <$> getFieldString s.name field.name
-      else if (parseExample cmd).isSome then [(`_example).num idx]
+      else if (Example.parse cmd).isSome then [(`_example).num idx]
       else []
     for name in names do
       if m.contains name then
@@ -60,30 +58,29 @@ partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
         result := path :: result
   return result
 
-open Qdt (ElabContext ElabM ElabM.run elabDefinition elabExample elabAxiom elabInductiveCmd elabStructureCmd)
-
 def getDeclName (cmd : Ast) (idx : Nat) : Name :=
-  if let some d := parseDefinition cmd then d.name
-  else if let some a := parseAxiom cmd then a.name
-  else if let some i := parseInductive cmd then i.name
-  else if let some s := parseStructure cmd then s.name
-  else if (parseExample cmd).isSome then (`_example).num idx
+  if let some d := Definition.parse cmd then d.name
+  else if let some a := Axiom.parse cmd then a.name
+  else if let some i := Inductive.parse cmd then i.name
+  else if let some s := Structure.parse cmd then s.name
+  else if (Example.parse cmd).isSome then (`_example).num idx
   else .anonymous
 
 def getCommandUnivParams (cmd : Ast) : List Name :=
-  if let some d := parseDefinition cmd then d.univParams
-  else if let some a := parseAxiom cmd then a.univParams
-  else if let some i := parseInductive cmd then i.univParams
-  else if let some s := parseStructure cmd then s.univParams
+  if let some d := Definition.parse cmd then d.univParams
+  else if let some e := Example.parse cmd then e.univParams
+  else if let some a := Axiom.parse cmd then a.univParams
+  else if let some i := Inductive.parse cmd then i.univParams
+  else if let some s := Structure.parse cmd then s.univParams
   else []
 
 def elabAction (cmd : Ast) : ElabM (Option Unit) :=
-  if let some d := parseDefinition cmd then elabDefinition d
-  else if let some e := parseExample cmd then elabExample e
-  else if let some a := parseAxiom cmd then elabAxiom a
-  else if let some i := parseInductive cmd then elabInductiveCmd i
-  else if let some s := parseStructure cmd then elabStructureCmd s
-  else pure ()
+  if let some d := Definition.parse cmd then d.elab
+  else if let some e := Example.parse cmd then e.elab
+  else if let some a := Axiom.parse cmd then a.elab
+  else if let some i := Inductive.parse cmd then i.elab
+  else if let some s := Structure.parse cmd then s.elab
+  else return
 
 def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option FilePath :=
   let expectedPath : FilePath :=
@@ -129,7 +126,7 @@ def tasks : Tasks Monad Key Val
     let .node _ progCs := prog | return #[]
     let mut result : Array Name := #[]
     for cmd in progCs do
-      if let some imp := parseImport cmd then
+      if let some imp := Import.parse cmd then
         result := result.push imp.moduleName
     return result
   | .moduleFile modName => some do
