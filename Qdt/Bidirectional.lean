@@ -23,8 +23,8 @@ def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty
 
 partial def checkAstUniverse : Ast → OptionT ElabM Universe
   | .node `Level.zero _ => do return .zero
-  | .node `Level.succ cs => do return .succ (← checkAstUniverse cs[0]!)
-  | .node `Level.max cs => do return .max (← checkAstUniverse cs[0]!) (← checkAstUniverse cs[1]!)
+  | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
+  | .node `Level.max cs => do return (← checkAstUniverse cs[0]!).mkMax (← checkAstUniverse cs[1]!)
   | .node `Level.name cs => do return .level cs[0]!.getName
   | _ => failure
 
@@ -143,15 +143,15 @@ partial def inferPi {n : Nat}
   let (codTm, codTy) ← withChild 1 (inferTm ctx' cod)
   let .u codLevel := codTy
     | raiseError (.expectedType ctx'.names (← codTy.quote))
-  return (.pi' ⟨x, domTm⟩ codTm, .max domLevel codLevel)
+  return (.pi' ⟨x, domTm⟩ codTm, domLevel.mkMax codLevel)
 
 partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
   | .missing => failure
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
       checkUniverseLevel level
-      emitType ctx (.u level.succ)
-      return (.u level, level.succ)
+      emitType ctx (.u level.mkSucc)
+      return (.u level, level.mkSucc)
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let x := bs[0]!.getName
@@ -160,8 +160,9 @@ partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → Optio
       withChild 0 (withChild 0 (emitType ctx domVal))
       let ctx' := ctx.bind x domVal
       let (cod, codLevel) ← withChild 1 (checkTyWithLevelCore ctx' cs[1]!)
-      emitType ctx (.u (.max domLevel codLevel))
-      return (.pi ⟨x, dom⟩ cod, .max domLevel codLevel)
+      let piLevel := domLevel.mkMax codLevel
+      emitType ctx (.u piLevel)
+      return (.pi ⟨x, dom⟩ cod, piLevel)
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       return (.el tm, level)
@@ -196,15 +197,15 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
       return (.app fTm aTm, bTyVal)
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
-      let ty : VTy n := .u level.succ
-      emitType ctx ty
+      let ty : VTy n := .u level.mkSucc
+      emitType ctx (.u level.mkSucc)
       return (.u' level, ty)
   | .node `Term.lam cs => do
       let .node `Binder.typed bs := cs[0]! | raiseError .inferUnannotatedLambda
       let x := bs[0]!.getName
       let aTy ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
       let aTyVal ← aTy.eval ctx.env
-      withChild 0 (withChild 0 (emitType ctx aTyVal))
+      withChild 0 (withChild 0 (emitHover (.localVar x ctx.names aTy)))
       let ctx' := ctx.bind x aTyVal
       let (bodyTm, bodyTy) ← withChild 1 (inferTm ctx' cs[1]!)
       let clos := ⟨ctx.env, ← bodyTy.quote⟩
@@ -253,7 +254,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       match cs[0]! with
       | .node `Binder.untyped bs =>
         let x := bs[0]!.getName
-        withChild 0 (withChild 0 (emitType ctx a))
+        withChild 0 (withChild 0 (emitHover (.localVar x ctx.names (← a.quote))))
         let ctx' := ctx.bind x a
         let b ← b.eval (env.weaken.cons (VTm.varAt n))
         let b ← withChild 1 (checkTmCore ctx' b body)
@@ -265,7 +266,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let annVal : VTy n ← ann.eval ctx.env
         if !(← annVal.defEq a) then
           raiseError (.typeMismatch ctx.names (← a.quote) (← annVal.quote))
-        withChild 0 (withChild 0 (emitType ctx a))
+        withChild 0 (withChild 0 (emitHover (.localVar x ctx.names (← a.quote))))
         let ctx' := ctx.bind x a
         let b ← b.eval (env.weaken.cons (VTm.varAt n))
         let body ← withChild 1 (checkTmCore ctx' b body)
@@ -300,8 +301,8 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return tm
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
-      if !(← expected.defEq (.u level.succ)) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (.u level.succ))
+      if !(← expected.defEq (.u level.mkSucc)) then
+        raiseError (.typeMismatch ctx.names (← expected.quote) (.u level.mkSucc))
       emitType ctx expected
       return .u' level
   | .node `Term.app cs => do

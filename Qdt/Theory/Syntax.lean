@@ -83,8 +83,8 @@ mutual
 def Universe.subst (subst : List (Name × Universe)) : Universe → Universe
   | .level n => subst.lookup n |>.getD (.level n)
   | .zero => .zero
-  | .succ u => .succ (u.subst subst)
-  | .max u v => .max (u.subst subst) (v.subst subst)
+  | .succ u => (u.subst subst).mkSucc
+  | .max u v => (u.subst subst).mkMax (v.subst subst)
 
 def Ty.substLevels {n} (subst : List (Name × Universe)) : Ty n → Ty n
   | .u u => .u (u.subst subst)

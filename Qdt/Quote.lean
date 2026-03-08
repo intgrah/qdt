@@ -53,23 +53,23 @@ partial def VTy.reify {n} : VTy n → ElabM (Tm n)
   | .el n => n.quote
 
 partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM Universe
-  | .u i => return i.succ
+  | .u i => return i.mkSucc
   | .pi ⟨_x, a⟩ ⟨env, b⟩ => do
       let aLevel ← a.inferLevel ctx
       let bVal : VTy (n + 1) ← b.eval (env.weaken.cons (VTm.varAt n))
       let bLevel ← bVal.inferLevel (ctx.snoc ⟨.anonymous, a⟩)
-      return Universe.max aLevel bLevel |>.normalise
+      return aLevel.mkMax bLevel
   | .el ⟨.const name us, _sp⟩ => do
       let some info ← fetchConstantInfo name
         | panic! s!"inferLevel: unknown constant {name}"
       let ty := info.ty.substLevels (info.univParams.zip us)
       let some u := ty.getResultUniverse?
         | panic! s!"inferLevel: could not determine universe for {name}"
-      return u.normalise
+      return u
   | .el ⟨.var lvl, _sp⟩ => do
       let .u u := ctx.lookup lvl.rev
         | panic! "inferLevel: could not determine universe"
-      return u.normalise
+      return u
 
 end
 

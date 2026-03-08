@@ -19,9 +19,9 @@ noHover ⟨1, 8⟩
 noHover ⟨1, 9⟩
 
 -- Type 2
-hover ⟨1, 10⟩ "Type 2 : Type 3"
-hover ⟨1, 14⟩ "Type 2 : Type 3"
-hover ⟨1, 15⟩ "Type 2 : Type 3"
+hover ⟨1, 10⟩ "Type 3"
+hover ⟨1, 14⟩ "Type 3"
+hover ⟨1, 15⟩ "Type 3"
 
 -- →
 hover ⟨1, 16⟩ "Type 3"
@@ -29,7 +29,7 @@ hover ⟨1, 17⟩ "Type 3"
 hover ⟨1, 18⟩ "Type 3"
 
 -- Type
-hover ⟨1, 19⟩ "Type : Type 1"
+hover ⟨1, 19⟩ "Type 1"
 
 -- →
 hover ⟨1, 23⟩ "Type 2"
@@ -37,9 +37,9 @@ hover ⟨1, 24⟩ "Type 2"
 hover ⟨1, 25⟩ "Type 2"
 
 -- Type 1
-hover ⟨1, 26⟩ "Type 1 : Type 2"
-hover ⟨1, 30⟩ "Type 1 : Type 2"
-hover ⟨1, 31⟩ "Type 1 : Type 2"
+hover ⟨1, 26⟩ "Type 2"
+hover ⟨1, 30⟩ "Type 2"
+hover ⟨1, 31⟩ "Type 2"
 
 -- :=
 noHover ⟨1, 32⟩
@@ -63,4 +63,4 @@ hover ⟨1, 45⟩ "Type 2 → Type → Type 1"
 hover ⟨1, 46⟩ "Type 2 → Type → Type 1"
 
 -- Type
-hover ⟨1, 47⟩ "Type : Type 1"
+hover ⟨1, 47⟩ "Type 1"
