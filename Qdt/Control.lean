@@ -37,7 +37,6 @@ instance {ρ ω M} [Monad M] [MonadWriter ω M] : MonadWriter ω (ReaderT ρ M) 
 structure ElabContext where
   filepath : FilePath
   univParams : List Name
-  selfNames : List Name := []
   collectHovers : Bool
   currentDecl : Name
   path : Path := []
@@ -94,8 +93,6 @@ def fetchConstant (name : Name) : ElabM (Option Constant) := do
   if let some e := st.localEnv[name]? then
     return some e
   let ctx ← readThe ElabContext
-  if name ∈ ctx.selfNames then
-    return none
   if let some result := st.entryCache[name]? then
     return result
   let (declIndex, _) ← (fetch (Key.declarationIndex ctx.filepath) : Task Monad Key Val _)
