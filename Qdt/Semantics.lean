@@ -10,7 +10,7 @@ open Lean (Name)
 
 /-- de Bruijn levels -/
 def Lvl n := Fin n
-deriving Repr, BEq
+deriving Repr, DecidableEq
 
 mutual
 

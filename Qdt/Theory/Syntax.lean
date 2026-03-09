@@ -11,7 +11,7 @@ open Lean (Name)
 
 /-- de Bruijn indices -/
 def Idx n := Fin n
-deriving Repr, Hashable, DecidableEq, BEq
+deriving Repr, Hashable, DecidableEq
 
 /-- Allow natural number literals to be used as de Bruijn indices -/
 instance {n} [NeZero n] {i} : OfNat (Idx n) i where
@@ -25,7 +25,7 @@ inductive Ty : Nat → Type
   | pi {n} : Param n → Ty (n + 1) → Ty n
   /-- If Γ ⊢ t : 𝑢 i, then Γ ⊢ El(t) type -/
   | el {n} : Tm n → Ty n
-deriving Repr
+deriving Repr, Hashable
 
 /-- Terms -/
 inductive Tm : Nat → Type
@@ -37,25 +37,26 @@ inductive Tm : Nat → Type
   | pi' {n} : Param' n → Tm (n + 1) → Tm n
   | proj {n} : Nat → Tm n → Tm n
   | letE {n} : Name → Ty n → Tm n → Tm (n + 1) → Tm n
-deriving Repr
+deriving Repr, Hashable
 
 @[pp_using_anonymous_constructor]
 inductive Param : Nat → Type
   | mk {n} (name : Name) (ty : Ty n) : Param n
-deriving Repr
+deriving Repr, Hashable
 
 @[pp_using_anonymous_constructor]
 inductive Param' : Nat → Type
   | mk {n} (name : Name) (tm : Tm n) : Param' n
-deriving Repr
+deriving Repr, Hashable
 
 end
 
 instance {n} : Inhabited (Ty n) := ⟨.u .zero⟩
 instance {n} : Inhabited (Tm n) := ⟨.u' .zero⟩
-instance {n} : Inhabited (Param n) := ⟨⟨.anonymous, default⟩⟩
 
 def Ctx := Tele Param
+
+instance {a b} : Hashable (Ctx a b) := ⟨Tele.hash⟩
 
 notation "𝑢" => Ty.u
 
@@ -106,43 +107,5 @@ def Param.substLevels {n} (subst : List (Name × Universe)) : Param n → Param 
   | ⟨name, ty⟩ => ⟨name, ty.substLevels subst⟩
 
 end
-
-/-!
-## Hashable instances
-
-Since mutual inductives cannot derive Hashable automatically, we define them manually.
--/
-
-mutual
-
-def Ty.hash {n} : Ty n → UInt64
-  | .u u => mixHash 1 (hash u)
-  | .pi p b => mixHash 2 (mixHash p.hash b.hash)
-  | .el t => mixHash 3 t.hash
-
-def Tm.hash {n} : Tm n → UInt64
-  | .u' u => mixHash 10 (hash u)
-  | .var i => mixHash 11 (hash i)
-  | .const name us => mixHash 12 (mixHash (hash name) (hash us))
-  | .lam p body => mixHash 13 (mixHash p.hash body.hash)
-  | .app f a => mixHash 14 (mixHash f.hash a.hash)
-  | .pi' ⟨name, a⟩ b => mixHash 15 (mixHash (hash name) (mixHash a.hash b.hash))
-  | .proj i t => mixHash 16 (mixHash (hash i) t.hash)
-  | .letE name ty val body => mixHash 17 (mixHash (hash name) (mixHash ty.hash (mixHash val.hash body.hash)))
-
-def Param.hash {n} : Param n → UInt64
-  | ⟨name, ty⟩ => mixHash (hash name) ty.hash
-
-end
-
-instance {n} : Hashable (Ty n) := ⟨Ty.hash⟩
-instance {n} : Hashable (Tm n) := ⟨Tm.hash⟩
-instance {n} : Hashable (Param n) := ⟨Param.hash⟩
-
-def hashCtx {a b} : Ctx a b → UInt64
-  | .nil => 0
-  | .snoc ts t => mixHash (hashCtx ts) (hash t)
-
-instance {a b} : Hashable (Ctx a b) := ⟨hashCtx⟩
 
 end Qdt
