@@ -23,7 +23,7 @@ mutual
 inductive Ty : Nat → Type
   | u {n} : Universe → Ty n
   | pi {n} : Name → Ty n → Ty (n + 1) → Ty n
-  /-- If Γ ⊢ t : 𝑢 i, then Γ ⊢ El(t) type -/
+  /-- If Γ ⊢ t : .u i, then Γ ⊢ .el t type -/
   | el {n} : Tm n → Ty n
 deriving Repr, Hashable
 
@@ -47,8 +47,6 @@ instance {n} : Inhabited (Tm n) := ⟨.u' .zero⟩
 def Ctx := Tele (Name × Ty ·)
 
 instance {a b} : Hashable (Ctx a b) := ⟨Tele.hash⟩
-
-notation "𝑢" => Ty.u
 
 abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi .anonymous ty
 
