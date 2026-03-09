@@ -8,6 +8,6 @@ echo "inductive Eq.{u} (A : Type u) (a : A) : A → Type u where"
 echo "  | refl : Eq.{u} A a a"
 echo
 for ((i = 0; i <= 1000; i++)); do
-    echo "def f$i : Nat := 1"
-    echo "example : f$i = 1 := Eq.refl.{0} Nat 1"
+    echo "def n$i : Nat := Nat.zero"
+    echo "example : n$i = Nat.zero := Eq.refl.{0} Nat Nat.zero"
 done
