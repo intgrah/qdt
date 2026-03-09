@@ -195,7 +195,7 @@ def tasks : Tasks Monad Key Val
         return none
   | .type filepath name => some do
     match ← fetch (Key.constant filepath name) with
-    | some (constant, _) => return constant.ty
+    | some (constant, _) => return some constant.toConstantInfo
     | none => return none
   | .checkFile filepath => some do
     let (_, _, parseDiags) ← fetch (Key.astSourceMap filepath)
