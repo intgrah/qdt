@@ -112,9 +112,9 @@ def HoverContent.format : HoverContent → String
             let x := freshName prevNames pname
             (prev ++ [s!"({x} : {pty.fmt prevNames Prec.min})"], x :: prevNames)
       let rec peelPis {m : Nat} (names : List Name) : Ty m → List String × String
-        | .pi ⟨pname, dom⟩ cod =>
+        | .pi pname dom cod =>
             if pname.isAnonymous then
-              ([], toString ((Ty.pi ⟨pname, dom⟩ cod).fmt names Prec.min))
+              ([], toString ((Ty.pi pname dom cod).fmt names Prec.min))
             else
               let x := freshName names pname
               let (rest, retStr) := peelPis (x :: names) cod

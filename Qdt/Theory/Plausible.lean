@@ -64,7 +64,7 @@ def Tm.sample (n : Nat) : Nat → Gen (Tm n)
           else
             return .const `x []
       | 1 => return .const `c []
-      | 2 => return .lam ⟨.anonymous, ← Ty.sample n fuel⟩ (← Tm.sample (n + 1) fuel)
+      | 2 => return .lam .anonymous (← Ty.sample n fuel) (← Tm.sample (n + 1) fuel)
       | 3 => return .app (← Tm.sample n fuel) (← Tm.sample n fuel)
 end
 

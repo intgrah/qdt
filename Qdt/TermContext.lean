@@ -8,7 +8,7 @@ namespace Qdt
 
 open Lean (Name)
 
-def VCtx : Nat → Type := Tele VParam 0
+def VCtx : Nat → Type := Tele (Name × VTy ·) 0
 
 structure TermContext (n : Nat) where
   ctx : VCtx n
@@ -34,7 +34,7 @@ def TermContext.lookup {n} (i : Idx n) (tctx : TermContext n) : VTy n :=
   tctx.ctx.lookup i
 
 def TermContext.findName? {n} (name : Name) (tctx : TermContext n) : Option (Idx n × VTy n) :=
-  let rec go {n} : Tele VParam 0 n → Option (Idx n × VTy n)
+  let rec go {n} : Tele (Name × VTy ·) 0 n → Option (Idx n × VTy n)
     | .nil => none
     | .snoc ts ⟨n, ty⟩ => do
       if n = name then

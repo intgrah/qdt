@@ -24,9 +24,9 @@ notation:50 Γ " ⊩ " A " type" => Ty.WF.Alg Γ A
 --   | lam {Γ x A body B} :
 --       (Γ ⊩ A type) →
 --       (Γ.snoc ⟨x, A⟩ ⊩ body ⇐ B) →
---       (Γ ⊩ .lam ⟨x, A⟩ body ⇐ .pi ⟨x, A⟩ B)
+--       (Γ ⊩ .lam x A body ⇐ .pi x A B)
 --   | app {Γ f a x A B C} :
---       (Γ ⊩ f ⇒ .pi ⟨x, A⟩ B) →
+--       (Γ ⊩ f ⇒ .pi x A B) →
 --       (Γ ⊩ a ⇐ A) →
 --       (Γ ⊩ .app f a ⇐ C)
 
@@ -36,13 +36,13 @@ notation:50 Γ " ⊩ " A " type" => Ty.WF.Alg Γ A
 --   | const {Γ name} :
 --       (Γ ⊩ .const name ⇒ 𝑢) -- TODO
 --   | app {Γ f a x A B C} :
---       (Γ ⊩ f ⇒ .pi ⟨x, A⟩ B) →
+--       (Γ ⊩ f ⇒ .pi x A B) →
 --       (Γ ⊩ a ⇐ A) →
 --       (Γ ⊩ .app f a ⇒ C)
 --   | lam {Γ x A body B} :
---       (Γ ⊩ .pi ⟨x, A⟩ B type) →
+--       (Γ ⊩ .pi x A B type) →
 --       (Γ.snoc ⟨x, A⟩ ⊩ body ⇐ B) →
---       (Γ ⊩ .lam ⟨x, A⟩ body ⇒ .pi ⟨x, A⟩ B)
+--       (Γ ⊩ .lam x A body ⇒ .pi x A B)
 
 -- inductive Ty.WF.Alg : {n : Nat} → Ctx 0 n → Ty n → Prop
 --   | u {Γ} :
@@ -52,7 +52,7 @@ notation:50 Γ " ⊩ " A " type" => Ty.WF.Alg Γ A
 --   | pi {Γ x A B} :
 --       (Γ ⊩ A type) →
 --       (Γ.snoc ⟨x, A⟩ ⊩ B type) →
---       (Γ ⊩ .pi ⟨x, A⟩ B type)
+--       (Γ ⊩ .pi x A B type)
 
 -- inductive Ty.Eq.Alg : {n m : Nat} → Ctx 0 n → Ty n → Ty n → Ctx 0 m → Prop
 --   | refl {Γ A} :
@@ -64,7 +64,7 @@ notation:50 Γ " ⊩ " A " type" => Ty.WF.Alg Γ A
 -- inductive App.Alg : {n : Nat} → Ctx 0 n → Tm n → Ty n → Ty n → Prop
 --   | pi {Γ e x A B C} :
 --       (Γ ⊩ e ⇐ A) →
---       (Γ ⊩ e ∈ .pi ⟨x, A⟩ B ⇒ C)
+--       (Γ ⊩ e ∈ .pi x A B ⇒ C)
 
 -- end
 

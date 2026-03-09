@@ -173,11 +173,11 @@ def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
         let fieldIdx := idx - numParams
         let projBody : Tm np1 := Tm.proj fieldIdx pVar
 
-        let projBodyTy : Ty numParams := Ty.pi ⟨`self, majorTy⟩ ftyTy
+        let projBodyTy : Ty numParams := Ty.pi `self majorTy ftyTy
         let projTy : Ty 0 := Ty.pis paramTys projBodyTy
         let projTm : Tm 0 :=
           Tm.lams paramTys <|
-          Tm.lam ⟨`self, majorTy⟩ projBody
+          Tm.lam `self majorTy projBody
 
         let univParams ← getUnivParams
         let entry : Name × Constant := (projName, .definition { univParams, ty := projTy, tm := projTm })

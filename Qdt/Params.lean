@@ -42,12 +42,12 @@ def Params.elab (params : List Ast) :
   Nat.zero_add params.length ▸ elabFrom TermContext.empty params
 
 def VParams.elabFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
-    OptionT ElabM (TermContext (n + params.length) × Tele VParam n (n + params.length)) :=
+    OptionT ElabM (TermContext (n + params.length) × Tele (Name × VTy ·) n (n + params.length)) :=
   Nat.zero_add params.length ▸ go n 0 ctx .nil params
   where
-    go {a : Nat} (b : Nat) (idx : Nat) (ctx : TermContext b) (acc : Tele VParam a b) :
+    go {a : Nat} (b : Nat) (idx : Nat) (ctx : TermContext b) (acc : Tele (Name × VTy ·) a b) :
       (params : List Ast) →
-      OptionT ElabM (TermContext (b + params.length) × Tele VParam a (b + params.length))
+      OptionT ElabM (TermContext (b + params.length) × Tele (Name × VTy ·) a (b + params.length))
     | [] => return (ctx, acc)
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
@@ -61,7 +61,7 @@ def VParams.elabFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih
 
 def VParams.elab (params : List Ast) :
-    OptionT ElabM (TermContext params.length × Tele VParam 0 params.length) := by
+    OptionT ElabM (TermContext params.length × Tele (Name × VTy ·) 0 params.length) := by
   simpa only [Nat.zero_add] using elabFrom TermContext.empty params
 
 end Qdt

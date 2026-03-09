@@ -75,7 +75,7 @@ def Ty.getTele {a : Nat} : Ty a → Σ b, Ctx a b × Ty b :=
       (acc : Ctx a b) :
       Ty b →
       Σ nb : Nat, Ctx a nb × Ty nb
-    | .pi param b => go (acc.snoc param) b
+    | .pi name ty b => go (acc.snoc (name, ty)) b
     | t => ⟨b, acc, t⟩
 
 unsafe def weaken_impl {n m : Nat} : List (VTm n) → (_ : n ≤ m) → List (VTm m) := unsafeCast
@@ -95,15 +95,15 @@ def Tm.hasIndOcc {n : Nat} (ind : Name) : Tm n → Bool
   | .u' _ => false
   | .var _ => false
   | .const name _ => name == ind
-  | .lam ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .lam _ a b => a.hasIndOcc ind || b.hasIndOcc ind
   | .app a b => a.hasIndOcc ind || b.hasIndOcc ind
-  | .pi' ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .pi' _ a b => a.hasIndOcc ind || b.hasIndOcc ind
   | .proj _ a => a.hasIndOcc ind
   | .letE _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
 
 def Ty.hasIndOcc {n : Nat} (ind : Name) : Ty n → Bool
   | .u _ => false
-  | .pi ⟨_, a⟩ b => a.hasIndOcc ind || b.hasIndOcc ind
+  | .pi _ a b => a.hasIndOcc ind || b.hasIndOcc ind
   | .el a => a.hasIndOcc ind
 
 end
@@ -320,7 +320,7 @@ def buildMinorTy
     (ithMinor : Nat)
     (him : ithMinor ≤ numMinors)
     (ctorFieldsTy : Ty numParams) :
-    OptionT ElabM (Param (numParams + 1 + ithMinor) × RuleSeed (numParams + 1 + numMinors)) := do
+    OptionT ElabM ((Name × Ty (numParams + 1 + ithMinor)) × RuleSeed (numParams + 1 + numMinors)) := do
   let numParamsMotivesIthMinor : Nat := numParams + 1 + ithMinor
   let numParamsMotivesMinors := numParams + 1 + numMinors
   let ctorFieldsTy ← ctorFieldsTy.eval Env.infer
@@ -475,7 +475,7 @@ def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
   let resultUniv ← match returnTy with
     | .u u => pure u
     | .el _ => raiseError (.inductiveReturnTypeMustBeTypeUniverse ind.name)
-    | .pi _ _ => raiseError (.msg "internal error")
+    | .pi _ _ _ => raiseError (.msg "internal error")
 
   let indUnivs := univParams.map Universe.level
   let indVal : VTm 0 := VTm.const ind.name indUnivs
@@ -550,7 +550,7 @@ def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
 
   let recTy : Ty 0 :=
     Ty.pis paramTys <|
-    Ty.pi ⟨`motive, motiveTy⟩ <|
+    Ty.pi `motive motiveTy <|
     Ty.pis minorTys <|
     Ty.pis indexTys' <|
     Ty.arrow majorTy <|
