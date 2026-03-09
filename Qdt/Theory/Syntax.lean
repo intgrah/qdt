@@ -22,7 +22,7 @@ mutual
 /-- Types -/
 inductive Ty : Nat → Type
   | u {n} : Universe → Ty n
-  | pi {n} : Param n → Ty (n + 1) → Ty n
+  | pi {n} : Name → Ty n → Ty (n + 1) → Ty n
   /-- If Γ ⊢ t : 𝑢 i, then Γ ⊢ El(t) type -/
   | el {n} : Tm n → Ty n
 deriving Repr, Hashable
@@ -32,21 +32,11 @@ inductive Tm : Nat → Type
   | u' {n} : Universe → Tm n
   | var {n} : Idx n → Tm n
   | const {n} : Name → List Universe → Tm n
-  | lam {n} : Param n → Tm (n + 1) → Tm n
+  | lam {n} : Name → Ty n → Tm (n + 1) → Tm n
   | app {n} : Tm n → Tm n → Tm n
-  | pi' {n} : Param' n → Tm (n + 1) → Tm n
+  | pi' {n} : Name → Tm n → Tm (n + 1) → Tm n
   | proj {n} : Nat → Tm n → Tm n
   | letE {n} : Name → Ty n → Tm n → Tm (n + 1) → Tm n
-deriving Repr, Hashable
-
-@[pp_using_anonymous_constructor]
-inductive Param : Nat → Type
-  | mk {n} (name : Name) (ty : Ty n) : Param n
-deriving Repr, Hashable
-
-@[pp_using_anonymous_constructor]
-inductive Param' : Nat → Type
-  | mk {n} (name : Name) (tm : Tm n) : Param' n
 deriving Repr, Hashable
 
 end
@@ -54,13 +44,13 @@ end
 instance {n} : Inhabited (Ty n) := ⟨.u .zero⟩
 instance {n} : Inhabited (Tm n) := ⟨.u' .zero⟩
 
-def Ctx := Tele Param
+def Ctx := Tele (Name × Ty ·)
 
 instance {a b} : Hashable (Ctx a b) := ⟨Tele.hash⟩
 
 notation "𝑢" => Ty.u
 
-abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi ⟨.anonymous, ty⟩
+abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi .anonymous ty
 
 @[match_pattern]
 def Tm.apps {n} : Tm n → List (Tm n) → Tm n :=
@@ -68,16 +58,16 @@ def Tm.apps {n} : Tm n → List (Tm n) → Tm n :=
 
 def Ty.pis {a b} : Ctx a b → Ty b → Ty a
   | .nil => id
-  | .snoc bs param => pis bs ∘ pi param
+  | .snoc bs (name, ty) => pis bs ∘ pi name ty
 
 def Ty.getResultUniverse? {n} : Ty n → Option Universe
   | .u univ => some univ
-  | .pi _ cod => cod.getResultUniverse?
+  | .pi _ _ cod => cod.getResultUniverse?
   | .el _ => none
 
 def Tm.lams {a b} : Ctx a b → Tm b → Tm a
   | .nil => id
-  | .snoc bs param => lams bs ∘ lam param
+  | .snoc bs (name, ty) => lams bs ∘ lam name ty
 
 mutual
 
@@ -89,22 +79,19 @@ def Universe.subst (subst : List (Name × Universe)) : Universe → Universe
 
 def Ty.substLevels {n} (subst : List (Name × Universe)) : Ty n → Ty n
   | .u u => .u (u.subst subst)
-  | .pi ⟨name, ty⟩ b => .pi ⟨name, ty.substLevels subst⟩ (b.substLevels subst)
+  | .pi name ty b => .pi name (ty.substLevels subst) (b.substLevels subst)
   | .el t => .el (t.substLevels subst)
 
 def Tm.substLevels {n} (subst : List (Name × Universe)) : Tm n → Tm n
   | .u' u => .u' (u.subst subst)
   | .var i => .var i
   | .const c us => .const c (us.map (·.subst subst))
-  | .lam ⟨name, ty⟩ b => .lam ⟨name, ty.substLevels subst⟩ (b.substLevels subst)
+  | .lam name ty b => .lam name (ty.substLevels subst) (b.substLevels subst)
   | .app f a => .app (f.substLevels subst) (a.substLevels subst)
-  | .pi' ⟨name, a⟩ b => .pi' ⟨name, a.substLevels subst⟩ (b.substLevels subst)
+  | .pi' name a b => .pi' name (a.substLevels subst) (b.substLevels subst)
   | .proj i t => .proj i (t.substLevels subst)
   | .letE name ty rhs body =>
       .letE name (ty.substLevels subst) (rhs.substLevels subst) (body.substLevels subst)
-
-def Param.substLevels {n} (subst : List (Name × Universe)) : Param n → Param n
-  | ⟨name, ty⟩ => ⟨name, ty.substLevels subst⟩
 
 end
 

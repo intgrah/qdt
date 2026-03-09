@@ -11,12 +11,12 @@ mutual
 partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
   | .u' i₁, .u' i₂ => return i₁ == i₂
   | .neutral n₁, .neutral n₂ => n₁.defEq n₂
-  | .lam _ ⟨env₁, body₁⟩, .lam _ ⟨env₂, body₂⟩ => do
+  | .lam _ _ ⟨env₁, body₁⟩, .lam _ _ ⟨env₂, body₂⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← body₁.eval (env₁.weaken.cons var)
       let b₂Val ← body₂.eval (env₂.weaken.cons var)
       b₁Val.defEq b₂Val
-  | .lam _ ⟨env, body⟩, other => do
+  | .lam _ _ ⟨env, body⟩, other => do
       let var : VTm (n + 1) := VTm.varAt n
       let bVal ← body.eval (env.weaken.cons var)
       match other.weaken (m := n + 1) with
@@ -24,7 +24,7 @@ partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
           let oVal ← (VTm.neutral ne).app var
           bVal.defEq oVal
       | _ => return false
-  | other, .lam _ ⟨env, body⟩ => do
+  | other, .lam _ _ ⟨env, body⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
       let bVal ← body.eval (env.weaken.cons var)
       match other.weaken (m := n + 1) with
@@ -104,7 +104,7 @@ end
 
 partial def VTy.defEq {n} : VTy n → VTy n → ElabM Bool
   | .u i₁, .u i₂ => return i₁ == i₂
-  | .pi ⟨_, a₁⟩ ⟨env₁, b₁⟩, .pi ⟨_, a₂⟩ ⟨env₂, b₂⟩ => do
+  | .pi _ a₁ ⟨env₁, b₁⟩, .pi _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.defEq a₂) then return false
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← b₁.eval (env₁.weaken.cons var)

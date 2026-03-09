@@ -143,7 +143,7 @@ partial def inferPi {n : Nat}
   let (codTm, codTy) ← withChild 1 (inferTm ctx' cod)
   let .u codLevel := codTy
     | raiseError (.expectedType ctx'.names (← codTy.quote))
-  return (.pi' ⟨x, domTm⟩ codTm, domLevel.mkMax codLevel)
+  return (.pi' x domTm codTm, domLevel.mkMax codLevel)
 
 partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
   | .missing => failure
@@ -162,7 +162,7 @@ partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → Optio
       let (cod, codLevel) ← withChild 1 (checkTyWithLevelCore ctx' cs[1]!)
       let piLevel := domLevel.mkMax codLevel
       emitType ctx (.u piLevel)
-      return (.pi ⟨x, dom⟩ cod, piLevel)
+      return (.pi x dom cod, piLevel)
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       return (.el tm, level)
@@ -188,7 +188,7 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
       return result
   | .node `Term.app cs => do
       let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
-      let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy
+      let .pi _ aTy ⟨env, bTy⟩ := fTy
         | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
       let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval ctx.env
@@ -209,9 +209,9 @@ partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm 
       let ctx' := ctx.bind x aTyVal
       let (bodyTm, bodyTy) ← withChild 1 (inferTm ctx' cs[1]!)
       let clos := ⟨ctx.env, ← bodyTy.quote⟩
-      let resultTy : VTy n := .pi ⟨x, aTyVal⟩ clos
+      let resultTy : VTy n := .pi x aTyVal clos
       emitType ctx resultTy
-      return (.lam ⟨x, aTy⟩ bodyTm, resultTy)
+      return (.lam x aTy bodyTm, resultTy)
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
@@ -249,7 +249,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return tm
   | ast@(.node `Term.lam cs) => do
       let body := cs[1]!
-      let .pi ⟨_, a⟩ ⟨env, b⟩ := expected
+      let .pi _ a ⟨env, b⟩ := expected
         | raiseError (.typeMismatch ctx.names (← expected.quote) (← (← inferTm ctx ast).snd.quote))
       match cs[0]! with
       | .node `Binder.untyped bs =>
@@ -259,7 +259,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let b ← b.eval (env.weaken.cons (VTm.varAt n))
         let b ← withChild 1 (checkTmCore ctx' b body)
         emitType ctx expected
-        return .lam ⟨x, ← a.quote⟩ b
+        return .lam x (← a.quote) b
       | .node `Binder.typed bs =>
         let x := bs[0]!.getName
         let ann ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
@@ -271,7 +271,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let b ← b.eval (env.weaken.cons (VTm.varAt n))
         let body ← withChild 1 (checkTmCore ctx' b body)
         emitType ctx expected
-        return .lam ⟨x, ← a.quote⟩ body
+        return .lam x (← a.quote) body
       | _ => failure
   | .node `Term.letE cs => do
       let name := cs[0]!.getName
@@ -307,7 +307,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return .u' level
   | .node `Term.app cs => do
       let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
-      let .pi ⟨_, aTy⟩ ⟨env, bTy⟩ := fTy
+      let .pi _ aTy ⟨env, bTy⟩ := fTy
         | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
       let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval ctx.env

@@ -12,12 +12,12 @@ mutual
 
 partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
   | .u i => return .u i
-  | .pi ⟨x, a⟩ b => return .pi ⟨x, ← a.eval⟩ ⟨← read, b⟩
+  | .pi x a b => return .pi x (← a.eval) ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → ElabM (VTy n)
   | .u' i => return .u i
-  | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
+  | .pi' x a ⟨env, b⟩ => return .pi x (← doEl a) ⟨env, .el b⟩
   | .neutral ne => do
     match ← (VTm.neutral ne).whnf with
     | .neutral ne' => return .el ne'
@@ -28,19 +28,19 @@ partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .u' i => return .u' i
   | .var i => return (← read).get i
   | .const name us => return .neutral ⟨.const name us, .nil⟩
-  | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
+  | .lam x a body => return .lam x (← a.eval) ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
-  | .pi' ⟨x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
+  | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
 partial def VTm.app {n} (fn arg : VTm n) : ElabM (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
-  | .lam _param clos => betaReduction clos arg
+  | .lam _ _ clos => betaReduction clos arg
   | .neutral ne => do
     match ← (VTm.neutral ne).whnf with
-    | .lam _ clos => betaReduction clos arg
+    | .lam _ _ clos => betaReduction clos arg
     | .neutral ne' =>
       match ← iotaReduction ne' arg with
       | some result => return result

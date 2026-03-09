@@ -42,7 +42,7 @@ def Ty.fmt {c : Nat} (ctx : List Name) (ty : Ty c) (prec : Nat) : Format :=
   match ty with
   | .u .zero => "Type"
   | .u i => f!"Type {Universe.reprPrec i Prec.max}"
-  | .pi ⟨name, dom⟩ cod =>
+  | .pi name dom cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.app
       let codFmt := cod.fmt (x :: ctx) Prec.arrow
@@ -62,7 +62,7 @@ def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
       else
         let usStrs := us.map (fun u => toString (Universe.reprPrec u Prec.min))
         toString name ++ ".{" ++ ", ".intercalate usStrs ++ "}"
-  | .lam ⟨name, dom⟩ body =>
+  | .lam name dom body =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.arrow
       let bodyFmt := body.fmt (x :: ctx) Prec.min
@@ -72,7 +72,7 @@ def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
       let fFmt := f.fmt ctx Prec.app
       let aFmt := a.fmt ctx Prec.max
       parenIf (prec > Prec.app) f!"{fFmt} {aFmt}"
-  | .pi' ⟨name, dom⟩ cod =>
+  | .pi' name dom cod =>
       let x := freshName ctx name
       let domFmt := dom.fmt ctx Prec.app
       let codFmt := cod.fmt (x :: ctx) Prec.arrow

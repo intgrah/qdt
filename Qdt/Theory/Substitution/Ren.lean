@@ -23,16 +23,16 @@ mutual
 
 def Ty.ren {m n : Nat} (ξ : Ren m n) : Ty m → Ty n
   | .u i => .u i
-  | .pi ⟨x, a⟩ b => .pi ⟨x, a.ren ξ⟩ (b.ren ξ.up)
+  | .pi x a b => .pi x (a.ren ξ) (b.ren ξ.up)
   | .el t => .el (t.ren ξ)
 
 def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
   | .u' i => .u' i
   | .var i => .var (ξ i)
   | .const x us => .const x us
-  | .lam ⟨x, a⟩ body => .lam ⟨x, a.ren ξ⟩ (body.ren ξ.up)
+  | .lam x a body => .lam x (a.ren ξ) (body.ren ξ.up)
   | .app f a => .app (f.ren ξ) (a.ren ξ)
-  | .pi' ⟨x, a⟩ b => .pi' ⟨x, a.ren ξ⟩ (b.ren ξ.up)
+  | .pi' x a b => .pi' x (a.ren ξ) (b.ren ξ.up)
   | .proj i t => .proj i (t.ren ξ)
   | .letE x ty t body => .letE x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
 
@@ -63,7 +63,7 @@ mutual
 @[simp]
 theorem Ty.ren_id {n} : ∀ A : Ty n, A.ren (Ren.id n) = A
   | .u .. => rfl
-  | .pi ⟨_, _⟩ _ => by simp [Ty.ren, Ty.ren_id]
+  | .pi .. => by simp [Ty.ren, Ty.ren_id]
   | .el .. => by simp [Ty.ren, Tm.ren_id]
 
 @[simp]
@@ -71,9 +71,9 @@ theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
   | .u' .. => rfl
   | .var .. => rfl
   | .const .. => rfl
-  | .lam ⟨_, _⟩ _ => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
+  | .lam .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
   | .app .. => by simp only [Tm.ren, Tm.ren_id]
-  | .pi' ⟨_, _⟩ _ => by simp [Tm.ren, Tm.ren_id]
+  | .pi' .. => by simp [Tm.ren, Tm.ren_id]
   | .proj .. => by simp only [Tm.ren, Tm.ren_id]
   | .letE .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
 
@@ -88,7 +88,7 @@ mutual
 theorem Ty.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
     ∀ A : Ty l, A.ren (ξ.comp ζ) = (A.ren ξ).ren ζ
   | .u .. => rfl
-  | .pi ⟨_, _⟩ _ => by simp [Ty.ren, Ty.comp_ren]
+  | .pi .. => by simp [Ty.ren, Ty.comp_ren]
   | .el .. => by simp only [Ty.ren, Tm.comp_ren]
 
 @[simp]
@@ -97,9 +97,9 @@ theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
   | .u' .. => rfl
   | .var .. => rfl
   | .const .. => rfl
-  | .lam ⟨_, _⟩ _ => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
+  | .lam .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
   | .app .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .pi' ⟨_, _⟩ _ => by simp [Tm.ren, Tm.comp_ren]
+  | .pi' .. => by simp [Tm.ren, Tm.comp_ren]
   | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
   | .letE .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
 

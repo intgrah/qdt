@@ -28,7 +28,7 @@ inductive Ty.AlphaEq : ∀ {n}, Ty n → Ty n → Prop
   | congrPi {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Ty (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .pi ⟨x₁, a₁⟩ b₁ ≡α .pi ⟨x₂, a₂⟩ b₂
+      .pi x₁ a₁ b₁ ≡α .pi x₂ a₂ b₂
   | congrEl {n} (t₁ t₂ : Tm n) : t₁ ≡α t₂ → Ty.el t₁ ≡α Ty.el t₂
 
 inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
@@ -48,11 +48,11 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
   | congrPiHat {n} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .pi' ⟨x₁, a₁⟩ b₁ ≡α .pi' ⟨x₂, a₂⟩ b₂
+      .pi' x₁ a₁ b₁ ≡α .pi' x₂ a₂ b₂
   | congrLam {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →
-      .lam ⟨x₁, a₁⟩ b₁ ≡α .lam ⟨x₂, a₂⟩ b₂
+      .lam x₁ a₁ b₁ ≡α .lam x₂ a₂ b₂
   | congrLetE {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm n} {c₁ c₂ : Tm (n + 1)} :
       a₁ ≡α a₂ →
       b₁ ≡α b₂ →

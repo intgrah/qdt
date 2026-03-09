@@ -10,26 +10,26 @@ mutual
 
 partial def VTy.quote {n} : VTy n → ElabM (Ty n)
   | .u i => return .u i
-  | .pi ⟨x, a⟩ ⟨env, b⟩ => do
+  | .pi x a ⟨env, b⟩ => do
       let a ← a.quote
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
-      return .pi ⟨x, a⟩ b
+      return .pi x a b
   | .el n => return .el (← n.quote)
 
 partial def VTm.quote {n} : VTm n → ElabM (Tm n)
   | .u' i => return .u' i
   | .neutral n => n.quote
-  | .lam ⟨x, a⟩ ⟨env, b⟩ => do
+  | .lam x a ⟨env, b⟩ => do
       let a ← a.quote
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
-      return .lam ⟨x, a⟩ b
+      return .lam x a b
   | .pi' x a ⟨env, b⟩ => do
       let a ← a.quote
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
-      return .pi' ⟨x, a⟩ b
+      return .pi' x a b
 
 partial def Head.quote {n} : Head n → ElabM (Tm n)
   | .var i => return .var i.rev
@@ -45,16 +45,16 @@ partial def Neutral.quote {n} (ne : Neutral n) : ElabM (Tm n) := do
 
 partial def VTy.reify {n} : VTy n → ElabM (Tm n)
   | .u i => return .u' i
-  | .pi ⟨x, a⟩ ⟨env, b⟩ => do
+  | .pi x a ⟨env, b⟩ => do
       let a ← a.reify
       let b ← b.eval (env.weaken.cons (VTm.varAt n))
       let b ← b.reify
-      return .pi' ⟨x, a⟩ b
+      return .pi' x a b
   | .el n => n.quote
 
 partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM Universe
   | .u i => return i.mkSucc
-  | .pi ⟨_x, a⟩ ⟨env, b⟩ => do
+  | .pi _x a ⟨env, b⟩ => do
       let aLevel ← a.inferLevel ctx
       let bVal : VTy (n + 1) ← b.eval (env.weaken.cons (VTm.varAt n))
       let bLevel ← bVal.inferLevel (ctx.snoc ⟨.anonymous, a⟩)

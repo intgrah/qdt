@@ -265,7 +265,7 @@ module
 --     (T : Ty n) → T.shiftAfter m (k + 1) = (T.shiftAfter m k).shiftAfter m 1
 --   | 𝑢 => rfl
 --   | .el t => congrArg Ty.el (Tm.shiftAfter_succ m k t)
---   | .pi ⟨x, A⟩ B => by
+--   | .pi x A B => by
 --       simp [Ty.shiftAfter, Ty.shiftAfter_succ m k, Ty.shiftAfter_succ (m + 1) k]
 
 -- theorem Tm.shiftAfter_succ {n : Nat} (m k : Nat) :
@@ -277,7 +277,7 @@ module
 --         simp [h, h', Nat.add_assoc]
 --       · simp [h]
 --   | .const _ => rfl
---   | .lam ⟨x, A⟩ body => by
+--   | .lam x A body => by
 --       simp [Tm.shiftAfter, Ty.shiftAfter_succ m k, Tm.shiftAfter_succ (m + 1) k]
 --   | .app f a => by
 --       simp only [Tm.shiftAfter, Tm.shiftAfter_succ m k]
