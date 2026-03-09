@@ -111,12 +111,6 @@ def fetchConstant (name : Name) : ElabM (Option Constant) := do
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
 
-def fetchTy (name : Name) : ElabM (Option (Ty 0)) := do
-  let some e ← fetchConstant name | return none
-  return some (match e with
-    | .definition info | .opaque info | .axiom info
-    | .recursor info | .constructor info | .inductive info => info.ty)
-
 def fetchConstantInfo (name : Name) : ElabM (Option ConstantInfo) := do
   let some e ← fetchConstant name | return none
   return some (match e with

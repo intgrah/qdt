@@ -138,8 +138,8 @@ abbrev Val : Key → Type
   | .constant _ _ => Option (Constant × Origin)
   /- The set of all files transitively imported by the given file. -/
   | .transitiveImports _ => HashSet FilePath
-  /- The type of the constant, if it was found, retaining only the type -/
-  | .type _ _ => Option (Ty 0)
+  /- The type and universe params of the constant, if found -/
+  | .type _ _ => Option ConstantInfo
   | .moduleFile _ => Option FilePath
   | .inputFiles => HashSet FilePath
   | .checkFile _ => Array Diagnostic
