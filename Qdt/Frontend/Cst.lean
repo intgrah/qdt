@@ -13,6 +13,11 @@ open Std (HashMap)
 inductive Cst : Type
   | token (kind : SyntaxNodeKind) (val : String)
   | node (kind : SyntaxNodeKind) (children : Array Cst)
+with
+  @[computed_field]
+  width : Cst → Nat
+    | .token _ val => val.length
+    | .node _ children => children.map width |>.sum
 deriving Hashable
 
 structure Span where
@@ -20,10 +25,6 @@ structure Span where
   endPos : Nat
 
 namespace Cst
-
-def width : Cst → Nat
-  | .token _ val => val.length
-  | .node _ children => children.foldl (· + ·.width) 0
 
 def reconstruct : Cst → String
   | .token _ val => val
