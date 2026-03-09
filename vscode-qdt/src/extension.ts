@@ -75,20 +75,23 @@ export async function activate(
 
   try {
     await client.start();
-    client.onNotification("$/lean/fileProgress", (params: FileProgressParams) => {
-      const uri = VSCode.Uri.parse(params.textDocument.uri);
-      const decos: VSCode.DecorationOptions[] = params.processing
-        .filter((i) => i.kind === undefined || i.kind === 1)
-        .map((i) => ({
-          range: new VSCode.Range(i.range.start.line, 0, i.range.end.line, 0),
-          hoverMessage: "Processing...",
-        }));
-      for (const editor of VSCode.window.visibleTextEditors) {
-        if (editor.document.uri.toString() === uri.toString()) {
-          editor.setDecorations(processingDecoration, decos);
+    client.onNotification(
+      "$/lean/fileProgress",
+      (params: FileProgressParams) => {
+        const uri = VSCode.Uri.parse(params.textDocument.uri);
+        const decos: VSCode.DecorationOptions[] = params.processing
+          .filter((i) => i.kind === undefined || i.kind === 1)
+          .map((i) => ({
+            range: new VSCode.Range(i.range.start.line, 0, i.range.end.line, 0),
+            hoverMessage: "Processing...",
+          }));
+        for (const editor of VSCode.window.visibleTextEditors) {
+          if (editor.document.uri.toString() === uri.toString()) {
+            editor.setDecorations(processingDecoration, decos);
+          }
         }
-      }
-    });
+      },
+    );
   } catch (err: unknown) {
     output.appendLine(`[qdt] Failed to start: ${String(err)}`);
     output.show(true);
