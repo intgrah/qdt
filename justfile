@@ -3,13 +3,15 @@ c_sources := "FSWatch/c/rdcw.c FSWatch/c/inotify.c Incremental/c/shake.c"
 
 default: qdt qdt-lsp
 
+install:
+    ln -sf {{justfile_directory()}}/.lake/build/bin/qdt ~/.local/bin/qdt
+    ln -sf {{justfile_directory()}}/.lake/build/bin/qdt-lsp ~/.local/bin/qdt-lsp
+
 qdt:
     lake build qdt
-    cp .lake/build/bin/qdt ~/.local/bin
 
 qdt-lsp:
     lake build qdt-lsp
-    cp .lake/build/bin/qdt-lsp ~/.local/bin
 
 compile_commands:
     echo '{{c_sources}}' \
@@ -19,7 +21,15 @@ compile_commands:
       > compile_commands.json
 
 stdlib:
-    qdt --root stdlib Std
+    qdt --root examples/stdlib Std
 
 normalisation-bench:
-    qdt --root normalisation-bench Bench
+    qdt --root examples/normalisation-bench Bench
+
+long-discrete:
+    cd examples/long && ./discrete.sh > Discrete.qdt
+    qdt --root examples/long Discrete
+
+long-chain:
+    cd examples/long && ./chain.sh > Chain.qdt
+    qdt --root examples/long Chain
