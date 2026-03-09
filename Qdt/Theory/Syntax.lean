@@ -25,7 +25,16 @@ inductive Ty : Nat → Type
   | pi {n} : Name → Ty n → Ty (n + 1) → Ty n
   /-- If Γ ⊢ t : .u i, then Γ ⊢ .el t type -/
   | el {n} : Tm n → Ty n
-deriving Repr, Hashable
+with
+  @[computed_field]
+  hash' : ∀ n, Ty n → UInt64
+    | _, .u u =>
+      0 |> mixHash (hash u)
+    | _, .pi name dom cod =>
+      0 |> mixHash (hash name) |> mixHash dom.hash' |> mixHash cod.hash'
+    | _, .el t =>
+      1 |> mixHash t.hash'
+deriving Repr
 
 /-- Terms -/
 inductive Tm : Nat → Type
@@ -37,10 +46,31 @@ inductive Tm : Nat → Type
   | pi' {n} : Name → Tm n → Tm (n + 1) → Tm n
   | proj {n} : Nat → Tm n → Tm n
   | letE {n} : Name → Ty n → Tm n → Tm (n + 1) → Tm n
-deriving Repr, Hashable
+with
+  @[computed_field]
+  hash' : ∀ n, Tm n → UInt64
+    | _, .u' u =>
+      0 |> mixHash (hash u)
+    | _, .var i =>
+      1 |> mixHash (hash i)
+    | _, .const name us =>
+      2 |> mixHash (hash name) |> mixHash (hash us)
+    | _, .lam name ty b =>
+      3 |> mixHash (hash name) |> mixHash ty.hash' |> mixHash b.hash'
+    | _, .app f a =>
+      4 |> mixHash f.hash' |> mixHash a.hash'
+    | _, .pi' name a b =>
+      5 |> mixHash (hash name) |> mixHash a.hash' |> mixHash b.hash'
+    | _, .proj i t =>
+      6 |> mixHash (hash i) |> mixHash t.hash'
+    | _, .letE name ty rhs body =>
+      7 |> mixHash (hash name) |> mixHash ty.hash' |> mixHash rhs.hash' |> mixHash body.hash'
+deriving Repr
 
 end
 
+instance {n} : Hashable (Ty n) := ⟨Ty.hash' n⟩
+instance {n} : Hashable (Tm n) := ⟨Tm.hash' n⟩
 instance {n} : Inhabited (Ty n) := ⟨.u .zero⟩
 instance {n} : Inhabited (Tm n) := ⟨.u' .zero⟩
 
