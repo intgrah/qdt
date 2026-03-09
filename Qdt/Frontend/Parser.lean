@@ -168,7 +168,7 @@ def peekIdentStr : ParserM (Option String) := do
       else return none
   | none => return none
 
-def one (p : ParserM Cst) : ParserM (Array Cst) := do return #[← p]
+def one (p : ParserM Cst) : ParserM (Array Cst) := Array.singleton <$> p
 
 def opt (p : ParserM Cst) : ParserM (Array Cst) := do
   match ← tryParse p with
@@ -176,10 +176,10 @@ def opt (p : ParserM Cst) : ParserM (Array Cst) := do
   | none => return #[]
 
 instance : Append (ParserM (Array Cst)) where
-  append p q := return (← p) ++ (← q)
+  append p q := Array.append <$> p <*> q
 
-def node (kind : SyntaxNodeKind) (p : ParserM (Array Cst)) : ParserM Cst := do
-  return Cst.node kind (← p)
+def node (kind : SyntaxNodeKind) (p : ParserM (Array Cst)) : ParserM Cst :=
+  Cst.node kind <$> p
 
 partial def many (p : ParserM (Array Cst)) : ParserM (Array Cst) := do
   match ← tryParse p with
@@ -477,36 +477,5 @@ def parse (input : String) : Cst × Array ParseError :=
   match parseProgram.run init with
   | .ok (cst, st) => (cst, st.errors)
   | .error e => (.token `missing "", #[e]) -- Should be unreachable with manyRecover, but as fallback
-
-def parseExpr (input : String) : Except ParseError Cst :=
-  match term.run { input, pos := 0, errors := #[] } with
-  | .ok (cst, _) => .ok cst
-  | .error e => .error e
-
-def parseLean (input : String) : IO (Cst × Array ParseError) := do
-  let ictx := Lean.Parser.mkInputContext input "<input>"
-  let (header, mps, _) ← Lean.Parser.parseHeader ictx
-  let env ← Lean.mkEmptyEnvironment 0
-  let pmctx : Lean.Parser.ParserModuleContext := { env, options := {} }
-  let mut mps := mps
-  let mut children : Array Cst := #[Cst.ofLeanSyntax header]
-  while mps.pos.byteIdx < input.utf8ByteSize do
-    let (cmd, mps', _) := Lean.Parser.parseCommand ictx pmctx mps {}
-    children := children.push (Cst.ofLeanSyntax cmd)
-    if mps'.pos == mps.pos then break
-    mps := mps'
-  return (Cst.node `Lean.Parser.Module children, #[])
-
-def showTree (cst : Cst) (indent : Nat := 0) : String :=
-  let pfx := "".pushn ' ' (indent * 2)
-  match cst with
-  | .token kind val =>
-      let k := toString kind
-      pfx ++ k ++ "@" ++ toString val.length ++ " \"" ++ val ++ "\"\n"
-  | .node kind args =>
-      let k := toString kind
-      let hdr := pfx ++ k ++ "@" ++ toString cst.width ++ "\n"
-      let children := args.map (fun child => showTree child (indent + 1))
-      hdr ++ String.join children.toList
 
 end Qdt.Frontend.Parser
