@@ -8,7 +8,7 @@ public import Lean.Data.Lsp.InitShutdown
 
 namespace Qdt
 
-open Std (DHashMap HashMap)
+open Std (DHashMap HashMap HashSet)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
@@ -67,7 +67,8 @@ def getProject (filepath : FilePath) : ServerM ProjectState := do
   match st.projects[root]? with
   | some ps => return ps
   | none =>
-      let ps : ProjectState := { root, store := DHashMap.emptyWithCapacity 1024 }
+      let store ← Store.populate root (DHashMap.emptyWithCapacity 1024)
+      let ps : ProjectState := { root, store }
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
 
@@ -126,8 +127,7 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
     IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
-  let store ← Store.populate ps.root ps.store
-  let store ← match ShakeNative.build tasks (Key.checkFile filepath) store with
+  let store ← match ShakeNative.build tasks (Key.checkFile filepath) ps.store with
     | .ok (_, s) => pure s
     | .error .cycle => throw (IO.userError "cycle detected")
     | .error .missingInput => throw (IO.userError "missing input")
@@ -138,7 +138,14 @@ def runElabTask (ps : ProjectState) (filepath : FilePath) :
 def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
   let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  setProject { ps with store := ps.store.insert (.text file) memo }
+  let store := ps.store.insert (.text file) memo
+  let inputFiles : HashSet FilePath :=
+    match store.get? .inputFiles with
+    | some (m : Memo Key Val .inputFiles) => m.value.insert file
+    | none => {file}
+  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
+  let store := store.insert .inputFiles inputMemo
+  setProject { ps with store }
 
 def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
@@ -165,7 +172,7 @@ def handleInitialize (id : RequestID) (params? : Option Json.Structured) : Serve
   let sync : TextDocumentSyncOptions :=
     {
       openClose := true
-      change := TextDocumentSyncKind.full
+      change := TextDocumentSyncKind.incremental
       willSave := false
       willSaveWaitUntil := false
       save? := none
@@ -226,11 +233,22 @@ def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
   let some file ← uriToPath? uri
     | return
 
-  let text? : Option String :=
-    match params.contentChanges.back? with
-    | some (.fullChange text) => some text
-    | _ => none
-  let some text := text? | return
+  let ps ← getProject file
+  let mut text :=
+    match ps.store.get? (.text file) with
+    | some memo => memo.value
+    | none => ""
+  for change in params.contentChanges do
+    match change with
+    | .rangeChange range replacement =>
+      let fileMap := text.toFileMap
+      let start := fileMap.lspPosToUtf8Pos range.start
+      let stop := fileMap.lspPosToUtf8Pos range.end
+      let pre := String.Pos.Raw.extract text 0 start
+      let post := String.Pos.Raw.extract text stop text.rawEndPos
+      text := pre ++ replacement ++ post
+    | .fullChange newText =>
+      text := newText
 
   updateFileText file text
   elaborateAndPublish file uri version?
@@ -302,8 +320,10 @@ def mainLoop (stdin : IO.FS.Stream) : ServerM Unit := do
     | .request id method _ =>
       sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
     | .notification "exit" _ => throw (IO.userError "exit")
-    | .notification "textDocument/didOpen" params? => handleDidOpen params?
-    | .notification "textDocument/didChange" params? => handleDidChange params?
+    | .notification "textDocument/didOpen" params? =>
+      handleDidOpen params?
+    | .notification "textDocument/didChange" params? =>
+      handleDidChange params?
     | .notification "textDocument/didClose" params? => handleDidClose params?
     | _ => continue
 
