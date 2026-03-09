@@ -38,6 +38,14 @@ partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
       let b₁Val ← b₁.eval (env₁.weaken.cons var)
       let b₂Val ← b₂.eval (env₂.weaken.cons var)
       b₁Val.defEq b₂Val
+  | .neutral ne, other => do
+      match ← (VTm.neutral ne).whnf with
+      | .neutral _ => return false
+      | v => v.defEq other
+  | other, .neutral ne => do
+      match ← (VTm.neutral ne).whnf with
+      | .neutral _ => return false
+      | v => other.defEq v
   | _, _ => return false
 
 partial def etaDefEq {n} (ne : Neutral n) (other : VTm n) : ElabM Bool := do
@@ -68,11 +76,23 @@ partial def Neutral.defEq {n} : Neutral n → Neutral n → ElabM Bool
           if n₁ == n₂ && us₁ == us₂ then
             sp₁.defEq sp₂
           else
-            let eta1 ← etaDefEq ⟨.const n₁ us₁, sp₁⟩ (.neutral ne₂)
-            let eta2 ← etaDefEq ⟨.const n₂ us₂, sp₂⟩ (.neutral ne₁)
-            return eta1 || eta2
-      | .const _ _, .var _ => etaDefEq ne₁ (.neutral ne₂)
-      | .var _, .const _ _ => etaDefEq ne₂ (.neutral ne₁)
+            match ← deltaReduction n₁ us₁, ← deltaReduction n₂ us₂ with
+            | some v₁, some v₂ =>
+                (← applySpine sp₁ v₁).defEq (← applySpine sp₂ v₂)
+            | some v₁, none =>
+                (← applySpine sp₁ v₁).defEq (.neutral ne₂)
+            | none, some v₂ =>
+                (VTm.neutral ne₁).defEq (← applySpine sp₂ v₂)
+            | none, none =>
+                return (← etaDefEq ne₁ (.neutral ne₂)) || (← etaDefEq ne₂ (.neutral ne₁))
+      | .const n₁ us₁, .var _ =>
+          match ← deltaReduction n₁ us₁ with
+          | some v₁ => (← applySpine sp₁ v₁).defEq (.neutral ne₂)
+          | none => etaDefEq ne₁ (.neutral ne₂)
+      | .var _, .const n₂ us₂ =>
+          match ← deltaReduction n₂ us₂ with
+          | some v₂ => (VTm.neutral ne₁).defEq (← applySpine sp₂ v₂)
+          | none => etaDefEq ne₂ (.neutral ne₁)
 
 partial def Spine.defEq {n} : Spine n → Spine n → ElabM Bool
   | .nil, .nil => return true
