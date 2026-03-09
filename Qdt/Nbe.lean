@@ -18,13 +18,16 @@ partial def Ty.eval {n c} : Ty c → SemM n c (VTy n)
 partial def doEl {n} : VTm n → ElabM (VTy n)
   | .u' i => return .u i
   | .pi' x a ⟨env, b⟩ => return .pi ⟨x, ← doEl a⟩ ⟨env, .el b⟩
-  | .neutral ne => return .el ne
+  | .neutral ne => do
+    match ← (VTm.neutral ne).whnf with
+    | .neutral ne' => return .el ne'
+    | v => doEl v
   | .lam .. => panic! "doEl: expected type code or neutral"
 
 partial def Tm.eval {n c} : Tm c → SemM n c (VTm n)
   | .u' i => return .u' i
   | .var i => return (← read).get i
-  | .const name us => deltaReduction name us
+  | .const name us => return .neutral ⟨.const name us, .nil⟩
   | .lam ⟨x, a⟩ body => return .lam ⟨x, ← a.eval⟩ ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
   | .pi' ⟨x, a⟩ b => return .pi' x (← a.eval) ⟨← read, b⟩
@@ -36,34 +39,49 @@ partial def VTm.app {n} (fn arg : VTm n) : ElabM (VTm n) :=
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _param clos => betaReduction clos arg
   | .neutral ne => do
-    match ← iotaReduction ne arg with
-    | some result => return result
-    | none => return .neutral (ne.app arg)
+    match ← (VTm.neutral ne).whnf with
+    | .lam _ clos => betaReduction clos arg
+    | .neutral ne' =>
+      match ← iotaReduction ne' arg with
+      | some result => return result
+      | none => return .neutral (ne'.app arg)
+    | _ => panic! "VTm.app: unexpected whnf result"
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → ElabM (VTm n)
   | .u' .. => panic! "VTm.proj: expected neutral"
   | .lam .. => panic! "VTm.proj: expected neutral"
   | .neutral ne => do
-    match ← projReduction ne i with
-    | some result => return result
-    | none => return .neutral (ne.proj i)
+    match ← (VTm.neutral ne).whnf with
+    | .neutral ne' =>
+      match ← projReduction ne' i with
+      | some result => return result
+      | none => return .neutral (ne'.proj i)
+    | v => v.proj i
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
-@[inline]
-partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM (VTm n) := do
-  match ← fetchDefinition name, ← fetchConstantInfo name with
-  | some tm, some info =>
-    let subst := info.univParams.zip us
-    tm.substLevels subst |>.eval .nil
-  | _, _ => return .neutral ⟨.const name us, .nil⟩
+partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM (Option (VTm n)) := do
+  let some tm ← fetchDefinition name | return none
+  let some info ← fetchConstantInfo name | return none
+  let subst := info.univParams.zip us
+  return some (← (tm.substLevels subst).eval .nil)
 
-@[inline]
+partial def applySpine {n} : Spine n → VTm n → ElabM (VTm n)
+  | .nil, v => return v
+  | .app sp arg, v => do (← applySpine sp v).app arg
+  | .proj sp i, v => do (← applySpine sp v).proj i
+
+partial def VTm.whnf {n} : VTm n → ElabM (VTm n)
+  | .neutral ⟨.const name us, sp⟩ => do
+    match ← deltaReduction name us with
+    | some v => (← applySpine sp v).whnf
+    | none => return .neutral ⟨.const name us, sp⟩
+  | v => return v
+
 partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM (VTm n) :=
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 
-@[inline]
 partial def iotaReduction {n}
     (ne : Neutral n)
     (arg : VTm n) :
@@ -99,7 +117,6 @@ partial def iotaReduction {n}
   else
     return none
 
-@[inline]
 partial def projReduction {n}
     (ne : Neutral n)
     (i : Nat) :
