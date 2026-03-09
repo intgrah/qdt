@@ -33,3 +33,7 @@ long-discrete:
 long-chain:
     cd examples/long && ./chain.sh > Chain.qdt
     qdt --root examples/long Chain
+
+long-random:
+    cd examples/long && ./random.sh > Random.qdt
+    qdt --root examples/long Random
