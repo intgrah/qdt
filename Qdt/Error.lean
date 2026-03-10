@@ -138,7 +138,6 @@ instance {α} : Monoid (Array α) where
   mul_one _ := Array.append_empty
   mul_assoc _ _ _ := Array.append_assoc
 
-@[pp_using_anonymous_constructor]
 structure ElabInfo where
   diagnostics : Array Diagnostic
   hovers : Array HoverInfo

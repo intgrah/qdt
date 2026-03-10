@@ -70,7 +70,7 @@ def withChild {α : Type} (i : Nat) : ElabM α → ElabM α :=
   ReaderT.adapt fun ctx => { ctx with path := i :: ctx.path }
 
 def getUnivParams : ElabM (List Name) := do
-  return (← readThe ElabContext).univParams
+  return (← read).univParams
 
 def emitDiagnostic (err : Error) : ElabM Unit := do
   let path ← currentPath
