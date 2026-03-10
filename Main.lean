@@ -11,7 +11,6 @@ namespace Qdt
 open Cli
 open Qdt
 open Incremental
-open Incremental.Shake (Store Memo)
 open Std (DHashMap)
 open System (FilePath)
 
@@ -35,42 +34,39 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
-def checkModule (store : Store Key Val) (filepath : FilePath) : Array String := Id.run do
-  let some transImports := store.get? (Key.transitiveImports filepath)
+def checkModule (store : QStore) (filepath : FilePath) : Array String := Id.run do
+  let some transImports := store.cache.get? (Key.transitiveImports filepath)
     | return #[s!"{filepath}: error: missing transitive imports"]
   let allFiles := transImports.value.toList ++ [filepath]
   let mut msgs : Array String := #[]
   for file in allFiles do
-    let some diagsMemo := store.get? (Key.checkFile file) | continue
+    let some diagsMemo := store.cache.get? (Key.checkFile file) | continue
     let diags := diagsMemo.value
     if diags.isEmpty then continue
-    let some textMemo := store.get? (Key.text file) | continue
-    let some asmMemo := store.get? (Key.astSourceMap file) | continue
-    let text := textMemo.value
+    let text := (store.inputs.get? (.text file)).getD ""
+    let some asmMemo := store.cache.get? (Key.astSourceMap file) | continue
     let (_, sm, _) := asmMemo.value
-    let some cstMemo := store.get? (Key.cst file) | continue
+    let some cstMemo := store.cache.get? (Key.cst file) | continue
     let (cst, _) := cstMemo.value
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
   return msgs
 
-def runOnce (root : FilePath) (store : Store Key Val) (filepath : FilePath) :
-    IO (Array String × Store Key Val) := do
-  let store ← Store.populate root store
-  let (transImports, store) ← match ShakeNative.build tasks (Key.transitiveImports filepath) store with
+def runOnce (root : FilePath) (store : QStore) (filepath : FilePath) :
+    IO (Array String × QStore) := do
+  let store ← QStore.populate root store
+  let (transImports, store) ← match build.build tasks (Key.transitiveImports filepath) store with
     | .ok (v, s) => pure (v, s)
     | .error .cycle => return (#["[error] cycle detected"], store)
-    | .error .missingInput => return (#["[error] missing input"], store)
   let allFiles := transImports.toList ++ [filepath]
   let keys := allFiles.map Key.checkFile
-  match keys.foldlM (fun s k => Prod.snd <$> ShakeNative.build tasks k s) store with
+  match keys.foldlM (fun s k => Prod.snd <$> build.build tasks k s) store with
   | .ok store =>
       let msgs := checkModule store filepath
       return (msgs, store)
   | .error .cycle => return (#["[error] cycle detected"], store)
-  | .error .missingInput => return (#["[error] missing input"], store)
 
-def watchLoop (root : FilePath) (store : Store Key Val) (entryFile : FilePath) : IO Unit := do
+def watchLoop (root : FilePath) (store : QStore) (entryFile : FilePath) : IO Unit := do
   let (msgs, initialStore) ← runOnce root store entryFile
   for msg in msgs do println! msg
   let store ← IO.mkRef initialStore
@@ -86,8 +82,7 @@ def watchLoop (root : FilePath) (store : Store Key Val) (entryFile : FilePath) :
       if !pendingFiles.isEmpty then
         for file in pendingFiles do
           let text ← IO.FS.readFile file
-          let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-          store.modify (·.insert (.text file) memo)
+          store.modify fun s => { s with inputs := s.inputs.insert (.text file) text }
         let (msgs, s) ← runOnce root (← store.get) entryFile
         for msg in msgs do println! msg
         store.set s
@@ -108,7 +103,7 @@ def run (parsed : Parsed) : IO UInt32 := do
 
   let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
 
-  let store : Store Key Val := DHashMap.emptyWithCapacity 1024
+  let store := build.init (DHashMap.emptyWithCapacity 64)
 
   if watchMode then
     watchLoop root store files[0]!

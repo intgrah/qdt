@@ -13,6 +13,9 @@ qdt:
 qdt-lsp:
     lake build qdt-lsp
 
+test:
+    lake test
+
 compile_commands:
     echo '{{c_sources}}' \
       | tr ' ' '\n' \
