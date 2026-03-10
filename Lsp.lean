@@ -12,7 +12,6 @@ open Std (DHashMap HashMap HashSet)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
-open Incremental.Shake (Store Memo)
 open Frontend (Cst Path SourceMap Span)
 
 def mkRange (text : String) (span : Span) : Range :=
@@ -51,7 +50,7 @@ def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
 
 structure ProjectState where
   root : FilePath
-  store : Store Key Val
+  store : QStore
 
 structure ServerState where
   hOut : IO.FS.Stream
@@ -67,7 +66,8 @@ def getProject (filepath : FilePath) : ServerM ProjectState := do
   match st.projects[root]? with
   | some ps => return ps
   | none =>
-      let store ← Store.populate root (DHashMap.emptyWithCapacity 1024)
+      let store := build.init (DHashMap.emptyWithCapacity 64)
+      let store ← QStore.populate root store
       let ps : ProjectState := { root, store }
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
@@ -126,32 +126,27 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    IO ((ElabInfo × SourceMap × Cst) × Store Key Val) := do
-  let store ← match ShakeNative.build tasks (Key.checkFile filepath) ps.store with
+    IO ((ElabInfo × SourceMap × Cst) × QStore) := do
+  let store ← match build.build tasks (Key.checkFile filepath) ps.store with
     | .ok (_, s) => pure s
     | .error .cycle => throw (IO.userError "cycle detected")
-    | .error .missingInput => throw (IO.userError "missing input")
   match elaborateFile store filepath with
   | some result => pure (result, store)
   | none => throw (IO.userError "elaboration failed")
 
 def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
-  let memo : Memo Key Val (.text file) := { value := text, deps := ∅ }
-  let store := ps.store.insert (.text file) memo
+  let inputs := ps.store.inputs.insert (.text file) text
   let inputFiles : HashSet FilePath :=
-    match store.get? .inputFiles with
-    | some (m : Memo Key Val .inputFiles) => m.value.insert file
+    match inputs.get? .inputFiles with
+    | some fs => fs.insert file
     | none => {file}
-  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  let store := store.insert .inputFiles inputMemo
-  setProject { ps with store }
+  let inputs := inputs.insert .inputFiles inputFiles
+  setProject { ps with store := { ps.store with inputs } }
 
 def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
-  let text := match ps.store.get? (.text file) with
-    | some memo => memo.value
-    | none => ""
+  let text := (ps.store.inputs.get? (.text file)).getD ""
   let ((info, sourceMap, cst), store') ← runElabTask ps file
   setProject { ps with store := store' }
   let diagnostics := buildDiagnostics text info sourceMap cst
@@ -234,10 +229,7 @@ def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
     | return
 
   let ps ← getProject file
-  let mut text :=
-    match ps.store.get? (.text file) with
-    | some memo => memo.value
-    | none => ""
+  let mut text := (ps.store.inputs.get? (.text file)).getD ""
   for change in params.contentChanges do
     match change with
     | .rangeChange range replacement =>
@@ -263,7 +255,7 @@ def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
   let uri := params.textDocument.uri
   if let some file ← uriToPath? uri then
     let ps ← getProject file
-    setProject { ps with store := ps.store.erase (.text file) }
+    setProject { ps with store := { ps.store with inputs := ps.store.inputs.erase (.text file) } }
   publishDiagnostics uri none #[]
 
 def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
@@ -280,10 +272,7 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
 
   let ps ← getProject file
 
-  let text ←
-    match ps.store.get? (.text file) with
-    | some memo => pure memo.value
-    | none => IO.FS.readFile file
+  let text := (ps.store.inputs.get? (.text file)).getD ""
 
   let fileMap := Lean.FileMap.ofString text
   let bytePos := fileMap.lspPosToUtf8Pos lspPos

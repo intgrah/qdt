@@ -1,5 +1,6 @@
 module
 
+public import Mathlib.Logic.Function.Basic
 public import Std.Data.DHashMap
 public import Std.Data.HashMap
 public import Std.Data.HashSet
@@ -18,49 +19,68 @@ The choice of the constraint `c` has concrete meanings:
 - `c := Monad` - dynamic dependencies
 -/
 
-set_option checkBinderAnnotations false in
-def Task
-    (c : (Type → Type) → Type 1)
-    (Q : Type)
-    (R : Q → Type)
-    (α : Type) :
-    Type 1 :=
-  ∀ (f : Type → Type) [c f], (∀ q, f (R q)) → f α
-
 variable
   (c : (Type → Type) → Type 1)
-  (σ : Type)
-  (Q : Type)
-  (R : Q → Type)
+  (I : Type) (V : I → Type)
+  (Q : Type) (R : Q → Type)
+
+set_option checkBinderAnnotations false in
+def Task (α : Type) : Type 1 :=
+  ∀ (f : Type → Type) [c f], (∀ i, V i) → (∀ q, f (R q)) → f α
 
 namespace Task
 
-def fetch
-    {c : (Type → Type) → Type 1}
-    {Q : Type}
-    {R : Q → Type}
-    (q : Q) :
-    Task c Q R (R q) :=
-  fun _ [_] fetch => fetch q
+variable
+  {c : (Type → Type) → Type 1}
+  {I : Type} {V : I → Type}
+  {Q : Type} {R : Q → Type}
 
-instance {Q : Type} {R : Q → Type} : Monad (Task Monad Q R) where
-  pure a := fun _ [_] _ => pure a
-  bind t f := fun g [_] fetch => t g fetch >>= fun a => f a g fetch
-  map f t := fun g [_] fetch => f <$> t g fetch
+def input (i : I) :
+    Task Monad I V Q R (V i) :=
+  fun _ [_] iv _ => pure (iv i)
+
+def fetch (q : Q) :
+    Task c I V Q R (R q) :=
+  fun _ [_] _ fetch => fetch q
+
+instance {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} :
+    Monad (Task Monad I V Q R) where
+  pure a := fun _ [_] _ _ => pure a
+  bind t f := fun g [_] input fetch => t g input fetch >>= fun a => f a g input fetch
+  map f t := fun g [_] input fetch => f <$> t g input fetch
 
 end Task
 
-export Task (fetch)
+export Task (input fetch)
 
-inductive BuildError
-  | cycle
-  | missingInput
-deriving Inhabited
+class Input (I : Type) (V : I → Type) (ι : Type) where
+  get : ι → ∀ i, V i
+  set : ι → ∀ i, V i → ι
+
+instance {I : Type} {V : I → Type} [DecidableEq I] : Input I V (∀ i, V i) where
+  get := id
+  set := Function.update
+
+instance {I : Type} {V : I → Type} [BEq I] [LawfulBEq I] [Hashable I] :
+    Input I (fun i => Option (V i)) (DHashMap I V) where
+  get := DHashMap.get?
+  set m i v := m.alter i (fun _ => v)
+
+instance {α n} : Input (Fin n) (fun _ => α) (Vector α n) where
+  get vec i := vec.get i
+  set vec i := vec.set i
 
 def Tasks : Type 1 :=
-  ∀ q, Option (Task c Q R (R q))
+  ∀ q, Task c I V Q R (R q)
 
-def Build : Type 1 :=
-  Tasks c Q R → ∀ q, StateT σ (Except BuildError) (R q)
+inductive BuildError where
+  | cycle
+deriving Inhabited
+
+structure Build (ι : Type) [Input I V ι] : Type 1 where
+  σ : Type
+  init : ι → σ
+  set : σ → ∀ i, V i → σ
+  build : Tasks c I V Q R → ∀ q, σ → Except BuildError (R q × σ)
 
 end Incremental
