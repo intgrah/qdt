@@ -24,17 +24,18 @@ structure Shake.Memo (q : Q) where
 
 structure Shake.Store (ι : Type) where
   inputs : ι
-  cache : DHashMap Q (Memo I Q R)
+  memos : DHashMap Q (Memo I Q R)
 
 partial def Shake : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
   init inputs := {
     inputs
-    cache := DHashMap.emptyWithCapacity 1024
+    memos := DHashMap.emptyWithCapacity 1024
   }
-  set i v := modify fun s => { s with inputs := Input.set s.inputs i v }
-  build tasks q := fun s => runEST fun σ => do
-    let cache ← ST.mkRef (σ := σ) s.cache
+  set i v := modify fun store =>
+    { store with inputs := Input.set store.inputs i v }
+  build tasks q := fun store => runEST fun σ => do
+    let memos ← ST.mkRef (σ := σ) store.memos
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
     let stack ← ST.mkRef (σ := σ) #[]
     let rec fetch (q : Q) : EST BuildError σ (R q) := do
@@ -48,7 +49,7 @@ partial def Shake : Build Monad I V Q R ι where
           let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64)
           let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 4)
           let input' (i : I) : EST BuildError σ (V i) := do
-            let v := Input.get s.inputs i
+            let v := Input.get store.inputs i
             let ds ← inputDeps.get
             if !ds.contains i then
               inputDeps.modify (·.insert i (hash v))
@@ -65,7 +66,7 @@ partial def Shake : Build Monad I V Q R ι where
           let a ← tasks q (EST BuildError σ) input' fetch'
           return (a, ← deps.get, ← inputDeps.get)
         let verifyInputDeps (inputDeps : HashMap I UInt64) : Bool :=
-          inputDeps.all fun i oldHash => hash (Input.get (V := V) s.inputs i) == oldHash
+          inputDeps.all fun i oldHash => hash (Input.get (V := V) store.inputs i) == oldHash
         let verifyDeps (deps : HashMap Q UInt64) : EST BuildError σ Bool := do
           for (depKey, oldHash) in deps do
             let _ ← fetch depKey
@@ -78,9 +79,9 @@ partial def Shake : Build Monad I V Q R ι where
           let (value, deps, inputDeps) ← compute
           let m : Shake.Memo I Q R q := { value, deps, inputDeps }
           started.modify (·.insert q m)
-          cache.modify (·.insert q m)
+          memos.modify (·.insert q m)
           pure value
-        let r ← match (← cache.get).get? q with
+        let r ← match (← memos.get).get? q with
           | some m =>
             if verifyInputDeps m.inputDeps && (← verifyDeps m.deps) then
               started.modify (·.insert q m)
@@ -89,7 +90,7 @@ partial def Shake : Build Monad I V Q R ι where
           | none => recompute
         stack.modify Array.pop
         return r
-    return (← fetch q, ⟨s.inputs, ← cache.get⟩)
+    return (← fetch q, ⟨store.inputs, ← memos.get⟩)
 
 @[extern "lean_shake_build"]
 opaque ShakeNative.build'
@@ -102,13 +103,13 @@ opaque ShakeNative.build'
 
 def ShakeNative : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
-  init store := { inputs := store, cache := DHashMap.emptyWithCapacity 1024 }
+  init store := { inputs := store, memos := DHashMap.emptyWithCapacity 1024 }
   set i v := modify fun s => { s with inputs := Input.set s.inputs i v }
   build := ShakeNative.build'
 
 structure ShakeRdeps.Store (ι : Type) where
   inputs : ι
-  cache : DHashMap Q (Shake.Memo I Q R)
+  memos : DHashMap Q (Shake.Memo I Q R)
   rdeps : HashMap Q (HashSet Q)
 
 partial def ShakeRdeps.getTransitiveDependents {Q : Type} [BEq Q] [Hashable Q]
@@ -129,19 +130,20 @@ def ShakeRdeps.invalidate
     [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
     (store : ShakeRdeps.Store I Q R ι) (changedKeys : HashSet Q) : ShakeRdeps.Store I Q R ι :=
   let toInvalidate := getTransitiveDependents store.rdeps changedKeys
-  { store with cache := toInvalidate.fold (init := store.cache) DHashMap.erase }
+  { store with memos := toInvalidate.fold .erase store.memos }
 
 partial def ShakeRdeps : Build Monad I V Q R ι where
   σ := ShakeRdeps.Store I Q R ι
   init inputs := {
     inputs
-    cache := DHashMap.emptyWithCapacity 1024
+    memos := DHashMap.emptyWithCapacity 1024
     rdeps := HashMap.emptyWithCapacity 1024
   }
-  set i v := modify fun s => { s with inputs := Input.set s.inputs i v }
-  build tasks q := fun s => runEST fun σ => do
-    let cache ← ST.mkRef (σ := σ) s.cache
-    let rdeps ← ST.mkRef (σ := σ) s.rdeps
+  set i v := modify fun store =>
+    { store with inputs := Input.set store.inputs i v }
+  build tasks q := fun store => runEST fun σ => do
+    let memos ← ST.mkRef (σ := σ) store.memos
+    let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
     let stack ← ST.mkRef (σ := σ) #[]
     let rec fetch (q : Q) : EST BuildError σ (R q) := do
@@ -158,7 +160,7 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
           let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64)
           let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 4)
           let input' (i : I) : EST BuildError σ (V i) := do
-            let v := Input.get s.inputs i
+            let v := Input.get store.inputs i
             let ds ← inputDeps.get
             if !ds.contains i then
               inputDeps.modify (·.insert i (hash v))
@@ -175,7 +177,7 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
           let a ← tasks q (EST BuildError σ) input' fetch'
           return (a, ← deps.get, ← inputDeps.get)
         let verifyInputDeps (inputDeps : HashMap I UInt64) : Bool :=
-          inputDeps.all fun i oldHash => hash (Input.get (V := V) s.inputs i) == oldHash
+          inputDeps.all fun i oldHash => hash (Input.get (V := V) store.inputs i) == oldHash
         let verifyDeps (deps : HashMap Q UInt64) : EST BuildError σ Bool := do
           for (depKey, oldHash) in deps do
             let _ ← fetch depKey
@@ -188,9 +190,9 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
           let (value, deps, inputDeps) ← compute
           let m : Shake.Memo I Q R q := { value, deps, inputDeps }
           started.modify (·.insert q m)
-          cache.modify (·.insert q m)
+          memos.modify (·.insert q m)
           pure value
-        let r ← match (← cache.get).get? q with
+        let r ← match (← memos.get).get? q with
           | some m =>
             if verifyInputDeps m.inputDeps && (← verifyDeps m.deps) then
               started.modify (·.insert q m)
@@ -199,6 +201,6 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
           | none => recompute
         stack.modify Array.pop
         return r
-    return (← fetch q, ⟨s.inputs, ← cache.get, ← rdeps.get⟩)
+    return (← fetch q, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
 
 end Incremental

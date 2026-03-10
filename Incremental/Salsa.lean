@@ -33,11 +33,11 @@ structure Salsa.Store (ι : Type) where
 partial def Salsa : Build Monad I V Q R ι where
   σ := Salsa.Store I Q R ι
   init store := { inputs := store, memos := DHashMap.emptyWithCapacity 1024 }
-  set i v := modify fun s =>
-    let revision := s.revision + 1
-    let inputs := Input.set s.inputs i v
-    let inputRevisions := s.inputRevisions.insert i revision
-    { s with inputs, revision, inputRevisions }
+  set i v := modify fun store =>
+    let revision := store.revision + 1
+    let inputs := Input.set store.inputs i v
+    let inputRevisions := store.inputRevisions.insert i revision
+    { store with inputs, revision, inputRevisions }
   build tasks q := fun store => runEST fun σ => do
     let memos ← ST.mkRef (σ := σ) store.memos
     let stack ← ST.mkRef (σ := σ) (HashSet.emptyWithCapacity 64 : HashSet Q)

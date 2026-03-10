@@ -16,7 +16,7 @@ variable
 partial def Busy : Build Applicative I V Q R ι where
   σ := ι
   init := id
-  set i v := modify (Input.set · i v)
+  set i v := modify fun store => Input.set store i v
   build tasks q := fun store => runEST fun σ => do
     -- Call stack for cycle detection
     let stack ← ST.mkRef (σ := σ) #[]
@@ -40,7 +40,7 @@ This build system is most similar to a batch elaborator.
 partial def LessBusy : Build Applicative I V Q R ι where
   σ := ι
   init := id
-  set i v := modify (Input.set · i v)
+  set i v := modify fun store => Input.set store i v
   build tasks q := fun store => runEST fun σ => do
     -- Call stack for cycle detection
     let stack ← ST.mkRef (σ := σ) #[]
