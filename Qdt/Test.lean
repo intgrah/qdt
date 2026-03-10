@@ -8,23 +8,19 @@ namespace Qdt.Test
 
 open Qdt
 open Incremental
-open Incremental.Shake (Store Memo)
 open System (FilePath)
 open Std (DHashMap)
 
 def check (src : String) : IO (Array Diagnostic) := do
   let dummyPath : FilePath := "test.qdt"
-  let memo : Memo Key Val (.text dummyPath) := { value := src, deps := ∅ }
-  let inputFiles : Std.HashSet System.FilePath := {dummyPath}
-  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  let store : Store Key Val := DHashMap.emptyWithCapacity 64
-  let store := store.insert (.text dummyPath) memo
-  let store := store.insert .inputFiles inputMemo
+  let inputs : DHashMap InputKey InputVal := DHashMap.emptyWithCapacity 4
+  let inputs := inputs.insert (.text dummyPath) src
+  let inputs := inputs.insert .inputFiles ({dummyPath} : Std.HashSet FilePath)
+  let store := testBuild.init inputs
 
-  match Shake.build tasks (Key.checkFile dummyPath) store with
+  match StateT.run (s := store) <| testBuild.build tasks (Key.checkFile dummyPath) with
   | .ok (diags, _) => return diags
   | .error .cycle => return #[⟨[], .msg "cycle detected"⟩]
-  | .error .missingInput => return #[⟨[], .msg "missing input"⟩]
 
 def assertNoDiags (diags : Array Diagnostic) : IO Unit := do
   if !diags.isEmpty then

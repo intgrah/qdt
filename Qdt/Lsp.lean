@@ -10,7 +10,6 @@ namespace Qdt
 open Std (DHashMap)
 open System (FilePath)
 open Incremental
-open Incremental.Shake (Store Memo)
 open Frontend (Cst Path SourceMap Span)
 
 def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
@@ -32,25 +31,21 @@ where
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else bp
 
-def elaborateFile (store : Store Key Val) (filepath : FilePath) :
-    Option (ElabInfo × SourceMap × Cst) := Id.run do
-  let some cstMemo := store.get? (Key.cst filepath) | return none
-  let some smMemo := store.get? (Key.astSourceMap filepath) | return none
-  let some declMemo := store.get? (Key.declarationIndex filepath) | return none
-  let (cst, _) := cstMemo.value
-  let (_, sourceMap, _) := smMemo.value
-  let (declIndex, dupDiags) := declMemo.value
+def elaborateFile {ι} [Input InputKey InputV ι]
+    (b : Build Monad InputKey InputV Key Val ι)
+    (filepath : FilePath) : StateT b.σ (Except BuildError) (ElabInfo × SourceMap × Cst) := do
+  let (cst, _) ← b.build tasks (Key.cst filepath)
+  let (_, sourceMap, astDiags) ← b.build tasks (Key.astSourceMap filepath)
+  let (declIndex, dupDiags) ← b.build tasks (Key.declarationIndex filepath)
   let mut combinedInfo : ElabInfo := 1
-
   for name in declIndex.keysIter do
-    if let some infoMemo := store.get? (Key.lookupInfo filepath name) then
-      combinedInfo := combinedInfo * infoMemo.value
-
-  let (_, _, astDiags) := smMemo.value
+    try
+      let info ← b.build tasks (Key.lookupInfo filepath name)
+      combinedInfo := combinedInfo * info
+    catch _ => pure ()
   let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
-
-  return some (combinedInfo, sourceMap, cst)
+  return (combinedInfo, sourceMap, cst)
 
 def lookupHoverAtPosition (cst : Cst) (sourceMap : SourceMap) (info : ElabInfo)
     (codepointPos : Nat) : Option (HoverContent × Span) := Id.run do

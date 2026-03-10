@@ -1,8 +1,7 @@
 module
 
 public import Qdt.Frontend.Cst
-public import Lean.Parser.Module
-public import Std.Do.Triple.SpecLemmas
+import Lean.Parser.Term.Basic
 
 @[expose] public section
 
