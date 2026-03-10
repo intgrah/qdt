@@ -476,6 +476,6 @@ def parse (input : String) : Cst × Array ParseError :=
   let init : State := { input, pos := 0, errors := #[] }
   match parseProgram.run init with
   | .ok (cst, st) => (cst, st.errors)
-  | .error e => (.token `missing "", #[e]) -- Should be unreachable with manyRecover, but as fallback
+  | .error e => (.token `missing input, #[e])
 
 end Qdt.Frontend.Parser
