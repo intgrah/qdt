@@ -48,8 +48,6 @@ structure ElabState where
   entryCache : Std.HashMap Name (Option Constant)
 deriving Inhabited
 
-abbrev InputV := fun i => Option (InputVal i)
-
 abbrev ElabM :=
   Task Monad InputKey InputV Key Val
   |> WriterT ElabInfo

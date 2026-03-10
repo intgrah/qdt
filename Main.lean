@@ -34,42 +34,32 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
-def checkModule (store : QStore) (filepath : FilePath) : Array String := Id.run do
-  let some transImports := store.cache.get? (Key.transitiveImports filepath)
-    | return #[s!"{filepath}: error: missing transitive imports"]
-  let allFiles := transImports.value.toList ++ [filepath]
+def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
+    StateT build.σ (Except BuildError) (Array String) := do
+  let transImports ← build.build tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
-  for file in allFiles do
-    let some diagsMemo := store.cache.get? (Key.checkFile file) | continue
-    let diags := diagsMemo.value
+  for file in transImports.toList ++ [filepath] do
+    let diags ← build.build tasks (Key.checkFile file)
     if diags.isEmpty then continue
-    let text := (store.inputs.get? (.text file)).getD ""
-    let some asmMemo := store.cache.get? (Key.astSourceMap file) | continue
-    let (_, sm, _) := asmMemo.value
-    let some cstMemo := store.cache.get? (Key.cst file) | continue
-    let (cst, _) := cstMemo.value
+    let text := (inputs.get? (.text file)).getD ""
+    let (_, sm, _) ← build.build tasks (Key.astSourceMap file)
+    let (cst, _) ← build.build tasks (Key.cst file)
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
   return msgs
 
-def runOnce (root : FilePath) (store : QStore) (filepath : FilePath) :
-    IO (Array String × QStore) := do
-  let store ← QStore.populate root store
-  let (transImports, store) ← match build.build tasks (Key.transitiveImports filepath) store with
-    | .ok (v, s) => pure (v, s)
-    | .error .cycle => return (#["[error] cycle detected"], store)
-  let allFiles := transImports.toList ++ [filepath]
-  let keys := allFiles.map Key.checkFile
-  match keys.foldlM (fun s k => Prod.snd <$> build.build tasks k s) store with
-  | .ok store =>
-      let msgs := checkModule store filepath
-      return (msgs, store)
-  | .error .cycle => return (#["[error] cycle detected"], store)
+def runOnce (inputs : DHashMap InputKey InputVal) (store : build.σ) (filepath : FilePath) :
+    Array String × build.σ :=
+  match StateT.run (s := store) <| checkModule inputs filepath with
+  | .ok (msgs, store) => (msgs, store)
+  | .error .cycle => (#["[error] cycle detected"], store)
 
-def watchLoop (root : FilePath) (store : QStore) (entryFile : FilePath) : IO Unit := do
-  let (msgs, initialStore) ← runOnce root store entryFile
+def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : build.σ)
+    (entryFile : FilePath) : IO Unit := do
+  let (msgs, initialStore) := runOnce inputs₀ store₀ entryFile
   for msg in msgs do println! msg
   let store ← IO.mkRef initialStore
+  let inputs ← IO.mkRef inputs₀
   let pending ← IO.mkRef #[]
 
   FSWatch.Manager.withManager fun m => do
@@ -82,8 +72,9 @@ def watchLoop (root : FilePath) (store : QStore) (entryFile : FilePath) : IO Uni
       if !pendingFiles.isEmpty then
         for file in pendingFiles do
           let text ← IO.FS.readFile file
-          store.modify fun s => { s with inputs := s.inputs.insert (.text file) text }
-        let (msgs, s) ← runOnce root (← store.get) entryFile
+          store.modify fun s => (build.set (InputKey.text file) (some text) |>.run s).2
+          inputs.modify (·.insert (.text file) text)
+        let (msgs, s) := runOnce (← inputs.get) (← store.get) entryFile
         for msg in msgs do println! msg
         store.set s
 
@@ -103,17 +94,18 @@ def run (parsed : Parsed) : IO UInt32 := do
 
   let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
 
-  let store := build.init (DHashMap.emptyWithCapacity 64)
+  let inputs ← scanInputs root
+  let store := build.init inputs
 
   if watchMode then
-    watchLoop root store files[0]!
+    watchLoop root inputs store files[0]!
     return 0
   else
     let t₀ ← IO.monoMsNow
     let mut allMsgs : Array String := #[]
     let mut store := store
     for file in files do
-      let (msgs, store') ← runOnce root store file
+      let (msgs, store') := runOnce inputs store file
       allMsgs := allMsgs ++ msgs
       store := store'
     for msg in allMsgs do println! msg

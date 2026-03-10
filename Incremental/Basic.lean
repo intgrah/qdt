@@ -26,7 +26,7 @@ variable
 
 set_option checkBinderAnnotations false in
 def Task (α : Type) : Type 1 :=
-  ∀ (f : Type → Type) [c f], (∀ i, V i) → (∀ q, f (R q)) → f α
+  ∀ (f : Type → Type) [c f], (∀ i, f (V i)) → (∀ q, f (R q)) → f α
 
 namespace Task
 
@@ -36,8 +36,8 @@ variable
   {Q : Type} {R : Q → Type}
 
 def input (i : I) :
-    Task Monad I V Q R (V i) :=
-  fun _ [_] iv _ => pure (iv i)
+    Task c I V Q R (V i) :=
+  fun _ [_] input _ => input i
 
 def fetch (q : Q) :
     Task c I V Q R (R q) :=
@@ -62,7 +62,7 @@ instance {I : Type} {V : I → Type} [DecidableEq I] : Input I V (∀ i, V i) wh
   set := Function.update
 
 instance {I : Type} {V : I → Type} [BEq I] [LawfulBEq I] [Hashable I] :
-    Input I (fun i => Option (V i)) (DHashMap I V) where
+    Input I (Option ∘ V) (DHashMap I V) where
   get := DHashMap.get?
   set m i v := m.alter i (fun _ => v)
 
@@ -80,7 +80,7 @@ deriving Inhabited
 structure Build (ι : Type) [Input I V ι] : Type 1 where
   σ : Type
   init : ι → σ
-  set : σ → ∀ i, V i → σ
-  build : Tasks c I V Q R → ∀ q, σ → Except BuildError (R q × σ)
+  set : ∀ i, V i → StateM σ Unit
+  build : Tasks c I V Q R → ∀ q, StateT σ (Except BuildError) (R q)
 
 end Incremental

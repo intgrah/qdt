@@ -9,12 +9,12 @@ namespace Qdt.Lsp.Test
 
 open Qdt
 open Incremental
-open Incremental.Shake (Store Memo)
 open Std (DHashMap HashSet)
 open System (FilePath)
 
 structure TestState where
-  store : Store Key Val
+  inputs : DHashMap InputKey InputVal
+  store : testBuild.σ
   errors : Array String := #[]
 
 abbrev TestM := StateRefT TestState IO
@@ -25,30 +25,31 @@ def test (action : TestM Unit) : IO Unit := do
     let errors := (← get).errors
     if !errors.isEmpty then
       throw (IO.userError ("\n".intercalate errors.toList))
-  check.run' { store := DHashMap.emptyWithCapacity 64 }
+  let inputs := DHashMap.emptyWithCapacity 64
+  check.run' { inputs, store := testBuild.init inputs }
 
 def fail (msg : String) : TestM Unit :=
   modify fun st => { st with errors := st.errors.push msg }
 
 def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store := (← get).store
-  let memo : Memo Key Val (.text filepath) := { value := text, deps := ∅ }
-  let store := store.insert (.text filepath) memo
+  let st ← get
+  let inputs := st.inputs.insert (.text filepath) text
   let inputFiles : HashSet FilePath :=
-    match store.get? .inputFiles with
-    | some (m : Memo Key Val .inputFiles) => m.value.insert filepath
+    match st.inputs.get? .inputFiles with
+    | some fs => fs.insert filepath
     | none => {filepath}
-  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  let store := store.insert .inputFiles inputMemo
-  match Shake.build tasks (Key.checkFile filepath) store with
-  | .ok (_, store) => modify fun st => { st with store }
+  let inputs := inputs.insert .inputFiles inputFiles
+  let (_, store) := (testBuild.set (.text filepath) (some text)).run st.store
+  let (_, store) := (testBuild.set .inputFiles (some inputFiles)).run store
+  match StateT.run (s := store) <| testBuild.build tasks (Key.checkFile filepath) with
+  | .ok (_, store) => modify fun _ => { inputs, store }
   | .error .cycle => throw (IO.userError "cycle detected")
-  | .error .missingInput => throw (IO.userError "missing input")
 
 def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let diags := match (← get).store.get? (Key.checkFile filepath) with
-    | some memo => memo.value
-    | none => #[]
+  let store := (← get).store
+  let diags := match StateT.run (s := store) <| testBuild.build tasks (Key.checkFile filepath) with
+    | .ok (v, _) => v
+    | .error _ => #[]
   if !check diags then
     fail s!"diagnostics check failed: {diags.map (·.error)}"
 
@@ -57,14 +58,12 @@ def noDiagnostics (filepath : FilePath := "test.qdt") : TestM Unit :=
 
 def hover (pos : Lean.Position) (expected : String)
     (start stop : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store := (← get).store
-  let text := match store.get? (Key.text filepath) with
-    | some memo => memo.value
-    | none => ""
+  let st ← get
+  let text := (st.inputs.get? (.text filepath)).getD ""
   let fileMap := Lean.FileMap.ofString text
-  match elaborateFile store filepath with
-  | none => fail s!"no elaboration info for {filepath}"
-  | some (info, sourceMap, cst) =>
+  match StateT.run (s := st.store) <| elaborateFile testBuild filepath with
+  | .error _ => fail s!"no elaboration info for {filepath}"
+  | .ok ((info, sourceMap, cst), _) =>
     let bytePos := fileMap.ofPosition pos
     let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
     match lookupHoverAtPosition cst sourceMap info codepointPos with
@@ -81,13 +80,11 @@ def hover (pos : Lean.Position) (expected : String)
         fail s!"hover span mismatch at {repr pos}: expected {repr start}..{repr stop}, got {repr actualStart}..{repr actualStop}"
 
 def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
-  let store := (← get).store
-  let text := match store.get? (Key.text filepath) with
-    | some memo => memo.value
-    | none => ""
-  match elaborateFile store filepath with
-  | none => return
-  | some (info, sourceMap, cst) =>
+  let st ← get
+  let text := (st.inputs.get? (.text filepath)).getD ""
+  match StateT.run (s := st.store) <| elaborateFile testBuild filepath with
+  | .error _ => return
+  | .ok ((info, sourceMap, cst), _) =>
     let bytePos := (Lean.FileMap.ofString text).ofPosition pos
     let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
     match lookupHoverAtPosition cst sourceMap info codepointPos with

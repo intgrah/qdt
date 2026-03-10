@@ -18,75 +18,38 @@ structure Origin where
   idx : Nat
 deriving DecidableEq, Repr, Hashable, Inhabited
 
-inductive Key : Type
-  /-- Raw text of a file -/
+inductive InputKey : Type
   | text (filepath : FilePath)
-  /-- Concrete syntax tree of a file -/
-  | cst (filepath : FilePath)
-  /-- Abstract syntax tree and source map of a file -/
-  | astSourceMap (filepath : FilePath)
-  /-- Abstract syntax tree of a file -/
-  | ast (filepath : FilePath)
-  /-- Source map produced when going from CST to AST -/
-  | sourceMap (filepath : FilePath)
-  /-- Modules imported from a file -/
-  | imports (filePath : FilePath)
-  /-- Map from a declaration to its index within a file -/
-  | declarationIndex (filePath : FilePath)
-  /--
-  Fetch the specific AST node for a declaration.
-  This allows granularity: if the file changes but this node doesn't,
-  elaboration of this node is skipped.
-  Returns the AST and its index in the file.
-  -/
-  | declAst (filepath : FilePath) (name : Name)
-  /--
-  Elaborate the command at a given index in a file.
-  Shared key: all generated names from the same command use this.
-  -/
-  | elabCmdAt (filepath : FilePath) (idx : Nat)
-  /--
-  Elaborate a specific declaration.
-  Returns the full elaboration result (Constant + Info).
-  Delegates to `elabCmdAt`.
-  -/
-  | elabDecl (filepath : FilePath) (name : Name)
-  /--
-  Look up a declaration within a specific file.
-  This is a projection of `elabDecl` that returns only Semantic info.
-  If ElabInfo changes (e.g. whitespace/comments), this query remains unchanged.
-  -/
-  | lookup (filepath : FilePath) (name : Name)
-  /--
-  Look up elaboration info for a declaration.
-  This is a projection of `elabDecl`.
-  -/
-  | lookupInfo (filepath : FilePath) (name : Name)
-  /--
-  Fetch a declaration from the project context (checking imports).
-  The `filepath` refers to the file *requesting* the constant.
-  Searches imports and verifies scope using `transitiveImports`.
-  -/
-  | constant (filepath : FilePath) (name : Name)
-  /--
-  The transitive closure of imports.
-  Required to verify that a fetched constant is actually in scope.
-  -/
-  | transitiveImports (filepath : FilePath)
-  /-- Type of a declaration. Projection from `constant`. -/
-  | type (filepath : FilePath) (name : Name)
-  /-- Resolve a module name to a file path -/
-  | moduleFile (modName : Name)
-  /-- All input files in the project -/
   | inputFiles
-  /-- Check a file for diagnostics (parsing + elaboration) -/
+deriving DecidableEq, Repr, Inhabited, Hashable
+
+abbrev InputVal : InputKey → Type
+  | .text _ => String
+  | .inputFiles => HashSet FilePath
+
+abbrev InputV := Option ∘ InputVal
+
+inductive Key : Type
+  | cst (filepath : FilePath)
+  | astSourceMap (filepath : FilePath)
+  | ast (filepath : FilePath)
+  | sourceMap (filepath : FilePath)
+  | imports (filePath : FilePath)
+  | declarationIndex (filePath : FilePath)
+  | declAst (filepath : FilePath) (name : Name)
+  | elabCmdAt (filepath : FilePath) (idx : Nat)
+  | elabDecl (filepath : FilePath) (name : Name)
+  | lookup (filepath : FilePath) (name : Name)
+  | lookupInfo (filepath : FilePath) (name : Name)
+  | constant (filepath : FilePath) (name : Name)
+  | transitiveImports (filepath : FilePath)
+  | type (filepath : FilePath) (name : Name)
+  | moduleFile (modName : Name)
   | checkFile (filepath : FilePath)
-  /-- Check the entire project (all input files) -/
   | checkProject
 deriving DecidableEq, Repr, Inhabited, Hashable
 
 def Key.tag : Key → String
-  | .text _ => "text"
   | .cst _ => "cst"
   | .astSourceMap _ => "astSourceMap"
   | .ast _ => "ast"
@@ -102,46 +65,25 @@ def Key.tag : Key → String
   | .transitiveImports _ => "transitiveImports"
   | .type _ _ => "type"
   | .moduleFile _ => "moduleFile"
-  | .inputFiles => "inputFiles"
   | .checkFile _ => "checkFile"
   | .checkProject => "checkProject"
 
 abbrev Val : Key → Type
-  /- Input query -/
-  | .text _ => String
-  /-
-  Parsing recovers on failure, so this always produces a `Cst`,
-  but it may also produce errors.
-  -/
   | .cst _ => Cst × Array ParseError
-  /- Includes errors from parsing and desugaring -/
   | .astSourceMap _ => Ast × SourceMap × Array Diagnostic
-  /- Retain only the `Ast` -/
   | .ast _ => Ast
-  /- Retain only the `SourceMap` -/
   | .sourceMap _ => SourceMap
-  /- A list of all the imported modules in a file. Never fails. -/
   | .imports _ => Array Name
-  /- A map from names to index within the file -/
   | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
-  /- The specific AST node and its index -/
   | .declAst _ _ => Option (Ast × Nat)
-  /- Full elaboration result for a command at a given index -/
   | .elabCmdAt _ _ => Global × ElabInfo
-  /- Full elaboration result: info is always returned, constant only on success -/
   | .elabDecl _ _ => Option (Constant × Origin) × ElabInfo
-  /- Semantic projection -/
   | .lookup _ _ => Option (Constant × Origin)
-  /- Info projection (always available) -/
   | .lookupInfo _ _ => ElabInfo
-  /- The found constant, potentially from an imported file. -/
   | .constant _ _ => Option (Constant × Origin)
-  /- The set of all files transitively imported by the given file. -/
   | .transitiveImports _ => HashSet FilePath
-  /- The type and universe params of the constant, if found -/
   | .type _ _ => Option ConstantInfo
   | .moduleFile _ => Option FilePath
-  | .inputFiles => HashSet FilePath
   | .checkFile _ => Array Diagnostic
   | .checkProject => Array Diagnostic
 
@@ -151,7 +93,13 @@ instance {α} [Hashable α] : Hashable (HashMap Name α) where
 instance {α} [BEq α] [Hashable α] : Hashable (HashSet α) where
   hash m := hash <| m.toArray
 
-instance : ∀ q, Hashable (Val q) := by
-  rintro (_ | _) <;> infer_instance
+instance {q} : Hashable (Val q) := by
+  cases q <;> infer_instance
+
+instance {i} : Hashable (InputVal i) := by
+  cases i <;> infer_instance
+
+instance {i} : Hashable (InputV i) :=
+  inferInstanceAs (Hashable (Option (InputVal i)))
 
 end Qdt

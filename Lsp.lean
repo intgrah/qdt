@@ -50,7 +50,8 @@ def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
 
 structure ProjectState where
   root : FilePath
-  store : QStore
+  inputs : DHashMap InputKey InputVal
+  store : build.σ
 
 structure ServerState where
   hOut : IO.FS.Stream
@@ -66,9 +67,9 @@ def getProject (filepath : FilePath) : ServerM ProjectState := do
   match st.projects[root]? with
   | some ps => return ps
   | none =>
-      let store := build.init (DHashMap.emptyWithCapacity 64)
-      let store ← QStore.populate root store
-      let ps : ProjectState := { root, store }
+      let inputs ← scanInputs root
+      let store := build.init inputs
+      let ps : ProjectState := { root, inputs, store }
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
 
@@ -126,27 +127,29 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    IO ((ElabInfo × SourceMap × Cst) × QStore) := do
-  let store ← match build.build tasks (Key.checkFile filepath) ps.store with
-    | .ok (_, s) => pure s
-    | .error .cycle => throw (IO.userError "cycle detected")
-  match elaborateFile store filepath with
-  | some result => pure (result, store)
-  | none => throw (IO.userError "elaboration failed")
+    IO ((ElabInfo × SourceMap × Cst) × build.σ) := do
+  let result : Except BuildError _ := StateT.run (s := ps.store) <| do
+    let _ ← build.build tasks (Key.checkFile filepath)
+    elaborateFile build filepath
+  match result with
+  | .ok r => pure r
+  | .error .cycle => throw (IO.userError "cycle detected")
 
 def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
-  let inputs := ps.store.inputs.insert (.text file) text
+  let inputs := ps.inputs.insert (.text file) text
   let inputFiles : HashSet FilePath :=
-    match inputs.get? .inputFiles with
+    match ps.inputs.get? .inputFiles with
     | some fs => fs.insert file
     | none => {file}
   let inputs := inputs.insert .inputFiles inputFiles
-  setProject { ps with store := { ps.store with inputs } }
+  let (_, store) := (build.set (.text file) (some text)).run ps.store
+  let (_, store) := (build.set .inputFiles (some inputFiles)).run store
+  setProject { ps with store, inputs }
 
 def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
-  let text := (ps.store.inputs.get? (.text file)).getD ""
+  let text := (ps.inputs.get? (.text file)).getD ""
   let ((info, sourceMap, cst), store') ← runElabTask ps file
   setProject { ps with store := store' }
   let diagnostics := buildDiagnostics text info sourceMap cst
@@ -229,7 +232,7 @@ def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
     | return
 
   let ps ← getProject file
-  let mut text := (ps.store.inputs.get? (.text file)).getD ""
+  let mut text := (ps.inputs.get? (.text file)).getD ""
   for change in params.contentChanges do
     match change with
     | .rangeChange range replacement =>
@@ -255,7 +258,9 @@ def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
   let uri := params.textDocument.uri
   if let some file ← uriToPath? uri then
     let ps ← getProject file
-    setProject { ps with store := { ps.store with inputs := ps.store.inputs.erase (.text file) } }
+    let (_, store) := (build.set (.text file) none).run ps.store
+    let inputs := ps.inputs.erase (.text file)
+    setProject { ps with store, inputs }
   publishDiagnostics uri none #[]
 
 def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
@@ -272,13 +277,13 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
 
   let ps ← getProject file
 
-  let text := (ps.store.inputs.get? (.text file)).getD ""
+  let text := (ps.inputs.get? (.text file)).getD ""
 
   let fileMap := Lean.FileMap.ofString text
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let some (info, sourceMap, cst) := elaborateFile ps.store file
+  let .ok ((info, sourceMap, cst), _) := StateT.run (s := ps.store) <| elaborateFile build file
     | sendResponse id Json.null
 
   let some (hoverContent, span) := lookupHoverAtPosition cst sourceMap info codepointPos

@@ -3,19 +3,19 @@ module
 public import Qdt.Config
 public import Qdt.Elab
 public import Qdt.Frontend.Desugar
-public import Incremental.ShakeNative
+public import Incremental.Salsa
+public import Incremental.Shake
 
 @[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
-open Std (HashMap HashSet)
+open Std (DHashMap HashMap HashSet)
 open System (FilePath)
 open Frontend (Ast Cst Path SourceMap)
 open Frontend.Parser (ParseError)
 open Incremental
-open Incremental.Shake (Store Memo)
 
 def getFieldString (_structName fieldName : Name) : Option String :=
   if !fieldName.isAtomic then none
@@ -103,25 +103,23 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
   let (_, sorted) := files.foldl (fun (v, s) f => visit f v s) (HashSet.emptyWithCapacity 0, [])
   sorted.reverse
 
-def tasks : Tasks Monad Key Val
-  | .text _ => none
-  | .inputFiles => none
-  | .cst filepath => some do
-    let text ← fetch (Key.text filepath)
+def tasks : Tasks Monad InputKey InputV Key Val
+  | .cst filepath => do
+    let some text ← input (InputKey.text filepath) | return Frontend.Parser.parse ""
     return Frontend.Parser.parse text
-  | .astSourceMap filepath => some do
+  | .astSourceMap filepath => do
     let (cst, parseErrors) ← fetch (Key.cst filepath)
     let (ast, sourceMap) := Frontend.desugarProgram cst
     let diagnostics : Array Diagnostic := parseErrors.map fun err =>
       ⟨cst.pathAtPosition err.pos, .syntaxError err⟩
     return (ast, sourceMap, diagnostics)
-  | .ast filepath => some do
+  | .ast filepath => do
     let (ast, _, _) ← fetch (Key.astSourceMap filepath)
     return ast
-  | .sourceMap filepath => some do
+  | .sourceMap filepath => do
     let (_, sourceMap, _) ← fetch (Key.astSourceMap filepath)
     return sourceMap
-  | .imports filepath => some do
+  | .imports filepath => do
     let prog ← fetch (Key.ast filepath)
     let .node _ progCs := prog | return #[]
     let mut result : Array Name := #[]
@@ -129,10 +127,10 @@ def tasks : Tasks Monad Key Val
       if let some imp := Import.parse cmd then
         result := result.push imp.moduleName
     return result
-  | .moduleFile modName => some do
-    let inputFiles ← fetch Key.inputFiles
+  | .moduleFile modName => do
+    let some inputFiles ← input InputKey.inputFiles | return none
     return resolveModule modName inputFiles
-  | .transitiveImports filepath => some do
+  | .transitiveImports filepath => do
     let imports ← fetch (Key.imports filepath)
     let mut result : HashSet FilePath := HashSet.emptyWithCapacity 0
     for modName in imports do
@@ -142,10 +140,10 @@ def tasks : Tasks Monad Key Val
         for p in subImports do
           result := result.insert p
     return result
-  | .declarationIndex filepath => some do
+  | .declarationIndex filepath => do
     let prog ← fetch (Key.ast filepath)
     return buildOwnerIndex prog
-  | .declAst filepath name => some do
+  | .declAst filepath name => do
     let (indexMap, _) ← fetch (Key.declarationIndex filepath)
     match indexMap[name]? with
     | some idx =>
@@ -153,7 +151,7 @@ def tasks : Tasks Monad Key Val
         let .node _ progCs := prog | return none
         return some (progCs[idx]!, idx)
     | none => return none
-  | .elabCmdAt filepath idx => some do
+  | .elabCmdAt filepath idx => do
     let prog ← fetch (Key.ast filepath)
     let ast := match prog with | .node _ cs => cs[idx]! | _ => .missing
     let name := getDeclName ast idx
@@ -167,7 +165,7 @@ def tasks : Tasks Monad Key Val
     }
     let (_, globalEnv, info) ← (elabAction ast).run elabCtx
     return (globalEnv, info)
-  | .elabDecl filepath name => some do
+  | .elabDecl filepath name => do
     let (indexMap, _) ← fetch (Key.declarationIndex filepath)
     match indexMap[name]? with
     | some idx =>
@@ -177,13 +175,13 @@ def tasks : Tasks Monad Key Val
         | some constant => return (some (constant, origin), info)
         | none => return (none, info)
     | none => return (none, 1)
-  | .lookup filepath name => some do
+  | .lookup filepath name => do
     let (result, _) ← fetch (Key.elabDecl filepath name)
     return result
-  | .lookupInfo filepath name => some do
+  | .lookupInfo filepath name => do
     let (_, info) ← fetch (Key.elabDecl filepath name)
     return info
-  | .constant filepath name => some do
+  | .constant filepath name => do
     match ← fetch (Key.lookup filepath name) with
     | some res => return some res
     | none =>
@@ -193,11 +191,11 @@ def tasks : Tasks Monad Key Val
            | some res => return some res
            | none => continue
         return none
-  | .type filepath name => some do
+  | .type filepath name => do
     match ← fetch (Key.constant filepath name) with
     | some (constant, _) => return some constant.toConstantInfo
     | none => return none
-  | .checkFile filepath => some do
+  | .checkFile filepath => do
     let (_, _, parseDiags) ← fetch (Key.astSourceMap filepath)
     let (decls, dupDiags) ← fetch (Key.declarationIndex filepath)
     let mut allDiags := parseDiags ++ dupDiags
@@ -208,8 +206,8 @@ def tasks : Tasks Monad Key Val
       let info ← fetch (Key.lookupInfo filepath name)
       allDiags := allDiags ++ info.diagnostics
     return allDiags
-  | .checkProject => some do
-      let inputFiles ← fetch Key.inputFiles
+  | .checkProject => do
+      let some inputFiles ← input InputKey.inputFiles | return #[]
       let files := inputFiles.toList
 
       let mut adj : HashMap FilePath (List FilePath) := HashMap.emptyWithCapacity 0
@@ -230,23 +228,22 @@ def tasks : Tasks Monad Key Val
 
       return allDiags
 
-def Store.populate (root : FilePath) (store : Store Key Val) : IO (Store Key Val) := do
-  let mut rawFiles : List FilePath := []
-  rawFiles := rawFiles ++ (← listSrcFiles root)
-  let mut inputFiles : HashSet FilePath := HashSet.emptyWithCapacity rawFiles.length
-  let mut store := store
+opaque build : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
+  ShakeNative InputKey InputV Key Val (DHashMap InputKey InputVal)
+
+opaque testBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
+  Shake InputKey InputV Key Val (DHashMap InputKey InputVal)
+
+def scanInputs (root : FilePath) : IO (DHashMap InputKey InputVal) := do
+  let rawFiles ← listSrcFiles root
+  let mut inputs : DHashMap InputKey InputVal := DHashMap.emptyWithCapacity 64
+  let mut inputFiles : HashSet FilePath := ∅
   for file in rawFiles do
     let absPath ← IO.FS.realPath file
     inputFiles := inputFiles.insert absPath
-    match store.get? (.text absPath) with
-    | some _ => continue
-    | none =>
-        let text ← IO.FS.readFile absPath
-        let memo : Memo Key Val (.text absPath) :=
-          { value := text, deps := ∅ }
-        store := store.insert (.text absPath) memo
-  let inputMemo : Memo Key Val .inputFiles := { value := inputFiles, deps := ∅ }
-  store := store.insert .inputFiles inputMemo
-  return store
+    let text ← IO.FS.readFile absPath
+    inputs := inputs.insert (.text absPath) text
+  inputs := inputs.insert .inputFiles inputFiles
+  return inputs
 
 end Qdt
