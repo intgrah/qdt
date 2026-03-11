@@ -1,6 +1,7 @@
 module
 
 public import Qdt.Lsp
+public import Qdt.Common
 public import Lean.Data.Lsp.Communication
 public import Lean.Data.Lsp.InitShutdown
 
@@ -13,6 +14,9 @@ open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
 open Frontend (Cst Path SourceMap Span)
+
+opaque lspBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
+  selectBuild .shakeNative
 
 def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
@@ -51,7 +55,7 @@ def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
 structure ProjectState where
   root : FilePath
   inputs : DHashMap InputKey InputVal
-  store : build.σ
+  store : lspBuild.σ
 
 structure ServerState where
   hOut : IO.FS.Stream
@@ -68,7 +72,7 @@ def getProject (filepath : FilePath) : ServerM ProjectState := do
   | some ps => return ps
   | none =>
       let inputs ← scanInputs root
-      let store := build.init inputs
+      let store := lspBuild.init inputs
       let ps : ProjectState := { root, inputs, store }
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
@@ -127,10 +131,10 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    IO ((ElabInfo × SourceMap × Cst) × build.σ) := do
+    IO ((ElabInfo × SourceMap × Cst) × lspBuild.σ) := do
   let result : Except BuildError _ := StateT.run (s := ps.store) <| do
-    let _ ← build.build tasks (Key.checkFile filepath)
-    elaborateFile build filepath
+    let _ ← lspBuild.build tasks (Key.checkFile filepath)
+    elaborateFile lspBuild filepath
   match result with
   | .ok r => pure r
   | .error .cycle => throw (IO.userError "cycle detected")
@@ -143,8 +147,8 @@ def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
     | some fs => fs.insert file
     | none => {file}
   let inputs := inputs.insert .inputFiles inputFiles
-  let (_, store) := (build.set (.text file) (some text)).run ps.store
-  let (_, store) := (build.set .inputFiles (some inputFiles)).run store
+  let (_, store) := (lspBuild.set (.text file) (some text)).run ps.store
+  let (_, store) := (lspBuild.set .inputFiles (some inputFiles)).run store
   setProject { ps with store, inputs }
 
 def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
@@ -258,7 +262,7 @@ def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
   let uri := params.textDocument.uri
   if let some file ← uriToPath? uri then
     let ps ← getProject file
-    let (_, store) := (build.set (.text file) none).run ps.store
+    let (_, store) := (lspBuild.set (.text file) none).run ps.store
     let inputs := ps.inputs.erase (.text file)
     setProject { ps with store, inputs }
   publishDiagnostics uri none #[]
@@ -283,7 +287,7 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let .ok ((info, sourceMap, cst), _) := StateT.run (s := ps.store) <| elaborateFile build file
+  let .ok ((info, sourceMap, cst), _) := StateT.run (s := ps.store) <| elaborateFile lspBuild file
     | sendResponse id Json.null
 
   let some (hoverContent, span) := lookupHoverAtPosition cst sourceMap info codepointPos

@@ -1,10 +1,7 @@
 module
 
-public import Qdt.Config
 public import Qdt.Elab
 public import Qdt.Frontend.Desugar
-public import Incremental.Salsa
-public import Incremental.Shake
 
 @[expose] public section
 
@@ -45,18 +42,6 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
       else
         m := m.insert name idx
   return (m, diags)
-
-partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
-  let mut result : List FilePath := []
-  if ← dir.isDir then
-    let entries ← dir.readDir
-    for entry in entries do
-      let path := entry.path
-      if ← path.isDir then
-        result := result ++ (← listSrcFiles path)
-      else if path.extension == some "qdt" then
-        result := path :: result
-  return result
 
 def getDeclName (cmd : Ast) (idx : Nat) : Name :=
   if let some d := Definition.parse cmd then d.name
@@ -227,23 +212,5 @@ def tasks : Tasks Monad InputKey InputV Key Val
         allDiags := allDiags ++ diags
 
       return allDiags
-
-opaque build : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
-  ShakeNative InputKey InputV Key Val (DHashMap InputKey InputVal)
-
-opaque testBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
-  Shake InputKey InputV Key Val (DHashMap InputKey InputVal)
-
-def scanInputs (root : FilePath) : IO (DHashMap InputKey InputVal) := do
-  let rawFiles ← listSrcFiles root
-  let mut inputs : DHashMap InputKey InputVal := DHashMap.emptyWithCapacity 64
-  let mut inputFiles : HashSet FilePath := ∅
-  for file in rawFiles do
-    let absPath ← IO.FS.realPath file
-    inputFiles := inputFiles.insert absPath
-    let text ← IO.FS.readFile absPath
-    inputs := inputs.insert (.text absPath) text
-  inputs := inputs.insert .inputFiles inputFiles
-  return inputs
 
 end Qdt

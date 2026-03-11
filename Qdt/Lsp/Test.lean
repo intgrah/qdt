@@ -7,7 +7,7 @@ public import Qdt.Test
 
 namespace Qdt.Lsp.Test
 
-open Qdt
+open Qdt Qdt.Test
 open Incremental
 open Std (DHashMap HashSet)
 open System (FilePath)

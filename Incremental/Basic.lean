@@ -11,6 +11,15 @@ namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
 
+universe u v
+
+abbrev Const (α : Type u) (_ : Type v) : Type u := α
+
+instance {α : Type u} : Applicative (Const (List α)) where
+  pure _ := []
+  seq f x := f ++ x ()
+
+
 /-!
 [Build systems à la carte]
 The choice of the constraint `c` has concrete meanings:
@@ -48,6 +57,12 @@ instance {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} :
   pure a := fun _ [_] _ _ => pure a
   bind t f := fun g [_] input fetch => t g input fetch >>= fun a => f a g input fetch
   map f t := fun g [_] input fetch => f <$> t g input fetch
+
+def queryDeps {q : Q} (task : Task Applicative I V Q R (R q)) : List Q :=
+  task (Const (List Q)) (fun _ => []) ([·])
+
+def inputDeps {q : Q} (task : Task Applicative I V Q R (R q)) : List I :=
+  task (Const (List I)) ([·]) (fun _ => [])
 
 end Task
 
