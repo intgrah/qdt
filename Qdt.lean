@@ -13,4 +13,5 @@ public import Qdt.Inductive
 public import Qdt.Pretty
 public import Qdt.Elab
 public import Qdt.Frontend
-public import Qdt.Config
+public import Qdt.Cli
+public import Qdt.Common

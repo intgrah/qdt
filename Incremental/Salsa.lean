@@ -17,8 +17,8 @@ variable
 
 structure Salsa.Memo (q : Q) where
   value : R q
-  changedAt : Nat
-  verifiedAt : Nat
+  changedAt : UInt64
+  verifiedAt : UInt64
   deps : Array Q
   inputDeps : Array I
   hash : UInt64 := Hashable.hash value
@@ -26,9 +26,9 @@ structure Salsa.Memo (q : Q) where
 
 structure Salsa.Store (ι : Type) where
   inputs : ι
-  revision : Nat := 0
+  revision : UInt64 := 0
   memos : DHashMap Q (Salsa.Memo I Q R)
-  inputRevisions : HashMap I Nat := HashMap.emptyWithCapacity 64
+  inputRevisions : HashMap I UInt64 := HashMap.emptyWithCapacity 64
 
 partial def Salsa : Build Monad I V Q R ι where
   σ := Salsa.Store I Q R ι

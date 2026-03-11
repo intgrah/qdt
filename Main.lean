@@ -1,8 +1,9 @@
 module
 
-public import Cli.Basic
 public import FSWatch.Manager
+public import Qdt.Common
 public import Qdt.Incremental.Rules
+public import Cli.Extensions
 
 @[expose] public section
 
@@ -34,29 +35,31 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
+variable (b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal))
+
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
-    StateT build.σ (Except BuildError) (Array String) := do
-  let transImports ← build.build tasks (Key.transitiveImports filepath)
+    StateT b.σ (Except BuildError) (Array String) := do
+  let transImports ← b.build tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
   for file in transImports.toList ++ [filepath] do
-    let diags ← build.build tasks (Key.checkFile file)
+    let diags ← b.build tasks (Key.checkFile file)
     if diags.isEmpty then continue
     let text := (inputs.get? (.text file)).getD ""
-    let (_, sm, _) ← build.build tasks (Key.astSourceMap file)
-    let (cst, _) ← build.build tasks (Key.cst file)
+    let (_, sm, _) ← b.build tasks (Key.astSourceMap file)
+    let (cst, _) ← b.build tasks (Key.cst file)
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
   return msgs
 
-def runOnce (inputs : DHashMap InputKey InputVal) (store : build.σ) (filepath : FilePath) :
-    Array String × build.σ :=
-  match StateT.run (s := store) <| checkModule inputs filepath with
+def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
+    Array String × b.σ :=
+  match StateT.run (s := store) <| checkModule b inputs filepath with
   | .ok (msgs, store) => (msgs, store)
   | .error .cycle => (#["[error] cycle detected"], store)
 
-def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : build.σ)
+def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : b.σ)
     (entryFile : FilePath) : IO Unit := do
-  let (msgs, initialStore) := runOnce inputs₀ store₀ entryFile
+  let (msgs, initialStore) := runOnce b inputs₀ store₀ entryFile
   for msg in msgs do println! msg
   let store ← IO.mkRef initialStore
   let inputs ← IO.mkRef inputs₀
@@ -72,40 +75,28 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
       if !pendingFiles.isEmpty then
         for file in pendingFiles do
           let text ← IO.FS.readFile file
-          store.modify fun s => (build.set (InputKey.text file) (some text) |>.run s).2
+          store.modify fun s => (b.set (InputKey.text file) (some text) |>.run s).2
           inputs.modify (·.insert (.text file) text)
-        let (msgs, s) := runOnce (← inputs.get) (← store.get) entryFile
+        let (msgs, s) := runOnce b (← inputs.get) (← store.get) entryFile
         for msg in msgs do println! msg
         store.set s
 
-def resolveFile (root : FilePath) (arg : String) : FilePath :=
-  if arg.endsWith ".qdt" then
-    ⟨arg⟩
-  else
-    root / Config.moduleToPath arg
-
 def run (parsed : Parsed) : IO UInt32 := do
-  let root ← IO.FS.realPath (parsed.flag? "root" |>.map (·.as! String) |>.getD ".")
-  let watchMode := parsed.hasFlag "watch"
+  let config ← parseConfig parsed
+  let b := selectBuild config.buildSystem
 
-  let args := parsed.variableArgsAs! String
-  if args.isEmpty then
-    throw (IO.userError "No files specified. Usage: qdt <module>...")
+  let inputs ← scanInputs config.root
+  let store := b.init inputs
 
-  let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
-
-  let inputs ← scanInputs root
-  let store := build.init inputs
-
-  if watchMode then
-    watchLoop root inputs store files[0]!
+  if config.watchMode then
+    watchLoop b config.root inputs store config.files[0]!
     return 0
   else
     let t₀ ← IO.monoMsNow
     let mut allMsgs : Array String := #[]
     let mut store := store
-    for file in files do
-      let (msgs, store') := runOnce inputs store file
+    for file in config.files do
+      let (msgs, store') := runOnce b inputs store file
       allMsgs := allMsgs ++ msgs
       store := store'
     for msg in allMsgs do println! msg
@@ -118,18 +109,22 @@ def run (parsed : Parsed) : IO UInt32 := do
       println! "{allMsgs.size} error(s) ({δt}ms)"
       return 1
 
-def cmd : Cmd :=
-  Cmd.mk
-    (name := "qdt")
-    (version? := none)
-    (description := "Query-based Dependent Type elaborator")
-    (flags := #[
-      ⟨some "r", "root", "project root directory (default: cwd)", String⟩,
-      Flag.paramless (longName := "watch") (description := "Enable watch mode"),
-      Flag.paramless (longName := "profile") (description := "Print query profile table after build")
-    ])
-    (variableArg? := some { name := "module", description := "Modules to check", type := String })
-    (run := run)
+def cmd : Cmd := `[Cli|
+  qdt VIA run;
+  "Query-based Dependent Type elaborator"
+
+  FLAGS:
+    r, root : String;              "Project root directory (default: cwd)"
+    w, watch;                      "Enable watch mode"
+    "build" : BuildSystem;         "Build system to use (default: shake-native)"
+    profile;                       "Print query profile table after build"
+
+  ARGS:
+    ...modules : String;           "Modules to check"
+
+  EXTENSIONS:
+    defaultValues! #[("build", "shake-native")]
+]
 
 end Qdt
 

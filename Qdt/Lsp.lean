@@ -1,6 +1,5 @@
 module
 
-public import Qdt
 public import Qdt.Incremental.Rules
 
 @[expose] public section
@@ -31,8 +30,8 @@ where
       go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
     else bp
 
-def elaborateFile {ι} [Input InputKey InputV ι]
-    (b : Build Monad InputKey InputV Key Val ι)
+def elaborateFile
+    (b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal))
     (filepath : FilePath) : StateT b.σ (Except BuildError) (ElabInfo × SourceMap × Cst) := do
   let (cst, _) ← b.build tasks (Key.cst filepath)
   let (_, sourceMap, astDiags) ← b.build tasks (Key.astSourceMap filepath)

@@ -1,8 +1,9 @@
 module
 
-public import Qdt
+public import Qdt.Common
 public import Qdt.Incremental.Rules
-public import Incremental.Basic
+
+@[expose] public section
 
 namespace Qdt.Test
 
@@ -10,6 +11,9 @@ open Qdt
 open Incremental
 open System (FilePath)
 open Std (DHashMap)
+
+opaque testBuild : Build Monad InputKey InputV Key Val Input :=
+  selectBuild .shake
 
 def check (src : String) : IO (Array Diagnostic) := do
   let dummyPath : FilePath := "test.qdt"
