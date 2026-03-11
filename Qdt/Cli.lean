@@ -17,7 +17,7 @@ inductive BuildSystem where
   | shake
   | shakeCPS
   | shakeEState
-  | shakeNative
+  | shakeC
 deriving Repr, Inhabited
 
 instance : Cli.ParseableType BuildSystem where
@@ -29,7 +29,7 @@ instance : Cli.ParseableType BuildSystem where
     | "shake" => some .shake
     | "shake-cps" => some .shakeCPS
     | "shake-estate" => some .shakeEState
-    | "shake-native" => some .shakeNative
+    | "shake-c" => some .shakeC
     | _ => none
 
 structure Config where
@@ -49,7 +49,7 @@ def resolveFile (root : FilePath) (arg : String) : FilePath :=
 def parseConfig (parsed : Parsed) : IO Config := do
   let root ← IO.FS.realPath (parsed.flag? "root" |>.map (·.as! String) |>.getD ".")
   let watchMode := parsed.hasFlag "watch"
-  let buildSystem := parsed.flag? "build" |>.map (·.as! BuildSystem) |>.getD .shakeNative
+  let buildSystem := parsed.flag? "build" |>.map (·.as! BuildSystem) |>.getD .shakeC
   let args := parsed.variableArgsAs! String
   if args.isEmpty then
     throw (IO.userError "No files specified. Usage: qdt <module>...")

@@ -116,14 +116,14 @@ def cmd : Cmd := `[Cli|
   FLAGS:
     r, root : String;              "Project root directory (default: cwd)"
     w, watch;                      "Enable watch mode"
-    "build" : BuildSystem;         "Build system to use (default: shake-native)"
+    "build" : BuildSystem;         "Build system to use (default: shake-c)"
     profile;                       "Print query profile table after build"
 
   ARGS:
     ...modules : String;           "Modules to check"
 
   EXTENSIONS:
-    defaultValues! #[("build", "shake-native")]
+    defaultValues! #[("build", "shake-c")]
 ]
 
 end Qdt
