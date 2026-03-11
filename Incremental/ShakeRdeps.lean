@@ -1,6 +1,6 @@
 module
 
-public import Incremental.Basic
+public import Incremental.Shake
 
 @[expose] public section
 
@@ -15,30 +15,49 @@ variable
   [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-structure Shake.Memo (q : Q) where
-  value : R q
-  deps : HashMap Q UInt64
-  inputDeps : HashMap I UInt64
-  hash : UInt64 := hash value
-  hash_value : Hashable.hash value = hash := by rfl
-
-structure Shake.Store (ι : Type) where
+structure ShakeRdeps.Store (ι : Type) where
   inputs : ι
-  memos : DHashMap Q (Memo I Q R)
+  memos : DHashMap Q (Shake.Memo I Q R)
+  rdeps : HashMap Q (HashSet Q)
 
-partial def Shake : Build Monad I V Q R ι where
-  σ := Shake.Store I Q R ι
+partial def ShakeRdeps.getTransitiveDependents {Q : Type} [BEq Q] [Hashable Q]
+    (rdeps : HashMap Q (HashSet Q)) (keys : HashSet Q) : HashSet Q :=
+  let rec go (worklist : List Q) (visited : HashSet Q) : HashSet Q :=
+    match worklist with
+    | [] => visited
+    | k :: rest =>
+        if visited.contains k then go rest visited
+        else
+          let visited := visited.insert k
+          let newWork := (rdeps.getD k ∅).toList.filter (!visited.contains ·)
+          go (newWork ++ rest) visited
+  go keys.toList (HashSet.emptyWithCapacity keys.size)
+
+def ShakeRdeps.invalidate
+    {I Q R ι} [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
+    [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
+    (store : ShakeRdeps.Store I Q R ι) (changedKeys : HashSet Q) : ShakeRdeps.Store I Q R ι :=
+  let toInvalidate := getTransitiveDependents store.rdeps changedKeys
+  { store with memos := toInvalidate.fold .erase store.memos }
+
+partial def ShakeRdeps : Build Monad I V Q R ι where
+  σ := ShakeRdeps.Store I Q R ι
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 1024
+    rdeps := HashMap.emptyWithCapacity 1024
   }
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
   build tasks q := fun store => runEST fun σ => do
     let memos ← ST.mkRef (σ := σ) store.memos
+    let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
     let stack ← ST.mkRef (σ := σ) #[]
     let rec fetch (q : Q) : EST BuildError σ (R q) := do
+      if let some dependent := (← stack.get).back? then
+        rdeps.modify fun rd =>
+          rd.alter q (·.getD ∅ |>.insert dependent)
       if let some m := (← started.get).get? q then
         return m.value
       let stk ← stack.get
@@ -48,12 +67,14 @@ partial def Shake : Build Monad I V Q R ι where
       let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 4)
       let input' (i : I) : EST BuildError σ (V i) := do
         let v := Input.get store.inputs i
-        if !(← inputDeps.get).contains i then
+        let ds ← inputDeps.get
+        if !ds.contains i then
           inputDeps.modify (·.insert i (hash v))
         pure v
       let fetch' (q : Q) : EST BuildError σ (R q) := do
         let v ← fetch q
-        if !(← deps.get).contains q then
+        let ds ← deps.get
+        if !ds.contains q then
           let h := match (← started.get).get? q with
             | some m => m.hash
             | none => hash v
@@ -87,6 +108,7 @@ partial def Shake : Build Monad I V Q R ι where
     let store := {
       store with
       memos := ← memos.get
+      rdeps := ← rdeps.get
     }
     return (← fetch q, store)
 
