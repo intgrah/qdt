@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <windows.h>
 
-static inline lean_obj_res lean_mk_string_from_wchar(const WCHAR *wstr,
-                                                     DWORD byteLen) {
+static inline lean_obj_res lean_mk_string_from_wchar(
+    const WCHAR *wstr, DWORD byteLen) {
   int charLen = byteLen / sizeof(WCHAR);
   int utf8Len =
       WideCharToMultiByte(CP_UTF8, 0, wstr, charLen, NULL, 0, NULL, NULL);
@@ -20,16 +20,16 @@ static inline lean_obj_res lean_mk_string_from_wchar(const WCHAR *wstr,
   return result;
 }
 
-LEAN_EXPORT lean_obj_res fswatch_rdcw_open(b_lean_obj_arg path,
-                                           lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_rdcw_open(
+    b_lean_obj_arg path, lean_obj_arg world) {
   const char *pathStr = lean_string_cstr(path);
   int wlen = MultiByteToWideChar(CP_UTF8, 0, pathStr, -1, NULL, 0);
   WCHAR *wpath = (WCHAR *)malloc(wlen * sizeof(WCHAR));
   MultiByteToWideChar(CP_UTF8, 0, pathStr, -1, wpath, wlen);
 
   HANDLE h = CreateFileW(wpath, FILE_LIST_DIRECTORY,
-                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                         NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+      OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
   free(wpath);
 
   if (h == INVALID_HANDLE_VALUE) {
@@ -46,15 +46,13 @@ LEAN_EXPORT lean_obj_res fswatch_rdcw_close(size_t h, lean_obj_arg world) {
   return lean_io_result_mk_ok(lean_box(0));
 }
 
-LEAN_EXPORT lean_obj_res fswatch_rdcw_read(size_t h, uint8_t watchSubTree,
-                                           uint32_t filter,
-                                           lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_rdcw_read(
+    size_t h, uint8_t watchSubTree, uint32_t filter, lean_obj_arg world) {
   BYTE buffer[16384];
   DWORD bytesReturned = 0;
 
   BOOL success = ReadDirectoryChangesW((HANDLE)h, buffer, sizeof(buffer),
-                                       watchSubTree ? TRUE : FALSE, filter,
-                                       &bytesReturned, NULL, NULL);
+      watchSubTree ? TRUE : FALSE, filter, &bytesReturned, NULL, NULL);
 
   if (!success) {
     DWORD err = GetLastError();
@@ -71,8 +69,7 @@ LEAN_EXPORT lean_obj_res fswatch_rdcw_read(size_t h, uint8_t watchSubTree,
   FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION *)buffer;
   for (;;) {
     lean_obj_res event = lean_alloc_ctor(0, 1, 4);
-    lean_ctor_set(
-        event, 0,
+    lean_ctor_set(event, 0,
         lean_mk_string_from_wchar(fni->FileName, fni->FileNameLength));
     lean_ctor_set_uint32(event, sizeof(void *), (uint32_t)fni->Action);
     events = lean_array_push(events, event);
@@ -126,16 +123,15 @@ LEAN_EXPORT uint32_t fswatch_FILE_ACTION_RENAMED_NEW_NAME(void) {
   lean_io_result_mk_error(lean_mk_io_user_error(                               \
       lean_mk_string("ReadDirectoryChangesW is only available on Windows")))
 
-LEAN_EXPORT lean_obj_res fswatch_rdcw_open(b_lean_obj_arg path,
-                                           lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_rdcw_open(
+    b_lean_obj_arg path, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
 LEAN_EXPORT lean_obj_res fswatch_rdcw_close(size_t h, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
-LEAN_EXPORT lean_obj_res fswatch_rdcw_read(size_t h, uint8_t watchSubTree,
-                                           uint32_t filter,
-                                           lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_rdcw_read(
+    size_t h, uint8_t watchSubTree, uint32_t filter, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
 
