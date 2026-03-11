@@ -50,7 +50,6 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
   build tasks q := fun store => runEST fun σ => do
-    let inputs := store.inputs
     let memos ← ST.mkRef (σ := σ) store.memos
     let rdeps ← ST.mkRef (σ := σ) store.rdeps
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
@@ -67,7 +66,7 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
       let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 64)
       let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 4)
       let input' (i : I) : EST BuildError σ (V i) := do
-        let v := Input.get inputs i
+        let v := Input.get store.inputs i
         let ds ← inputDeps.get
         if !ds.contains i then
           inputDeps.modify (·.insert i (hash v))
@@ -106,6 +105,6 @@ partial def ShakeRdeps : Build Monad I V Q R ι where
         | none => recompute
       stack.modify Array.pop
       return r
-    return (← fetch q, ⟨inputs, ← memos.get, ← rdeps.get⟩)
+    return (← fetch q, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
 
 end Incremental

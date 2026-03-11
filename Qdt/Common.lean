@@ -4,6 +4,9 @@ public import Qdt.Cli
 public import Incremental.Busy
 public import Incremental.Salsa
 public import Incremental.Shake
+public import Incremental.ShakeCPS
+public import Incremental.ShakeEState
+public import Incremental.ShakeNative
 public import Qdt.Incremental.Query
 
 @[expose] public section
@@ -21,6 +24,8 @@ def selectBuild : BuildSystem → Build Monad InputKey InputV Key Val Input
   | .lessBusy => LessBusy InputKey InputV Key Val Input
   | .salsa => Salsa InputKey InputV Key Val Input
   | .shake => Shake InputKey InputV Key Val Input
+  | .shakeCPS => ShakeCPS InputKey InputV Key Val Input
+  | .shakeEState => ShakeEState InputKey InputV Key Val Input
   | .shakeNative => ShakeNative InputKey InputV Key Val Input
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
