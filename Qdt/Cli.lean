@@ -15,6 +15,8 @@ inductive BuildSystem where
   | lessBusy
   | salsa
   | shake
+  | shakeCPS
+  | shakeEState
   | shakeNative
 deriving Repr, Inhabited
 
@@ -25,6 +27,8 @@ instance : Cli.ParseableType BuildSystem where
     | "less-busy" => some .lessBusy
     | "salsa" => some .salsa
     | "shake" => some .shake
+    | "shake-cps" => some .shakeCPS
+    | "shake-estate" => some .shakeEState
     | "shake-native" => some .shakeNative
     | _ => none
 
