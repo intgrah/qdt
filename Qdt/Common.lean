@@ -7,6 +7,7 @@ public import Incremental.Shake
 public import Incremental.ShakeCPS
 public import Incremental.ShakeEState
 public import Incremental.ShakeC
+public import Incremental.SalsaC
 public import Qdt.Incremental.Query
 
 @[expose] public section
@@ -27,6 +28,7 @@ def selectBuild : BuildSystem → Build Monad InputKey InputV Key Val Input
   | .shakeCPS => ShakeCPS InputKey InputV Key Val Input
   | .shakeEState => ShakeEState InputKey InputV Key Val Input
   | .shakeC => ShakeC InputKey InputV Key Val Input
+  | .salsaC => SalsaC InputKey InputV Key Val Input
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []

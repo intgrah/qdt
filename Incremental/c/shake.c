@@ -27,29 +27,12 @@ static lean_object *mk_empty_dhashmap(size_t cap) {
   return m;
 }
 
-/* Except.error = tag 0 */
-static lean_object *mk_err(lean_object *err) {
-  lean_object *r = lean_alloc_ctor(0, 1, 0);
-  lean_ctor_set(r, 0, err);
-  return r;
-}
-
-/* Except.ok = tag 1 */
-static lean_object *mk_ok(lean_object *val) {
-  lean_object *r = lean_alloc_ctor(1, 1, 0);
-  lean_ctor_set(r, 0, val);
-  return r;
-}
-
-#define IS_ERR(r) (lean_obj_tag(r) == 0)
-#define IS_OK(r) (lean_obj_tag(r) == 1)
-
-/* BuildError.cycle = tag 0 */
-static lean_object *mk_err_cycle(void) { return mk_err(lean_box(0)); }
-
-#define GET_VAL(r) lean_ctor_get(r, 0)
-
-/* Memo: ctor(0, 3, 8) — value, deps, inputDeps, hash */
+/* Memo: ctor(0, 3, 8) — value, deps, inputDeps, hash
+ *   structure Shake.Memo (q : Q) where
+ *     value : R q
+ *     deps : HashMap Q UInt64
+ *     inputDeps : HashMap I UInt64
+ *     hash : UInt64 := hash value */
 static lean_object *mk_memo(lean_object *value, lean_object *deps,
     lean_object *input_deps, uint64_t hash) {
   lean_object *m = lean_alloc_ctor(0, 3, sizeof(uint64_t));
@@ -60,15 +43,26 @@ static lean_object *mk_memo(lean_object *value, lean_object *deps,
   return m;
 }
 
+/* Internal convention: NULL = BuildError.cycle, non-NULL = value.
+ * Converted to Except only at the lean_shake_build entry point.
+ * NULL is safe because no lean_object* (boxed scalar or heap pointer) is ever
+ * 0. */
+#define CYCLE NULL
+#define IS_CYCLE(r) ((r) == CYCLE)
+
 static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
     lean_object *key);
 
-/* wrapped_input_cb: wraps pure input_fn into monadic (Except) with dep
- * tracking. Closure captures: beqI, hashI, hashV, input_fn, input_deps_ref.
- * Free arg: i. */
+/* input' (i : I) : EST BuildError σ (V i) := do
+ *   let v := Input.get store.inputs i
+ *   if !(← inputDeps.get).contains i then
+ *     inputDeps.modify (·.insert i (hash v))
+ *   pure v
+ *
+ * Returns Except because it's passed to the task as a closure. */
 static lean_object *wrapped_input_cb(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *input_fn, lean_object *input_deps_ref,
     lean_object *i) {
@@ -100,25 +94,35 @@ static lean_object *wrapped_input_cb(lean_object *beqI, lean_object *hashI,
   }
 
   lean_dec(i);
-  return mk_ok(v);
+  /* Except.ok v */
+  lean_object *r = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(r, 0, v);
+  return r;
 }
 
-/* fetch' callback for tasks. Returns Except BuildError (R q) directly.
- * Closure captures: beqQ, hashQ, hashR, beqI, hashI, hashV, input_fn, tasks,
- * cache_ref, started_ref, stack_ref, deps_ref. Free arg: key. */
+/* fetch' (q : Q) : EST BuildError σ (R q) := do
+ *   let v ← fetch q
+ *   if !(← deps.get).contains q then
+ *     let h := match (← started.get).get? q with
+ *       | some m => m.hash
+ *       | none => hash v
+ *     deps.modify (·.insert q h)
+ *   pure v
+ *
+ * Returns Except because it's passed to the task as a closure. */
 static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
     lean_object *deps_ref, lean_object *key) {
-  lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
+  lean_object *value = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
       input_fn, tasks, cache_ref, started_ref, stack_ref, key);
-  if (IS_ERR(result))
-    return result;
-
-  lean_object *value = GET_VAL(result);
-  lean_inc(value);
-  lean_dec_ref(result);
+  if (IS_CYCLE(value)) {
+    /* Except.error BuildError.cycle */
+    lean_object *r = lean_alloc_ctor(0, 1, 0);
+    lean_ctor_set(r, 0, lean_box(0));
+    return r;
+  }
 
   lean_object *ds = lean_st_ref_get(deps_ref);
   lean_inc(key);
@@ -139,10 +143,12 @@ static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
     lean_dec(started);
 
     if (!lean_is_scalar(memo_opt)) {
+      /* some m => m.hash */
       lean_object *memo = lean_ctor_get(memo_opt, 0);
       h = lean_ctor_get_uint64(memo, sizeof(void *) * 3);
       lean_dec_ref(memo_opt);
     } else {
+      /* none => hash v */
       lean_dec(memo_opt);
       lean_inc(key);
       lean_inc(value);
@@ -162,14 +168,27 @@ static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
   }
 
   lean_dec(key);
-  return mk_ok(value);
+  /* Except.ok value */
+  lean_object *r = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(r, 0, value);
+  return r;
 }
 
+/* verifyDeps (deps : HashMap Q UInt64) : EST BuildError σ Bool := do
+ *   for (depKey, oldHash) in deps do
+ *     let _ ← fetch depKey
+ *     let h := match (← started.get).get? depKey with
+ *       | some m => m.hash
+ *       | none => 0
+ *     if h != oldHash then return false
+ *   return true
+ *
+ * Returns: 0 = all deps valid, 1 = hash mismatch, 2 = error (cycle).  */
 static int verify_deps(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
-    lean_object *deps, lean_object **err_out) {
+    lean_object *deps) {
   lean_object *buckets = lean_ctor_get(deps, 1);
   size_t n = lean_array_size(buckets);
 
@@ -180,14 +199,14 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
       lean_object *old_hash_box = lean_ctor_get(node, 1);
       uint64_t old_hash = lean_unbox_uint64(old_hash_box);
 
-      lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
+      /* let _ ← fetch depKey */
+      lean_object *value = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
           input_fn, tasks, cache_ref, started_ref, stack_ref, dep_key);
-      if (IS_ERR(result)) {
-        *err_out = result;
+      if (IS_CYCLE(value))
         return 2;
-      }
-      lean_dec_ref(result);
+      lean_dec(value);
 
+      /* let h := match (← started.get).get? depKey with ... */
       lean_object *started = lean_st_ref_get(started_ref);
       lean_inc(dep_key);
       lean_inc_ref(beqQ);
@@ -206,6 +225,7 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
       }
       lean_dec_ref(memo_opt);
 
+      /* if h != oldHash then return false */
       if (cur_hash != old_hash)
         return 1;
 
@@ -215,7 +235,9 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
   return 0;
 }
 
-/* Verify that all input deps still hash to the same values. */
+/* verifyInputDeps (inputDeps : HashMap I UInt64) : Bool :=
+ *   inputDeps.all fun i oldHash =>
+ *     hash (Input.get store.inputs i) == oldHash */
 static int verify_input_deps(
     lean_object *hashV, lean_object *input_fn, lean_object *input_deps) {
   lean_object *buckets = lean_ctor_get(input_deps, 1);
@@ -249,18 +271,26 @@ static int verify_input_deps(
   return 0;
 }
 
+/* recompute : EST BuildError σ (R q) := do
+ *   let value ← tasks q (EST BuildError σ) input' fetch'
+ *   let m : Shake.Memo I Q R q := { value, deps := ← deps.get, inputDeps := ←
+ * inputDeps.get } started.modify (·.insert q m) memos.modify (·.insert q m)
+ *   return value
+ *
+ * Runs the task, records the memo. Returns value or NULL on error. */
 static lean_object *run_task(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
-    lean_object *task) {
+    lean_object *task, lean_object *key, lean_object **out_deps,
+    lean_object **out_input_deps) {
   lean_inc(g_empty_dhashmap_128);
   lean_object *deps_ref = lean_st_mk_ref(g_empty_dhashmap_128);
 
   lean_inc(g_empty_dhashmap_128);
   lean_object *input_deps_ref = lean_st_mk_ref(g_empty_dhashmap_128);
 
-  /* wrapped input closure: 6 args total, 5 captured, 1 free (i) */
+  /* Build input' closure */
   lean_inc_ref(beqI);
   lean_inc_ref(hashI);
   lean_inc_ref(hashV);
@@ -274,7 +304,7 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
   lean_closure_set(input_closure, 3, input_fn);
   lean_closure_set(input_closure, 4, input_deps_ref);
 
-  /* fetch' closure: 13 args total, 12 captured, 1 free (key) */
+  /* Build fetch' closure */
   lean_inc_ref(beqQ);
   lean_inc_ref(hashQ);
   lean_inc_ref(hashR);
@@ -302,43 +332,44 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
   lean_closure_set(fetch_closure, 10, stack_ref);
   lean_closure_set(fetch_closure, 11, deps_ref);
 
+  /* let value ← tasks q (Except BuildError) input' fetch' */
   lean_inc(task);
   lean_inc(g_monad_inst);
   lean_object *result = lean_apply_4(
       task, lean_box(0), g_monad_inst, input_closure, fetch_closure);
 
-  if (IS_ERR(result)) {
+  if (lean_obj_tag(result) == 0) {
+    /* Except.error — task failed */
+    lean_dec_ref(result);
     lean_dec(deps_ref);
     lean_dec(input_deps_ref);
-    return result;
+    return CYCLE;
   }
 
-  lean_object *value = GET_VAL(result);
+  lean_object *value = lean_ctor_get(result, 0);
   lean_inc(value);
   lean_dec_ref(result);
 
-  lean_object *recorded_deps = lean_st_ref_get(deps_ref);
+  *out_deps = lean_st_ref_get(deps_ref);
   lean_dec(deps_ref);
 
-  lean_object *recorded_input_deps = lean_st_ref_get(input_deps_ref);
+  *out_input_deps = lean_st_ref_get(input_deps_ref);
   lean_dec(input_deps_ref);
 
-  /* Return triple: (value, deps, input_deps) as nested pairs */
-  lean_object *inner = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(inner, 0, recorded_deps);
-  lean_ctor_set(inner, 1, recorded_input_deps);
-  lean_object *outer = lean_alloc_ctor(0, 2, 0);
-  lean_ctor_set(outer, 0, value);
-  lean_ctor_set(outer, 1, inner);
-  return mk_ok(outer);
+  return value;
 }
 
+/* fetch (q : Q) : EST BuildError σ (R q)
+ *
+ * Returns the value directly, or NULL on error (cycle). */
 static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
     lean_object *key) {
-  /* Check started map */
+
+  /* if let some m := (← started.get).get? q then
+   *   return m.value */
   {
     lean_object *started = lean_st_ref_get(started_ref);
     lean_inc(key);
@@ -352,12 +383,12 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
       lean_object *value = lean_ctor_get(memo, 0);
       lean_inc(value);
       lean_dec_ref(memo_opt);
-      return mk_ok(value);
+      return value;
     }
     lean_dec(memo_opt);
   }
 
-  /* Cycle detection */
+  /* if stk.contains q then throw .cycle */
   {
     lean_object *stack = lean_st_ref_get(stack_ref);
     lean_inc(key);
@@ -366,10 +397,10 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
     uint8_t on_stack = l_Array_contains___redArg(beqQ, stack, key);
     lean_dec(stack);
     if (on_stack)
-      return mk_err_cycle();
+      return CYCLE;
   }
 
-  /* Push onto stack */
+  /* stack.set (stk.push q) */
   {
     lean_object *stack = lean_st_ref_take(stack_ref);
     lean_inc(key);
@@ -377,14 +408,9 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
     lean_st_ref_set(stack_ref, stack);
   }
 
-  lean_object *result;
+  lean_object *value;
 
-  /* Get the task */
-  lean_inc(key);
-  lean_inc_ref(tasks);
-  lean_object *task = lean_apply_1(tasks, key);
-
-  /* Check cache for existing memo */
+  /* match (← memos.get).get? q with ... */
   lean_object *cache = lean_st_ref_get(cache_ref);
   lean_inc(key);
   lean_inc_ref(beqQ);
@@ -394,32 +420,34 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
   lean_dec(cache);
 
   if (lean_is_scalar(cached_opt)) {
+    /* | none => recompute */
     lean_dec(cached_opt);
-    goto compute;
+    goto recompute;
   } else {
+    /* | some m => ... */
     lean_object *cached_memo = lean_ctor_get(cached_opt, 0);
     lean_inc(cached_memo);
     lean_dec_ref(cached_opt);
 
-    /* Verify input deps first (cheap, no recursive fetching) */
+    /* if verifyInputDeps m.inputDeps && ... */
     lean_object *cached_input_deps = lean_ctor_get(cached_memo, 2);
     if (verify_input_deps(hashV, input_fn, cached_input_deps)) {
       lean_dec(cached_memo);
-      goto compute;
+      goto recompute;
     }
 
-    /* Verify query deps */
+    /* ... (← verifyDeps m.deps) then */
     lean_object *cached_deps = lean_ctor_get(cached_memo, 1);
-    lean_object *err = NULL;
     int vr = verify_deps(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn,
-        tasks, cache_ref, started_ref, stack_ref, cached_deps, &err);
+        tasks, cache_ref, started_ref, stack_ref, cached_deps);
 
     if (vr == 2) {
+      /* error from verify_deps */
       lean_dec(cached_memo);
-      lean_dec(task);
-      result = err;
+      value = CYCLE;
     } else if (vr == 0) {
-      lean_dec(task);
+      /* started.modify (·.insert q m)
+       * pure m.value */
       lean_object *old_started = lean_st_ref_take(started_ref);
       lean_inc(key);
       lean_inc(cached_memo);
@@ -430,34 +458,34 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
               beqQ, hashQ, old_started, key, cached_memo);
       lean_st_ref_set(started_ref, new_started);
 
-      lean_object *value = lean_ctor_get(cached_memo, 0);
+      value = lean_ctor_get(cached_memo, 0);
       lean_inc(value);
       lean_dec(cached_memo);
-      result = mk_ok(value);
     } else {
+      /* else recompute */
       lean_dec(cached_memo);
-      goto compute;
+      goto recompute;
     }
     goto done;
   }
 
-compute:;
-  lean_object *comp_result = run_task(beqI, hashI, hashV, beqQ, hashQ, hashR,
-      input_fn, tasks, cache_ref, started_ref, stack_ref, task);
-  lean_dec(task);
+recompute:;
+  /* let value ← tasks q ... input' fetch'
+   * let m := { value, deps, inputDeps }
+   * started.modify (·.insert q m)
+   * memos.modify (·.insert q m) */
+  {
+    lean_inc(key);
+    lean_inc_ref(tasks);
+    lean_object *task = lean_apply_1(tasks, key);
 
-  if (IS_ERR(comp_result)) {
-    result = comp_result;
-  } else {
-    lean_object *outer = GET_VAL(comp_result);
-    lean_object *value = lean_ctor_get(outer, 0);
-    lean_object *inner = lean_ctor_get(outer, 1);
-    lean_object *deps = lean_ctor_get(inner, 0);
-    lean_object *input_deps = lean_ctor_get(inner, 1);
-    lean_inc(value);
-    lean_inc(deps);
-    lean_inc(input_deps);
-    lean_dec_ref(comp_result);
+    lean_object *deps, *input_deps;
+    value = run_task(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn, tasks,
+        cache_ref, started_ref, stack_ref, task, key, &deps, &input_deps);
+    lean_dec(task);
+
+    if (IS_CYCLE(value))
+      goto done;
 
     lean_inc(key);
     lean_inc(value);
@@ -491,22 +519,26 @@ compute:;
     lean_st_ref_set(cache_ref, new_cache);
 
     lean_dec(memo);
-    result = mk_ok(value);
   }
 
-done: {
-  lean_object *stack = lean_st_ref_take(stack_ref);
-  stack = lean_array_pop(stack);
-  lean_st_ref_set(stack_ref, stack);
+done:
+  /* stack.modify Array.pop */
+  {
+    lean_object *stack = lean_st_ref_take(stack_ref);
+    stack = lean_array_pop(stack);
+    lean_st_ref_set(stack_ref, stack);
+  }
+
+  return value;
 }
 
-  return result;
-}
-
+/* build tasks q := fun store => ...
+ *   return (← fetch q, ⟨store.inputs, ← memos.get⟩) */
 LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *inputInst, lean_object *tasks,
     lean_object *target, lean_object *store) {
+  /* let inputs := store.inputs */
   lean_object *inputs = lean_ctor_get(store, 0);
   lean_inc(inputs);
   lean_inc(inputs);
@@ -514,12 +546,17 @@ LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
   lean_inc(cache);
   lean_dec_ref(store);
 
+  /* Input.get store.inputs (partially applied) */
   lean_object *get_method = lean_ctor_get(inputInst, 0);
   lean_inc(get_method);
   lean_dec_ref(inputInst);
   lean_object *input_fn = lean_apply_1(get_method, inputs);
 
   ensure_init();
+
+  /* let memos ← ST.mkRef store.memos
+   * let started ← ST.mkRef (DHashMap.emptyWithCapacity 1024)
+   * let stack ← ST.mkRef #[] */
   lean_object *cache_ref = lean_st_mk_ref(cache);
 
   lean_inc(g_empty_dhashmap_2048);
@@ -529,14 +566,13 @@ LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
       lean_mk_empty_array_with_capacity(lean_unsigned_to_nat(0u));
   lean_object *stack_ref = lean_st_mk_ref(empty_arr);
 
-  lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
+  /* ← fetch q */
+  lean_object *value = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
       input_fn, tasks, cache_ref, started_ref, stack_ref, target);
 
-  if (IS_OK(result)) {
-    lean_object *value = GET_VAL(result);
-    lean_inc(value);
-    lean_dec_ref(result);
-
+  lean_object *result;
+  if (!IS_CYCLE(value)) {
+    /* Except.ok (value, ⟨inputs, ← memos.get⟩) */
     lean_object *final_cache = lean_st_ref_get(cache_ref);
     lean_object *new_store = lean_alloc_ctor(0, 2, 0);
     lean_ctor_set(new_store, 0, inputs);
@@ -544,9 +580,13 @@ LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
     lean_object *pair = lean_alloc_ctor(0, 2, 0);
     lean_ctor_set(pair, 0, value);
     lean_ctor_set(pair, 1, new_store);
-    result = mk_ok(pair);
+    result = lean_alloc_ctor(1, 1, 0);
+    lean_ctor_set(result, 0, pair);
   } else {
+    /* Except.error BuildError.cycle */
     lean_dec(inputs);
+    result = lean_alloc_ctor(0, 1, 0);
+    lean_ctor_set(result, 0, lean_box(0));
   }
 
   lean_dec(cache_ref);
