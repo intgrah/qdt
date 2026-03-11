@@ -27,21 +27,17 @@ def mkRange (text : String) (span : Span) : Range :=
     «end» := fileMap.utf8PosToLspPos ⟨endByte⟩
   }
 
-def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic :=
-  {
-    range := mkRange text span
-    severity? := some DiagnosticSeverity.error
-    source? := some "qdt"
-    message := toString err
-  }
+def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic where
+  range := mkRange text span
+  severity? := some DiagnosticSeverity.error
+  source? := some "qdt"
+  message := toString err
 
-def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic :=
-  {
-    range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
-    severity? := some DiagnosticSeverity.error
-    source? := some "qdt"
-    message := toString err
-  }
+def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic where
+  range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
+  severity? := some DiagnosticSeverity.error
+  source? := some "qdt"
+  message := toString err
 
 def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
   match System.Uri.fileUriToPath? uri with
@@ -65,7 +61,7 @@ structure ServerState where
 
 abbrev ServerM := StateRefT ServerState IO
 
-def getProject (filepath : FilePath) : ServerM ProjectState := do
+def ServerM.getProject (filepath : FilePath) : ServerM ProjectState := do
   let st ← get
   let root ← IO.FS.realPath (st.rootUri?.getD (filepath.parent.getD (FilePath.mk ".")))
   match st.projects[root]? with
@@ -77,22 +73,22 @@ def getProject (filepath : FilePath) : ServerM ProjectState := do
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
 
-def setProject (ps : ProjectState) : ServerM Unit :=
+def ServerM.setProject (ps : ProjectState) : ServerM Unit :=
   modify fun st => { st with projects := st.projects.insert ps.root ps }
 
-def writeLsp (msg : JsonRpc.Message) : ServerM Unit := do
+def ServerM.writeLsp (msg : JsonRpc.Message) : ServerM Unit := do
   (← get).hOut.writeLspMessage msg
 
-def sendResponse (id : RequestID) (result : Json) : ServerM Unit :=
+def ServerM.sendResponse (id : RequestID) (result : Json) : ServerM Unit :=
   writeLsp <| Message.response id result
 
-def sendError (id : RequestID) (code : ErrorCode) (msg : String) : ServerM Unit :=
+def ServerM.sendError (id : RequestID) (code : ErrorCode) (msg : String) : ServerM Unit :=
   writeLsp <| Message.responseError id code msg none
 
-def sendNotification (method : String) (params : Json.Structured) : ServerM Unit :=
+def ServerM.sendNotification (method : String) (params : Json.Structured) : ServerM Unit :=
   writeLsp <| Message.notification method (some params)
 
-def publishDiagnostics
+def ServerM.publishDiagnostics
     (uri : DocumentUri)
     (version? : Option Int)
     (diags : Array Lsp.Diagnostic) : ServerM Unit := do
@@ -101,7 +97,7 @@ def publishDiagnostics
   | Except.error e => throw (IO.userError s!"internal error: cannot encode diagnostics: {e}")
   | Except.ok s => sendNotification "textDocument/publishDiagnostics" s
 
-def sendFileProgress (uri : DocumentUri) (ranges : Array Range) : ServerM Unit := do
+def ServerM.sendFileProgress (uri : DocumentUri) (ranges : Array Range) : ServerM Unit := do
   let processing := ranges.map fun r => Json.mkObj [("range", toJson r)]
   let params := Json.mkObj [
     ("textDocument", Json.mkObj [("uri", toJson uri)]),
@@ -139,7 +135,7 @@ def runElabTask (ps : ProjectState) (filepath : FilePath) :
   | .ok r => pure r
   | .error .cycle => throw (IO.userError "cycle detected")
 
-def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
+def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
   let inputs := ps.inputs.insert (.text file) text
   let inputFiles : HashSet FilePath :=
@@ -151,7 +147,7 @@ def updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let (_, store) := (lspBuild.set .inputFiles (some inputFiles)).run store
   setProject { ps with store, inputs }
 
-def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
+def ServerM.elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
   let text := (ps.inputs.get? (.text file)).getD ""
   let ((info, sourceMap, cst), store') ← runElabTask ps file
@@ -160,7 +156,7 @@ def elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option
   publishDiagnostics uri version? diagnostics
   sendFileProgress uri #[]
 
-def handleInitialize (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
+def ServerM.handleInitialize (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "initialize: missing params")
   let initParams : InitializeParams ←
@@ -190,11 +186,11 @@ def handleInitialize (id : RequestID) (params? : Option Json.Structured) : Serve
   }
   sendResponse id (toJson result)
 
-def handleShutdown (id : RequestID) : ServerM Unit := do
+def ServerM.handleShutdown (id : RequestID) : ServerM Unit := do
   modify fun st => { st with shutdownRequested := true }
   sendResponse id Json.null
 
-def handleDidOpen (params? : Option Json.Structured) : ServerM Unit := do
+def ServerM.handleDidOpen (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "didOpen: missing params")
   let params ←
@@ -221,7 +217,7 @@ def handleDidOpen (params? : Option Json.Structured) : ServerM Unit := do
   updateFileText file text
   elaborateAndPublish file uri version?
 
-def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
+def ServerM.handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "didChange: missing params")
   let params ←
@@ -252,7 +248,7 @@ def handleDidChange (params? : Option Json.Structured) : ServerM Unit := do
   updateFileText file text
   elaborateAndPublish file uri version?
 
-def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
+def ServerM.handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "didClose: missing params")
   let params ←
@@ -267,7 +263,7 @@ def handleDidClose (params? : Option Json.Structured) : ServerM Unit := do
     setProject { ps with store, inputs }
   publishDiagnostics uri none #[]
 
-def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
+def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?
     | throw (IO.userError "hover: missing params")
   let .ok params := fromJson? (α := HoverParams) (toJson params)
@@ -304,7 +300,7 @@ def handleHover (id : RequestID) (params? : Option Json.Structured) : ServerM Un
   }
   sendResponse id (toJson hover)
 
-def mainLoop (stdin : IO.FS.Stream) : ServerM Unit := do
+def ServerM.main (stdin : IO.FS.Stream) : ServerM Unit := do
   while true do
     match ← stdin.readLspMessage with
     | .request id "initialize" params? =>
@@ -333,8 +329,8 @@ def main : IO UInt32 := do
   let stdout ← IO.getStdout
   let st : ServerState := { hOut := stdout }
   try
-    (mainLoop stdin).run' st
+    (ServerM.main stdin).run' st
     pure 0
   catch e =>
-    println!"fatal: {e}"
+    println! "fatal: {e}"
     pure 1
