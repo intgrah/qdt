@@ -17,13 +17,13 @@ variable
 
 structure Make.Memo (q : Q) where
   value : R q
-  modTime : UInt64
+  modTime : Nat
 
 structure Make.Store (ι : Type) where
   inputs : ι
-  time : UInt64
+  time : Nat
   memos : DHashMap Q (Make.Memo Q R)
-  inputModTimes : HashMap I UInt64
+  inputModTimes : HashMap I Nat
 
 partial def Make : Build Applicative I V Q R ι where
   σ := Make.Store I Q R ι
