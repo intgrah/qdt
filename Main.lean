@@ -35,7 +35,7 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
-variable (b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal))
+variable {b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal)}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateT b.σ (Except BuildError) (Array String) := do
@@ -53,13 +53,13 @@ def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
 
 def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
     Array String × b.σ :=
-  match StateT.run (s := store) <| checkModule b inputs filepath with
+  match StateT.run (s := store) <| checkModule inputs filepath with
   | .ok (msgs, store) => (msgs, store)
   | .error .cycle => (#["[error] cycle detected"], store)
 
 def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : b.σ)
     (entryFile : FilePath) : IO Unit := do
-  let (msgs, initialStore) := runOnce b inputs₀ store₀ entryFile
+  let (msgs, initialStore) := runOnce inputs₀ store₀ entryFile
   for msg in msgs do println! msg
   let store ← IO.mkRef initialStore
   let inputs ← IO.mkRef inputs₀
@@ -77,7 +77,7 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
           let text ← IO.FS.readFile file
           store.modify fun s => (b.set (InputKey.text file) (some text) |>.run s).2
           inputs.modify (·.insert (.text file) text)
-        let (msgs, s) := runOnce b (← inputs.get) (← store.get) entryFile
+        let (msgs, s) := runOnce (← inputs.get) (← store.get) entryFile
         for msg in msgs do println! msg
         store.set s
 
@@ -89,14 +89,14 @@ def run (parsed : Parsed) : IO UInt32 := do
   let store := b.init inputs
 
   if config.watchMode then
-    watchLoop b config.root inputs store config.files[0]!
+    watchLoop config.root inputs store config.files[0]!
     return 0
   else
     let t₀ ← IO.monoMsNow
     let mut allMsgs : Array String := #[]
     let mut store := store
     for file in config.files do
-      let (msgs, store') := runOnce b inputs store file
+      let (msgs, store') := runOnce inputs store file
       allMsgs := allMsgs ++ msgs
       store := store'
     for msg in allMsgs do println! msg
