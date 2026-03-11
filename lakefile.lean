@@ -36,3 +36,8 @@ extern_lib libleanshake pkg := do
   let srcs : Array FilePath := #["Incremental/c/shake.c"]
   let objs ← srcs.mapM (buildCObj pkg)
   buildStaticLib (pkg.staticLibDir / nameToStaticLib "leanshake") objs
+
+extern_lib libleansalsa pkg := do
+  let srcs : Array FilePath := #["Incremental/c/salsa.c"]
+  let objs ← srcs.mapM (buildCObj pkg)
+  buildStaticLib (pkg.staticLibDir / nameToStaticLib "leansalsa") objs
