@@ -84,10 +84,6 @@ partial def Shake : Build Monad I V Q R ι where
         | none => recompute
       stack.modify Array.pop
       return r
-    let store := {
-      store with
-      memos := ← memos.get
-    }
-    return (← fetch q, store)
+    return (← fetch q, ⟨store.inputs, ← memos.get⟩)
 
 end Incremental
