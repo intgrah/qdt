@@ -7,8 +7,8 @@ extern lean_object *l_Std_DHashMap_Internal_Raw_u2080_insert___redArg(
     lean_object *, lean_object *, lean_object *, lean_object *, lean_object *);
 extern uint8_t l_Std_DHashMap_Internal_Raw_u2080_contains___redArg(
     lean_object *, lean_object *, lean_object *, lean_object *);
-extern uint8_t l_Array_contains___redArg(lean_object *, lean_object *,
-                                         lean_object *);
+extern uint8_t l_Array_contains___redArg(
+    lean_object *, lean_object *, lean_object *);
 extern lean_object *l_Except_instMonad(lean_object *);
 
 static lean_object *g_monad_inst = NULL;
@@ -51,7 +51,7 @@ static lean_object *mk_err_cycle(void) { return mk_err(lean_box(0)); }
 
 /* Memo: ctor(0, 3, 8) — value, deps, inputDeps, hash */
 static lean_object *mk_memo(lean_object *value, lean_object *deps,
-                            lean_object *input_deps, uint64_t hash) {
+    lean_object *input_deps, uint64_t hash) {
   lean_object *m = lean_alloc_ctor(0, 3, sizeof(uint64_t));
   lean_ctor_set(m, 0, value);
   lean_ctor_set(m, 1, deps);
@@ -61,19 +61,17 @@ static lean_object *mk_memo(lean_object *value, lean_object *deps,
 }
 
 static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
-                                lean_object *hashV,
-                                lean_object *beqQ, lean_object *hashQ,
-                                lean_object *hashR, lean_object *input_fn,
-                                lean_object *tasks, lean_object *cache_ref,
-                                lean_object *started_ref,
-                                lean_object *stack_ref, lean_object *key);
+    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
+    lean_object *hashR, lean_object *input_fn, lean_object *tasks,
+    lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
+    lean_object *key);
 
-/* wrapped_input_cb: wraps pure input_fn into monadic (Except) with dep tracking.
- * Closure captures: beqI, hashI, hashV, input_fn, input_deps_ref. Free arg: i. */
+/* wrapped_input_cb: wraps pure input_fn into monadic (Except) with dep
+ * tracking. Closure captures: beqI, hashI, hashV, input_fn, input_deps_ref.
+ * Free arg: i. */
 static lean_object *wrapped_input_cb(lean_object *beqI, lean_object *hashI,
-                                     lean_object *hashV, lean_object *input_fn,
-                                     lean_object *input_deps_ref,
-                                     lean_object *i) {
+    lean_object *hashV, lean_object *input_fn, lean_object *input_deps_ref,
+    lean_object *i) {
   lean_inc(i);
   lean_inc_ref(input_fn);
   lean_object *v = lean_apply_1(input_fn, i);
@@ -109,17 +107,12 @@ static lean_object *wrapped_input_cb(lean_object *beqI, lean_object *hashI,
  * Closure captures: beqQ, hashQ, hashR, beqI, hashI, hashV, input_fn, tasks,
  * cache_ref, started_ref, stack_ref, deps_ref. Free arg: key. */
 static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
-                                   lean_object *hashR,
-                                   lean_object *beqI, lean_object *hashI,
-                                   lean_object *hashV,
-                                   lean_object *input_fn,
-                                   lean_object *tasks, lean_object *cache_ref,
-                                   lean_object *started_ref,
-                                   lean_object *stack_ref,
-                                   lean_object *deps_ref, lean_object *key) {
+    lean_object *hashR, lean_object *beqI, lean_object *hashI,
+    lean_object *hashV, lean_object *input_fn, lean_object *tasks,
+    lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
+    lean_object *deps_ref, lean_object *key) {
   lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
-                                    input_fn, tasks,
-                                    cache_ref, started_ref, stack_ref, key);
+      input_fn, tasks, cache_ref, started_ref, stack_ref, key);
   if (IS_ERR(result))
     return result;
 
@@ -173,12 +166,10 @@ static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
 }
 
 static int verify_deps(lean_object *beqI, lean_object *hashI,
-                       lean_object *hashV,
-                       lean_object *beqQ, lean_object *hashQ, lean_object *hashR,
-                       lean_object *input_fn, lean_object *tasks,
-                       lean_object *cache_ref, lean_object *started_ref,
-                       lean_object *stack_ref, lean_object *deps,
-                       lean_object **err_out) {
+    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
+    lean_object *hashR, lean_object *input_fn, lean_object *tasks,
+    lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
+    lean_object *deps, lean_object **err_out) {
   lean_object *buckets = lean_ctor_get(deps, 1);
   size_t n = lean_array_size(buckets);
 
@@ -189,9 +180,8 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
       lean_object *old_hash_box = lean_ctor_get(node, 1);
       uint64_t old_hash = lean_unbox_uint64(old_hash_box);
 
-      lean_object *result =
-          shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn, tasks,
-                      cache_ref, started_ref, stack_ref, dep_key);
+      lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
+          input_fn, tasks, cache_ref, started_ref, stack_ref, dep_key);
       if (IS_ERR(result)) {
         *err_out = result;
         return 2;
@@ -203,8 +193,8 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
       lean_inc_ref(beqQ);
       lean_inc_ref(hashQ);
       lean_object *memo_opt =
-          l_Std_DHashMap_Internal_Raw_u2080_get_x3f___redArg(beqQ, hashQ,
-                                                             started, dep_key);
+          l_Std_DHashMap_Internal_Raw_u2080_get_x3f___redArg(
+              beqQ, hashQ, started, dep_key);
       lean_dec(started);
 
       uint64_t cur_hash;
@@ -226,8 +216,8 @@ static int verify_deps(lean_object *beqI, lean_object *hashI,
 }
 
 /* Verify that all input deps still hash to the same values. */
-static int verify_input_deps(lean_object *hashV, lean_object *input_fn,
-                              lean_object *input_deps) {
+static int verify_input_deps(
+    lean_object *hashV, lean_object *input_fn, lean_object *input_deps) {
   lean_object *buckets = lean_ctor_get(input_deps, 1);
   size_t n = lean_array_size(buckets);
 
@@ -260,12 +250,10 @@ static int verify_input_deps(lean_object *hashV, lean_object *input_fn,
 }
 
 static lean_object *run_task(lean_object *beqI, lean_object *hashI,
-                             lean_object *hashV,
-                             lean_object *beqQ, lean_object *hashQ,
-                             lean_object *hashR, lean_object *input_fn,
-                             lean_object *tasks, lean_object *cache_ref,
-                             lean_object *started_ref, lean_object *stack_ref,
-                             lean_object *task) {
+    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
+    lean_object *hashR, lean_object *input_fn, lean_object *tasks,
+    lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
+    lean_object *task) {
   lean_inc(g_empty_dhashmap_128);
   lean_object *deps_ref = lean_st_mk_ref(g_empty_dhashmap_128);
 
@@ -316,8 +304,8 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
 
   lean_inc(task);
   lean_inc(g_monad_inst);
-  lean_object *result =
-      lean_apply_4(task, lean_box(0), g_monad_inst, input_closure, fetch_closure);
+  lean_object *result = lean_apply_4(
+      task, lean_box(0), g_monad_inst, input_closure, fetch_closure);
 
   if (IS_ERR(result)) {
     lean_dec(deps_ref);
@@ -346,12 +334,10 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
 }
 
 static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
-                                lean_object *hashV,
-                                lean_object *beqQ, lean_object *hashQ,
-                                lean_object *hashR, lean_object *input_fn,
-                                lean_object *tasks, lean_object *cache_ref,
-                                lean_object *started_ref,
-                                lean_object *stack_ref, lean_object *key) {
+    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
+    lean_object *hashR, lean_object *input_fn, lean_object *tasks,
+    lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
+    lean_object *key) {
   /* Check started map */
   {
     lean_object *started = lean_st_ref_get(started_ref);
@@ -426,8 +412,7 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
     lean_object *cached_deps = lean_ctor_get(cached_memo, 1);
     lean_object *err = NULL;
     int vr = verify_deps(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn,
-                         tasks, cache_ref, started_ref, stack_ref,
-                         cached_deps, &err);
+        tasks, cache_ref, started_ref, stack_ref, cached_deps, &err);
 
     if (vr == 2) {
       lean_dec(cached_memo);
@@ -457,9 +442,8 @@ static lean_object *shake_fetch(lean_object *beqI, lean_object *hashI,
   }
 
 compute:;
-  lean_object *comp_result =
-      run_task(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn, tasks,
-               cache_ref, started_ref, stack_ref, task);
+  lean_object *comp_result = run_task(beqI, hashI, hashV, beqQ, hashQ, hashR,
+      input_fn, tasks, cache_ref, started_ref, stack_ref, task);
   lean_dec(task);
 
   if (IS_ERR(comp_result)) {
@@ -519,11 +503,10 @@ done: {
   return result;
 }
 
-LEAN_EXPORT lean_object *
-lean_shake_build(lean_object *beqI, lean_object *hashI, lean_object *hashV,
-                 lean_object *beqQ, lean_object *hashQ, lean_object *hashR,
-                 lean_object *inputInst, lean_object *tasks, lean_object *target,
-                 lean_object *store) {
+LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
+    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
+    lean_object *hashR, lean_object *inputInst, lean_object *tasks,
+    lean_object *target, lean_object *store) {
   lean_object *inputs = lean_ctor_get(store, 0);
   lean_inc(inputs);
   lean_inc(inputs);
@@ -547,8 +530,7 @@ lean_shake_build(lean_object *beqI, lean_object *hashI, lean_object *hashV,
   lean_object *stack_ref = lean_st_mk_ref(empty_arr);
 
   lean_object *result = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
-                                    input_fn, tasks,
-                                    cache_ref, started_ref, stack_ref, target);
+      input_fn, tasks, cache_ref, started_ref, stack_ref, target);
 
   if (IS_OK(result)) {
     lean_object *value = GET_VAL(result);

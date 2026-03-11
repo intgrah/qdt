@@ -18,10 +18,8 @@ LEAN_EXPORT lean_obj_res fswatch_inotify_init(lean_obj_arg world) {
   return lean_io_result_mk_ok(lean_box((size_t)fd));
 }
 
-LEAN_EXPORT lean_obj_res fswatch_inotify_add_watch(uint32_t fd,
-                                                   lean_obj_arg path,
-                                                   uint32_t mask,
-                                                   lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_add_watch(
+    uint32_t fd, lean_obj_arg path, uint32_t mask, lean_obj_arg world) {
   const char *path_str = lean_string_cstr(path);
   int wd = inotify_add_watch((int)fd, path_str, mask);
   if (wd < 0) {
@@ -31,8 +29,8 @@ LEAN_EXPORT lean_obj_res fswatch_inotify_add_watch(uint32_t fd,
   return lean_io_result_mk_ok(lean_box((size_t)wd));
 }
 
-LEAN_EXPORT lean_obj_res fswatch_inotify_rm_watch(uint32_t fd, uint32_t wd,
-                                                  lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_rm_watch(
+    uint32_t fd, uint32_t wd, lean_obj_arg world) {
   if (inotify_rm_watch((int)fd, (int)wd) < 0) {
     return lean_io_result_mk_error(
         lean_mk_io_user_error(lean_mk_string(strerror(errno))));
@@ -40,14 +38,14 @@ LEAN_EXPORT lean_obj_res fswatch_inotify_rm_watch(uint32_t fd, uint32_t wd,
   return lean_io_result_mk_ok(lean_box(0));
 }
 
-LEAN_EXPORT lean_obj_res fswatch_inotify_close(uint32_t fd,
-                                               lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_close(
+    uint32_t fd, lean_obj_arg world) {
   close((int)fd);
   return lean_io_result_mk_ok(lean_box(0));
 }
 
-static lean_object *mk_raw_event(int32_t wd, uint32_t mask, uint32_t cookie,
-                                 const char *name) {
+static lean_object *mk_raw_event(
+    int32_t wd, uint32_t mask, uint32_t cookie, const char *name) {
   lean_object *obj = lean_alloc_ctor(0, 1, 12);
   lean_ctor_set(obj, 0, lean_mk_string(name ? name : ""));
   lean_ctor_set_uint32(obj, sizeof(void *), (uint32_t)wd);
@@ -114,18 +112,16 @@ LEAN_EXPORT uint32_t fswatch_IN_ALL_EVENTS(void) { return IN_ALL_EVENTS; }
 LEAN_EXPORT lean_obj_res fswatch_inotify_init(lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
-LEAN_EXPORT lean_obj_res fswatch_inotify_add_watch(uint32_t fd,
-                                                   lean_obj_arg path,
-                                                   uint32_t mask,
-                                                   lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_add_watch(
+    uint32_t fd, lean_obj_arg path, uint32_t mask, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
-LEAN_EXPORT lean_obj_res fswatch_inotify_rm_watch(uint32_t fd, uint32_t wd,
-                                                  lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_rm_watch(
+    uint32_t fd, uint32_t wd, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
-LEAN_EXPORT lean_obj_res fswatch_inotify_close(uint32_t fd,
-                                               lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res fswatch_inotify_close(
+    uint32_t fd, lean_obj_arg world) {
   return PLATFORM_ERROR;
 }
 LEAN_EXPORT lean_obj_res fswatch_inotify_read(uint32_t fd, lean_obj_arg world) {
