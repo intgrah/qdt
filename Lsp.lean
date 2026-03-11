@@ -16,7 +16,7 @@ open Incremental
 open Frontend (Cst Path SourceMap Span)
 
 opaque lspBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
-  selectBuild .shakeNative
+  selectBuild .shakeC
 
 def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
