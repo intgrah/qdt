@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap)
@@ -25,7 +23,7 @@ structure Make.Store (ι : Type) where
   memos : DHashMap Q (Make.Memo Q R)
   inputModTimes : HashMap I Nat
 
-partial def Make : Build Applicative I V Q R ι where
+public partial def Make : Build Applicative I V Q R ι where
   σ := Make.Store I Q R ι
   init inputs := {
     inputs

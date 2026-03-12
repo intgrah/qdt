@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-public section
-
 namespace Incremental
 
 variable
@@ -13,7 +11,7 @@ variable
   [BEq Q]
 
 /-- Never remembers anything, always computes. -/
-partial def Busy : Build Monad I V Q R ι where
+public partial def Busy : Build Monad I V Q R ι where
   σ := ι
   init := id
   set i v := modify fun store => Input.set store i v

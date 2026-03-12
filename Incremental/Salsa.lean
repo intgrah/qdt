@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
@@ -15,7 +13,7 @@ variable
   [BEq I] [LawfulBEq I] [Hashable I]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-structure Salsa.Memo (q : Q) where
+public structure Salsa.Memo (q : Q) where
   value : R q
   changedAt : Nat
   verifiedAt : Nat
@@ -24,13 +22,13 @@ structure Salsa.Memo (q : Q) where
   hash : UInt64 := Hashable.hash value
   hash_value : Hashable.hash value = hash := by rfl
 
-structure Salsa.Store (ι : Type) where
+public structure Salsa.Store (ι : Type) where
   inputs : ι
   revision : Nat
   memos : DHashMap Q (Salsa.Memo I Q R)
   inputRevisions : HashMap I Nat
 
-partial def Salsa : Build Monad I V Q R ι where
+public partial def Salsa : Build Monad I V Q R ι where
   σ := Salsa.Store I Q R ι
   init store := {
     inputs := store

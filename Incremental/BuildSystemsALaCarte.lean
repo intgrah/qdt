@@ -1,9 +1,5 @@
-module
-
-public import Batteries.Control.AlternativeMonad
-public import Mathlib.Control.Monad.Writer
-
-@[expose] public section
+import Batteries.Control.AlternativeMonad
+import Mathlib.Control.Monad.Writer
 
 /-!
 # Build Systems à la Carte
