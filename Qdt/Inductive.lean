@@ -3,21 +3,19 @@ module
 public import Qdt.Theory.Substitution.Basic
 public import Qdt.Params
 
-@[expose] public section
-
 namespace Qdt
 
 open Lean (Name)
 
 open Frontend (Ast Path)
 
-structure InductiveConstructor where
+public structure InductiveConstructor where
   name : Name
   fields : List Ast
   tyOpt : Option Ast
 deriving Inhabited
 
-structure Inductive where
+public structure Inductive where
   name : Name
   recName : Name
   univParams : List Name
@@ -39,7 +37,7 @@ def InductiveConstructor.parse  : Ast → Option InductiveConstructor
       some { name, fields, tyOpt }
   | _ => none
 
-def Inductive.parse : Ast → Option Inductive
+public def Inductive.parse : Ast → Option Inductive
   | .node `Command.inductive cs =>
       let name := cs[0]!.getName
       let univParamsNode := cs[1]!
@@ -83,7 +81,7 @@ unsafe def weaken_impl {n m : Nat} : List (VTm n) → (_ : n ≤ m) → List (VT
 def weaken' {n m : Nat} (ts : List (VTm n)) (h : n ≤ m) : List (VTm m) :=
   ts.map (VTm.weaken h)
 
-def weaken {n m : Nat} (ts : List (VTm n)) (h : n ≤ m := by omega) : List (VTm m) := weaken' ts h
+public def weaken {n m : Nat} (ts : List (VTm n)) (h : n ≤ m := by omega) : List (VTm m) := weaken' ts h
 
 def Env.infer : {n : Nat} → Env n n
   | 0 => Env.nil
@@ -223,7 +221,7 @@ def InductiveConstructor.elab {numParams}
   let ctorTy : Ty numParams := ctorTyWithInd.subst (Subst.beta (.const indName indUnivs))
   return (ctorName, ctorTy)
 
-structure InductiveResult where
+public structure InductiveResult where
   indEntry : Name × Constant
   ctorEntries : List (Name × Constant)
   recEntry : Name × Constant
@@ -458,7 +456,7 @@ def goMinors
     have hk : numParams + 1 + ithMinor = numParams + 1 + numMinors := by omega
     return (hk ▸ acc, hEq ▸ seeds)
 
-def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
+public def Inductive.elab' (ind : Inductive) : OptionT ElabM InductiveResult := do
   let numParams := ind.params.length
   let numMotives := 1
   let numParamsMotives := numParams + numMotives

@@ -2,7 +2,7 @@ module
 
 public import Qdt.Control
 
-@[expose] public section
+public section
 
 namespace Qdt
 

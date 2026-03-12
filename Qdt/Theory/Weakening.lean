@@ -1,6 +1,6 @@
 module
--- import Qdt.Theory.Declarative
-@[expose] public section
+
+public section
 
 -- namespace Qdt
 
