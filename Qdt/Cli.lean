@@ -27,11 +27,11 @@ instance : Cli.ParseableType BuildSystem where
     | "busy" => some .busy
     | "less-busy" => some .lessBusy
     | "salsa" => some .salsa
+    | "salsa-c" => some .salsaC
     | "shake" => some .shake
+    | "shake-c" => some .shakeC
     | "shake-cps" => some .shakeCPS
     | "shake-estate" => some .shakeEState
-    | "shake-c" => some .shakeC
-    | "salsa-c" => some .salsaC
     | _ => none
 
 structure Config where
