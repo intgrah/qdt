@@ -107,13 +107,21 @@ def Category.Functor.comp.{v1, v2, v3, u1, u2, u3}
           h1)
         h2)
 
-
 structure Category.NatTrans.{v1, v2, u1, u2}
     (C : Type u1) (catC : Category.{v1, u1} C)
     (D : Type u2) (catD : Category.{v2, u2} D)
     (F G : Category.Functor.{v1, v2, u1, u2} C catC D catD) : Type (max u1 (max v1 v2)) where
   (app (X : C) : Category.Hom.{v2, u2} D catD (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G X))
-  (naturality (X Y : C) (f : Category.Hom.{v1, u1} C catC X Y) : Eq.{v2} (Category.Hom.{v2, u2} D catD (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G Y)) (Category.comp.{v2, u2} D catD (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F Y) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G Y) (Category.Functor.map.{v1, v2, u1, u2} C catC D catD F X Y f) (app Y)) (Category.comp.{v2, u2} D catD (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G Y) (app X) (Category.Functor.map.{v1, v2, u1, u2} C catC D catD G X Y f)))
+  (naturality (X Y : C) (f : Category.Hom.{v1, u1} C catC X Y) :
+    let F.obj := Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F;
+    let G.obj := Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G;
+    Eq.{v2} (Category.Hom.{v2, u2} D catD (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD F X) (Category.Functor.obj.{v1, v2, u1, u2} C catC D catD G Y))
+      (Category.comp.{v2, u2} D catD
+        (F.obj X) (F.obj Y) (G.obj Y)
+        (Category.Functor.map.{v1, v2, u1, u2} C catC D catD F X Y f) (app Y))
+      (Category.comp.{v2, u2} D catD
+        (F.obj X) (G.obj X) (G.obj Y)
+        (app X) (Category.Functor.map.{v1, v2, u1, u2} C catC D catD G X Y f)))
 
 def Category.NatTrans.id.{v1, v2, u1, u2}
     (C : Type u1) (catC : Category.{v1, u1} C)
