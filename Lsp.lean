@@ -5,8 +5,6 @@ public import Qdt.Common
 public import Lean.Data.Lsp.Communication
 public import Lean.Data.Lsp.InitShutdown
 
-@[expose] public section
-
 namespace Qdt
 
 open Std (DHashMap HashMap HashSet)
@@ -15,8 +13,8 @@ open System (FilePath)
 open Incremental
 open Frontend (Cst Path SourceMap Span)
 
-opaque lspBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
-  selectBuild .shakeC
+def lspBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
+  selectBuild .salsaC
 
 def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
@@ -324,7 +322,7 @@ def ServerM.main (stdin : IO.FS.Stream) : ServerM Unit := do
 end Qdt
 
 open Qdt in
-def main : IO UInt32 := do
+public def main : IO UInt32 := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
   let st : ServerState := { hOut := stdout }
