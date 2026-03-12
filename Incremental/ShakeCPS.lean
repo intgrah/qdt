@@ -3,7 +3,7 @@ module
 public import Incremental.Shake
 public import Mathlib.Control.Monad.Cont
 
-@[expose] public section
+public section
 
 namespace Incremental
 
