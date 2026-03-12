@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap)
@@ -19,7 +17,7 @@ Never remembers anything permanently, but remembers queries that it has already
 computed during the current run, avoiding redundant computation of diamond dependencies.
 This build system is most similar to a batch elaborator.
 -/
-partial def LessBusy : Build Monad I V Q R ι where
+public partial def LessBusy : Build Monad I V Q R ι where
   σ := ι
   init := id
   set i v := modify fun store => Input.set store i v

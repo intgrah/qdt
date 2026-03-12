@@ -2,8 +2,6 @@ module
 
 public import Incremental.Shake
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
@@ -22,7 +20,7 @@ structure ShakeEState.State where
   deps : HashMap Q UInt64
   inputDeps : HashMap I UInt64
 
-partial def ShakeEState : Build Monad I V Q R ι where
+public partial def ShakeEState : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
   init inputs := {
     inputs

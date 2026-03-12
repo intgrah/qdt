@@ -2,8 +2,6 @@ module
 
 public import Incremental.Salsa
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap)
@@ -16,7 +14,7 @@ variable
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
 @[extern "lean_salsa_build"]
-opaque SalsaC.build'
+public opaque SalsaC.build'
     {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} {ι : Type}
     [BEq I] [Hashable I]
     [BEq Q] [Hashable Q] [∀ q, Hashable (R q)]
@@ -24,7 +22,7 @@ opaque SalsaC.build'
     Tasks Monad I V Q R → ∀ q,
     Salsa.Store I Q R ι → Except BuildError (R q × Salsa.Store I Q R ι)
 
-def SalsaC : Build Monad I V Q R ι where
+public def SalsaC : Build Monad I V Q R ι where
   σ := Salsa.Store I Q R ι
   init inputs := {
     inputs

@@ -2,8 +2,6 @@ module
 
 public import Incremental.Shake
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
@@ -40,7 +38,7 @@ def ShakeRdeps.invalidate
   let toInvalidate := getTransitiveDependents store.rdeps changedKeys
   { store with memos := toInvalidate.fold .erase store.memos }
 
-partial def ShakeRdeps : Build Monad I V Q R ι where
+public partial def ShakeRdeps : Build Monad I V Q R ι where
   σ := ShakeRdeps.Store I Q R ι
   init inputs := {
     inputs

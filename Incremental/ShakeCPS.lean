@@ -3,8 +3,6 @@ module
 public import Incremental.Shake
 public import Mathlib.Control.Monad.Cont
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
@@ -16,7 +14,7 @@ variable
   [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-partial def ShakeCPS : Build Monad I V Q R ι where
+public partial def ShakeCPS : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
   init inputs := {
     inputs

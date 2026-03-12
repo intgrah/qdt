@@ -68,12 +68,10 @@ static lean_object *wrapped_input_cb(
   lean_inc(i);
   lean_object *new_arr = lean_array_push(old, i);
   lean_st_ref_set(input_deps_ref, new_arr);
+  lean_dec(input_deps_ref);
 
-  lean_inc(i);
-  lean_inc_ref(input_fn);
   lean_object *v = lean_apply_1(input_fn, i);
 
-  lean_dec(i);
   lean_object *r = lean_alloc_ctor(1, 1, 0);
   lean_ctor_set(r, 0, v);
   return r;
@@ -88,28 +86,41 @@ static lean_object *salsa_fetch_cb(lean_object *beqI, lean_object *hashI,
     lean_object *input_fn, lean_object *tasks, lean_object *store,
     lean_object *memos_ref, lean_object *stack_ref, lean_object *deps_ref,
     lean_object *key) {
-  /* borrow key */
   lean_object *value = salsa_fetch(beqI, hashI, beqQ, hashQ, hashR, input_fn,
       tasks, store, memos_ref, stack_ref, key);
 
+  lean_object *ret;
   if (lean_obj_tag(value) == 0) {
     lean_dec(key);
-    return value;
+    ret = value;
+  } else {
+    lean_object *v = lean_ctor_get(value, 0);
+    lean_inc(v);
+    lean_dec_ref(value);
+
+    lean_object *old = lean_st_ref_take(deps_ref);
+    lean_inc(key);
+    lean_object *new_arr = lean_array_push(old, key);
+    lean_st_ref_set(deps_ref, new_arr);
+
+    lean_dec(key);
+    ret = lean_alloc_ctor(1, 1, 0);
+    lean_ctor_set(ret, 0, v);
   }
 
-  lean_object *v = lean_ctor_get(value, 0);
-  lean_inc(v);
-  lean_dec_ref(value);
+  lean_dec_ref(beqI);
+  lean_dec_ref(hashI);
+  lean_dec_ref(beqQ);
+  lean_dec_ref(hashQ);
+  lean_dec_ref(hashR);
+  lean_dec_ref(input_fn);
+  lean_dec_ref(tasks);
+  lean_dec_ref(store);
+  lean_dec(memos_ref);
+  lean_dec(stack_ref);
+  lean_dec(deps_ref);
 
-  lean_object *old = lean_st_ref_take(deps_ref);
-  lean_inc(key);
-  lean_object *new_arr = lean_array_push(old, key);
-  lean_st_ref_set(deps_ref, new_arr);
-
-  lean_dec(key);
-  lean_object *r = lean_alloc_ctor(1, 1, 0);
-  lean_ctor_set(r, 0, v);
-  return r;
+  return ret;
 }
 
 /* verifyInputDeps (memo.inputDeps : Array I) : Bool :=
@@ -124,7 +135,6 @@ static int verify_input_revs(lean_object *beqI, lean_object *hashI,
     lean_inc(key);
     lean_inc_ref(beqI);
     lean_inc_ref(hashI);
-    lean_inc(input_revisions);
     lean_object *zero = lean_unsigned_to_nat(0u);
     lean_object *rev = l_Std_DHashMap_Internal_Raw_u2080_Const_getD___redArg(
         beqI, hashI, input_revisions, key, zero);
@@ -236,6 +246,7 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
     lean_inc_ref(hashQ);
     uint8_t on_stack = l_Std_DHashMap_Internal_Raw_u2080_contains___redArg(
         beqQ, hashQ, stack, key);
+    lean_dec(stack);
     if (on_stack) {
       lean_dec_ref(memo_opt);
       lean_object *r = lean_alloc_ctor(0, 1, 0);
@@ -287,6 +298,7 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
 
     if (clean) {
       lean_object *value = lean_ctor_get(memo, 0);
+      lean_inc(value);
       lean_inc(value);
       lean_object *changedAt = lean_ctor_get(memo, 1);
       lean_inc(changedAt);

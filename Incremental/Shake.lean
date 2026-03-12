@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
@@ -15,18 +13,18 @@ variable
   [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-structure Shake.Memo (q : Q) where
+public structure Shake.Memo (q : Q) where
   value : R q
   deps : HashMap Q UInt64
   inputDeps : HashMap I UInt64
   hash : UInt64 := hash value
   hash_value : Hashable.hash value = hash := by rfl
 
-structure Shake.Store (ι : Type) where
+public structure Shake.Store (ι : Type) where
   inputs : ι
   memos : DHashMap Q (Memo I Q R)
 
-partial def Shake : Build Monad I V Q R ι where
+public partial def Shake : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
   init inputs := {
     inputs
