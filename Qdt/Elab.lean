@@ -2,13 +2,12 @@ module
 
 public import Qdt.Structure
 
-@[expose] public section
+public section
 
 namespace Qdt
 
 open Lean (Name)
 open Frontend (Ast Path)
-
 
 structure Import where
   moduleName : Name

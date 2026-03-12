@@ -2,19 +2,17 @@ module
 
 public import Qdt.Inductive
 
-@[expose] public section
-
 namespace Qdt
 
 open Lean (Name)
 open Frontend (Ast Path)
 
-structure StructureField where
+public structure StructureField where
   name : Name
   params : List Ast
   ty : Ast
 
-structure Structure where
+public structure Structure where
   name : Name
   mkName : Name
   recName : Name
@@ -34,7 +32,7 @@ def StructureField.parse : Ast → Option StructureField
       some { name, params, ty }
   | _ => none
 
-def Structure.parse : Ast → Option Structure
+public def Structure.parse : Ast → Option Structure
   | .node `Command.structure cs =>
       let name := cs[0]!.getName
       let univParamsNode := cs[1]!
@@ -95,11 +93,11 @@ def checkFields {m} (ctx : TermContext m) : List StructureField → Nat → Opti
     let fullFieldTyVal ← fullFieldTy.eval ctx.env
     checkFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
 
-structure StructureResult where
+public structure StructureResult where
   indResult : InductiveResult
   projEntries : List (Name × Constant)
 
-def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
+public def Structure.elab' (info : Structure) : OptionT ElabM StructureResult := do
   let numParams := info.params.length
 
   let (paramCtx, paramTys) ← withChild 2 (Params.elab info.params)

@@ -2,13 +2,11 @@ module
 
 public import Qdt.Nbe
 
-@[expose] public section
-
 namespace Qdt
 
 mutual
 
-partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
+public partial def VTm.defEq {n} : VTm n → VTm n → ElabM Bool
   | .u' i₁, .u' i₂ => return i₁ == i₂
   | .neutral n₁, .neutral n₂ => n₁.defEq n₂
   | .lam _ _ ⟨env₁, body₁⟩, .lam _ _ ⟨env₂, body₂⟩ => do
@@ -102,7 +100,7 @@ partial def Spine.defEq {n} : Spine n → Spine n → ElabM Bool
 
 end
 
-partial def VTy.defEq {n} : VTy n → VTy n → ElabM Bool
+public partial def VTy.defEq {n} : VTy n → VTy n → ElabM Bool
   | .u i₁, .u i₂ => return i₁ == i₂
   | .pi _ a₁ ⟨env₁, b₁⟩, .pi _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.defEq a₂) then return false

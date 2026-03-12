@@ -2,7 +2,7 @@ module
 
 public import Qdt.Frontend.Cst
 
-@[expose] public section
+public section
 
 namespace Qdt.Frontend
 

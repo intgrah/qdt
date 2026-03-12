@@ -3,8 +3,6 @@ module
 public import Qdt.Elab
 public import Qdt.Frontend.Desugar
 
-@[expose] public section
-
 namespace Qdt
 
 open Lean (Name)
@@ -88,7 +86,7 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
   let (_, sorted) := files.foldl (fun (v, s) f => visit f v s) (HashSet.emptyWithCapacity 0, [])
   sorted.reverse
 
-def tasks : Tasks Monad InputKey InputV Key Val
+public def tasks : Tasks Monad InputKey InputV Key Val
   | .cst filepath => do
     let some text ← input (InputKey.text filepath) | return Frontend.Parser.parse ""
     return Frontend.Parser.parse text

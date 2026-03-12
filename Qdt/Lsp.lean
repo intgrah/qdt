@@ -2,7 +2,7 @@ module
 
 public import Qdt.Incremental.Rules
 
-@[expose] public section
+public section
 
 namespace Qdt
 

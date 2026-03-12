@@ -1,6 +1,8 @@
 module
-universe u v w
+
 @[expose] public section
+
+universe u v w
 
 inductive Tele (T : Nat → Type u) (a : Nat) : Nat → Type u
   | nil : Tele T a a

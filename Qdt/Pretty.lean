@@ -3,7 +3,7 @@ module
 public import Qdt.Theory.Syntax
 public import Lean.Data.Format
 
-@[expose] public section
+public section
 
 namespace Qdt
 

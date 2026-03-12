@@ -3,8 +3,6 @@ module
 public import Qdt.DefinitionalEquality
 public import Qdt.Quote
 
-@[expose] public section
-
 namespace Qdt
 
 open Lean (Name)
@@ -21,7 +19,7 @@ def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty
       return
   emitHover (.localVar name ctx.names (← ty.quote))
 
-partial def checkAstUniverse : Ast → OptionT ElabM Universe
+public partial def checkAstUniverse : Ast → OptionT ElabM Universe
   | .node `Level.zero _ => do return .zero
   | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
   | .node `Level.max cs => do return (← checkAstUniverse cs[0]!).mkMax (← checkAstUniverse cs[1]!)
@@ -171,15 +169,15 @@ partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → Optio
       let .u level := ty | raiseError (.expectedType ctx.names (← ty.quote))
       return (.el tm, level)
 
-partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n × Universe) := do
+public partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n × Universe) := do
   match ← OptionT.run (checkTyWithLevelCore ctx ast) with
   | some result => return result
   | none => emitSorryTy ctx
 
-partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n) :=
+public partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n) :=
   return (← checkTyWithLevel ctx ast).fst
 
-partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
+public partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
   | .missing => failure
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
@@ -318,7 +316,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return .app fTm aTm
   | _ => failure
 
-partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM (Tm n) := do
+public partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM (Tm n) := do
   match ← OptionT.run (checkTmCore ctx expected ast) with
   | some tm => return tm
   | none => emitSorryTm ctx expected
