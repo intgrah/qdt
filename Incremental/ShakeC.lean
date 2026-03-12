@@ -26,7 +26,10 @@ opaque ShakeC.build'
 
 def ShakeC : Build Monad I V Q R ι where
   σ := Shake.Store I Q R ι
-  init inputs := { inputs, memos := DHashMap.emptyWithCapacity 1024 }
+  init inputs := {
+    inputs
+    memos := DHashMap.emptyWithCapacity 4096
+  }
   set i v := modify fun store => { store with inputs := Input.set store.inputs i v }
   build := ShakeC.build'
 
