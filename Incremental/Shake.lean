@@ -2,7 +2,7 @@ module
 
 public import Incremental.Basic
 
-@[expose] public section
+public section
 
 namespace Incremental
 

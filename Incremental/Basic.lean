@@ -19,7 +19,6 @@ instance {α : Type u} : Applicative (Const (List α)) where
   pure _ := []
   seq f x := f ++ x ()
 
-
 /-!
 [Build systems à la carte]
 The choice of the constraint `c` has concrete meanings:
