@@ -5,8 +5,6 @@ public import Qdt.Common
 public import Qdt.Incremental.Rules
 public import Cli.Extensions
 
-@[expose] public section
-
 namespace Qdt
 
 open Cli
@@ -128,5 +126,5 @@ def cmd : Cmd := `[Cli|
 
 end Qdt
 
-def main : List String → IO UInt32 :=
+public def main : List String → IO UInt32 :=
   Qdt.cmd.validate
