@@ -35,8 +35,8 @@ partial def Salsa : Build Monad I V Q R ι where
   init store := {
     inputs := store
     revision := 0
-    memos := DHashMap.emptyWithCapacity 1024
-    inputRevisions  := HashMap.emptyWithCapacity 64
+    memos := DHashMap.emptyWithCapacity 4096
+    inputRevisions := HashMap.emptyWithCapacity 1024
   }
   set i v := modify fun store =>
     let revision := store.revision + 1
