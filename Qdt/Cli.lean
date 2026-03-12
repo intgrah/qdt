@@ -14,11 +14,11 @@ inductive BuildSystem where
   | busy
   | lessBusy
   | salsa
+  | salsaC
   | shake
+  | shakeC
   | shakeCPS
   | shakeEState
-  | shakeC
-  | salsaC
 deriving Repr, Inhabited
 
 instance : Cli.ParseableType BuildSystem where
