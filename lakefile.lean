@@ -13,6 +13,7 @@ require "leanprover-community" / mathlib @ git "v4.28.0"
 
 lean_lib FSWatch
 lean_lib Incremental
+lean_lib IncrementalWF
 lean_lib Qdt
 lean_lib Qdt.Test where
   globs := #[`Qdt.Test.*, `Qdt.Lsp.Test.*]
