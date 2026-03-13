@@ -1,0 +1,34 @@
+import Std.Nat
+
+def ack : Nat → Nat → Nat :=
+  Nat.rec.{0} (fun _ => Nat → Nat)
+    Nat.succ
+    (fun m ack_m =>
+      WellFounded.fix.{0, 0, 0} Nat Nat.lt (fun _ => Nat) Nat.lt_wf
+        (fun n rec_n =>
+          Nat.rec.{0} (fun k => ((y : Nat) → Nat.lt y k → Nat) → Nat)
+            (fun _ => ack_m 1)
+            (fun n' _ => fun rec_n => ack_m (rec_n n' (Nat.le.refl (Nat.succ n'))))
+            n rec_n))
+
+def ack_zero (n : Nat) : ack 0 n = Nat.succ n :=
+  Eq.refl.{0} Nat (Nat.succ n)
+
+def ack_succ_zero (m : Nat) : ack (Nat.succ m) 0 = ack m 1 :=
+  WellFounded.fix_eq.{0, 0, 0} Nat Nat.lt (fun _ => Nat) Nat.lt_wf
+    (fun n rec_n =>
+      Nat.rec.{0} (fun k => ((y : Nat) → Nat.lt y k → Nat) → Nat)
+        (fun _ => ack m 1)
+        (fun n' _ => fun rec_n => ack m (rec_n n' (Nat.le.refl (Nat.succ n'))))
+        n rec_n)
+    0
+
+def ack_succ_succ (m n : Nat) : ack (Nat.succ m) (Nat.succ n) = ack m (ack (Nat.succ m) n) :=
+  WellFounded.fix_eq.{0, 0, 0} Nat Nat.lt (fun _ => Nat) Nat.lt_wf
+    (fun n rec_n =>
+      Nat.rec.{0} (fun k => ((y : Nat) → Nat.lt y k → Nat) → Nat)
+        (fun _ => ack m 1)
+        (fun n' _ => fun rec_n => ack m (rec_n n' (Nat.le.refl (Nat.succ n'))))
+        n rec_n)
+    (Nat.succ n)
+
