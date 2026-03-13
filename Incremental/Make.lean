@@ -9,7 +9,7 @@ open Std (DHashMap HashMap)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq I] [LawfulBEq I] [Hashable I]
   [BEq Q] [LawfulBEq Q] [Hashable Q]
 
@@ -17,14 +17,14 @@ structure Make.Memo (q : Q) where
   value : R q
   modTime : Nat
 
-structure Make.Store (ι : Type) where
-  inputs : ι
+structure Make.Store (J : Type) where
+  inputs : J
   time : Nat
   memos : DHashMap Q (Make.Memo Q R)
   inputModTimes : HashMap I Nat
 
-public partial def Make : Build Applicative I V Q R ι where
-  σ := Make.Store I Q R ι
+public partial def Make : Build Applicative I V Q R J where
+  σ := Make.Store I Q R J
   init inputs := {
     inputs
     time := 0

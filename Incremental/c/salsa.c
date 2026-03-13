@@ -48,8 +48,8 @@ static lean_object *mk_memo(lean_object *value, lean_object *changedAt,
 }
 
 /* Salsa.Store: ctor(0, 4, 0)
- *   structure Salsa.Store (ι : Type) where
- *     inputs : ι               -- field 0
+ *   structure Salsa.Store (J : Type) where
+ *     inputs : J               -- field 0
  *     revision : Nat           -- field 1
  *     memos : DHashMap Q Memo  -- field 2
  *     inputRevisions : HashMap I Nat  -- field 3 */

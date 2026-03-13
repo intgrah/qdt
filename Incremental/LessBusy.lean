@@ -9,7 +9,7 @@ open Std (DHashMap)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq Q] [LawfulBEq Q] [Hashable Q]
 
 /--
@@ -17,8 +17,8 @@ Never remembers anything permanently, but remembers queries that it has already
 computed during the current run, avoiding redundant computation of diamond dependencies.
 This build system is most similar to a batch elaborator.
 -/
-public partial def LessBusy : Build Monad I V Q R ι where
-  σ := ι
+public partial def LessBusy : Build Monad I V Q R J where
+  σ := J
   init := id
   set i v := modify fun store => Input.set store i v
   build tasks q := fun store => runEST fun σ => do

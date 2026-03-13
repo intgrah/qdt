@@ -9,7 +9,7 @@ open Std (DHashMap HashMap HashSet)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
@@ -20,8 +20,8 @@ structure ShakeEState.State where
   deps : HashMap Q UInt64
   inputDeps : HashMap I UInt64
 
-public partial def ShakeEState : Build Monad I V Q R ι where
-  σ := Shake.Store I Q R ι
+public partial def ShakeEState : Build Monad I V Q R J where
+  σ := Shake.Store I Q R J
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 1024

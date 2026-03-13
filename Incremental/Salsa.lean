@@ -9,7 +9,7 @@ open Std (DHashMap HashMap HashSet)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq I] [LawfulBEq I] [Hashable I]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
@@ -22,14 +22,14 @@ public structure Salsa.Memo (q : Q) where
   hash : UInt64 := Hashable.hash value
   hash_value : Hashable.hash value = hash := by rfl
 
-public structure Salsa.Store (ι : Type) where
-  inputs : ι
+public structure Salsa.Store (J : Type) where
+  inputs : J
   revision : Nat
   memos : DHashMap Q (Salsa.Memo I Q R)
   inputRevisions : HashMap I Nat
 
-public partial def Salsa : Build Monad I V Q R ι where
-  σ := Salsa.Store I Q R ι
+public partial def Salsa : Build Monad I V Q R J where
+  σ := Salsa.Store I Q R J
   init store := {
     inputs := store
     revision := 0
