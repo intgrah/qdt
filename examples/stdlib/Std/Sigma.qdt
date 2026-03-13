@@ -1,9 +1,9 @@
 import Std.Eq
 
-structure Sigma.{u, v} (A : Type u) (B : A → Type v) : Type (max u v) where
-  (fst : A)
-  (snd : B fst)
+structure Sigma.{u, v} (α : Type u) (β : α → Type v) : Type (max u v) where
+  (fst : α)
+  (snd : β fst)
 
-def Sigma.eta.{u, v} (A : Type u) (B : A → Type v) (p : Sigma.{u, v} A B) :
-    Sigma.mk.{u, v} A B (Sigma.fst.{u, v} A B p) (Sigma.snd.{u, v} A B p) = p :=
-  Eq.refl.{max u v} (Sigma.{u, v} A B) p
+def Sigma.eta.{u, v} (α : Type u) (β : α → Type v) (p : Sigma.{u, v} α β) :
+    Sigma.mk.{u, v} α β (Sigma.fst.{u, v} α β p) (Sigma.snd.{u, v} α β p) = p :=
+  Eq.refl.{max u v} (Sigma.{u, v} α β) p

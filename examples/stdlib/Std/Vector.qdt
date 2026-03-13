@@ -2,20 +2,20 @@ import Std.Eq
 import Std.Nat
 import Std.List
 
-inductive Vector.{u} (A : Type u) : Nat → Type u where
-  | nil : Vector A Nat.zero
-  | cons (n : Nat) (head : A) (tail : Vector A n) : Vector A (Nat.succ n)
+inductive Vector.{u} (α : Type u) : Nat → Type u where
+  | nil : Vector α Nat.zero
+  | cons (n : Nat) (head : α) (tail : Vector α n) : Vector α (Nat.succ n)
 
-def Vector.toList.{u} (A : Type u) : (n : Nat) → Vector.{u} A n → List.{u} A :=
-  Vector.rec.{u, u} A (fun _ _ => List.{u} A) (List.nil.{u} A) (fun m h _ => List.cons.{u} A h)
+def Vector.toList.{u} (α : Type u) : (n : Nat) → Vector.{u} α n → List.{u} α :=
+  Vector.rec.{u, u} α (fun _ _ => List.{u} α) (List.nil.{u} α) (fun m h _ => List.cons.{u} α h)
 
-def Vector.ofList.{u} (A : Type u) (xs : List.{u} A) : Vector.{u} A (List.length.{u} A xs) :=
-  List.rec.{u, u} A (fun xs => Vector.{u} A (List.length.{u} A xs)) (Vector.nil.{u} A) (fun h t ih => Vector.cons.{u} A (List.length.{u} A t) h ih) xs
+def Vector.ofList.{u} (α : Type u) (xs : List.{u} α) : Vector.{u} α (List.length.{u} α xs) :=
+  List.rec.{u, u} α (fun xs => Vector.{u} α (List.length.{u} α xs)) (Vector.nil.{u} α) (fun h t ih => Vector.cons.{u} α (List.length.{u} α t) h ih) xs
 
-def Vector.map.{u, v} (A : Type u) (B : Type v) (n : Nat) (f : A → B) : Vector.{u} A n → Vector.{v} B n :=
-  Vector.rec.{v, u} A (fun k _ => Vector.{v} B k) (Vector.nil.{v} B) (fun m h _ => Vector.cons.{v} B m (f h)) n
+def Vector.map.{u, v} (α : Type u) (β : Type v) (n : Nat) (f : α → β) : Vector.{u} α n → Vector.{v} β n :=
+  Vector.rec.{v, u} α (fun k _ => Vector.{v} β k) (Vector.nil.{v} β) (fun m h _ => Vector.cons.{v} β m (f h)) n
 
-def Vector.append.{u} (A : Type u) (m n : Nat) (xs : Vector.{u} A m) (ys : Vector.{u} A n) : Vector.{u} A (m + n) :=
-  Eq.subst.{u, 0} Nat (Vector.{u} A) (n + m) (m + n) (Nat.add_comm n m)
-    (Vector.rec.{u, u} A (fun m _ => Vector.{u} A (n + m)) ys
-      (fun m h _ ih => Vector.cons.{u} A (n + m) h ih) m xs)
+def Vector.append.{u} (α : Type u) (m n : Nat) (xs : Vector.{u} α m) (ys : Vector.{u} α n) : Vector.{u} α (m + n) :=
+  Eq.subst.{u, 0} Nat (Vector.{u} α) (n + m) (m + n) (Nat.add_comm n m)
+    (Vector.rec.{u, u} α (fun m _ => Vector.{u} α (n + m)) ys
+      (fun m h _ ih => Vector.cons.{u} α (n + m) h ih) m xs)

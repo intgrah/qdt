@@ -2,11 +2,11 @@ inductive Bool where
   | true
   | false
 
-def Bool.ite.{u} (A : Type u) (b : Bool) (t f : A) :=
-  Bool.rec.{u} (fun _ => A) t f b
+def Bool.ite.{u} (α : Type u) (b : Bool) (t f : α) :=
+  Bool.rec.{u} (fun _ => α) t f b
 
-def Bool.dite.{u} (A : Bool → Type u) (b : Bool) (t : A Bool.true) (f : A Bool.false) : A b :=
-  Bool.rec.{u} A t f b
+def Bool.dite.{u} (motive : Bool → Type u) (b : Bool) (t : motive Bool.true) (f : motive Bool.false) : motive b :=
+  Bool.rec.{u} motive t f b
 
 def Bool.not (b : Bool) :=
   Bool.ite.{0} Bool Bool.false Bool.true b

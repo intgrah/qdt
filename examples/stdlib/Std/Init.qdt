@@ -1,13 +1,13 @@
 import Std.Eq
 
-def id.{u} (A : Type u) (x : A) : A := x
-def const.{u, v} (A : Type u) (B : Type v) (a : A) (b : B) := a
-def comp.{u, v, w} (A : Type u) (B : Type v) (C : Type w) (f : B → C) (g : A → B) (x : A) : C := f (g x)
+def id.{u} (α : Type u) (a : α) : α := a
+def const.{u, v} (α : Type u) (β : Type v) (a : α) (b : β) := a
+def comp.{u, v, w} (α : Type u) (β : Type v) (γ : Type w) (f : β → γ) (g : α → β) (x : α) : γ := f (g x)
 
 def comp_assoc.{u, v, w, x}
-  (A : Type u) (B : Type v) (C : Type w) (D : Type x)
-  (f : C → D) (g : B → C) (h : A → B) :
-    comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h = comp.{u, w, x} A C D f (comp.{u, v, w} A B C g h) :=
-  Eq.refl.{max u x} (A → D) (comp.{u, v, x} A B D (comp.{v, w, x} B C D f g) h)
+  (α : Type u) (β : Type v) (γ : Type w) (δ : Type x)
+  (f : γ → δ) (g : β → γ) (h : α → β) :
+    comp.{u, v, x} α β δ (comp.{v, w, x} β γ δ f g) h = comp.{u, w, x} α γ δ f (comp.{u, v, w} α β γ g h) :=
+  Eq.refl.{max u x} (α → δ) (comp.{u, v, x} α β δ (comp.{v, w, x} β γ δ f g) h)
 
-axiom funext.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (h : (x : A) → Eq.{v} (B x) (f x) (g x)) : Eq.{max u v} ((x : A) → B x) f g
+axiom funext.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (h : (x : α) → Eq.{v} (β x) (f x) (g x)) : Eq.{max u v} ((x : α) → β x) f g

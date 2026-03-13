@@ -1,82 +1,82 @@
 import Std.Relation
 
-inductive W.{u, v} (C : Type u) (A : C → Type v) : Type (max u v) where
-  | tree (root : C) (subtr : A root → W C A) : W C A
+inductive W.{u, v} (α : Type u) (β : α → Type v) : Type (max u v) where
+  | tree (root : α) (subtr : β root → W α β) : W α β
 
-inductive Acc.{u, v} (A : Type u) (r : A → A → Type v) : A → Type (max u v) where
-  | intro (x : A) (h : (y : A) → r y x → Acc A r y) : Acc A r x
+inductive Acc.{u, v} (α : Type u) (r : α → α → Type v) : α → Type (max u v) where
+  | intro (x : α) (h : (y : α) → r y x → Acc α r y) : Acc α r x
 
-def Acc.inv.{u, v} (A : Type u) (r : A → A → Type v) (x y : A) (hx : Acc.{u, v} A r x) (hyx : r y x) : Acc.{u, v} A r y :=
-  (Acc.rec.{max u v, u, v} A r
-     (fun x _ => (y : A) → r y x → Acc.{u, v} A r y)
+def Acc.inv.{u, v} (α : Type u) (r : α → α → Type v) (x y : α) (hx : Acc.{u, v} α r x) (hyx : r y x) : Acc.{u, v} α r y :=
+  (Acc.rec.{max u v, u, v} α r
+     (fun x _ => (y : α) → r y x → Acc.{u, v} α r y)
      (fun x h _ => h)
      x hx)
     y hyx
 
-inductive WellFounded.{u, v} (A : Type u) (r : A → A → Type v) : Type (max u v) where
-  | intro (h : (a : A) → Acc.{u, v} A r a) : WellFounded A r
+inductive WellFounded.{u, v} (α : Type u) (r : α → α → Type v) : Type (max u v) where
+  | intro (h : (a : α) → Acc.{u, v} α r a) : WellFounded α r
 
-def WellFounded.apply.{u, v} (A : Type u) (r : A → A → Type v) : WellFounded.{u, v} A r → (x : A) → Acc.{u, v} A r x :=
-  WellFounded.rec.{max u v, u, v} A r (fun _ => (a : A) → Acc.{u, v} A r a) (fun h => h)
+def WellFounded.apply.{u, v} (α : Type u) (r : α → α → Type v) : WellFounded.{u, v} α r → (x : α) → Acc.{u, v} α r x :=
+  WellFounded.rec.{max u v, u, v} α r (fun _ => (a : α) → Acc.{u, v} α r a) (fun h => h)
 
 def WellFounded.fixF.{u, v, w}
-    (A : Type u)
-    (r : A → A → Type v)
-    (C : A → Type w)
-    (F : (x : A) → ((y : A) → r y x → C y) → C x) :
-    (x : A) → Acc.{u, v} A r x → C x :=
-  Acc.rec.{w, u, v} A r (fun x _ => C x) (fun x _ => F x)
+    (α : Type u)
+    (r : α → α → Type v)
+    (C : α → Type w)
+    (F : (x : α) → ((y : α) → r y x → C y) → C x) :
+    (x : α) → Acc.{u, v} α r x → C x :=
+  Acc.rec.{w, u, v} α r (fun x _ => C x) (fun x _ => F x)
 
 def WellFounded.fix.{u, v, w}
-    (A : Type u)
-    (r : A → A → Type v)
-    (C : A → Type w)
-    (F : (x : A) → ((y : A) → r y x → C y) → C x)
-    (hwf : WellFounded.{u, v} A r)
-    (x : A) : C x :=
-  WellFounded.fixF.{u, v, w} A r C F x (WellFounded.apply.{u, v} A r hwf x)
+    (α : Type u)
+    (r : α → α → Type v)
+    (C : α → Type w)
+    (hwf : WellFounded.{u, v} α r)
+    (F : (x : α) → ((y : α) → r y x → C y) → C x)
+    (x : α) : C x :=
+  WellFounded.fixF.{u, v, w} α r C F x (WellFounded.apply.{u, v} α r hwf x)
 
-def WellFounded.empty.{u} (A : Type u) : WellFounded.{u, 0} A (Relation.empty.{u} A) :=
-  WellFounded.intro.{u, 0} A (Relation.empty.{u} A)
+def WellFounded.empty.{u} (α : Type u) : WellFounded.{u, 0} α (Relation.empty.{u} α) :=
+  WellFounded.intro.{u, 0} α (Relation.empty.{u} α)
     (fun x =>
-      Acc.intro.{u, 0} A (Relation.empty.{u} A) x
-        (fun y => False.elim.{max u 0} (Acc.{u, 0} A (Relation.empty.{u} A) y)))
+      Acc.intro.{u, 0} α (Relation.empty.{u} α) x
+        (fun y => False.elim.{max u 0} (Acc.{u, 0} α (Relation.empty.{u} α) y)))
 
 def Subrelation.accessible.{u, v}
-    (A : Type u)
-    (q r : A → A → Type v)
-    (h : Subrelation.{u, v} A r q) :
-    (a : A) → Acc.{u, v} A r a → Acc.{u, v} A q a :=
-  Acc.rec.{max u v, u, v} A r
-    (fun x _ => Acc.{u, v} A q x)
-    (fun x _ ih => Acc.intro.{u, v} A q x (fun y hyq => ih y (h y x hyq)))
+    (α : Type u)
+    (q r : α → α → Type v)
+    (h : Subrelation.{u, v} α r q) :
+    (a : α) → Acc.{u, v} α r a → Acc.{u, v} α q a :=
+  Acc.rec.{max u v, u, v} α r
+    (fun x _ => Acc.{u, v} α q x)
+    (fun x _ ih => Acc.intro.{u, v} α q x (fun y hyq => ih y (h y x hyq)))
 
 def Subrelation.wf.{u, v}
-    (A : Type u)
-    (q r : A → A → Type v)
-    (h : Subrelation.{u, v} A r q)
-    (hwf : WellFounded.{u, v} A r) : WellFounded.{u, v} A q :=
-  WellFounded.intro.{u, v} A q (fun a =>
-    Subrelation.accessible.{u, v} A q r h a (WellFounded.apply.{u, v} A r hwf a))
+    (α : Type u)
+    (q r : α → α → Type v)
+    (h : Subrelation.{u, v} α r q)
+    (hwf : WellFounded.{u, v} α r) : WellFounded.{u, v} α q :=
+  WellFounded.intro.{u, v} α q (fun a =>
+    Subrelation.accessible.{u, v} α q r h a (WellFounded.apply.{u, v} α r hwf a))
 
-def Acc.transGen.{u, v} (A : Type u) (r : A → A → Type v) : (a : A) → Acc.{u, v} A r a → Acc.{u, max u v} A (Relation.TransGen.{u, v} A r) a :=
-  Acc.rec.{max u v, u, v} A r
-    (fun x _ => Acc.{u, max u v} A (Relation.TransGen.{u, v} A r) x)
+def Acc.transGen.{u, v} (α : Type u) (r : α → α → Type v) : (a : α) → Acc.{u, v} α r a → Acc.{u, max u v} α (Relation.TransGen.{u, v} α r) a :=
+  Acc.rec.{max u v, u, v} α r
+    (fun x _ => Acc.{u, max u v} α (Relation.TransGen.{u, v} α r) x)
     (fun x _ ih =>
-      Acc.intro.{u, max u v} A (Relation.TransGen.{u, v} A r) x
+      Acc.intro.{u, max u v} α (Relation.TransGen.{u, v} α r) x
         (fun y =>
-          Relation.TransGen.rec.{max u v, u, v} A r
-            (fun a b _ => Acc.{u, max u v} A (Relation.TransGen.{u, v} A r) a)
+          Relation.TransGen.rec.{max u v, u, v} α r
+            (fun a b _ => Acc.{u, max u v} α (Relation.TransGen.{u, v} α r) a)
             sorry
             sorry
             y x))
 
-def Acc.transGen'.{u, v} (A : Type u) (r : A → A → Type v) : (a : A) → Acc.{u, max u v} A (Relation.TransGen.{u, v} A r) a → Acc.{u, v} A r a :=
+def Acc.transGen'.{u, v} (α : Type u) (r : α → α → Type v) : (a : α) → Acc.{u, max u v} α (Relation.TransGen.{u, v} α r) a → Acc.{u, v} α r a :=
   sorry
 
 def WellFounded.transGen.{u, v}
-    (A : Type u)
-    (r : A → A → Type v)
-    (h : WellFounded.{u, v} A r) : WellFounded.{u, max u v} A (Relation.TransGen.{u, v} A r) :=
-  WellFounded.intro.{u, max u v} A (Relation.TransGen.{u, v} A r)
-    (fun a => Acc.transGen.{u, v} A r a (WellFounded.apply.{u, v} A r h a))
+    (α : Type u)
+    (r : α → α → Type v)
+    (h : WellFounded.{u, v} α r) : WellFounded.{u, max u v} α (Relation.TransGen.{u, v} α r) :=
+  WellFounded.intro.{u, max u v} α (Relation.TransGen.{u, v} α r)
+    (fun a => Acc.transGen.{u, v} α r a (WellFounded.apply.{u, v} α r h a))

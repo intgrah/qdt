@@ -1,10 +1,10 @@
 import Std.Eq
 
-inductive Unit where
+inductive Unit.{u} : Type u where
   | unit
 
-def Unit.eta (t : Unit) : () = t :=
-  Eq.refl.{0} Unit ()
+def Unit.eta.{u} (t : Unit.{u}) : Unit.unit.{u} = t :=
+  Eq.refl.{u} Unit.{u} Unit.unit.{u}
 
-def Unit.ext (a b : Unit) : a = b :=
-  Eq.trans.{0} Unit a Unit.unit b (Eq.symm.{0} Unit Unit.unit a (Unit.eta a)) (Unit.eta b)
+def Unit.ext.{u} (a b : Unit.{u}) : a = b :=
+  Eq.trans.{u} Unit.{u} a Unit.unit.{u} b (Eq.symm.{u} Unit.{u} Unit.unit.{u} a (Unit.eta.{u} a)) (Unit.eta.{u} b)

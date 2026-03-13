@@ -1,3 +1,4 @@
-inductive Empty where
+inductive Empty.{u} : Type u where
 
-def Empty.elim.{u} (A : Type u) (e : Empty) : A := Empty.rec.{u} (fun _ => A) e
+def Empty.elim.{v, u} (α : Type v) : Empty.{u} → α :=
+  Empty.rec.{v, u} (fun _ => α)
