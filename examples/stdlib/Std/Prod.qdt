@@ -1,12 +1,12 @@
 import Std.Eq
 
-structure Prod.{u, v} (A : Type u) (B : Type v) : Type (max u v) where
-  (fst : A)
-  (snd : B)
+structure Prod.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
+  (fst : α)
+  (snd : β)
 
-def Prod.swap.{u, v} (A : Type u) (B : Type v) (p : Prod.{u, v} A B) : Prod.{v, u} B A :=
-  Prod.mk.{v, u} B A (Prod.snd.{u, v} A B p) (Prod.fst.{u, v} A B p)
+def Prod.swap.{u, v} (α : Type u) (β : Type v) (p : Prod.{u, v} α β) : Prod.{v, u} β α :=
+  Prod.mk.{v, u} β α (Prod.snd.{u, v} α β p) (Prod.fst.{u, v} α β p)
 
-def Prod.eta.{u, v} (A : Type u) (B : Type v) (p : Prod.{u, v} A B) :
-    Prod.mk.{u, v} A B (Prod.fst.{u, v} A B p) (Prod.snd.{u, v} A B p) = p :=
-  Eq.refl.{max u v} (Prod.{u, v} A B) p
+def Prod.eta.{u, v} (α : Type u) (β : Type v) (p : Prod.{u, v} α β) :
+    Prod.mk.{u, v} α β (Prod.fst.{u, v} α β p) (Prod.snd.{u, v} α β p) = p :=
+  Eq.refl.{max u v} (Prod.{u, v} α β) p

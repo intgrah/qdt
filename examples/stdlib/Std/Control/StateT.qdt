@@ -1,0 +1,52 @@
+import Std.Monad
+import Std.Prod
+import Std.Control.Id
+
+def StateT.{u, v} (σ : Type u) (m : Type u → Type v) (α : Type u) : Type (max u v) :=
+  σ → m (Prod.{u, u} α σ)
+
+def StateT.run.{u, v} (σ : Type u) (m : Type u → Type v) (α : Type u) (x : StateT.{u, v} σ m α) (s : σ) : m (Prod.{u, u} α σ) :=
+  x s
+
+def StateT.get.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad.{u, v} m) : StateT.{u, v} σ m σ :=
+  fun (s : σ) => Monad.pure.{u, v} m inst (Prod.{u, u} σ σ) (Prod.mk.{u, u} σ σ s s)
+
+def StateT.pure.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad.{u, v} m) (α : Type u) (a : α) : StateT.{u, v} σ m α :=
+  fun (s : σ) => Monad.pure.{u, v} m inst (Prod.{u, u} α σ) (Prod.mk.{u, u} α σ a s)
+
+def StateT.bind.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad.{u, v} m) (α β : Type u) (x : StateT.{u, v} σ m α) (f : α → StateT.{u, v} σ m β) : StateT.{u, v} σ m β :=
+  fun (s : σ) =>
+    Monad.bind.{u, v} m inst (Prod.{u, u} α σ) (Prod.{u, u} β σ) (x s)
+      (fun (p : Prod.{u, u} α σ) => f (Prod.fst.{u, u} α σ p) (Prod.snd.{u, u} α σ p))
+
+def StateT.instMonad.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad.{u, v} m) : Monad.{u, max u v} (StateT.{u, v} σ m) :=
+  Monad.mk.{u, max u v} (StateT.{u, v} σ m)
+    (StateT.pure.{u, v} σ m inst)
+    (StateT.bind.{u, v} σ m inst)
+    (fun (α β : Type u) (a : α) (f : α → StateT.{u, v} σ m β) =>
+      funext.{u, v} σ (fun (_ : σ) => m (Prod.{u, u} β σ))
+        (StateT.bind.{u, v} σ m inst α β (StateT.pure.{u, v} σ m inst α a) f)
+        (f a)
+        (fun (s : σ) =>
+          Monad.bind_pure_left.{u, v} m inst (Prod.{u, u} α σ) (Prod.{u, u} β σ)
+            (Prod.mk.{u, u} α σ a s)
+            (fun (p : Prod.{u, u} α σ) => f (Prod.fst.{u, u} α σ p) (Prod.snd.{u, u} α σ p))))
+    (fun (α : Type u) (x : StateT.{u, v} σ m α) =>
+      funext.{u, v} σ (fun (_ : σ) => m (Prod.{u, u} α σ))
+        (StateT.bind.{u, v} σ m inst α α x (StateT.pure.{u, v} σ m inst α))
+        x
+        (fun (s : σ) => Monad.bind_pure_right.{u, v} m inst (Prod.{u, u} α σ) (x s)))
+    (fun (α β γ : Type u) (x : StateT.{u, v} σ m α) (f : α → StateT.{u, v} σ m β) (g : β → StateT.{u, v} σ m γ) =>
+      funext.{u, v} σ (fun (_ : σ) => m (Prod.{u, u} γ σ))
+        (StateT.bind.{u, v} σ m inst β γ (StateT.bind.{u, v} σ m inst α β x f) g)
+        (StateT.bind.{u, v} σ m inst α γ x (fun (a : α) => StateT.bind.{u, v} σ m inst β γ (f a) g))
+        (fun (s : σ) =>
+          Monad.bind_assoc.{u, v} m inst (Prod.{u, u} α σ) (Prod.{u, u} β σ) (Prod.{u, u} γ σ)
+            (x s)
+            (fun (p : Prod.{u, u} α σ) => f (Prod.fst.{u, u} α σ p) (Prod.snd.{u, u} α σ p))
+            (fun (q : Prod.{u, u} β σ) => g (Prod.fst.{u, u} β σ q) (Prod.snd.{u, u} β σ q))))
+
+def StateM.{u} (σ : Type u) (α : Type u) : Type u := StateT.{u, u} σ Id.{u} α
+
+def StateM.instMonad.{u} (σ : Type u) : Monad.{u, u} (StateM.{u} σ) :=
+  StateT.instMonad.{u, u} σ Id.{u} Id.instMonad.{u}

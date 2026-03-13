@@ -1,0 +1,78 @@
+import Std.Monad
+import Std.Option
+import Std.Control.Id
+
+def OptionT.{u, v} (m : Type u → Type v) (α : Type u) : Type v :=
+  m (Option.{u} α)
+
+def OptionT.run.{u, v} (m : Type u → Type v) (α : Type u) (x : OptionT.{u, v} m α) : m (Option.{u} α) :=
+  x
+
+def OptionT.pure.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α : Type u) (a : α) : OptionT.{u, v} m α :=
+  Monad.pure.{u, v} m inst (Option.{u} α) (Option.some.{u} α a)
+
+def OptionT.none.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α : Type u) : OptionT.{u, v} m α :=
+  Monad.pure.{u, v} m inst (Option.{u} α) (Option.none.{u} α)
+
+def OptionT.bindCont.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β : Type u) (f : α → OptionT.{u, v} m β) (o : Option.{u} α) : m (Option.{u} β) :=
+  Option.rec.{v, u} α (fun _ => m (Option.{u} β))
+    (Monad.pure.{u, v} m inst (Option.{u} β) (Option.none.{u} β))
+    f
+    o
+
+def OptionT.bind.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β : Type u) (x : OptionT.{u, v} m α) (f : α → OptionT.{u, v} m β) : OptionT.{u, v} m β :=
+  Monad.bind.{u, v} m inst (Option.{u} α) (Option.{u} β) x (OptionT.bindCont.{u, v} m inst α β f)
+
+def OptionT.bindCont_pure.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α : Type u) (o : Option.{u} α)
+    : Eq.{v} (m (Option.{u} α)) (OptionT.bindCont.{u, v} m inst α α (OptionT.pure.{u, v} m inst α) o) (Monad.pure.{u, v} m inst (Option.{u} α) o) :=
+  Option.rec.{v, u} α
+    (fun o => Eq.{v} (m (Option.{u} α)) (OptionT.bindCont.{u, v} m inst α α (OptionT.pure.{u, v} m inst α) o) (Monad.pure.{u, v} m inst (Option.{u} α) o))
+    (Eq.refl.{v} (m (Option.{u} α)) (Monad.pure.{u, v} m inst (Option.{u} α) (Option.none.{u} α)))
+    (fun a => Eq.refl.{v} (m (Option.{u} α)) (Monad.pure.{u, v} m inst (Option.{u} α) (Option.some.{u} α a)))
+    o
+
+def OptionT.bindCont_assoc.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+    (f : α → OptionT.{u, v} m β) (g : β → OptionT.{u, v} m γ) (o : Option.{u} α)
+    : Eq.{v} (m (Option.{u} γ))
+        (Monad.bind.{u, v} m inst (Option.{u} β) (Option.{u} γ) (OptionT.bindCont.{u, v} m inst α β f o) (OptionT.bindCont.{u, v} m inst β γ g))
+        (OptionT.bindCont.{u, v} m inst α γ (fun a => OptionT.bind.{u, v} m inst β γ (f a) g) o) :=
+  Option.rec.{v, u} α
+    (fun o => Eq.{v} (m (Option.{u} γ))
+      (Monad.bind.{u, v} m inst (Option.{u} β) (Option.{u} γ) (OptionT.bindCont.{u, v} m inst α β f o) (OptionT.bindCont.{u, v} m inst β γ g))
+      (OptionT.bindCont.{u, v} m inst α γ (fun a => OptionT.bind.{u, v} m inst β γ (f a) g) o))
+    (Monad.bind_pure_left.{u, v} m inst (Option.{u} β) (Option.{u} γ) (Option.none.{u} β) (OptionT.bindCont.{u, v} m inst β γ g))
+    (fun a => Eq.refl.{v} (m (Option.{u} γ)) (OptionT.bind.{u, v} m inst β γ (f a) g))
+    o
+
+def OptionT.instMonad.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) : Monad.{u, v} (OptionT.{u, v} m) :=
+  let Oα := fun (α : Type u) => Option.{u} α;
+  let pure := Monad.pure.{u, v} m inst;
+  let bind := Monad.bind.{u, v} m inst;
+  Monad.mk.{u, v} (OptionT.{u, v} m)
+    (OptionT.pure.{u, v} m inst)
+    (OptionT.bind.{u, v} m inst)
+    (fun α β a f =>
+      Monad.bind_pure_left.{u, v} m inst (Oα α) (Oα β)
+        (Option.some.{u} α a)
+        (OptionT.bindCont.{u, v} m inst α β f))
+    (fun α x =>
+      let k1 := OptionT.bindCont.{u, v} m inst α α (OptionT.pure.{u, v} m inst α);
+      let k2 := pure (Oα α);
+      let keq := funext.{u, v} (Oα α) (fun (_ : Oα α) => m (Oα α)) k1 k2 (OptionT.bindCont_pure.{u, v} m inst α);
+      let step1 := congrArg.{max u v, v} (Oα α → m (Oα α)) (m (Oα α)) (fun (k : Oα α → m (Oα α)) => bind (Oα α) (Oα α) x k) k1 k2 keq;
+      let step2 := Monad.bind_pure_right.{u, v} m inst (Oα α) x;
+      Eq.trans.{v} (m (Oα α)) (bind (Oα α) (Oα α) x k1) (bind (Oα α) (Oα α) x k2) x step1 step2)
+    (fun α β γ x f g =>
+      let k_αβ := OptionT.bindCont.{u, v} m inst α β f;
+      let k_βγ := OptionT.bindCont.{u, v} m inst β γ g;
+      let k_composed := fun (oa : Oα α) => bind (Oα β) (Oα γ) (k_αβ oa) k_βγ;
+      let k_direct := OptionT.bindCont.{u, v} m inst α γ (fun (a : α) => OptionT.bind.{u, v} m inst β γ (f a) g);
+      let step1 := Monad.bind_assoc.{u, v} m inst (Oα α) (Oα β) (Oα γ) x k_αβ k_βγ;
+      let keq := funext.{u, v} (Oα α) (fun (_ : Oα α) => m (Oα γ)) k_composed k_direct (OptionT.bindCont_assoc.{u, v} m inst α β γ f g);
+      let step2 := congrArg.{max u v, v} (Oα α → m (Oα γ)) (m (Oα γ)) (fun (k : Oα α → m (Oα γ)) => bind (Oα α) (Oα γ) x k) k_composed k_direct keq;
+      Eq.trans.{v} (m (Oα γ)) (bind (Oα β) (Oα γ) (bind (Oα α) (Oα β) x k_αβ) k_βγ) (bind (Oα α) (Oα γ) x k_composed) (bind (Oα α) (Oα γ) x k_direct) step1 step2)
+
+def OptionM.{u} (α : Type u) : Type u := OptionT.{u, u} Id.{u} α
+
+def OptionM.instMonad.{u} : Monad.{u, u} OptionM.{u} :=
+  OptionT.instMonad.{u, u} Id.{u} Id.instMonad.{u}

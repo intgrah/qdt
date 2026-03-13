@@ -2,21 +2,21 @@ import Std.Eq
 import Std.Init
 import Std.Nat
 
-structure Iso.{u, v} (A : Type u) (B : Type v) : Type (max u v) where
-  (hom : A → B)
-  (inv : B → A)
-  (hom_inv_id : comp.{u, v, u} A B A inv hom = id.{u} A)
-  (inv_hom_id : comp.{v, u, v} B A B hom inv = id.{v} B)
+structure Iso.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
+  (hom : α → β)
+  (inv : β → α)
+  (hom_inv_id : comp.{u, v, u} α β α inv hom = id.{u} α)
+  (inv_hom_id : comp.{v, u, v} β α β hom inv = id.{v} β)
 
-def Iso.refl.{u} (A : Type u) : Iso.{u, u} A A :=
-  Iso.mk.{u, u} A A (id.{u} A) (id.{u} A) (Eq.refl.{u} (A → A) (id.{u} A)) (Eq.refl.{u} (A → A) (id.{u} A))
+def Iso.refl.{u} (α : Type u) : Iso.{u, u} α α :=
+  Iso.mk.{u, u} α α (id.{u} α) (id.{u} α) (Eq.refl.{u} (α → α) (id.{u} α)) (Eq.refl.{u} (α → α) (id.{u} α))
 
-def Iso.symm.{u, v} (A : Type u) (B : Type v) (iso : Iso.{u, v} A B) : Iso.{v, u} B A :=
-  Iso.mk.{v, u} B A
-    (Iso.inv.{u, v} A B iso)
-    (Iso.hom.{u, v} A B iso)
-    (Iso.inv_hom_id.{u, v} A B iso)
-    (Iso.hom_inv_id.{u, v} A B iso)
+def Iso.symm.{u, v} (α : Type u) (β : Type v) (iso : Iso.{u, v} α β) : Iso.{v, u} β α :=
+  Iso.mk.{v, u} β α
+    (Iso.inv.{u, v} α β iso)
+    (Iso.hom.{u, v} α β iso)
+    (Iso.inv_hom_id.{u, v} α β iso)
+    (Iso.hom_inv_id.{u, v} α β iso)
 
 structure Even where
   (val : Nat)

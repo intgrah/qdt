@@ -1,23 +1,23 @@
-inductive Eq.{u} (A : Type u) (a : A) : A → Type u where
-  | refl : Eq A a a
+inductive Eq.{u} (α : Type u) (a : α) : α → Type u where
+  | refl : Eq α a a
 
 -- UIP
-axiom Eq.ext.{u} (A : Type u) (x y : A) (p q : x = y) : p = q
+axiom Eq.ext.{u} (α : Type u) (x y : α) (p q : x = y) : p = q
 
-def Eq.ndrec.{v, u} (A : Type u) (a : A) (motive : A → Type v) (h : motive a) (b : A) (p : a = b) : motive b :=
-  Eq.rec.{v, u} A a (fun x _ => motive x) h b p
+def Eq.ndrec.{v, u} (α : Type u) (a : α) (motive : α → Type v) (h : motive a) (b : α) (p : a = b) : motive b :=
+  Eq.rec.{v, u} α a (fun x _ => motive x) h b p
 
-def Eq.subst.{v, u} (A : Type u) (P : A → Type v) (a b : A) (p : a = b) (h : P a) : P b :=
-  Eq.ndrec.{v, u} A a P h b p
+def Eq.subst.{v, u} (α : Type u) (P : α → Type v) (a b : α) (p : a = b) (h : P a) : P b :=
+  Eq.ndrec.{v, u} α a P h b p
 
-def Eq.symm.{u} (A : Type u) (a b : A) (p : Eq.{u} A a b) : Eq.{u} A b a :=
-  Eq.subst.{u, u} A (fun y => Eq.{u} A y a) a b p (Eq.refl.{u} A a)
+def Eq.symm.{u} (α : Type u) (a b : α) (p : Eq.{u} α a b) : Eq.{u} α b a :=
+  Eq.subst.{u, u} α (fun y => Eq.{u} α y a) a b p (Eq.refl.{u} α a)
 
-def Eq.trans.{u} (A : Type u) (a b c : A) (p : Eq.{u} A a b) (q : Eq.{u} A b c) : Eq.{u} A a c :=
-  Eq.subst.{u, u} A (fun z => Eq.{u} A a z) b c q p
+def Eq.trans.{u} (α : Type u) (a b c : α) (p : Eq.{u} α a b) (q : Eq.{u} α b c) : Eq.{u} α a c :=
+  Eq.subst.{u, u} α (fun z => Eq.{u} α a z) b c q p
 
-def congrArg.{u, v} (A : Type u) (B : Type v) (f : A → B) (x y : A) (p : Eq.{u} A x y) : Eq.{v} B (f x) (f y) :=
-  Eq.subst.{v, u} A (fun z => Eq.{v} B (f x) (f z)) x y p (Eq.refl.{v} B (f x))
+def congrArg.{u, v} (α : Type u) (β : Type v) (f : α → β) (x y : α) (p : Eq.{u} α x y) : Eq.{v} β (f x) (f y) :=
+  Eq.subst.{v, u} α (fun z => Eq.{v} β (f x) (f z)) x y p (Eq.refl.{v} β (f x))
 
-def congrFun.{u, v} (A : Type u) (B : A → Type v) (f g : (x : A) → B x) (p : Eq.{max u v} ((x : A) → B x) f g) (x : A) : Eq.{v} (B x) (f x) (g x) :=
-  Eq.subst.{v, max u v} ((x : A) → B x) (fun h => Eq.{v} (B x) (f x) (h x)) f g p (Eq.refl.{v} (B x) (f x))
+def congrFun.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (p : Eq.{max u v} ((x : α) → β x) f g) (x : α) : Eq.{v} (β x) (f x) (g x) :=
+  Eq.subst.{v, max u v} ((x : α) → β x) (fun h => Eq.{v} (β x) (f x) (h x)) f g p (Eq.refl.{v} (β x) (f x))

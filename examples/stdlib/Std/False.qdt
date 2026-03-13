@@ -2,10 +2,10 @@ import Std.Init
 
 inductive False where
 
-def False.elim.{u} (A : Type u) (e : False) : A := False.rec.{u} (fun _ => A) e
+def False.elim.{u} (α : Type u) (e : False) : α := False.rec.{u} (fun _ => α) e
 
-def Not (A : Type) := A → False
+def Not (α : Type) := α → False
 
-def absurd.{u} (A : Type) (B : Type u) (ha : A) (hna : Not A) : B := False.elim.{u} B (hna ha)
+def absurd.{u} (α : Type) (β : Type u) (ha : α) (hna : Not α) : β := False.elim.{u} β (hna ha)
 
 def not_false : Not False := id.{0} False

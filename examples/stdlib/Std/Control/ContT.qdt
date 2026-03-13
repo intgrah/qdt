@@ -1,0 +1,28 @@
+import Std.Monad
+
+def ContT.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) : Type (max u v) :=
+  (α → m ρ) → m ρ
+
+def ContT.run.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) (x : ContT.{u, v} ρ m α) (k : α → m ρ) : m ρ :=
+  x k
+
+def ContT.callCC.{u, v} (ρ : Type u) (m : Type u → Type v) (α β : Type u) (f : (α → ContT.{u, v} ρ m β) → ContT.{u, v} ρ m α) : ContT.{u, v} ρ m α :=
+  fun (k : α → m ρ) => f (fun (a : α) (k' : β → m ρ) => k a) k
+
+def ContT.pure.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) (a : α) : ContT.{u, v} ρ m α :=
+  fun (k : α → m ρ) => k a
+
+def ContT.bind.{u, v} (ρ : Type u) (m : Type u → Type v) (α β : Type u) (x : ContT.{u, v} ρ m α) (f : α → ContT.{u, v} ρ m β) : ContT.{u, v} ρ m β :=
+  fun (k : β → m ρ) => x (fun (a : α) => f a k)
+
+def ContT.instMonad.{u, v} (ρ : Type u) (m : Type u → Type v) : Monad.{u, max u v} (ContT.{u, v} ρ m) :=
+  Monad.mk.{u, max u v} (ContT.{u, v} ρ m)
+    (ContT.pure.{u, v} ρ m)
+    (ContT.bind.{u, v} ρ m)
+    (fun (α β : Type u) (a : α) (f : α → ContT.{u, v} ρ m β) =>
+      Eq.refl.{max u v} (ContT.{u, v} ρ m β) (f a))
+    (fun (α : Type u) (x : ContT.{u, v} ρ m α) =>
+      Eq.refl.{max u v} (ContT.{u, v} ρ m α) x)
+    (fun (α β γ : Type u) (x : ContT.{u, v} ρ m α) (f : α → ContT.{u, v} ρ m β) (g : β → ContT.{u, v} ρ m γ) =>
+      Eq.refl.{max u v} (ContT.{u, v} ρ m γ)
+        (fun (k : γ → m ρ) => x (fun (a : α) => f a (fun (b : β) => g b k))))

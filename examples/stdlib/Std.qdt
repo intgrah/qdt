@@ -1,5 +1,6 @@
 import Std.Algebra
 import Std.Bool
+import Std.Control
 import Std.Category
 import Std.Empty
 import Std.Eq

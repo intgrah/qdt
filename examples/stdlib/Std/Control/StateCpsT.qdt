@@ -1,0 +1,32 @@
+import Std.Monad
+import Std.Prod
+
+def StateCpsT.{u, v} (σ : Type u) (m : Type u → Type v) (α : Type u) : Type (max (u + 1) v) :=
+  (δ : Type u) → σ → (α → σ → m δ) → m δ
+
+def StateCpsT.runK.{u, v} (σ : Type u) (m : Type u → Type v) (α : Type u) (x : StateCpsT.{u, v} σ m α) (δ : Type u) (s : σ) (k : α → σ → m δ) : m δ :=
+  x δ s k
+
+def StateCpsT.run.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad.{u, v} m) (α : Type u) (x : StateCpsT.{u, v} σ m α) (s : σ) : m (Prod.{u, u} α σ) :=
+  x (Prod.{u, u} α σ) s (fun (a : α) (s' : σ) => Monad.pure.{u, v} m inst (Prod.{u, u} α σ) (Prod.mk.{u, u} α σ a s'))
+
+def StateCpsT.get.{u, v} (σ : Type u) (m : Type u → Type v) : StateCpsT.{u, v} σ m σ :=
+  fun (δ : Type u) (s : σ) (k : σ → σ → m δ) => k s s
+
+def StateCpsT.pure.{u, v} (σ : Type u) (m : Type u → Type v) (α : Type u) (a : α) : StateCpsT.{u, v} σ m α :=
+  fun (δ : Type u) (s : σ) (k : α → σ → m δ) => k a s
+
+def StateCpsT.bind.{u, v} (σ : Type u) (m : Type u → Type v) (α β : Type u) (x : StateCpsT.{u, v} σ m α) (f : α → StateCpsT.{u, v} σ m β) : StateCpsT.{u, v} σ m β :=
+  fun (δ : Type u) (s : σ) (k : β → σ → m δ) => x δ s (fun (a : α) (s' : σ) => f a δ s' k)
+
+def StateCpsT.instMonad.{u, v} (σ : Type u) (m : Type u → Type v) : Monad.{u, max (u + 1) v} (StateCpsT.{u, v} σ m) :=
+  Monad.mk.{u, max (u + 1) v} (StateCpsT.{u, v} σ m)
+    (StateCpsT.pure.{u, v} σ m)
+    (StateCpsT.bind.{u, v} σ m)
+    (fun (α β : Type u) (a : α) (f : α → StateCpsT.{u, v} σ m β) =>
+      Eq.refl.{max (u + 1) v} (StateCpsT.{u, v} σ m β) (f a))
+    (fun (α : Type u) (x : StateCpsT.{u, v} σ m α) =>
+      Eq.refl.{max (u + 1) v} (StateCpsT.{u, v} σ m α) x)
+    (fun (α β γ : Type u) (x : StateCpsT.{u, v} σ m α) (f : α → StateCpsT.{u, v} σ m β) (g : β → StateCpsT.{u, v} σ m γ) =>
+      Eq.refl.{max (u + 1) v} (StateCpsT.{u, v} σ m γ)
+        (fun (δ : Type u) (s : σ) (k : γ → σ → m δ) => x δ s (fun (a : α) (s' : σ) => f a δ s' (fun (b : β) (s'' : σ) => g b δ s'' k))))
