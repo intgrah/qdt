@@ -9,12 +9,12 @@ open Std (DHashMap HashMap HashSet)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
-structure ShakeRdeps.Store (ι : Type) where
-  inputs : ι
+structure ShakeRdeps.Store (J : Type) where
+  inputs : J
   memos : DHashMap Q (Shake.Memo I Q R)
   rdeps : HashMap Q (HashSet Q)
 
@@ -32,14 +32,14 @@ partial def ShakeRdeps.getTransitiveDependents {Q : Type} [BEq Q] [Hashable Q]
   go keys.toList (HashSet.emptyWithCapacity keys.size)
 
 def ShakeRdeps.invalidate
-    {I Q R ι} [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
+    {I Q R J} [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
     [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
-    (store : ShakeRdeps.Store I Q R ι) (changedKeys : HashSet Q) : ShakeRdeps.Store I Q R ι :=
+    (store : ShakeRdeps.Store I Q R J) (changedKeys : HashSet Q) : ShakeRdeps.Store I Q R J :=
   let toInvalidate := getTransitiveDependents store.rdeps changedKeys
   { store with memos := toInvalidate.fold .erase store.memos }
 
-public partial def ShakeRdeps : Build Monad I V Q R ι where
-  σ := ShakeRdeps.Store I Q R ι
+public partial def ShakeRdeps : Build Monad I V Q R J where
+  σ := ShakeRdeps.Store I Q R J
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 1024

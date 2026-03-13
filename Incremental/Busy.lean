@@ -7,12 +7,12 @@ namespace Incremental
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq Q]
 
 /-- Never remembers anything, always computes. -/
-public partial def Busy : Build Monad I V Q R ι where
-  σ := ι
+public partial def Busy : Build Monad I V Q R J where
+  σ := J
   init := id
   set i v := modify fun store => Input.set store i v
   build tasks q := fun store => runEST fun σ => do

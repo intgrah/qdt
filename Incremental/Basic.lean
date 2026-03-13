@@ -67,9 +67,9 @@ end Task
 
 export Task (input fetch)
 
-class Input (I : Type) (V : I → Type) (ι : Type) where
-  get : ι → ∀ i, V i
-  set : ι → ∀ i, V i → ι
+class Input (I : Type) (V : I → Type) (J : Type) where
+  get : J → ∀ i, V i
+  set : J → ∀ i, V i → J
 
 instance {I : Type} {V : I → Type} [DecidableEq I] : Input I V (∀ i, V i) where
   get := id
@@ -91,9 +91,9 @@ inductive BuildError where
   | cycle
 deriving Inhabited
 
-structure Build (ι : Type) [Input I V ι] : Type 1 where
+structure Build (J : Type) [Input I V J] : Type 1 where
   σ : Type
-  init : ι → σ
+  init : J → σ
   set : ∀ i, V i → StateM σ Unit
   build : Tasks c I V Q R → ∀ q, StateT σ (Except BuildError) (R q)
 

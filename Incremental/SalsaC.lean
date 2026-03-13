@@ -9,21 +9,21 @@ open Std (DHashMap HashMap)
 variable
   (I : Type) (V : I → Type)
   (Q : Type) (R : Q → Type)
-  (ι : Type) [Input I V ι]
+  (J : Type) [Input I V J]
   [BEq I] [LawfulBEq I] [Hashable I]
   [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
 
 @[extern "lean_salsa_build"]
 public opaque SalsaC.build'
-    {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} {ι : Type}
+    {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} {J : Type}
     [BEq I] [Hashable I]
     [BEq Q] [Hashable Q] [∀ q, Hashable (R q)]
-    [Input I V ι] :
+    [Input I V J] :
     Tasks Monad I V Q R → ∀ q,
-    Salsa.Store I Q R ι → Except BuildError (R q × Salsa.Store I Q R ι)
+    Salsa.Store I Q R J → Except BuildError (R q × Salsa.Store I Q R J)
 
-public def SalsaC : Build Monad I V Q R ι where
-  σ := Salsa.Store I Q R ι
+public def SalsaC : Build Monad I V Q R J where
+  σ := Salsa.Store I Q R J
   init inputs := {
     inputs
     revision := 0
