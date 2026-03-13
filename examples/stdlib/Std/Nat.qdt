@@ -1,6 +1,7 @@
 import Std.Eq
 import Std.True
 import Std.False
+import Std.WF
 
 inductive Nat where
   | zero
@@ -34,7 +35,6 @@ inductive Nat.le (n : Nat) : Nat → Type where
 def Nat.zero_le (n : Nat) : Nat.le 0 n := Nat.rec.{0} (Nat.le 0) (Nat.le.refl 0) (Nat.le.step 0) n
 
 def Nat.lt (m : Nat) := Nat.le (Nat.succ m)
-
 
 def Nat.zero_add : (n : Nat) → 0 + n = n :=
   Nat.rec.{0} (fun k => 0 + k = k)
@@ -81,3 +81,40 @@ def Nat.zero_ne_succ (n : Nat) : Not (Nat.zero = Nat.succ n) :=
     Eq.subst.{0, 0} Nat
       (Nat.rec.{1} (fun _ => Type) True (fun _ _ => False))
       Nat.zero (Nat.succ n) h True.intro
+
+def Nat.not_succ_le_zero (n : Nat) (h : Nat.le (Nat.succ n) 0) : False :=
+  Nat.le.rec.{0} (Nat.succ n)
+    (fun m _ => Nat.rec.{1} (fun _ => Type) False (fun _ _ => True) m)
+    True.intro
+    (fun _ _ _ => True.intro)
+    0 h
+
+def Nat.le_of_succ_le_succ (m n : Nat) (h : Nat.le (Nat.succ m) (Nat.succ n)) : Nat.le m n :=
+  Nat.le.rec.{0} (Nat.succ m)
+    (fun k _ => Nat.le m (Nat.pred k))
+    (Nat.le.refl m)
+    (fun k _ ih =>
+      Nat.rec.{0} (fun j => Nat.le m (Nat.pred j) → Nat.le m j)
+        (fun h => h)
+        (fun j _ => Nat.le.step m j)
+        k ih)
+    (Nat.succ n) h
+
+def Nat.acc_of_le (y n : Nat) (hle : Nat.le y n) (hacc : Acc.{0, 0} Nat Nat.lt n) : Acc.{0, 0} Nat Nat.lt y :=
+  Nat.le.rec.{0} y
+    (fun k _ => Acc.{0, 0} Nat Nat.lt k → Acc.{0, 0} Nat Nat.lt y)
+    (fun h => h)
+    (fun m _ ih hsm => ih (Acc.inv.{0, 0} Nat Nat.lt (Nat.succ m) m hsm (Nat.le.refl (Nat.succ m))))
+    n hle hacc
+
+def Nat.lt_acc (n : Nat) : Acc.{0, 0} Nat Nat.lt n :=
+  Nat.rec.{0} (fun k => Acc.{0, 0} Nat Nat.lt k)
+    (Acc.intro.{0, 0} Nat Nat.lt 0
+      (fun y hy => False.elim.{0} (Acc.{0, 0} Nat Nat.lt y) (Nat.not_succ_le_zero y hy)))
+    (fun n ih =>
+      Acc.intro.{0, 0} Nat Nat.lt (Nat.succ n)
+        (fun y hy => Nat.acc_of_le y n (Nat.le_of_succ_le_succ y n hy) ih))
+    n
+
+def Nat.lt_wf : WellFounded.{0, 0} Nat Nat.lt :=
+  WellFounded.intro.{0, 0} Nat Nat.lt Nat.lt_acc
