@@ -96,7 +96,7 @@ partial def iotaReduction {n}
   let numParamsMotivesMinorsIndices := numParamsMotivesMinors + info.numIndices
   if spList.length < numParamsMotivesMinorsIndices then
     return none
-  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ := arg
+  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ ← arg.whnf
     | return none
   let some rule := info.recRules.find? (fun r => r.ctorName == ctorName)
     | return none

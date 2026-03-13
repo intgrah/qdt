@@ -294,13 +294,21 @@ def buildIhs
       let nestedEnd₂ : Nat := rhsCtx + numNested
       have hStart₂ : idx + minorsAfter + fieldsAfter = rhsCtx := by omega
       have hEnd₂ : info.nestedEnd + minorsAfter + fieldsAfter = nestedEnd₂ := by omega
+      let numParamsMotivesIthMinor := numParamsMotives + ithMinor
+      have hAssoc1 : idx + (minorsAfter + fieldsAfter) = idx + minorsAfter + fieldsAfter := by omega
+      have hAssoc2 : info.nestedEnd + (minorsAfter + fieldsAfter) = info.nestedEnd + minorsAfter + fieldsAfter := Nat.add_assoc _ _ _ |>.symm
       let nestedTele₂ : Ctx rhsCtx nestedEnd₂ :=
-        hEnd₂ ▸ hStart₂ ▸ (info.nestedTele.shiftAt idx minorsAfter).shift fieldsAfter
+        hEnd₂ ▸ hStart₂ ▸ hAssoc1 ▸ hAssoc2 ▸ info.nestedTele.dmap (minorsAfter + fieldsAfter) fun {n : Nat} ⟨name, ty⟩ =>
+          let ty := ty.shiftAfter (n - idx) fieldsAfter
+          have : n + fieldsAfter + minorsAfter = n + (minorsAfter + fieldsAfter) := by omega
+          ⟨name, this ▸ ty.shiftAfter (n - numParamsMotivesIthMinor + fieldsAfter) minorsAfter⟩
 
       let indices₂ : List (Tm nestedEnd₂) :=
         info.indices.map fun t =>
-          let t := t.shiftAfter info.nestedEnd minorsAfter
-          let t := t.shiftAfter (info.nestedEnd + minorsAfter) fieldsAfter
+          let numNested := info.nestedEnd - idx
+          let t := t.shiftAfter numNested fieldsAfter
+          have : info.nestedEnd + fieldsAfter + minorsAfter = info.nestedEnd + minorsAfter + fieldsAfter := by omega
+          let t : Tm (info.nestedEnd + minorsAfter + fieldsAfter) := this ▸ t.shiftAfter (info.nestedEnd - numParamsMotivesIthMinor + fieldsAfter) minorsAfter
           hEnd₂ ▸ t
 
       let fieldIdx : Fin numFields := ⟨idx - numParamsMotivesIthMinor, by have := fs.le; omega⟩
