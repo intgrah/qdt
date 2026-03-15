@@ -1,9 +1,9 @@
 module
 
-public import FSWatch.Manager
-public import Qdt.Common
-public import Qdt.Incremental.Rules
-public import Cli.Extensions
+import Cli.Extensions
+import FSWatch.Manager
+import Qdt.Common
+import Qdt.Incremental.Rules
 
 namespace Qdt
 
