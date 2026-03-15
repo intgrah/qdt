@@ -1,6 +1,6 @@
 module
 
-public import Qdt.DefinitionalEquality
+public import Qdt.Conversion
 public import Qdt.Quote
 
 namespace Qdt
@@ -241,7 +241,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses cs[1]!
       let (tm, ty) ← inferIdent ctx cs[0]!.getName univs
-      if !(← ty.defEq expected) then
+      if !(← ty.conv expected) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
       emitIdentHover ctx cs[0]!.getName tm ty
       return tm
@@ -262,7 +262,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let x := bs[0]!.getName
         let ann ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
         let annVal : VTy n ← ann.eval ctx.env
-        if !(← annVal.defEq a) then
+        if !(← annVal.conv a) then
           raiseError (.typeMismatch ctx.names (← a.quote) (← annVal.quote))
         withChild 0 (withChild 0 (emitHover (.localVar x ctx.names (← a.quote))))
         let ctx' := ctx.bind x a
@@ -281,25 +281,25 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
-      if !(← expected.defEq (.u level)) then
+      if !(← expected.conv (.u level)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
       emitType ctx expected
       return tm
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
-      if !(← expected.defEq (.u level)) then
+      if !(← expected.conv (.u level)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
       emitType ctx expected
       return tm
   | .node `Term.ann cs => do
       let (tm, ty) ← inferAnn ctx cs[0]! cs[1]!
-      if !(← expected.defEq ty) then
+      if !(← expected.conv ty) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
       emitType ctx expected
       return tm
   | .node `Term.u cs => do
       let level ← checkAstUniverse cs[0]!
-      if !(← expected.defEq (.u level.mkSucc)) then
+      if !(← expected.conv (.u level.mkSucc)) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (.u level.mkSucc))
       emitType ctx expected
       return .u' level
@@ -310,7 +310,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval ctx.env
       let tyVal ← bTy.eval (env.cons aVal)
-      if !(← tyVal.defEq expected) then
+      if !(← tyVal.conv expected) then
         raiseError (.typeMismatch ctx.names (← expected.quote) (← tyVal.quote))
       emitType ctx expected
       return .app fTm aTm
