@@ -5,7 +5,7 @@ public import Qdt.Semantics
 public import Qdt.Error
 public import Qdt.TermContext
 public import Qdt.Nbe
-public import Qdt.DefinitionalEquality
+public import Qdt.Conversion
 public import Qdt.Quote
 public import Qdt.Bidirectional
 public import Qdt.Params
