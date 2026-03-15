@@ -10,7 +10,6 @@ inductive ConvState where
   | rigid
   | flex
   | full
-deriving BEq
 
 mutual
 
