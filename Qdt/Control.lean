@@ -1,7 +1,5 @@
 module
 
-public import Mathlib.Control.Monad.Writer
-
 public import Qdt.TermContext
 public import Qdt.Incremental.Query
 public import Incremental.Basic
@@ -17,23 +15,6 @@ open System (FilePath)
 
 open Std (HashMap HashSet)
 
-instance {ω M} [Monad M] [Monoid ω] [MonadWriter ω M] : MonadWriter ω (OptionT M) where
-  tell w := OptionT.lift (tell w)
-  listen m := do
-    let (result, w) ← OptionT.lift (listen m)
-    match result with
-    | some a => return (a, w)
-    | none => failure
-  pass m := do
-    let (a, f) ← m
-    OptionT.lift (tell (f 1))
-    return a
-
-instance {ρ ω M} [Monad M] [MonadWriter ω M] : MonadWriter ω (ReaderT ρ M) where
-  tell w := fun _ => tell w
-  listen m := fun r => listen (m r)
-  pass m := fun r => pass (m r)
-
 structure ElabContext where
   filepath : FilePath
   univParams : List Name
@@ -46,11 +27,12 @@ structure ElabState where
   localEnv : Global
   sorryId : Nat
   entryCache : Std.HashMap Name (Option Constant)
+  diagnostics : Array Diagnostic := #[]
+  hovers : Array HoverInfo := #[]
 deriving Inhabited
 
 abbrev ElabM :=
   Task Monad InputKey InputV Key Val
-  |> WriterT ElabInfo
   |> StateT ElabState
   |> ReaderT ElabContext
 
@@ -74,7 +56,7 @@ def getUnivParams : ElabM (List Name) := do
 
 def emitDiagnostic (err : Error) : ElabM Unit := do
   let path ← currentPath
-  tell { diagnostics := #[{ path, error := err }], hovers := #[] }
+  modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
 
 def raiseError {α : Type} (err : Error) : OptionT ElabM α := do
   emitDiagnostic err
@@ -83,7 +65,7 @@ def raiseError {α : Type} (err : Error) : OptionT ElabM α := do
 def emitHover (hover : HoverContent) : ElabM Unit := do
   if !(← readThe ElabContext).collectHovers then return
   let path ← currentPath
-  tell { diagnostics := #[], hovers := #[{ path, hover }] }
+  modify fun st => { st with hovers := st.hovers.push { path, hover } }
 
 def getLocalEnv : ElabM Global := do
   return (← get).localEnv
@@ -166,7 +148,7 @@ def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM α) :
     sorryId := 0
     entryCache := ∅
   }
-  let ((result, st), info) ← WriterT.run (StateT.run (action ctx) state)
-  return (result, st.localEnv, info)
+  let (result, st) ← StateT.run (action ctx) state
+  return (result, st.localEnv, { diagnostics := st.diagnostics, hovers := st.hovers })
 
 end Qdt
