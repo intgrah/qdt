@@ -1,9 +1,9 @@
 module
 
-public import Qdt.Lsp
-public import Qdt.Common
-public import Lean.Data.Lsp.Communication
-public import Lean.Data.Lsp.InitShutdown
+import Lean.Data.Lsp.Communication
+import Lean.Data.Lsp.InitShutdown
+import Qdt.Common
+import Qdt.Lsp
 
 namespace Qdt
 
