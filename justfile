@@ -40,3 +40,7 @@ long-chain:
 long-random:
     cd examples/long && ./random.sh > Random.qdt
     qdt --root examples/long Random
+
+long-triangle:
+    cd examples/long && ./triangle.sh > Triangle.qdt
+    qdt --root examples/long Triangle
