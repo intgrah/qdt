@@ -1,5 +1,6 @@
 module
 
+public import Qdt.Common
 public import Qdt.Incremental.Rules
 
 public section
@@ -31,17 +32,15 @@ where
     else bp
 
 def elaborateFile
-    (b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal))
-    (filepath : FilePath) : StateT b.σ (Except BuildError) (ElabInfo × SourceMap × Cst) := do
+    (b : Build Monad config (DHashMap InputKey InputVal))
+    (filepath : FilePath) : StateM b.σ (ElabInfo × SourceMap × Cst) := do
   let (cst, _) ← b.build tasks (Key.cst filepath)
   let (_, sourceMap, astDiags) ← b.build tasks (Key.astSourceMap filepath)
   let (declIndex, dupDiags) ← b.build tasks (Key.declarationIndex filepath)
   let mut combinedInfo : ElabInfo := 1
-  for name in declIndex.keysIter do
-    try
-      let info ← b.build tasks (Key.lookupInfo filepath name)
-      combinedInfo := combinedInfo * info
-    catch _ => pure ()
+  for (name, _) in declIndex.toList do
+    let info ← b.build tasks (Key.lookupInfo filepath name)
+    combinedInfo := combinedInfo * info
   let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
   return (combinedInfo, sourceMap, cst)

@@ -33,10 +33,10 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
-variable {b : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal)}
+variable {b : Build Monad config (DHashMap InputKey InputVal)}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
-    StateT b.σ (Except BuildError) (Array String) := do
+    StateM b.σ (Array String) := do
   let transImports ← b.build tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
   for file in transImports.toList ++ [filepath] do
@@ -51,9 +51,7 @@ def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
 
 def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
     Array String × b.σ :=
-  match StateT.run (s := store) <| checkModule inputs filepath with
-  | .ok (msgs, store) => (msgs, store)
-  | .error .cycle => (#["[error] cycle detected"], store)
+  StateT.run (s := store) <| checkModule inputs filepath
 
 def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : b.σ)
     (entryFile : FilePath) : IO Unit := do

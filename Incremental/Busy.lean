@@ -5,25 +5,21 @@ public import Incremental.Basic
 namespace Incremental
 
 variable
-  (I : Type) (V : I → Type)
-  (Q : Type) (R : Q → Type)
-  (J : Type) [Input I V J]
-  [BEq Q]
+  (ℭ : BuildConfig)
+  (J : Type) [Input ℭ J]
 
-/-- Never remembers anything, always computes. -/
-public partial def Busy : Build Monad I V Q R J where
+public def Busy : Build Monad ℭ J where
   σ := J
   init := id
+  inputs := Input.get
   set i v := modify fun store => Input.set store i v
-  build tasks q := fun store => runEST fun σ => do
-    -- Call stack for cycle detection
-    let stack ← ST.mkRef (σ := σ) #[]
-    let rec fetch (q : Q) : EST BuildError σ (R q) := do
-      if (← stack.get).contains q then throw .cycle
-      stack.modify (·.push q)
-      let r ← tasks q (EST BuildError σ) (fun i => pure (Input.get store i)) fetch
-      stack.modify (·.pop)
-      return r
-    return (← fetch q, store)
+  build tasks q₀ := do
+    let store ← get
+    let ι₀ := Input.get store
+    let rec fetch (q : ℭ.Q) : ℭ.R q :=
+      tasks ι₀ q Id ι₀ (fun q₁ _hq => fetch q₁)
+    termination_by (ℭ.wf ι₀).wrap q
+    decreasing_by exact _hq
+    return fetch q₀
 
 end Incremental

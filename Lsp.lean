@@ -13,7 +13,7 @@ open System (FilePath)
 open Incremental
 open Frontend (Cst Path SourceMap Span)
 
-def lspBuild : Build Monad InputKey InputV Key Val (DHashMap InputKey InputVal) :=
+def lspBuild : Build Monad config (DHashMap InputKey InputVal) :=
   selectBuild .salsaC
 
 def mkRange (text : String) (span : Span) : Range :=
@@ -125,13 +125,10 @@ def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (
     | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    IO ((ElabInfo × SourceMap × Cst) × lspBuild.σ) := do
-  let result : Except BuildError _ := StateT.run (s := ps.store) <| do
+    (ElabInfo × SourceMap × Cst) × lspBuild.σ :=
+  Id.run <| StateT.run (s := ps.store) do
     let _ ← lspBuild.build tasks (Key.checkFile filepath)
     elaborateFile lspBuild filepath
-  match result with
-  | .ok r => pure r
-  | .error .cycle => throw (IO.userError "cycle detected")
 
 def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
@@ -148,7 +145,7 @@ def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := d
 def ServerM.elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
   let text := (ps.inputs.get? (.text file)).getD ""
-  let ((info, sourceMap, cst), store') ← runElabTask ps file
+  let ((info, sourceMap, cst), store') := runElabTask ps file
   setProject { ps with store := store' }
   let diagnostics := buildDiagnostics text info sourceMap cst
   publishDiagnostics uri version? diagnostics
@@ -281,8 +278,7 @@ def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : Se
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let .ok ((info, sourceMap, cst), _) := StateT.run (s := ps.store) <| elaborateFile lspBuild file
-    | sendResponse id Json.null
+  let ((info, sourceMap, cst), _) := Id.run <| StateT.run (s := ps.store) <| elaborateFile lspBuild file
 
   let some (hoverContent, span) := lookupHoverAtPosition cst sourceMap info codepointPos
     | sendResponse id Json.null

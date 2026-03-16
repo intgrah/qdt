@@ -3,70 +3,74 @@ module
 public import Qdt.Conversion
 public import Qdt.Quote
 
+public section
+
 namespace Qdt
 
 open Lean (Name)
 open Frontend (Ast Path)
 
-def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM Unit := do
+variable (ι₀ : ∀ i, InputV i) (q₀ : Key)
+
+def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM ι₀ q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
-  emitHover (.typeOnly ctx.names (← ty.quote))
+  emitHover ι₀ q₀ (.typeOnly ctx.names (← ty.quote ι₀ q₀))
 
-def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : ElabM Unit := do
+def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : ElabM ι₀ q₀ Unit := do
   if let .const constName _ := tm then
-    if let some info ← fetchConstantInfo constName then
-      emitHover (.signature constName .nil info.ty)
+    if let some info ← fetchConstantInfo ι₀ q₀ constName then
+      emitHover ι₀ q₀ (.signature constName .nil info.ty)
       return
-  emitHover (.localVar name ctx.names (← ty.quote))
+  emitHover ι₀ q₀ (.localVar name ctx.names (← ty.quote ι₀ q₀))
 
-public partial def checkAstUniverse : Ast → OptionT ElabM Universe
+public partial def checkAstUniverse : Ast → OptionT (ElabM ι₀ q₀) Universe
   | .node `Level.zero _ => do return .zero
   | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
   | .node `Level.max cs => do return (← checkAstUniverse cs[0]!).mkMax (← checkAstUniverse cs[1]!)
   | .node `Level.name cs => do return .level cs[0]!.getName
   | _ => failure
 
-def checkAstUniverses : Ast → OptionT ElabM (List Universe)
-  | .node _ cs => cs.toList.mapM checkAstUniverse
+def checkAstUniverses : Ast → OptionT (ElabM ι₀ q₀) (List Universe)
+  | .node _ cs => cs.toList.mapM (checkAstUniverse ι₀ q₀)
   | _ => return []
 
-def checkUniverseLevel (level : Universe) : OptionT ElabM Unit := do
-  let univParams ← getUnivParams
+def checkUniverseLevel (level : Universe) : OptionT (ElabM ι₀ q₀) Unit := do
+  let univParams ← getUnivParams ι₀ q₀
   match level.checkLevels univParams with
-  | .error name => raiseError (.unboundUniverseVariable name)
+  | .error name => raiseError ι₀ q₀ (.unboundUniverseVariable name)
   | .ok () => return
 
 def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
-    OptionT ElabM (Ty 0) := do
+    OptionT (ElabM ι₀ q₀) (Ty 0) := do
   if univs.length != declParams.length then
-    raiseError (.universeArgCountMismatch name declParams.length univs.length)
+    raiseError ι₀ q₀ (.universeArgCountMismatch name declParams.length univs.length)
   return ty.substLevels (declParams.zip univs)
 
 def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Universe) :
-    OptionT ElabM (Tm n × VTy n) := do
+    OptionT (ElabM ι₀ q₀) (Tm n × VTy n) := do
   if let some (i, ty) := ctx.findName? name then
     return (.var i, ty)
   else
-    match ← liftM (fetchConstantInfo name) with
+    match ← liftM (fetchConstantInfo ι₀ q₀ name) with
     | some info =>
         for univ in univs do
-          checkUniverseLevel univ
+          checkUniverseLevel ι₀ q₀ univ
         let ty ←
           if univs.isEmpty then pure info.ty
-          else instantiateLevels name info.univParams info.ty univs
-        return (.const name univs, ← ty.eval .nil)
-    | none => raiseError (.unboundVariable name)
+          else instantiateLevels ι₀ q₀ name info.univParams info.ty univs
+        return (.const name univs, ← ty.eval ι₀ q₀ .nil)
+    | none => raiseError ι₀ q₀ (.unboundVariable name)
 
 def emitSorryAxiom {n : Nat}
     (ctx : TermContext n)
     (retTy : Ty n) :
-    ElabM (Tm n) := do
-  let decl ← currentDecl
+    ElabM ι₀ q₀ (Tm n) := do
+  let decl ← currentDecl ι₀ q₀
   let id ← modifyGet fun s => (s.sorryId, { s with sorryId := s.sorryId + 1 })
   let sorryName := decl.str "_sorry" |>.num id
-  let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote⟩
-  let univParams ← getUnivParams
-  let _ ← addConstant sorryName (.axiom {
+  let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote ι₀ q₀⟩
+  let univParams ← getUnivParams ι₀ q₀
+  let _ ← addConstant ι₀ q₀ sorryName (.axiom {
     univParams
     ty := Ty.pis locals retTy
   })
@@ -77,15 +81,15 @@ def emitSorryAxiom {n : Nat}
 def emitSorryTm {n : Nat}
     (ctx : TermContext n)
     (expected : VTy n) :
-    ElabM (Tm n) := do
-  let tm ← emitSorryAxiom ctx (← expected.quote)
-  emitType ctx expected
+    ElabM ι₀ q₀ (Tm n) := do
+  let tm ← emitSorryAxiom ι₀ q₀ ctx (← expected.quote ι₀ q₀)
+  emitType ι₀ q₀ ctx expected
   return tm
 
 def emitSorryTy {n : Nat}
     (ctx : TermContext n) :
-    ElabM (Ty n × Universe) := do
-  let tm ← emitSorryAxiom ctx (Ty.u .zero)
+    ElabM ι₀ q₀ (Ty n × Universe) := do
+  let tm ← emitSorryAxiom ι₀ q₀ ctx (Ty.u .zero)
   return (.el tm, .zero)
 
 mutual
@@ -95,35 +99,35 @@ partial def processLetRhs {n : Nat}
     (name : Name)
     (tyOpt : Ast)
     (rhs : Ast) :
-    OptionT ElabM (Tm n × Ty n × VTm n × TermContext (n + 1)) := do
+    OptionT (ElabM ι₀ q₀) (Tm n × Ty n × VTm n × TermContext (n + 1)) := do
   let (rhs, rhsTyVal, rhsTySyn) ←
     match tyOpt with
     | .missing =>
-        let (rhsTm, rhsTy) ← withChild 2 (inferTm ctx rhs)
-        pure (rhsTm, rhsTy, ← rhsTy.quote)
+        let (rhsTm, rhsTy) ← withChild ι₀ q₀ 2 (inferTm ctx rhs)
+        pure (rhsTm, rhsTy, ← rhsTy.quote ι₀ q₀)
     | ty =>
-        let ty ← OptionT.lift (withChild 1 (checkTy ctx ty))
-        let tyVal ← ty.eval ctx.env
-        pure (← withChild 2 (checkTmCore ctx tyVal rhs), tyVal, ty)
-  withChild 0 (emitType ctx rhsTyVal)
-  let rhsVal ← rhs.eval ctx.env
+        let ty ← OptionT.lift (withChild ι₀ q₀ 1 (checkTy ctx ty))
+        let tyVal ← ty.eval ι₀ q₀ ctx.env
+        pure (← withChild ι₀ q₀ 2 (checkTmCore ctx tyVal rhs), tyVal, ty)
+  withChild ι₀ q₀ 0 (emitType ι₀ q₀ ctx rhsTyVal)
+  let rhsVal ← rhs.eval ι₀ q₀ ctx.env
   let ctx' := ctx.define name rhsTyVal rhsVal
   return (rhs, rhsTySyn, rhsVal, ctx')
 
-partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT ElabM (Tm n × VTy n) := do
-  let ann ← OptionT.lift (withChild 1 (checkTy ctx ann))
-  let annVal ← ann.eval ctx.env
-  return (← withChild 0 (checkTmCore ctx annVal e), annVal)
+partial def inferAnn {n : Nat} (ctx : TermContext n) (e : Ast) (ann : Ast) : OptionT (ElabM ι₀ q₀) (Tm n × VTy n) := do
+  let ann ← OptionT.lift (withChild ι₀ q₀ 1 (checkTy ctx ann))
+  let annVal ← ann.eval ι₀ q₀ ctx.env
+  return (← withChild ι₀ q₀ 0 (checkTmCore ctx annVal e), annVal)
 
 partial def checkEq {n : Nat}
     (ctx : TermContext n)
     (a : Ast)
     (b : Ast) :
-    OptionT ElabM (Tm n × Universe) := do
-  let (aTm, ty) ← withChild 0 (inferTm ctx a)
-  let bTm ← withChild 1 (checkTmCore ctx ty b)
-  let tyTm ← ty.reify
-  let level ← ty.inferLevel ctx.ctx
+    OptionT (ElabM ι₀ q₀) (Tm n × Universe) := do
+  let (aTm, ty) ← withChild ι₀ q₀ 0 (inferTm ctx a)
+  let bTm ← withChild ι₀ q₀ 1 (checkTmCore ctx ty b)
+  let tyTm ← ty.reify ι₀ q₀
+  let level ← ty.inferLevel ι₀ q₀ ctx.ctx
   return (Tm.const `Eq [level] |>.apps [tyTm, aTm, bTm], level)
 
 partial def inferPi {n : Nat}
@@ -131,195 +135,195 @@ partial def inferPi {n : Nat}
     (x : Name)
     (dom : Ast)
     (cod : Ast) :
-    OptionT ElabM (Tm n × Universe) := do
-  let (domTm, domTy) ← withChild 0 (withChild 1 (inferTm ctx dom))
+    OptionT (ElabM ι₀ q₀) (Tm n × Universe) := do
+  let (domTm, domTy) ← withChild ι₀ q₀ 0 (withChild ι₀ q₀ 1 (inferTm ctx dom))
   let .u domLevel := domTy
-    | raiseError (.expectedType ctx.names (← domTy.quote))
-  let domVal ← (Ty.el domTm).eval ctx.env
-  withChild 0 (withChild 0 (emitType ctx domVal))
+    | raiseError ι₀ q₀ (.expectedType ctx.names (← domTy.quote ι₀ q₀))
+  let domVal ← (Ty.el domTm).eval ι₀ q₀ ctx.env
+  withChild ι₀ q₀ 0 (withChild ι₀ q₀ 0 (emitType ι₀ q₀ ctx domVal))
   let ctx' := ctx.bind x domVal
-  let (codTm, codTy) ← withChild 1 (inferTm ctx' cod)
+  let (codTm, codTy) ← withChild ι₀ q₀ 1 (inferTm ctx' cod)
   let .u codLevel := codTy
-    | raiseError (.expectedType ctx'.names (← codTy.quote))
+    | raiseError ι₀ q₀ (.expectedType ctx'.names (← codTy.quote ι₀ q₀))
   return (.pi' x domTm codTm, domLevel.mkMax codLevel)
 
-partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Ty n × Universe)
+partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT (ElabM ι₀ q₀) (Ty n × Universe)
   | .missing => failure
   | .node `Term.u cs => do
-      let level ← checkAstUniverse cs[0]!
-      checkUniverseLevel level
-      emitType ctx (.u level.mkSucc)
+      let level ← checkAstUniverse ι₀ q₀ cs[0]!
+      checkUniverseLevel ι₀ q₀ level
+      emitType ι₀ q₀ ctx (.u level.mkSucc)
       return (.u level, level.mkSucc)
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let x := bs[0]!.getName
-      let (dom, domLevel) ← withChild 0 (withChild 1 (checkTyWithLevelCore ctx bs[1]!))
-      let domVal ← dom.eval ctx.env
-      withChild 0 (withChild 0 (emitType ctx domVal))
+      let (dom, domLevel) ← withChild ι₀ q₀ 0 (withChild ι₀ q₀ 1 (checkTyWithLevelCore ctx bs[1]!))
+      let domVal ← dom.eval ι₀ q₀ ctx.env
+      withChild ι₀ q₀ 0 (withChild ι₀ q₀ 0 (emitType ι₀ q₀ ctx domVal))
       let ctx' := ctx.bind x domVal
-      let (cod, codLevel) ← withChild 1 (checkTyWithLevelCore ctx' cs[1]!)
+      let (cod, codLevel) ← withChild ι₀ q₀ 1 (checkTyWithLevelCore ctx' cs[1]!)
       let piLevel := domLevel.mkMax codLevel
-      emitType ctx (.u piLevel)
+      emitType ι₀ q₀ ctx (.u piLevel)
       return (.pi x dom cod, piLevel)
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       return (.el tm, level)
   | ast => do
       let (tm, ty) ← inferTm ctx ast
-      let .u level := ty | raiseError (.expectedType ctx.names (← ty.quote))
+      let .u level := ty | raiseError ι₀ q₀ (.expectedType ctx.names (← ty.quote ι₀ q₀))
       return (.el tm, level)
 
-public partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n × Universe) := do
+public partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM ι₀ q₀ (Ty n × Universe) := do
   match ← OptionT.run (checkTyWithLevelCore ctx ast) with
   | some result => return result
-  | none => emitSorryTy ctx
+  | none => emitSorryTy ι₀ q₀ ctx
 
-public partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM (Ty n) :=
+public partial def checkTy {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM ι₀ q₀ (Ty n) :=
   return (← checkTyWithLevel ctx ast).fst
 
-public partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT ElabM (Tm n × VTy n)
+public partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT (ElabM ι₀ q₀) (Tm n × VTy n)
   | .missing => failure
   | .node `Term.ident cs => do
-      let univs ← checkAstUniverses cs[1]!
-      let result ← inferIdent ctx cs[0]!.getName univs
-      emitIdentHover ctx cs[0]!.getName result.fst result.snd
+      let univs ← checkAstUniverses ι₀ q₀ cs[1]!
+      let result ← inferIdent ι₀ q₀ ctx cs[0]!.getName univs
+      emitIdentHover ι₀ q₀ ctx cs[0]!.getName result.fst result.snd
       return result
   | .node `Term.app cs => do
-      let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
+      let (fTm, fTy) ← withChild ι₀ q₀ 0 (inferTm ctx cs[0]!)
       let .pi _ aTy ⟨env, bTy⟩ := fTy
-        | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
-      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
-      let aVal ← aTm.eval ctx.env
-      let bTyVal ← bTy.eval (env.cons aVal)
-      emitType ctx bTyVal
+        | raiseError ι₀ q₀ (.expectedFunctionType ctx.names (← fTy.quote ι₀ q₀))
+      let aTm ← OptionT.lift (withChild ι₀ q₀ 1 (checkTm ctx aTy cs[1]!))
+      let aVal ← aTm.eval ι₀ q₀ ctx.env
+      let bTyVal ← bTy.eval ι₀ q₀ (env.cons aVal)
+      emitType ι₀ q₀ ctx bTyVal
       return (.app fTm aTm, bTyVal)
   | .node `Term.u cs => do
-      let level ← checkAstUniverse cs[0]!
+      let level ← checkAstUniverse ι₀ q₀ cs[0]!
       let ty : VTy n := .u level.mkSucc
-      emitType ctx (.u level.mkSucc)
+      emitType ι₀ q₀ ctx (.u level.mkSucc)
       return (.u' level, ty)
   | .node `Term.lam cs => do
-      let .node `Binder.typed bs := cs[0]! | raiseError .inferUnannotatedLambda
+      let .node `Binder.typed bs := cs[0]! | raiseError ι₀ q₀ .inferUnannotatedLambda
       let x := bs[0]!.getName
-      let aTy ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
-      let aTyVal ← aTy.eval ctx.env
-      withChild 0 (withChild 0 (emitHover (.localVar x ctx.names aTy)))
+      let aTy ← OptionT.lift (withChild ι₀ q₀ 0 (withChild ι₀ q₀ 1 (checkTy ctx bs[1]!)))
+      let aTyVal ← aTy.eval ι₀ q₀ ctx.env
+      withChild ι₀ q₀ 0 (withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.localVar x ctx.names aTy)))
       let ctx' := ctx.bind x aTyVal
-      let (bodyTm, bodyTy) ← withChild 1 (inferTm ctx' cs[1]!)
-      let clos := ⟨ctx.env, ← bodyTy.quote⟩
+      let (bodyTm, bodyTy) ← withChild ι₀ q₀ 1 (inferTm ctx' cs[1]!)
+      let clos := ⟨ctx.env, ← bodyTy.quote ι₀ q₀⟩
       let resultTy : VTy n := .pi x aTyVal clos
-      emitType ctx resultTy
+      emitType ι₀ q₀ ctx resultTy
       return (.lam x aTy bodyTm, resultTy)
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       let ty : VTy n := .u level
-      emitType ctx ty
+      emitType ι₀ q₀ ctx ty
       return (tm, ty)
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       let ty : VTy n := .u level
-      emitType ctx ty
+      emitType ι₀ q₀ ctx ty
       return (tm, ty)
   | .node `Term.letE cs => do
       let name := cs[0]!.getName
       let (rhsTm, rhsTySyn, rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
-      let (body, bodyTyVal) ← withChild 3 (inferTm ctx' cs[3]!)
-      let bodyTy ← bodyTyVal.quote
-      let ty ← bodyTy.eval (ctx.env.cons rhsVal)
-      emitType ctx ty
+      let (body, bodyTyVal) ← withChild ι₀ q₀ 3 (inferTm ctx' cs[3]!)
+      let bodyTy ← bodyTyVal.quote ι₀ q₀
+      let ty ← bodyTy.eval ι₀ q₀ (ctx.env.cons rhsVal)
+      emitType ι₀ q₀ ctx ty
       return (.letE name rhsTySyn rhsTm body, ty)
   | .node `Term.ann cs => do
       let result ← inferAnn ctx cs[0]! cs[1]!
-      emitType ctx result.snd
+      emitType ι₀ q₀ ctx result.snd
       return result
-  | .node `Term.sorry _ => raiseError .inferSorry
+  | .node `Term.sorry _ => raiseError ι₀ q₀ .inferSorry
   | _ => failure
 
-partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT ElabM (Tm n)
+partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT (ElabM ι₀ q₀) (Tm n)
   | .missing => failure
   | .node `Term.ident cs => do
-      let univs ← checkAstUniverses cs[1]!
-      let (tm, ty) ← inferIdent ctx cs[0]!.getName univs
-      if !(← ty.conv expected) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
-      emitIdentHover ctx cs[0]!.getName tm ty
+      let univs ← checkAstUniverses ι₀ q₀ cs[1]!
+      let (tm, ty) ← inferIdent ι₀ q₀ ctx cs[0]!.getName univs
+      if !(← ty.conv ι₀ q₀ expected) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (← ty.quote ι₀ q₀))
+      emitIdentHover ι₀ q₀ ctx cs[0]!.getName tm ty
       return tm
   | ast@(.node `Term.lam cs) => do
       let body := cs[1]!
       let .pi _ a ⟨env, b⟩ := expected
-        | raiseError (.typeMismatch ctx.names (← expected.quote) (← (← inferTm ctx ast).snd.quote))
+        | raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (← (← inferTm ctx ast).snd.quote ι₀ q₀))
       match cs[0]! with
       | .node `Binder.untyped bs =>
         let x := bs[0]!.getName
-        withChild 0 (withChild 0 (emitHover (.localVar x ctx.names (← a.quote))))
+        withChild ι₀ q₀ 0 (withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.localVar x ctx.names (← a.quote ι₀ q₀))))
         let ctx' := ctx.bind x a
-        let b ← b.eval (env.weaken.cons (VTm.varAt n))
-        let b ← withChild 1 (checkTmCore ctx' b body)
-        emitType ctx expected
-        return .lam x (← a.quote) b
+        let b ← b.eval ι₀ q₀ (env.weaken.cons (VTm.varAt n))
+        let b ← withChild ι₀ q₀ 1 (checkTmCore ctx' b body)
+        emitType ι₀ q₀ ctx expected
+        return .lam x (← a.quote ι₀ q₀) b
       | .node `Binder.typed bs =>
         let x := bs[0]!.getName
-        let ann ← OptionT.lift (withChild 0 (withChild 1 (checkTy ctx bs[1]!)))
-        let annVal : VTy n ← ann.eval ctx.env
-        if !(← annVal.conv a) then
-          raiseError (.typeMismatch ctx.names (← a.quote) (← annVal.quote))
-        withChild 0 (withChild 0 (emitHover (.localVar x ctx.names (← a.quote))))
+        let ann ← OptionT.lift (withChild ι₀ q₀ 0 (withChild ι₀ q₀ 1 (checkTy ctx bs[1]!)))
+        let annVal : VTy n ← ann.eval ι₀ q₀ ctx.env
+        if !(← annVal.conv ι₀ q₀ a) then
+          raiseError ι₀ q₀ (.typeMismatch ctx.names (← a.quote ι₀ q₀) (← annVal.quote ι₀ q₀))
+        withChild ι₀ q₀ 0 (withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.localVar x ctx.names (← a.quote ι₀ q₀))))
         let ctx' := ctx.bind x a
-        let b ← b.eval (env.weaken.cons (VTm.varAt n))
-        let body ← withChild 1 (checkTmCore ctx' b body)
-        emitType ctx expected
-        return .lam x (← a.quote) body
+        let b ← b.eval ι₀ q₀ (env.weaken.cons (VTm.varAt n))
+        let body ← withChild ι₀ q₀ 1 (checkTmCore ctx' b body)
+        emitType ι₀ q₀ ctx expected
+        return .lam x (← a.quote ι₀ q₀) body
       | _ => failure
   | .node `Term.letE cs => do
       let name := cs[0]!.getName
       let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
-      let body ← withChild 3 (checkTmCore ctx' expected.weaken cs[3]!)
-      emitType ctx expected
+      let body ← withChild ι₀ q₀ 3 (checkTmCore ctx' expected.weaken cs[3]!)
+      emitType ι₀ q₀ ctx expected
       return .letE name rhsTySyn rhsTm body
-  | .node `Term.sorry _ => emitSorryTm ctx expected
+  | .node `Term.sorry _ => OptionT.lift (emitSorryTm ι₀ q₀ ctx expected)
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
-      if !(← expected.conv (.u level)) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
-      emitType ctx expected
+      if !(← expected.conv ι₀ q₀ (.u level)) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (.u level))
+      emitType ι₀ q₀ ctx expected
       return tm
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
-      if !(← expected.conv (.u level)) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (.u level))
-      emitType ctx expected
+      if !(← expected.conv ι₀ q₀ (.u level)) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (.u level))
+      emitType ι₀ q₀ ctx expected
       return tm
   | .node `Term.ann cs => do
       let (tm, ty) ← inferAnn ctx cs[0]! cs[1]!
-      if !(← expected.conv ty) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (← ty.quote))
-      emitType ctx expected
+      if !(← expected.conv ι₀ q₀ ty) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (← ty.quote ι₀ q₀))
+      emitType ι₀ q₀ ctx expected
       return tm
   | .node `Term.u cs => do
-      let level ← checkAstUniverse cs[0]!
-      if !(← expected.conv (.u level.mkSucc)) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (.u level.mkSucc))
-      emitType ctx expected
+      let level ← checkAstUniverse ι₀ q₀ cs[0]!
+      if !(← expected.conv ι₀ q₀ (.u level.mkSucc)) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (.u level.mkSucc))
+      emitType ι₀ q₀ ctx expected
       return .u' level
   | .node `Term.app cs => do
-      let (fTm, fTy) ← withChild 0 (inferTm ctx cs[0]!)
+      let (fTm, fTy) ← withChild ι₀ q₀ 0 (inferTm ctx cs[0]!)
       let .pi _ aTy ⟨env, bTy⟩ := fTy
-        | raiseError (.expectedFunctionType ctx.names (← fTy.quote))
-      let aTm ← OptionT.lift (withChild 1 (checkTm ctx aTy cs[1]!))
-      let aVal ← aTm.eval ctx.env
-      let tyVal ← bTy.eval (env.cons aVal)
-      if !(← tyVal.conv expected) then
-        raiseError (.typeMismatch ctx.names (← expected.quote) (← tyVal.quote))
-      emitType ctx expected
+        | raiseError ι₀ q₀ (.expectedFunctionType ctx.names (← fTy.quote ι₀ q₀))
+      let aTm ← OptionT.lift (withChild ι₀ q₀ 1 (checkTm ctx aTy cs[1]!))
+      let aVal ← aTm.eval ι₀ q₀ ctx.env
+      let tyVal ← bTy.eval ι₀ q₀ (env.cons aVal)
+      if !(← tyVal.conv ι₀ q₀ expected) then
+        raiseError ι₀ q₀ (.typeMismatch ctx.names (← expected.quote ι₀ q₀) (← tyVal.quote ι₀ q₀))
+      emitType ι₀ q₀ ctx expected
       return .app fTm aTm
   | _ => failure
 
-public partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM (Tm n) := do
+public partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (ast : Ast) : ElabM ι₀ q₀ (Tm n) := do
   match ← OptionT.run (checkTmCore ctx expected ast) with
   | some tm => return tm
-  | none => emitSorryTm ctx expected
+  | none => emitSorryTm ι₀ q₀ ctx expected
 end
 
 end Qdt

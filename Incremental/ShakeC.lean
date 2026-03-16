@@ -7,28 +7,28 @@ namespace Incremental
 open Std (DHashMap)
 
 variable
-  (I : Type) (V : I → Type)
-  (Q : Type) (R : Q → Type)
-  (J : Type) [Input I V J]
-  [BEq I] [LawfulBEq I] [Hashable I] [∀ i, Hashable (V i)]
-  [BEq Q] [LawfulBEq Q] [Hashable Q] [∀ q, Hashable (R q)]
+  (ℭ : BuildConfig)
+  (J : Type) [Input ℭ J]
+  [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
+  [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
 @[extern "lean_shake_build"]
-public opaque ShakeC.build'
-    {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} {J : Type}
-    [BEq I] [Hashable I] [∀ i, Hashable (V i)]
-    [BEq Q] [Hashable Q] [∀ q, Hashable (R q)]
-    [Input I V J] :
-    Tasks Monad I V Q R → ∀ q,
-    Shake.Store I Q R J → Except BuildError (R q × Shake.Store I Q R J)
+unsafe opaque ShakeC.build_impl
+    {ℭ : BuildConfig} {J : Type}
+    [BEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
+    [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
+    [Input ℭ J] :
+    Tasks Monad ℭ → ∀ q,
+    Shake.Store ℭ J → ℭ.R q × Shake.Store ℭ J
 
-public def ShakeC : Build Monad I V Q R J where
-  σ := Shake.Store I Q R J
+public unsafe def ShakeC : Build Monad ℭ J where
+  σ := Shake.Store ℭ J
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 4096
   }
+  inputs store := Input.get store.inputs
   set i v := modify fun store => { store with inputs := Input.set store.inputs i v }
-  build := ShakeC.build'
+  build := ShakeC.build_impl
 
 end Incremental
