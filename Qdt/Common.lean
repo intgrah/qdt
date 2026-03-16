@@ -21,15 +21,29 @@ open Incremental
 
 abbrev Input := DHashMap InputKey InputVal
 
-def selectBuild : BuildSystem → Build Monad InputKey InputV Key Val Input
-  | .busy => Busy InputKey InputV Key Val Input
-  | .lessBusy => LessBusy InputKey InputV Key Val Input
-  | .salsa => Salsa InputKey InputV Key Val Input
-  | .salsaC => SalsaC InputKey InputV Key Val Input
-  | .shake => Shake InputKey InputV Key Val Input
-  | .shakeC => ShakeC InputKey InputV Key Val Input
-  | .shakeCPS => ShakeCPS InputKey InputV Key Val Input
-  | .shakeEState => ShakeEState InputKey InputV Key Val Input
+instance : Incremental.Input config Input where
+  get := DHashMap.get?
+  set m i v := m.alter i (fun _ => v)
+
+-- unsafe def selectBuild' : BuildSystem → Build Monad config Input
+--   | .busy => Busy config Input
+--   | .lessBusy => LessBusy config Input
+--   | .salsa => Salsa config Input
+--   | .salsaC => SalsaC config Input
+--   | .shake => Shake config Input
+--   | .shakeC => ShakeC config Input
+--   | .shakeCPS => ShakeCPS config Input
+--   | .shakeEState => ShakeEState config Input
+
+-- @[implemented_by selectBuild']
+def selectBuild : BuildSystem → Build Monad config Input
+  | .busy => Busy config Input
+  | .lessBusy => LessBusy config Input
+  | .salsa => Salsa config Input
+  | .shake => Shake config Input
+  | .shakeCPS => ShakeCPS config Input
+  | .shakeEState => ShakeEState config Input
+  | _ => Shake config Input
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []

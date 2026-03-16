@@ -9,6 +9,8 @@ namespace Qdt
 open Lean (Name)
 open Frontend (Ast Path)
 
+variable (ι₀ : ∀ i, InputV i) (q₀ : Key)
+
 structure Import where
   moduleName : Name
 
@@ -98,58 +100,58 @@ def checkDuplicateUnivParams (params : List Name) : Option Error :=
           loop (seen.insert n) ns
   loop ∅ params
 
-def Definition.elab (d : Definition) : OptionT ElabM Unit := do
+def Definition.elab (d : Definition) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some e := checkDuplicateUnivParams d.univParams then
-    raiseError e
-  let (paramCtx, paramTys) ← withChild 2 (Params.elab d.params)
+    raiseError ι₀ q₀ e
+  let (paramCtx, paramTys) ← withChild ι₀ q₀ 2 (Params.elab ι₀ q₀ d.params)
   let (tm, ty) ←
     match d.tyOpt with
     | none =>
-        let (tm, tyVal) ← withChild 4 (inferTm paramCtx d.body)
-        let ty ← tyVal.quote
+        let (tm, tyVal) ← withChild ι₀ q₀ 4 (inferTm ι₀ q₀ paramCtx d.body)
+        let ty ← tyVal.quote ι₀ q₀
         pure (tm, ty)
     | some tyRaw =>
-        let ty ← OptionT.lift (withChild 3 (checkTy paramCtx tyRaw))
-        let tyVal ← ty.eval paramCtx.env
-        let tm ← OptionT.lift (withChild 4 (checkTm paramCtx tyVal d.body))
+        let ty ← OptionT.lift (withChild ι₀ q₀ 3 (checkTy ι₀ q₀ paramCtx tyRaw))
+        let tyVal ← ty.eval ι₀ q₀ paramCtx.env
+        let tm ← OptionT.lift (withChild ι₀ q₀ 4 (checkTm ι₀ q₀ paramCtx tyVal d.body))
         pure (tm, ty)
-  withChild 0 (emitHover (.signature d.name paramTys ty))
+  withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant d.name (.definition { univParams := d.univParams, ty, tm })
+  let _ ← addConstant ι₀ q₀ d.name (.definition { univParams := d.univParams, ty, tm })
 
-def Example.elab (e : Example) : OptionT ElabM Unit := do
+def Example.elab (e : Example) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
-    raiseError err
-  let (paramCtx, _paramTys) ← withChild 0 (Params.elab e.params)
+    raiseError ι₀ q₀ err
+  let (paramCtx, _paramTys) ← withChild ι₀ q₀ 0 (Params.elab ι₀ q₀ e.params)
   match e.tyOpt with
   | some tyRaw =>
-      let expected ← OptionT.lift (withChild 1 (checkTy paramCtx tyRaw))
-      let expected ← expected.eval paramCtx.env
-      let _term ← OptionT.lift (withChild 2 (checkTm paramCtx expected e.body))
+      let expected ← OptionT.lift (withChild ι₀ q₀ 1 (checkTy ι₀ q₀ paramCtx tyRaw))
+      let expected ← expected.eval ι₀ q₀ paramCtx.env
+      let _term ← OptionT.lift (withChild ι₀ q₀ 2 (checkTm ι₀ q₀ paramCtx expected e.body))
   | none =>
-      let (_term, _tyVal) ← withChild 2 (inferTm paramCtx e.body)
+      let (_term, _tyVal) ← withChild ι₀ q₀ 2 (inferTm ι₀ q₀ paramCtx e.body)
 
-def Axiom.elab (a : Axiom) : OptionT ElabM Unit := do
+def Axiom.elab (a : Axiom) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some err := checkDuplicateUnivParams a.univParams then
-    raiseError err
-  let (paramCtx, paramTys) ← withChild 2 (Params.elab a.params)
-  let ty ← OptionT.lift (withChild 3 (checkTy paramCtx a.ty))
-  withChild 0 (emitHover (.signature a.name paramTys ty))
+    raiseError ι₀ q₀ err
+  let (paramCtx, paramTys) ← withChild ι₀ q₀ 2 (Params.elab ι₀ q₀ a.params)
+  let ty ← OptionT.lift (withChild ι₀ q₀ 3 (checkTy ι₀ q₀ paramCtx a.ty))
+  withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant a.name (.axiom { univParams := a.univParams, ty })
+  let _ ← addConstant ι₀ q₀ a.name (.axiom { univParams := a.univParams, ty })
 
-def Inductive.elab (info : Inductive) : OptionT ElabM Unit := do
+def Inductive.elab (info : Inductive) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
-    raiseError err
-  let result ← Inductive.elab' info
+    raiseError ι₀ q₀ err
+  let result ← Inductive.elab' ι₀ q₀ info
   let _ ← result.ctorEntries.foldlM (init := 0) fun i (ctorName, ctorConst) => do
-    withChild (4 + i) (emitHover (.signature ctorName .nil ctorConst.ty))
+    withChild ι₀ q₀ (4 + i) (emitHover ι₀ q₀ (.signature ctorName .nil ctorConst.ty))
     return i + 1
 
-def Structure.elab (info : Structure) : OptionT ElabM Unit := do
+def Structure.elab (info : Structure) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
-    raiseError err
-  let _ ← Structure.elab' info
+    raiseError ι₀ q₀ err
+  let _ ← Structure.elab' ι₀ q₀ info
 
 end Qdt

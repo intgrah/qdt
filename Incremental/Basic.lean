@@ -27,74 +27,65 @@ The choice of the constraint `c` has concrete meanings:
 - `c := Monad` - dynamic dependencies
 -/
 
+structure BuildConfig : Type 1 where
+  I : Type
+  V : I → Type
+  Q : Type
+  R : Q → Type
+  rel : (∀ i, V i) → Q → Q → Prop
+  wf : ∀ ι, WellFounded (rel ι)
+
 variable
   (c : (Type → Type) → Type 1)
-  (I : Type) (V : I → Type)
-  (Q : Type) (R : Q → Type)
+  (ℭ : BuildConfig)
+  (ι₀ : ∀ i, ℭ.V i)
+  (q₀ : ℭ.Q)
 
 set_option checkBinderAnnotations false in
 def Task (α : Type) : Type 1 :=
-  ∀ (f : Type → Type) [c f], (∀ i, f (V i)) → (∀ q, f (R q)) → f α
+  ∀ (f : Type → Type) [c f], (∀ i, f (ℭ.V i)) → (∀ q, ℭ.rel ι₀ q q₀ → f (ℭ.R q)) → f α
 
 namespace Task
 
 variable
   {c : (Type → Type) → Type 1}
-  {I : Type} {V : I → Type}
-  {Q : Type} {R : Q → Type}
+  {ℭ : BuildConfig}
+  {ι₀ : ∀ i, ℭ.V i}
+  {q₀ : ℭ.Q}
 
-def input (i : I) :
-    Task c I V Q R (V i) :=
+def input (i : ℭ.I) :
+    Task c ℭ ι₀ q₀ (ℭ.V i) :=
   fun _ [_] input _ => input i
 
-def fetch (q : Q) :
-    Task c I V Q R (R q) :=
-  fun _ [_] _ fetch => fetch q
+def fetch (q : ℭ.Q) (h : ℭ.rel ι₀ q q₀) :
+    Task c ℭ ι₀ q₀ (ℭ.R q) :=
+  fun _ [_] _ fetch => fetch q h
 
-instance {I : Type} {V : I → Type} {Q : Type} {R : Q → Type} :
-    Monad (Task Monad I V Q R) where
+instance : Monad (Task Monad ℭ ι₀ q₀) where
   pure a := fun _ [_] _ _ => pure a
   bind t f := fun g [_] input fetch => t g input fetch >>= fun a => f a g input fetch
   map f t := fun g [_] input fetch => f <$> t g input fetch
-
-def queryDeps {q : Q} (task : Task Applicative I V Q R (R q)) : List Q :=
-  task (Const (List Q)) (fun _ => []) ([·])
-
-def inputDeps {q : Q} (task : Task Applicative I V Q R (R q)) : List I :=
-  task (Const (List I)) ([·]) (fun _ => [])
 
 end Task
 
 export Task (input fetch)
 
-class Input (I : Type) (V : I → Type) (J : Type) where
-  get : J → ∀ i, V i
-  set : J → ∀ i, V i → J
+class Input (J : Type) where
+  get : J → ∀ i, ℭ.V i
+  set : J → ∀ i, ℭ.V i → J
 
-instance {I : Type} {V : I → Type} [DecidableEq I] : Input I V (∀ i, V i) where
+instance [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
   get := id
   set := Function.update
 
-instance {I : Type} {V : I → Type} [BEq I] [LawfulBEq I] [Hashable I] :
-    Input I (Option ∘ V) (DHashMap I V) where
-  get := DHashMap.get?
-  set m i v := m.alter i (fun _ => v)
-
-instance {α n} : Input (Fin n) (fun _ => α) (Vector α n) where
-  get vec i := vec.get i
-  set vec i := vec.set i
-
 def Tasks : Type 1 :=
-  ∀ q, Task c I V Q R (R q)
+  ∀ ι₀ q₀, Task c ℭ ι₀ q₀ (ℭ.R q₀)
 
-inductive BuildError where
-  | cycle
-deriving Inhabited
-
-structure Build (J : Type) [Input I V J] : Type 1 where
+structure Build (J : Type) [Input ℭ J] : Type 1 where
   σ : Type
   init : J → σ
-  set : ∀ i, V i → StateM σ Unit
-  build : Tasks c I V Q R → ∀ q, StateT σ (Except BuildError) (R q)
+  inputs : σ → ∀ i, ℭ.V i
+  set : ∀ i, ℭ.V i → StateM σ Unit
+  build : Tasks c ℭ → ∀ q, StateM σ (ℭ.R q)
 
 end Incremental

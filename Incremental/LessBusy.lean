@@ -7,33 +7,26 @@ namespace Incremental
 open Std (DHashMap)
 
 variable
-  (I : Type) (V : I → Type)
-  (Q : Type) (R : Q → Type)
-  (J : Type) [Input I V J]
-  [BEq Q] [LawfulBEq Q] [Hashable Q]
+  (ℭ : BuildConfig)
+  (J : Type) [Input ℭ J]
+  [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
 
-/--
-Never remembers anything permanently, but remembers queries that it has already
-computed during the current run, avoiding redundant computation of diamond dependencies.
-This build system is most similar to a batch elaborator.
--/
-public partial def LessBusy : Build Monad I V Q R J where
+public def LessBusy : Build Monad ℭ J where
   σ := J
   init := id
+  inputs := Input.get
   set i v := modify fun store => Input.set store i v
-  build tasks q := fun store => runEST fun σ => do
-    -- Call stack for cycle detection
-    let stack ← ST.mkRef (σ := σ) #[]
-    -- Queries it has already computed
-    let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
-    let rec fetch (q : Q) : EST BuildError σ (R q) := do
-      if let some r := (← started.get).get? q then return r
-      if (← stack.get).contains q then throw .cycle
-      stack.modify (·.push q)
-      let r ← tasks q (EST BuildError σ) (fun i => pure (Input.get store i)) fetch
-      stack.modify (·.pop)
-      started.modify (·.insert q r)
-      return r
-    return (← fetch q, store)
+  build tasks q₀ := fun store =>
+    let ι₀ := Input.get store
+    runST fun σ => do
+      let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024 : DHashMap ℭ.Q ℭ.R)
+      let rec fetch (q : ℭ.Q) : ST σ (ℭ.R q) := do
+        if let some r := (← started.get).get? q then return r
+        let r ← tasks ι₀ q (ST σ) (fun i => pure (ι₀ i)) (fun q₁ _hq => fetch q₁)
+        started.modify (·.insert q r)
+        return r
+      termination_by (ℭ.wf ι₀).wrap q
+      decreasing_by exact _hq
+      return (← fetch q₀, store)
 
 end Incremental

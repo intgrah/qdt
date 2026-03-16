@@ -2,6 +2,7 @@ module
 
 public import Qdt.Error
 public import Qdt.Theory.Global
+public import Incremental.Basic
 
 @[expose] public section
 
@@ -101,5 +102,13 @@ instance {i} : Hashable (InputVal i) := by
 
 instance {i} : Hashable (InputV i) :=
   inferInstanceAs (Hashable (Option (InputVal i)))
+
+abbrev config : Incremental.BuildConfig where
+  I := InputKey
+  V := InputV
+  Q := Key
+  R := Val
+  rel := sorry
+  wf := sorry
 
 end Qdt
