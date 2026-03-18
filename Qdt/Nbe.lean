@@ -40,14 +40,7 @@ partial def VTm.app {n} (fn arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _ _ clos => betaReduction clos arg
-  | .neutral ne => do
-    match ← (VTm.neutral ne).whnf with
-    | .lam _ _ clos => betaReduction clos arg
-    | .neutral ne' =>
-      match ← iotaReduction ne' arg with
-      | some result => return result
-      | none => return .neutral (ne'.app arg)
-    | _ => panic! "VTm.app: unexpected whnf result"
+  | .neutral ne => return .neutral (ne.app arg)
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
@@ -56,7 +49,7 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
   | .neutral ne => do
     match ← (VTm.neutral ne).whnf with
     | .neutral ne' =>
-      match ← projReduction ne' i with
+      match ← projReduction (ne'.proj i) with
       | some result => return result
       | none => return .neutral (ne'.proj i)
     | v => v.proj i
@@ -77,7 +70,10 @@ partial def VTm.whnf {n} : VTm n → ElabM ι₀ q₀ (VTm n)
   | .neutral ⟨.const name us, sp⟩ => do
     match ← deltaReduction name us with
     | some v => (← applySpine sp v).whnf
-    | none => return .neutral ⟨.const name us, sp⟩
+    | none =>
+      match ← iotaReduction ⟨.const name us, sp⟩ with
+      | some v => v.whnf
+      | none => return .neutral ⟨.const name us, sp⟩
   | v => return v
 
 partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=
@@ -85,8 +81,7 @@ partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM ι₀ q₀
   body.eval (.cons arg env)
 
 partial def iotaReduction {n}
-    (ne : Neutral n)
-    (arg : VTm n) :
+    (ne : Neutral n) :
     ElabM ι₀ q₀ (Option (VTm n)) := do
   let ⟨.const recName recUs, sp⟩ := ne
     | return none
@@ -95,10 +90,11 @@ partial def iotaReduction {n}
   let some spList := sp.toAppList
     | return none
   let numParamsMotivesMinors := info.numParams + info.numMotives + info.numMinors
-  let numParamsMotivesMinorsIndices := numParamsMotivesMinors + info.numIndices
-  if spList.length < numParamsMotivesMinorsIndices then
+  let numTotal := numParamsMotivesMinors + info.numIndices + 1
+  if spList.length < numTotal then
     return none
-  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ ← arg.whnf
+  let major := spList[numTotal - 1]!
+  let .neutral ⟨.const ctorName _ctorUs, ctorSp⟩ ← major.whnf
     | return none
   let some rule := info.recRules.find? (fun r => r.ctorName == ctorName)
     | return none
@@ -115,13 +111,14 @@ partial def iotaReduction {n}
   let rhs := rule.rhs.substLevels univSubst
   if h : envList.length = numParamsMotivesMinors + numFields then
     let env' : Env n (numParamsMotivesMinors + numFields) := h ▸ env
-    rhs.eval env'
+    let result ← rhs.eval env'
+    let remaining := spList.drop numTotal
+    some <$> remaining.foldlM (fun acc v => acc.app v) result
   else
     return none
 
 partial def projReduction {n}
-    (ne : Neutral n)
-    (i : Nat) :
+    (ne : Neutral n) :
     ElabM ι₀ q₀ (Option (VTm n)) := do
   let ⟨.const ctor _us, sp⟩ := ne
     | return none
@@ -129,9 +126,14 @@ partial def projReduction {n}
     | return none
   let some indInfo ← fetchInductive ι₀ q₀ ctorInfo.indName
     | return none
-  let some spList := sp.toAppList
-    | return none
-  return spList[indInfo.numParams + i]?
+  match sp with
+  | .proj sp' i =>
+    let some spList := sp'.toAppList
+      | return none
+    let some val := spList[indInfo.numParams + i]?
+      | return none
+    return some val
+  | _ => return none
 
 end
 
