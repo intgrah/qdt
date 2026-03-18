@@ -18,7 +18,15 @@ mutual
 public partial def VTm.conv {n} (a b : VTm n) (cs : ConvState := .rigid) : ElabM ι₀ q₀ Bool :=
   match a, b with
   | .u' i₁, .u' i₂ => return i₁ == i₂
-  | .neutral n₁, .neutral n₂ => n₁.conv n₂ cs
+  | .neutral n₁, .neutral n₂ => do
+      match cs with
+      | .flex => n₁.conv n₂ cs
+      | _ =>
+        let a' ← (VTm.neutral n₁).whnf ι₀ q₀
+        let b' ← (VTm.neutral n₂).whnf ι₀ q₀
+        match a', b' with
+        | .neutral n₁', .neutral n₂' => n₁'.conv n₂' cs
+        | _, _ => a'.conv b' cs
   | .lam _ _ ⟨env₁, body₁⟩, .lam _ _ ⟨env₂, body₂⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← body₁.eval ι₀ q₀ (env₁.weaken.cons var)
