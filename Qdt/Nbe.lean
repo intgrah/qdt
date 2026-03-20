@@ -24,12 +24,18 @@ partial def doEl {n} : VTm n → ElabM ι₀ q₀ (VTy n)
     match ← (VTm.neutral ne).whnf with
     | .neutral ne' => return .el ne'
     | v => doEl v
+  | .glued ne tm => do doEl (← (VTm.glued ne tm).whnf)
   | .lam .. => panic! "doEl: expected type code or neutral"
 
 partial def Tm.eval {n c} : Tm c → SemM ι₀ q₀ n c (VTm n)
   | .u' i => return .u' i
   | .var i => return (← read).get i
-  | .const name us => return .neutral ⟨.const name us, .nil⟩
+  | .const name us => do
+    let some tm ← fetchDefinition ι₀ q₀ name
+      | return .neutral ⟨.const name us, .nil⟩
+    let some info ← fetchConstantInfo ι₀ q₀ name
+      | return .neutral ⟨.const name us, .nil⟩
+    return .glued ⟨.const name us, .nil⟩ (tm.substLevels (info.univParams.zip us))
   | .lam x a body => return .lam x (← a.eval) ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
   | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
@@ -41,6 +47,7 @@ partial def VTm.app {n} (fn arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _ _ clos => betaReduction clos arg
   | .neutral ne => return .neutral (ne.app arg)
+  | .glued ne tm => return .glued (ne.app arg) tm
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
@@ -53,13 +60,15 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
       | some result => return result
       | none => return .neutral (ne'.proj i)
     | v => v.proj i
+  | .glued ne tm => do (← (VTm.glued ne tm).whnf).proj i
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM ι₀ q₀ (Option (VTm n)) := do
   let some tm ← fetchDefinition ι₀ q₀ name | return none
   let some info ← fetchConstantInfo ι₀ q₀ name | return none
   let subst := info.univParams.zip us
-  return some (← (tm.substLevels subst).eval .nil)
+  let v : VTm 0 ← (tm.substLevels subst).eval .nil
+  return some (VTm.weaken (Nat.zero_le n) v)
 
 partial def applySpine {n} : Spine n → VTm n → ElabM ι₀ q₀ (VTm n)
   | .nil, v => return v
@@ -74,6 +83,8 @@ partial def VTm.whnf {n} : VTm n → ElabM ι₀ q₀ (VTm n)
       match ← iotaReduction ⟨.const name us, sp⟩ with
       | some v => v.whnf
       | none => return .neutral ⟨.const name us, sp⟩
+  | .glued ⟨_, sp⟩ tm => do
+    (← applySpine sp (← tm.eval .nil)).whnf
   | v => return v
 
 partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=

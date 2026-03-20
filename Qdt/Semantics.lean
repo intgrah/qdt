@@ -25,6 +25,7 @@ inductive VTm : Nat → Type
   | neutral {n} : Neutral n → VTm n
   | lam {n} : Name → VTy n → ClosTm n → VTm n
   | pi' {n} : Name → VTm n → ClosTm n → VTm n
+  | glued {n} : Neutral n → Tm 0 → VTm n
 deriving Repr
 
 inductive Neutral : Nat → Type
@@ -132,6 +133,7 @@ def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
   | .neutral ne => .neutral (ne.weaken' h)
   | .lam x ty body => .lam x (ty.weaken' h) (body.weaken' h)
   | .pi' name dom codom => .pi' name (dom.weaken' h) (codom.weaken' h)
+  | .glued ne tm => .glued (ne.weaken' h) tm
 
 @[implemented_by Head.weaken_impl]
 def Head.weaken' (h : n ≤ m) : Head n → Head m

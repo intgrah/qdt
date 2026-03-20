@@ -30,6 +30,7 @@ public partial def VTm.quote {n} : VTm n → ElabM ι₀ q₀ (Tm n)
       let b ← b.eval ι₀ q₀ (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
       return .pi' x a b
+  | .glued ne _ => ne.quote
 
 partial def Head.quote {n} : Head n → ElabM ι₀ q₀ (Tm n)
   | .var i => return .var i.rev
