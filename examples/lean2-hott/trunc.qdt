@@ -1,0 +1,331 @@
+import nat
+import logic
+import equiv
+import pathover
+
+inductive trunc_index : Type 0 where
+  | minus_two : trunc_index
+  | succ : trunc_index → trunc_index
+
+def trunc_index.rec_on.{l} : (C : trunc_index → Type l) → (n : trunc_index) → C trunc_index.minus_two → ((a : trunc_index) → C a → C (trunc_index.succ a)) → C n :=
+  fun (C : trunc_index → Type l) => fun (n : trunc_index) => fun (e_1 : C trunc_index.minus_two) => fun (e_2 : (a : trunc_index) → C a → C (trunc_index.succ a)) => trunc_index.rec.{l} C e_1 e_2 n
+
+def trunc_index.cases_on.{l} : (C : trunc_index → Type l) → (n : trunc_index) → C trunc_index.minus_two → ((a : trunc_index) → C (trunc_index.succ a)) → C n :=
+  fun (C : trunc_index → Type l) => fun (n : trunc_index) => fun (e_1 : C trunc_index.minus_two) => fun (e_2 : (a : trunc_index) → C (trunc_index.succ a)) => trunc_index.rec.{l} C e_1 (fun (a : trunc_index) => fun (v_0 : C a) => e_2 a) n
+
+def trunc_index.no_confusion_type.{l} : Type l → trunc_index → trunc_index → Type l :=
+  fun (P : Type l) => fun (v1 : trunc_index) => fun (v2 : trunc_index) => trunc_index.cases_on.{l + 1} (fun (v1_1 : trunc_index) => Type l) v1 (trunc_index.cases_on.{l + 1} (fun (v1_1 : trunc_index) => Type l) v2 (P → lift.{l, 0} P) (fun (a : trunc_index) => lift.{l, 0} P)) (fun (a : trunc_index) => trunc_index.cases_on.{l + 1} (fun (v1_1 : trunc_index) => Type l) v2 (lift.{l, 0} P) (fun (a_1 : trunc_index) => (eq.{0} trunc_index a a_1 → P) → lift.{l, 0} P))
+
+def trunc_index.no_confusion.{l} : (P : Type l) → (v1 : trunc_index) → (v2 : trunc_index) → eq.{0} trunc_index v1 v2 → trunc_index.no_confusion_type.{l} P v1 v2 :=
+  fun (P : Type l) => fun (v1 : trunc_index) => fun (v2 : trunc_index) => fun (H12 : eq.{0} trunc_index v1 v2) => eq.rec.{l, 0} trunc_index v1 (fun (a : trunc_index) => fun (H1a : eq.{0} trunc_index v1 a) => trunc_index.no_confusion_type.{l} P v1 a) (trunc_index.cases_on.{l} (fun (v1_1 : trunc_index) => trunc_index.no_confusion_type.{l} P v1_1 v1_1) v1 (fun (a : P) => lift.up.{l, 0} P a) (fun (a : trunc_index) => fun (a_1 : eq.{0} trunc_index a a → P) => lift.up.{l, 0} P (a_1 (eq.refl.{0} trunc_index a)))) v2 H12
+
+def trunc_index.below.{l} : (trunc_index → Type l) → trunc_index → Type (max (1) l) :=
+  fun (C : trunc_index → Type l) => fun (n : trunc_index) => trunc_index.rec.{max (1) l + 1} (fun (n_1 : trunc_index) => Type (max (1) l)) poly_unit.{max (1) l} (fun (a : trunc_index) => fun (v_0 : Type (max (1) l)) => prod.{l, max (1) l} (C a) v_0) n
+
+def trunc_index.brec_on.{l} : (C : trunc_index → Type l) → (n : trunc_index) → ((n_1 : trunc_index) → trunc_index.below.{l} C n_1 → C n_1) → C n :=
+  fun (C : trunc_index → Type l) => fun (n : trunc_index) => fun (F_1 : (n_1 : trunc_index) → trunc_index.below.{l} C n_1 → C n_1) => prod.pr1.{l, max (1) l} (C n) (trunc_index.below.{l} C n) (trunc_index.rec.{max (1) l} (fun (n_1 : trunc_index) => prod.{l, max (1) l} (C n_1) (trunc_index.below.{l} C n_1)) (prod.mk.{l, max (1) l} (C trunc_index.minus_two) poly_unit.{max (1) l} (F_1 trunc_index.minus_two poly_unit.star.{max (1) l}) poly_unit.star.{max (1) l}) (fun (a : trunc_index) => fun (v_0 : prod.{l, max (1) l} (C a) (trunc_index.below.{l} C a)) => prod.mk.{l, max (1) l} (C (trunc_index.succ a)) (prod.{l, max (1) l} (C a) (trunc_index.below.{l} C a)) (F_1 (trunc_index.succ a) v_0) v_0) n)
+
+def has_zero_trunc_index : has_zero.{0} trunc_index :=
+  has_zero.mk.{0} trunc_index (trunc_index.succ (trunc_index.succ trunc_index.minus_two))
+
+def has_one_trunc_index : has_one.{0} trunc_index :=
+  has_one.mk.{0} trunc_index (trunc_index.succ (trunc_index.succ (trunc_index.succ trunc_index.minus_two)))
+
+def trunc_index.add_plus_two : trunc_index → trunc_index → trunc_index :=
+  fun (n : trunc_index) => fun (m : trunc_index) => trunc_index.rec_on.{0} (fun (a : trunc_index) => trunc_index) m n (fun (k : trunc_index) => trunc_index.succ)
+
+def trunc_index.add : trunc_index → trunc_index → trunc_index :=
+  fun (n : trunc_index) => fun (m : trunc_index) => trunc_index.cases_on.{0} (fun (n_1 : trunc_index) => trunc_index) m (trunc_index.cases_on.{0} (fun (n_1 : trunc_index) => trunc_index) n trunc_index.minus_two (fun (n' : trunc_index) => trunc_index.cases_on.{0} (fun (n_1 : trunc_index) => trunc_index) n' trunc_index.minus_two (id.{0} trunc_index))) (fun (m' : trunc_index) => trunc_index.cases_on.{0} (fun (n_1 : trunc_index) => trunc_index) m' (trunc_index.cases_on.{0} (fun (n_1 : trunc_index) => trunc_index) n trunc_index.minus_two (id.{0} trunc_index)) (trunc_index.add_plus_two n))
+
+inductive trunc_index.le (a : trunc_index) : trunc_index → Type 0 where
+  | tr_refl : trunc_index.le a a
+  | step : (b : trunc_index) → trunc_index.le a b → trunc_index.le a (trunc_index.succ b)
+
+def trunc_index.le.rec_on.{l} : (a : trunc_index) → (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) → (a_1 : trunc_index) → (n : trunc_index.le a a_1) → C a (trunc_index.le.tr_refl a) → ((b : trunc_index) → (a_2 : trunc_index.le a b) → C b a_2 → C (trunc_index.succ b) (trunc_index.le.step a b a_2)) → C a_1 n :=
+  fun (a : trunc_index) => fun (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) => fun (a_1 : trunc_index) => fun (n : trunc_index.le a a_1) => fun (e_1 : C a (trunc_index.le.tr_refl a)) => fun (e_2 : (b : trunc_index) → (a_2 : trunc_index.le a b) → C b a_2 → C (trunc_index.succ b) (trunc_index.le.step a b a_2)) => trunc_index.le.rec.{l} a C e_1 e_2 a_1 n
+
+def trunc_index.le.cases_on.{l} : (a : trunc_index) → (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) → (a_1 : trunc_index) → (n : trunc_index.le a a_1) → C a (trunc_index.le.tr_refl a) → ((b : trunc_index) → (a_2 : trunc_index.le a b) → C (trunc_index.succ b) (trunc_index.le.step a b a_2)) → C a_1 n :=
+  fun (a : trunc_index) => fun (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) => fun (a_1 : trunc_index) => fun (n : trunc_index.le a a_1) => fun (e_1 : C a (trunc_index.le.tr_refl a)) => fun (e_2 : (b : trunc_index) → (a_2 : trunc_index.le a b) → C (trunc_index.succ b) (trunc_index.le.step a b a_2)) => trunc_index.le.rec.{l} a C e_1 (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => fun (v_0 : C b a_2) => e_2 b a_2) a_1 n
+
+def trunc_index.le.no_confusion_type.{l} : (a : trunc_index) → (a_1 : trunc_index) → Type l → trunc_index.le a a_1 → trunc_index.le a a_1 → Type l :=
+  fun (a : trunc_index) => fun (a_1 : trunc_index) => fun (P : Type l) => fun (v1 : trunc_index.le a a_1) => fun (v2 : trunc_index.le a a_1) => trunc_index.le.cases_on.{l + 1} a (fun (a_2 : trunc_index) => fun (v1_1 : trunc_index.le a a_2) => Type l) a_1 v1 (trunc_index.le.cases_on.{l + 1} a (fun (a_2 : trunc_index) => fun (v1_1 : trunc_index.le a a_2) => Type l) a_1 v2 (P → lift.{l, 0} P) (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => lift.{l, 0} P)) (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => trunc_index.le.cases_on.{l + 1} a (fun (a_3 : trunc_index) => fun (v1_1 : trunc_index.le a a_3) => Type l) a_1 v2 (lift.{l, 0} P) (fun (b_1 : trunc_index) => fun (a_3 : trunc_index.le a b_1) => ((e_1 : eq.{0} trunc_index b b_1) → eq.{0} (trunc_index.le a b_1) (eq.rec.{0, 0} trunc_index b (fun (b_2 : trunc_index) => fun (e_1_1 : eq.{0} trunc_index b b_2) => trunc_index.le a b_2) a_2 b_1 e_1) a_3 → P) → lift.{l, 0} P))
+
+def trunc_index.le.no_confusion.{l} : (a : trunc_index) → (a_1 : trunc_index) → (P : Type l) → (v1 : trunc_index.le a a_1) → (v2 : trunc_index.le a a_1) → eq.{0} (trunc_index.le a a_1) v1 v2 → trunc_index.le.no_confusion_type.{l} a a_1 P v1 v2 :=
+  fun (a : trunc_index) => fun (a_1 : trunc_index) => fun (P : Type l) => fun (v1 : trunc_index.le a a_1) => fun (v2 : trunc_index.le a a_1) => fun (H12 : eq.{0} (trunc_index.le a a_1) v1 v2) => eq.rec.{l, 0} (trunc_index.le a a_1) v1 (fun (a_2 : trunc_index.le a a_1) => fun (H1a : eq.{0} (trunc_index.le a a_1) v1 a_2) => trunc_index.le.no_confusion_type.{l} a a_1 P v1 a_2) (trunc_index.le.cases_on.{l} a (fun (a_2 : trunc_index) => fun (v1_1 : trunc_index.le a a_2) => trunc_index.le.no_confusion_type.{l} a a_2 P v1_1 v1_1) a_1 v1 (fun (a_2 : P) => lift.up.{l, 0} P a_2) (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => fun (a_3 : (e_1 : eq.{0} trunc_index b b) → eq.{0} (trunc_index.le a b) (eq.rec.{0, 0} trunc_index b (fun (b_1 : trunc_index) => fun (e_1_1 : eq.{0} trunc_index b b_1) => trunc_index.le a b_1) a_2 b e_1) a_2 → P) => lift.up.{l, 0} P (a_3 (eq.refl.{0} trunc_index b) (eq.refl.{0} (trunc_index.le a b) a_2)))) v2 H12
+
+def trunc_index.le.below.{l} : (a : trunc_index) → ((a_1 : trunc_index) → trunc_index.le a a_1 → Type l) → (a_1 : trunc_index) → trunc_index.le a a_1 → Type (max (1) l) :=
+  fun (a : trunc_index) => fun (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) => fun (a_1 : trunc_index) => fun (n : trunc_index.le a a_1) => trunc_index.le.rec.{max (1) l + 1} a (fun (a_2 : trunc_index) => fun (n_1 : trunc_index.le a a_2) => Type (max (1) l)) poly_unit.{max (1) l} (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => fun (v_0 : Type (max (1) l)) => prod.{l, max (1) l} (C b a_2) v_0) a_1 n
+
+def trunc_index.le.brec_on.{l} : (a : trunc_index) → (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) → (a_1 : trunc_index) → (n : trunc_index.le a a_1) → ((a_2 : trunc_index) → (n_1 : trunc_index.le a a_2) → trunc_index.le.below.{l} a C a_2 n_1 → C a_2 n_1) → C a_1 n :=
+  fun (a : trunc_index) => fun (C : (a_1 : trunc_index) → trunc_index.le a a_1 → Type l) => fun (a_1 : trunc_index) => fun (n : trunc_index.le a a_1) => fun (F_1 : (a_2 : trunc_index) → (n_1 : trunc_index.le a a_2) → trunc_index.le.below.{l} a C a_2 n_1 → C a_2 n_1) => prod.pr1.{l, max (1) l} (C a_1 n) (trunc_index.le.below.{l} a C a_1 n) (trunc_index.le.rec.{max (1) l} a (fun (a_2 : trunc_index) => fun (n_1 : trunc_index.le a a_2) => prod.{l, max (1) l} (C a_2 n_1) (trunc_index.le.below.{l} a C a_2 n_1)) (prod.mk.{l, max (1) l} (C a (trunc_index.le.tr_refl a)) poly_unit.{max (1) l} (F_1 a (trunc_index.le.tr_refl a) poly_unit.star.{max (1) l}) poly_unit.star.{max (1) l}) (fun (b : trunc_index) => fun (a_2 : trunc_index.le a b) => fun (v_0 : prod.{l, max (1) l} (C b a_2) (trunc_index.le.below.{l} a C b a_2)) => prod.mk.{l, max (1) l} (C (trunc_index.succ b) (trunc_index.le.step a b a_2)) (prod.{l, max (1) l} (C b a_2) (trunc_index.le.below.{l} a C b a_2)) (F_1 (trunc_index.succ b) (trunc_index.le.step a b a_2) v_0) v_0) a_1 n)
+
+def has_le_trunc_index : has_le.{0} trunc_index :=
+  has_le.mk.{0} trunc_index trunc_index.le
+
+def has_add_trunc_index : has_add.{0} trunc_index :=
+  has_add.mk.{0} trunc_index trunc_index.add
+
+def trunc_index.sub_two : nat → trunc_index :=
+  fun (n : nat) => nat.rec_on.{0} (fun (a : nat) => trunc_index) n trunc_index.minus_two (fun (n_1 : nat) => trunc_index.succ)
+
+def trunc_index.add_two : trunc_index → nat :=
+  fun (n : trunc_index) => trunc_index.rec_on.{0} (fun (a : trunc_index) => nat) n nat.zero (fun (n_1 : trunc_index) => nat.succ)
+
+def trunc_index.of_nat : nat → trunc_index :=
+  fun (n : nat) => (fun (n_1 : trunc_index) => trunc_index.succ (trunc_index.succ n_1)) (trunc_index.sub_two n)
+
+def trunc_index.succ_le_succ : (n : trunc_index) → (m : trunc_index) → le.{0} trunc_index has_le_trunc_index n m → le.{0} trunc_index has_le_trunc_index (trunc_index.succ n) (trunc_index.succ m) :=
+  fun (n : trunc_index) => trunc_index.le.rec.{0} n (fun (m : trunc_index) => fun (H : le.{0} trunc_index has_le_trunc_index n m) => le.{0} trunc_index has_le_trunc_index (trunc_index.succ n) (trunc_index.succ m)) (trunc_index.le.tr_refl (trunc_index.succ n)) (fun (m : trunc_index) => fun (H : trunc_index.le n m) => trunc_index.le.step (trunc_index.succ n) (trunc_index.succ m))
+
+def trunc_index.minus_two_le : (n : trunc_index) → le.{0} trunc_index has_le_trunc_index trunc_index.minus_two n :=
+  trunc_index.rec.{0} (le.{0} trunc_index has_le_trunc_index trunc_index.minus_two) (trunc_index.le.tr_refl trunc_index.minus_two) (trunc_index.le.step trunc_index.minus_two)
+
+inductive is_trunc.contr_internal.{l_1} (A : Type l_1) : Type l_1 where
+  | mk : (center : A) → ((a : A) → eq.{l_1} A center a) → is_trunc.contr_internal.{l_1} A
+
+def is_trunc.contr_internal.center.{l_1} : (A : Type l_1) → is_trunc.contr_internal.{l_1} A → A :=
+  fun (A : Type l_1) => fun (c : is_trunc.contr_internal.{l_1} A) => is_trunc.contr_internal.rec.{l_1, l_1} A (fun (c_1 : is_trunc.contr_internal.{l_1} A) => A) (fun (center : A) => fun (center_eq : (a : A) → eq.{l_1} A center a) => center) c
+
+def is_trunc.contr_internal.center_eq.{l_1} : (A : Type l_1) → (c : is_trunc.contr_internal.{l_1} A) → (a : A) → eq.{l_1} A (is_trunc.contr_internal.center.{l_1} A c) a :=
+  fun (A : Type l_1) => fun (c : is_trunc.contr_internal.{l_1} A) => is_trunc.contr_internal.rec.{l_1, l_1} A (fun (c_1 : is_trunc.contr_internal.{l_1} A) => (a : A) → eq.{l_1} A (is_trunc.contr_internal.center.{l_1} A c_1) a) (fun (center : A) => fun (center_eq : (a : A) → eq.{l_1} A center a) => center_eq) c
+
+def is_trunc.contr_internal.rec_on.{l, l_1} : (A : Type l_1) → (C : is_trunc.contr_internal.{l_1} A → Type l) → (n : is_trunc.contr_internal.{l_1} A) → ((center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) → C n :=
+  fun (A : Type l_1) => fun (C : is_trunc.contr_internal.{l_1} A → Type l) => fun (n : is_trunc.contr_internal.{l_1} A) => fun (e_1 : (center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) => is_trunc.contr_internal.rec.{l, l_1} A C e_1 n
+
+def is_trunc.contr_internal.destruct.{l, l_1} : (A : Type l_1) → (C : is_trunc.contr_internal.{l_1} A → Type l) → (n : is_trunc.contr_internal.{l_1} A) → ((center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) → C n :=
+  fun (A : Type l_1) => fun (C : is_trunc.contr_internal.{l_1} A → Type l) => fun (n : is_trunc.contr_internal.{l_1} A) => fun (e_1 : (center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) => is_trunc.contr_internal.rec.{l, l_1} A C e_1 n
+
+def is_trunc.contr_internal.cases_on.{l, l_1} : (A : Type l_1) → (C : is_trunc.contr_internal.{l_1} A → Type l) → (n : is_trunc.contr_internal.{l_1} A) → ((center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) → C n :=
+  fun (A : Type l_1) => fun (C : is_trunc.contr_internal.{l_1} A → Type l) => fun (n : is_trunc.contr_internal.{l_1} A) => fun (e_1 : (center : A) → (center_eq : (a : A) → eq.{l_1} A center a) → C (is_trunc.contr_internal.mk.{l_1} A center center_eq)) => is_trunc.contr_internal.rec.{l, l_1} A C e_1 n
+
+def is_trunc.contr_internal.no_confusion_type.{l, l_1} : (A : Type l_1) → Type l → is_trunc.contr_internal.{l_1} A → is_trunc.contr_internal.{l_1} A → Type (max l l_1) :=
+  fun (A : Type l_1) => fun (P : Type l) => fun (v1 : is_trunc.contr_internal.{l_1} A) => fun (v2 : is_trunc.contr_internal.{l_1} A) => is_trunc.contr_internal.cases_on.{max l l_1 + 1, l_1} A (fun (v1_1 : is_trunc.contr_internal.{l_1} A) => Type (max l l_1)) v1 (fun (center : A) => fun (center_eq : (a : A) → eq.{l_1} A center a) => is_trunc.contr_internal.cases_on.{max l l_1 + 1, l_1} A (fun (v1_1 : is_trunc.contr_internal.{l_1} A) => Type (max l l_1)) v2 (fun (center_1 : A) => fun (center_eq_1 : (a : A) → eq.{l_1} A center_1 a) => ((e_1 : eq.{l_1} A center center_1) → eq.{l_1} ((a : A) → eq.{l_1} A center_1 a) (eq.rec.{l_1, l_1} A center (fun (center_2 : A) => fun (e_1_1 : eq.{l_1} A center center_2) => (a : A) → eq.{l_1} A center_2 a) center_eq center_1 e_1) center_eq_1 → P) → lift.{l, l_1} P))
+
+def is_trunc.contr_internal.no_confusion.{l, l_1} : (A : Type l_1) → (P : Type l) → (v1 : is_trunc.contr_internal.{l_1} A) → (v2 : is_trunc.contr_internal.{l_1} A) → eq.{l_1} (is_trunc.contr_internal.{l_1} A) v1 v2 → is_trunc.contr_internal.no_confusion_type.{l, l_1} A P v1 v2 :=
+  fun (A : Type l_1) => fun (P : Type l) => fun (v1 : is_trunc.contr_internal.{l_1} A) => fun (v2 : is_trunc.contr_internal.{l_1} A) => fun (H12 : eq.{l_1} (is_trunc.contr_internal.{l_1} A) v1 v2) => eq.rec.{max l l_1, l_1} (is_trunc.contr_internal.{l_1} A) v1 (fun (a : is_trunc.contr_internal.{l_1} A) => fun (H1a : eq.{l_1} (is_trunc.contr_internal.{l_1} A) v1 a) => is_trunc.contr_internal.no_confusion_type.{l, l_1} A P v1 a) (is_trunc.contr_internal.cases_on.{max l l_1, l_1} A (fun (v1_1 : is_trunc.contr_internal.{l_1} A) => is_trunc.contr_internal.no_confusion_type.{l, l_1} A P v1_1 v1_1) v1 (fun (center : A) => fun (center_eq : (a : A) → eq.{l_1} A center a) => fun (a : (e_1 : eq.{l_1} A center center) → eq.{l_1} ((a : A) → eq.{l_1} A center a) (eq.rec.{l_1, l_1} A center (fun (center_1 : A) => fun (e_1_1 : eq.{l_1} A center center_1) => (a : A) → eq.{l_1} A center_1 a) center_eq center e_1) center_eq → P) => lift.up.{l, l_1} P (a (eq.refl.{l_1} A center) (eq.refl.{l_1} ((a_1 : A) → eq.{l_1} A center a_1) center_eq)))) v2 H12
+
+def is_trunc.is_trunc_internal.{l_1} : trunc_index → Type l_1 → Type l_1 :=
+  fun (n : trunc_index) => trunc_index.rec_on.{l_1 + 1} (fun (a : trunc_index) => Type l_1 → Type l_1) n is_trunc.contr_internal.{l_1} (fun (n_1 : trunc_index) => fun (trunc_n : Type l_1 → Type l_1) => fun (A : Type l_1) => (x : A) → (y : A) → trunc_n (eq.{l_1} A x y))
+
+inductive is_trunc.{l_1} (n : trunc_index) (A : Type l_1) : Type l_1 where
+  | mk : is_trunc.is_trunc_internal.{l_1} n A → is_trunc.{l_1} n A
+
+def is_trunc.to_internal.{l_1} : (n : trunc_index) → (A : Type l_1) → is_trunc.{l_1} n A → is_trunc.is_trunc_internal.{l_1} n A :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (c : is_trunc.{l_1} n A) => is_trunc.rec.{l_1, l_1} n A (fun (c_1 : is_trunc.{l_1} n A) => is_trunc.is_trunc_internal.{l_1} n A) (fun (to_internal : is_trunc.is_trunc_internal.{l_1} n A) => to_internal) c
+
+def is_trunc.rec_on.{l, l_1} : (n : trunc_index) → (A : Type l_1) → (C : is_trunc.{l_1} n A → Type l) → (n_1 : is_trunc.{l_1} n A) → ((to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) → C n_1 :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (C : is_trunc.{l_1} n A → Type l) => fun (n_1 : is_trunc.{l_1} n A) => fun (e_1 : (to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) => is_trunc.rec.{l, l_1} n A C e_1 n_1
+
+def is_trunc.destruct.{l, l_1} : (n : trunc_index) → (A : Type l_1) → (C : is_trunc.{l_1} n A → Type l) → (n_1 : is_trunc.{l_1} n A) → ((to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) → C n_1 :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (C : is_trunc.{l_1} n A → Type l) => fun (n_1 : is_trunc.{l_1} n A) => fun (e_1 : (to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) => is_trunc.rec.{l, l_1} n A C e_1 n_1
+
+def is_trunc.cases_on.{l, l_1} : (n : trunc_index) → (A : Type l_1) → (C : is_trunc.{l_1} n A → Type l) → (n_1 : is_trunc.{l_1} n A) → ((to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) → C n_1 :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (C : is_trunc.{l_1} n A → Type l) => fun (n_1 : is_trunc.{l_1} n A) => fun (e_1 : (to_internal : is_trunc.is_trunc_internal.{l_1} n A) → C (is_trunc.mk.{l_1} n A to_internal)) => is_trunc.rec.{l, l_1} n A C e_1 n_1
+
+def is_trunc.no_confusion_type.{l, l_1} : (n : trunc_index) → (A : Type l_1) → Type l → is_trunc.{l_1} n A → is_trunc.{l_1} n A → Type (max l l_1) :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (P : Type l) => fun (v1 : is_trunc.{l_1} n A) => fun (v2 : is_trunc.{l_1} n A) => is_trunc.cases_on.{max l l_1 + 1, l_1} n A (fun (v1_1 : is_trunc.{l_1} n A) => Type (max l l_1)) v1 (fun (to_internal : is_trunc.is_trunc_internal.{l_1} n A) => is_trunc.cases_on.{max l l_1 + 1, l_1} n A (fun (v1_1 : is_trunc.{l_1} n A) => Type (max l l_1)) v2 (fun (to_internal_1 : is_trunc.is_trunc_internal.{l_1} n A) => (eq.{l_1} (trunc_index.rec.{l_1 + 1} (fun (a : trunc_index) => Type l_1 → Type l_1) is_trunc.contr_internal.{l_1} (fun (n_1 : trunc_index) => fun (trunc_n : Type l_1 → Type l_1) => fun (A_1 : Type l_1) => (x : A_1) → (y : A_1) → trunc_n (eq.{l_1} A_1 x y)) n A) to_internal to_internal_1 → P) → lift.{l, l_1} P))
+
+def is_trunc.no_confusion.{l, l_1} : (n : trunc_index) → (A : Type l_1) → (P : Type l) → (v1 : is_trunc.{l_1} n A) → (v2 : is_trunc.{l_1} n A) → eq.{l_1} (is_trunc.{l_1} n A) v1 v2 → is_trunc.no_confusion_type.{l, l_1} n A P v1 v2 :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (P : Type l) => fun (v1 : is_trunc.{l_1} n A) => fun (v2 : is_trunc.{l_1} n A) => fun (H12 : eq.{l_1} (is_trunc.{l_1} n A) v1 v2) => eq.rec.{max l l_1, l_1} (is_trunc.{l_1} n A) v1 (fun (a : is_trunc.{l_1} n A) => fun (H1a : eq.{l_1} (is_trunc.{l_1} n A) v1 a) => is_trunc.no_confusion_type.{l, l_1} n A P v1 a) (is_trunc.cases_on.{max l l_1, l_1} n A (fun (v1_1 : is_trunc.{l_1} n A) => is_trunc.no_confusion_type.{l, l_1} n A P v1_1 v1_1) v1 (fun (to_internal : is_trunc.is_trunc_internal.{l_1} n A) => fun (a : eq.{l_1} (trunc_index.rec.{l_1 + 1} (fun (a : trunc_index) => Type l_1 → Type l_1) is_trunc.contr_internal.{l_1} (fun (n_1 : trunc_index) => fun (trunc_n : Type l_1 → Type l_1) => fun (A_1 : Type l_1) => (x : A_1) → (y : A_1) → trunc_n (eq.{l_1} A_1 x y)) n A) to_internal to_internal → P) => lift.up.{l, l_1} P (a (eq.refl.{l_1} (trunc_index.rec.{l_1 + 1} (fun (a_1 : trunc_index) => Type l_1 → Type l_1) is_trunc.contr_internal.{l_1} (fun (n_1 : trunc_index) => fun (trunc_n : Type l_1 → Type l_1) => fun (A_1 : Type l_1) => (x : A_1) → (y : A_1) → trunc_n (eq.{l_1} A_1 x y)) n A) to_internal)))) v2 H12
+
+def is_trunc.is_contr.{l_1} : Type l_1 → Type l_1 :=
+  is_trunc.{l_1} trunc_index.minus_two
+
+def is_trunc.is_prop.{l_1} : Type l_1 → Type l_1 :=
+  is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two)
+
+def is_trunc.is_set.{l_1} : Type l_1 → Type l_1 :=
+  is_trunc.{l_1} (zero.{0} trunc_index has_zero_trunc_index)
+
+def is_trunc.is_trunc_succ_intro.{l_3} : (A : Type l_3) → (n : trunc_index) → ((x : A) → (y : A) → is_trunc.{l_3} n (eq.{l_3} A x y)) → is_trunc.{l_3} (trunc_index.succ n) A :=
+  fun (A : Type l_3) => fun (n : trunc_index) => fun (H : (x : A) → (y : A) → is_trunc.{l_3} n (eq.{l_3} A x y)) => is_trunc.mk.{l_3} (trunc_index.succ n) A (fun (x : A) => fun (y : A) => is_trunc.to_internal.{l_3} n (eq.{l_3} A x y) (H x y))
+
+def is_trunc.is_trunc_eq.{l_1} : (A : Type l_1) → (n : trunc_index) → is_trunc.{l_1} (trunc_index.succ n) A → (x : A) → (y : A) → is_trunc.{l_1} n (eq.{l_1} A x y) :=
+  fun (A : Type l_1) => fun (n : trunc_index) => fun (H : is_trunc.{l_1} (trunc_index.succ n) A) => fun (x : A) => fun (y : A) => is_trunc.mk.{l_1} n (eq.{l_1} A x y) (is_trunc.to_internal.{l_1} (trunc_index.succ n) A H x y)
+
+def is_trunc.is_contr.mk.{l_1} : (A : Type l_1) → (center : A) → ((a : A) → eq.{l_1} A center a) → is_trunc.{l_1} trunc_index.minus_two A :=
+  fun (A : Type l_1) => fun (center : A) => fun (center_eq : (a : A) → eq.{l_1} A center a) => is_trunc.mk.{l_1} trunc_index.minus_two A (is_trunc.contr_internal.mk.{l_1} A center center_eq)
+
+def is_trunc.center.{l_3} : (A : Type l_3) → is_trunc.{l_3} trunc_index.minus_two A → A :=
+  fun (A : Type l_3) => fun (H : is_trunc.{l_3} trunc_index.minus_two A) => is_trunc.contr_internal.center.{l_3} A (is_trunc.to_internal.{l_3} trunc_index.minus_two A H)
+
+def is_trunc.center'.{l_3} : (A : Type l_3) → is_trunc.{l_3} trunc_index.minus_two A → A :=
+  is_trunc.center.{l_3}
+
+def is_trunc.center_eq.{l_1} : (A : Type l_1) → (H : is_trunc.{l_1} trunc_index.minus_two A) → (a : A) → eq.{l_1} A (is_trunc.center.{l_1} A H) a :=
+  fun (A : Type l_1) => fun (H : is_trunc.{l_1} trunc_index.minus_two A) => is_trunc.contr_internal.center_eq.{l_1} A (is_trunc.to_internal.{l_1} trunc_index.minus_two A H)
+
+def is_trunc.eq_of_is_contr.{l_1} : (A : Type l_1) → is_trunc.{l_1} trunc_index.minus_two A → (x : A) → (y : A) → eq.{l_1} A x y :=
+  fun (A : Type l_1) => fun (H : is_trunc.{l_1} trunc_index.minus_two A) => fun (x : A) => fun (y : A) => eq.concat.{l_1} A x (is_trunc.center.{l_1} A H) y (eq.inverse.{l_1} A (is_trunc.center.{l_1} A H) x (is_trunc.center_eq.{l_1} A H x)) (is_trunc.center_eq.{l_1} A H y)
+
+def is_trunc.prop_eq_of_is_contr.{l_3} : (A : Type l_3) → is_trunc.{l_3} trunc_index.minus_two A → (x : A) → (y : A) → (p : eq.{l_3} A x y) → (q : eq.{l_3} A x y) → eq.{l_3} (eq.{l_3} A x y) p q :=
+  fun (A : Type l_3) => fun (H : is_trunc.{l_3} trunc_index.minus_two A) => fun (x : A) => fun (y : A) => fun (p : eq.{l_3} A x y) => fun (q : eq.{l_3} A x y) => (fun (K : (r : eq.{l_3} A x y) → eq.{l_3} (eq.{l_3} A x y) (is_trunc.eq_of_is_contr.{l_3} A H x y) r) => eq.concat.{l_3} (eq.{l_3} A x y) p (is_trunc.eq_of_is_contr.{l_3} A H x y) q (eq.inverse.{l_3} (eq.{l_3} A x y) (is_trunc.eq_of_is_contr.{l_3} A H x y) p (K p)) (K q)) (fun (r : eq.{l_3} A x y) => eq.rec_on.{l_3, l_3} A x (fun (a : A) => eq.{l_3} (eq.{l_3} A x a) (is_trunc.eq_of_is_contr.{l_3} A H x a)) y r (eq.con.left_inv.{l_3} A (is_trunc.center.{l_3} A H) x (is_trunc.center_eq.{l_3} A H x)))
+
+def is_trunc.is_contr_eq.{l_3} : (A : Type l_3) → is_trunc.{l_3} trunc_index.minus_two A → (x : A) → (y : A) → is_trunc.{l_3} trunc_index.minus_two (eq.{l_3} A x y) :=
+  fun (A : Type l_3) => fun (H : is_trunc.{l_3} trunc_index.minus_two A) => fun (x : A) => fun (y : A) => is_trunc.is_contr.mk.{l_3} (eq.{l_3} A x y) (is_trunc.eq_of_is_contr.{l_3} A H x y) (is_trunc.prop_eq_of_is_contr.{l_3} A H x y (is_trunc.eq_of_is_contr.{l_3} A H x y))
+
+def is_trunc.is_trunc_succ.{l_3} : (A : Type l_3) → (n : trunc_index) → is_trunc.{l_3} n A → is_trunc.{l_3} (trunc_index.succ n) A :=
+  fun (A : Type l_3) => fun (n : trunc_index) => trunc_index.rec_on.{l_3 + 1} (fun (a : trunc_index) => (n18.n2148 : Type l_3) → is_trunc.{l_3} a n18.n2148 → is_trunc.{l_3} (trunc_index.succ a) n18.n2148) n (fun (A_1 : Type l_3) => fun (H : is_trunc.{l_3} trunc_index.minus_two A_1) => is_trunc.is_trunc_succ_intro.{l_3} A_1 trunc_index.minus_two (is_trunc.is_contr_eq.{l_3} A_1 H)) (fun (n_1 : trunc_index) => fun (IH : (n18.n2148 : Type l_3) → is_trunc.{l_3} n_1 n18.n2148 → is_trunc.{l_3} (trunc_index.succ n_1) n18.n2148) => fun (A_1 : Type l_3) => fun (H : is_trunc.{l_3} (trunc_index.succ n_1) A_1) => is_trunc.is_trunc_succ_intro.{l_3} A_1 (trunc_index.succ n_1) (fun (x : A_1) => fun (y : A_1) => IH (eq.{l_3} A_1 x y) (is_trunc.is_trunc_eq.{l_3} A_1 n_1 H x y))) A
+
+def is_trunc.is_trunc_of_le.{l} : (A : Type l) → (n : trunc_index) → (m : trunc_index) → le.{0} trunc_index has_le_trunc_index n m → is_trunc.{l} n A → is_trunc.{l} m A :=
+  fun (A : Type l) => fun (n : trunc_index) => fun (m : trunc_index) => fun (Hnm : le.{0} trunc_index has_le_trunc_index n m) => fun (Hn : is_trunc.{l} n A) => trunc_index.le.rec.{l} n (fun (m_1 : trunc_index) => fun (Hnm_1 : le.{0} trunc_index has_le_trunc_index n m_1) => is_trunc.{l} m_1 A) Hn (fun (m_1 : trunc_index) => fun (Hnm_1 : trunc_index.le n m_1) => is_trunc.is_trunc_succ.{l} A m_1) m Hnm
+
+def is_trunc.is_trunc_of_imp_is_trunc.{l_1} : (A : Type l_1) → (n : trunc_index) → (A → is_trunc.{l_1} (trunc_index.succ n) A) → is_trunc.{l_1} (trunc_index.succ n) A :=
+  fun (A : Type l_1) => fun (n : trunc_index) => fun (H : A → is_trunc.{l_1} (trunc_index.succ n) A) => is_trunc.is_trunc_succ_intro.{l_1} A n (fun (x : A) => is_trunc.is_trunc_eq.{l_1} A n (H x) x)
+
+def is_trunc.is_trunc_of_imp_is_trunc_of_le.{l_1} : (A : Type l_1) → (n : trunc_index) → le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) n → (A → is_trunc.{l_1} n A) → is_trunc.{l_1} n A :=
+  fun (A : Type l_1) => fun (n : trunc_index) => fun (Hn : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) n) => fun (H : A → is_trunc.{l_1} n A) => (fun (t_1 : trunc_index) => fun (Hn_1 : trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1) => trunc_index.le.cases_on.{l_1} (trunc_index.succ trunc_index.minus_two) (fun (t_1_1 : trunc_index) => fun (Hn_1_1 : trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) => (e_1 : eq.{0} trunc_index n t_1_1) → eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) (eq.rec.{0, 0} trunc_index n (fun (t_1_2 : trunc_index) => fun (e_1_1 : eq.{0} trunc_index n t_1_2) => trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_2) Hn t_1_1 e_1) Hn_1_1 → is_trunc.{l_1} n A) t_1 Hn_1 (fun (e_1 : eq.{0} trunc_index n (trunc_index.succ trunc_index.minus_two)) => eq.elim_inv_inv.{0, l_1} trunc_index n (trunc_index.succ trunc_index.minus_two) (fun (e_1_1 : eq.{0} trunc_index n (trunc_index.succ trunc_index.minus_two)) => eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ trunc_index.minus_two)) (eq.rec.{0, 0} trunc_index n (fun (t_1_1 : trunc_index) => fun (e_1_2 : eq.{0} trunc_index n t_1_1) => trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) Hn (trunc_index.succ trunc_index.minus_two) e_1_1) (trunc_index.le.tr_refl (trunc_index.succ trunc_index.minus_two)) → is_trunc.{l_1} n A) e_1 (eq.rec.{l_1, 0} trunc_index (trunc_index.succ trunc_index.minus_two) (fun (n_1 : trunc_index) => fun (e_1_1 : eq.{0} trunc_index (trunc_index.succ trunc_index.minus_two) n_1) => (Hn_2 : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) n_1) → (A → is_trunc.{l_1} n_1 A) → eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ trunc_index.minus_two)) (eq.rec.{0, 0} trunc_index n_1 (fun (t_1_1 : trunc_index) => fun (e_1_2 : eq.{0} trunc_index n_1 t_1_1) => trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) Hn_2 (trunc_index.succ trunc_index.minus_two) (eq.symm.{0} trunc_index (trunc_index.succ trunc_index.minus_two) n_1 e_1_1)) (trunc_index.le.tr_refl (trunc_index.succ trunc_index.minus_two)) → is_trunc.{l_1} n_1 A) (fun (Hn_2 : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) (trunc_index.succ trunc_index.minus_two)) => fun (H_1 : A → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A) => fun (e_2 : eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ trunc_index.minus_two)) Hn_2 (trunc_index.le.tr_refl (trunc_index.succ trunc_index.minus_two))) => is_trunc.is_trunc_of_imp_is_trunc.{l_1} A trunc_index.minus_two H_1) n (eq.symm.{0} trunc_index n (trunc_index.succ trunc_index.minus_two) e_1) Hn H)) (fun (n' : trunc_index) => fun (Hn' : trunc_index.le (trunc_index.succ trunc_index.minus_two) n') => fun (e_1 : eq.{0} trunc_index n (trunc_index.succ n')) => eq.elim_inv_inv.{0, l_1} trunc_index n (trunc_index.succ n') (fun (e_1_1 : eq.{0} trunc_index n (trunc_index.succ n')) => eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n')) (eq.rec.{0, 0} trunc_index n (fun (t_1_1 : trunc_index) => fun (e_1_2 : eq.{0} trunc_index n t_1_1) => trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) Hn (trunc_index.succ n') e_1_1) (trunc_index.le.step (trunc_index.succ trunc_index.minus_two) n' Hn') → is_trunc.{l_1} n A) e_1 (eq.rec.{l_1, 0} trunc_index (trunc_index.succ n') (fun (n_1 : trunc_index) => fun (e_1_1 : eq.{0} trunc_index (trunc_index.succ n') n_1) => (Hn_2 : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) n_1) → (A → is_trunc.{l_1} n_1 A) → eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n')) (eq.rec.{0, 0} trunc_index n_1 (fun (t_1_1 : trunc_index) => fun (e_1_2 : eq.{0} trunc_index n_1 t_1_1) => trunc_index.le (trunc_index.succ trunc_index.minus_two) t_1_1) Hn_2 (trunc_index.succ n') (eq.symm.{0} trunc_index (trunc_index.succ n') n_1 e_1_1)) (trunc_index.le.step (trunc_index.succ trunc_index.minus_two) n' Hn') → is_trunc.{l_1} n_1 A) (fun (Hn_2 : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n')) => fun (H_1 : A → is_trunc.{l_1} (trunc_index.succ n') A) => fun (e_2 : eq.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n')) Hn_2 (trunc_index.le.step (trunc_index.succ trunc_index.minus_two) n' Hn')) => is_trunc.is_trunc_of_imp_is_trunc.{l_1} A n' H_1) n (eq.symm.{0} trunc_index n (trunc_index.succ n') e_1) Hn H))) n Hn (eq.refl.{0} trunc_index n) (eq.refl.{0} (trunc_index.le (trunc_index.succ trunc_index.minus_two) n) Hn)
+
+def is_trunc.is_trunc_of_is_contr.{l_3} : (A : Type l_3) → (n : trunc_index) → is_trunc.{l_3} trunc_index.minus_two A → is_trunc.{l_3} n A :=
+  fun (A : Type l_3) => fun (n : trunc_index) => fun (H : is_trunc.{l_3} trunc_index.minus_two A) => trunc_index.rec_on.{l_3} (fun (n_1 : trunc_index) => is_trunc.{l_3} n_1 A) n H (is_trunc.is_trunc_succ.{l_3} A)
+
+def is_trunc.is_trunc_succ_of_is_prop.{l_3} : (A : Type l_3) → (n : trunc_index) → is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A → is_trunc.{l_3} (trunc_index.succ n) A :=
+  fun (A : Type l_3) => fun (n : trunc_index) => is_trunc.is_trunc_of_le.{l_3} A (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n) ((fun (this : le.{0} trunc_index has_le_trunc_index (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n)) => this) (trunc_index.succ_le_succ trunc_index.minus_two n (trunc_index.minus_two_le n)))
+
+def is_trunc.is_trunc_succ_succ_of_is_set.{l_3} : (A : Type l_3) → (n : trunc_index) → is_trunc.{l_3} (zero.{0} trunc_index has_zero_trunc_index) A → is_trunc.{l_3} ((fun (n_1 : trunc_index) => trunc_index.succ (trunc_index.succ n_1)) n) A :=
+  fun (A : Type l_3) => fun (n : trunc_index) => is_trunc.is_trunc_of_le.{l_3} A (zero.{0} trunc_index has_zero_trunc_index) ((fun (n_1 : trunc_index) => trunc_index.succ (trunc_index.succ n_1)) n) ((fun (this : le.{0} trunc_index has_le_trunc_index (zero.{0} trunc_index has_zero_trunc_index) ((fun (n_1 : trunc_index) => trunc_index.succ (trunc_index.succ n_1)) n)) => this) (trunc_index.succ_le_succ (trunc_index.succ trunc_index.minus_two) (trunc_index.succ n) (trunc_index.succ_le_succ trunc_index.minus_two n (trunc_index.minus_two_le n))))
+
+def is_trunc.is_prop.elim.{l_1} : (A : Type l_1) → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A → (x : A) → (y : A) → eq.{l_1} A x y :=
+  fun (A : Type l_1) => fun (H : is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A) => fun (x : A) => fun (y : A) => is_trunc.center.{l_1} (eq.{l_1} A x y) (is_trunc.is_trunc_eq.{l_1} A trunc_index.minus_two H x y)
+
+def is_trunc.is_contr_of_inhabited_prop.{l_3} : (A : Type l_3) → A → is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A → is_trunc.{l_3} trunc_index.minus_two A :=
+  fun (A : Type l_3) => fun (x : A) => fun (H : is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A) => is_trunc.is_contr.mk.{l_3} A x (is_trunc.is_prop.elim.{l_3} A H x)
+
+def is_trunc.is_prop_of_imp_is_contr.{l_3} : (A : Type l_3) → (A → is_trunc.{l_3} trunc_index.minus_two A) → is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A :=
+  fun (A : Type l_3) => fun (H : A → is_trunc.{l_3} trunc_index.minus_two A) => is_trunc.is_trunc_succ_intro.{l_3} A trunc_index.minus_two (fun (x : A) => fun (y : A) => (fun (H2 : is_trunc.{l_3} trunc_index.minus_two A) => is_trunc.is_contr_eq.{l_3} A H2 x y) (H x))
+
+def is_trunc.is_prop.mk.{l_3} : (A : Type l_3) → ((x : A) → (y : A) → eq.{l_3} A x y) → is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A :=
+  fun (A : Type l_3) => fun (H : (x : A) → (y : A) → eq.{l_3} A x y) => is_trunc.is_prop_of_imp_is_contr.{l_3} A (fun (x : A) => is_trunc.is_contr.mk.{l_3} A x (H x))
+
+def is_trunc.is_prop_elim_self.{l_3} : (A : Type l_3) → (H : is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A) → (x : A) → eq.{l_3} (eq.{l_3} A x x) (is_trunc.is_prop.elim.{l_3} A H x x) (eq.idp.{l_3} A x) :=
+  fun (A : Type l_3) => fun (H : is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) A) => fun (x : A) => is_trunc.is_prop.elim.{l_3} (eq.{l_3} A x x) (is_trunc.is_trunc_eq.{l_3} A (trunc_index.succ trunc_index.minus_two) (is_trunc.is_trunc_succ.{l_3} A (trunc_index.succ trunc_index.minus_two) H) x x) (is_trunc.is_prop.elim.{l_3} A H x x) (eq.idp.{l_3} A x)
+
+def is_trunc.is_set.mk.{l_3} : (A : Type l_3) → ((x : A) → (y : A) → (p : eq.{l_3} A x y) → (q : eq.{l_3} A x y) → eq.{l_3} (eq.{l_3} A x y) p q) → is_trunc.{l_3} (zero.{0} trunc_index has_zero_trunc_index) A :=
+  fun (A : Type l_3) => fun (H : (x : A) → (y : A) → (p : eq.{l_3} A x y) → (q : eq.{l_3} A x y) → eq.{l_3} (eq.{l_3} A x y) p q) => is_trunc.is_trunc_succ_intro.{l_3} A (trunc_index.succ trunc_index.minus_two) (fun (x : A) => fun (y : A) => is_trunc.is_prop.mk.{l_3} (eq.{l_3} A x y) (H x y))
+
+def is_trunc.is_set.elim.{l_1} : (A : Type l_1) → is_trunc.{l_1} (zero.{0} trunc_index has_zero_trunc_index) A → (x : A) → (y : A) → (p : eq.{l_1} A x y) → (q : eq.{l_1} A x y) → eq.{l_1} (eq.{l_1} A x y) p q :=
+  fun (A : Type l_1) => fun (H : is_trunc.{l_1} (zero.{0} trunc_index has_zero_trunc_index) A) => fun (x : A) => fun (y : A) => is_trunc.is_prop.elim.{l_1} (eq.{l_1} A x y) (is_trunc.is_trunc_eq.{l_1} A (trunc_index.succ trunc_index.minus_two) H x y)
+
+def is_trunc.is_contr_sigma_eq.{l_3} : (A : Type l_3) → (a : A) → is_trunc.{l_3} trunc_index.minus_two (sigma.{l_3, l_3} A (eq.{l_3} A a)) :=
+  fun (A : Type l_3) => fun (a : A) => is_trunc.is_contr.mk.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.idp.{l_3} A a)) (fun (p : sigma.{l_3, l_3} A (eq.{l_3} A a)) => sigma.rec_on.{l_3, l_3, l_3} A (eq.{l_3} A a) (eq.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.idp.{l_3} A a))) p (fun (b : A) => fun (q : eq.{l_3} A a b) => eq.rec_on.{l_3, l_3} A a (fun (a_1 : A) => fun (n : eq.{l_3} A a a_1) => eq.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.idp.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a_1 n)) b q (eq.idp.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.refl.{l_3} A a)))))
+
+def is_trunc.is_contr_sigma_eq'.{l_3} : (A : Type l_3) → (a : A) → is_trunc.{l_3} trunc_index.minus_two (sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a)) :=
+  fun (A : Type l_3) => fun (a : A) => is_trunc.is_contr.mk.{l_3} (sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a)) (sigma.mk.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a) a (eq.idp.{l_3} A a)) (fun (p : sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a)) => sigma.rec_on.{l_3, l_3, l_3} A (fun (x : A) => eq.{l_3} A x a) (eq.{l_3} (sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a)) (sigma.mk.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a) a (eq.idp.{l_3} A a))) p (fun (b : A) => fun (q : eq.{l_3} A b a) => eq.rec_on.{l_3, l_3} A b (fun (a_1 : A) => fun (n : eq.{l_3} A b a_1) => eq.{l_3} (sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a_1)) (sigma.mk.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a_1) a_1 (eq.idp.{l_3} A a_1)) (sigma.mk.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x a_1) b n)) a q (eq.idp.{l_3} (sigma.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x b)) (sigma.mk.{l_3, l_3} A (fun (x : A) => eq.{l_3} A x b) b (eq.refl.{l_3} A b)))))
+
+def is_trunc.ap_pr1_center_eq_sigma_eq.{l_3} : (A : Type l_3) → (a : A) → (x : A) → (p : eq.{l_3} A a x) → eq.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a))) (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p))) p :=
+  fun (A : Type l_3) => fun (a : A) => eq.rec.{l_3, l_3} A a (fun (x : A) => fun (p : eq.{l_3} A a x) => eq.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a))) (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) x p))) p) (eq.refl.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a))) (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.refl.{l_3} A a)))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) A (sigma.pr1.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a)) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.refl.{l_3} A a)) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (eq.{l_3} A a)) (is_trunc.is_contr_sigma_eq.{l_3} A a) (sigma.mk.{l_3, l_3} A (eq.{l_3} A a) a (eq.refl.{l_3} A a)))))
+
+def is_trunc.ap_pr1_center_eq_sigma_eq'.{l_3} : (A : Type l_3) → (a : A) → (x : A) → (p : eq.{l_3} A x a) → eq.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) (is_trunc.is_contr_sigma_eq'.{l_3} A a))) (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) x p))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) A (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) (is_trunc.is_contr_sigma_eq'.{l_3} A a)) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) x p) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) (is_trunc.is_contr_sigma_eq'.{l_3} A a) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) x p))) (eq.inverse.{l_3} A (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) x p)) (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 a)) (is_trunc.is_contr_sigma_eq'.{l_3} A a))) p) :=
+  fun (A : Type l_3) => fun (a : A) => fun (x : A) => eq.rec.{l_3, l_3} A x (fun (a_1 : A) => fun (p : eq.{l_3} A x a_1) => eq.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) (is_trunc.is_contr_sigma_eq'.{l_3} A a_1))) (sigma.pr1.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) (sigma.mk.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) x p))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) A (sigma.pr1.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) (is_trunc.is_contr_sigma_eq'.{l_3} A a_1)) (sigma.mk.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) x p) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) (is_trunc.is_contr_sigma_eq'.{l_3} A a_1) (sigma.mk.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) x p))) (eq.inverse.{l_3} A (sigma.pr1.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) (sigma.mk.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) x p)) (sigma.pr1.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_2 : A) => eq.{l_3} A a_2 a_1)) (is_trunc.is_contr_sigma_eq'.{l_3} A a_1))) p)) (eq.refl.{l_3} (eq.{l_3} A (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x)) (is_trunc.is_contr_sigma_eq'.{l_3} A x))) (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x) x (eq.refl.{l_3} A x)))) (eq.ap.{l_3, l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x)) A (sigma.pr1.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x)) (is_trunc.center.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x)) (is_trunc.is_contr_sigma_eq'.{l_3} A x)) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x) x (eq.refl.{l_3} A x)) (is_trunc.center_eq.{l_3} (sigma.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x)) (is_trunc.is_contr_sigma_eq'.{l_3} A x) (sigma.mk.{l_3, l_3} A (fun (a_1 : A) => eq.{l_3} A a_1 x) x (eq.refl.{l_3} A x))))) a
+
+def is_trunc.is_contr_unit : is_trunc.{0} trunc_index.minus_two unit :=
+  is_trunc.is_contr.mk.{0} unit unit.star (fun (p : unit) => unit.rec_on.{0} (eq.{0} unit unit.star) p (eq.idp.{0} unit unit.star))
+
+def is_trunc.is_prop_empty : is_trunc.{0} (trunc_index.succ trunc_index.minus_two) empty :=
+  is_trunc.is_prop.mk.{0} empty (fun (x : empty) => empty.elim.{0} ((y : empty) → eq.{0} empty x y) x)
+
+def is_trunc.is_trunc_unit : (n : trunc_index) → is_trunc.{0} n unit :=
+  fun (n : trunc_index) => is_trunc.is_trunc_of_is_contr.{0} unit n is_trunc.is_contr_unit
+
+def is_trunc.is_trunc_empty : (n : trunc_index) → is_trunc.{0} (trunc_index.succ n) empty :=
+  fun (n : trunc_index) => is_trunc.is_trunc_succ_of_is_prop.{0} empty n is_trunc.is_prop_empty
+
+def is_trunc.is_contr_is_equiv_closed.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (f : A → B) → is_equiv.{l_1, l_2} A B f → is_trunc.{l_1} trunc_index.minus_two A → is_trunc.{l_2} trunc_index.minus_two B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : A → B) => fun (Hf : is_equiv.{l_1, l_2} A B f) => fun (HA : is_trunc.{l_1} trunc_index.minus_two A) => is_trunc.is_contr.mk.{l_2} B (f (is_trunc.center.{l_1} A HA)) (fun (p : B) => is_equiv.eq_of_eq_inv.{l_1, l_2} A B f Hf (is_trunc.center.{l_1} A HA) p (is_trunc.center_eq.{l_1} A HA (is_equiv.inv.{l_1, l_2} A B f Hf p)))
+
+def is_trunc.is_contr_equiv_closed.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → equiv.{l_1, l_2} A B → is_trunc.{l_1} trunc_index.minus_two A → is_trunc.{l_2} trunc_index.minus_two B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (H : equiv.{l_1, l_2} A B) => is_trunc.is_contr_is_equiv_closed.{l_1, l_2} A B (equiv.to_fun.{l_1, l_2} A B H) (equiv.to_is_equiv.{l_1, l_2} A B H)
+
+def is_trunc.is_contr_equiv_closed_rev.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → equiv.{l_1, l_2} A B → is_trunc.{l_2} trunc_index.minus_two B → is_trunc.{l_1} trunc_index.minus_two A :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (H : equiv.{l_1, l_2} A B) => is_trunc.is_contr_equiv_closed.{l_2, l_1} B A (equiv.symm.{l_1, l_2} A B H)
+
+def is_trunc.equiv_of_is_contr_of_is_contr.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → is_trunc.{l_1} trunc_index.minus_two A → is_trunc.{l_2} trunc_index.minus_two B → equiv.{l_1, l_2} A B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (HA : is_trunc.{l_1} trunc_index.minus_two A) => fun (HB : is_trunc.{l_2} trunc_index.minus_two B) => equiv.mk.{l_1, l_2} A B (fun (a : A) => is_trunc.center.{l_2} B HB) (is_equiv.adjointify.{l_1, l_2} A B (fun (a : A) => is_trunc.center.{l_2} B HB) (fun (b : B) => is_trunc.center.{l_1} A HA) (is_trunc.center_eq.{l_2} B HB) (is_trunc.center_eq.{l_1} A HA))
+
+def is_trunc.is_trunc_is_equiv_closed.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (n : trunc_index) → (f : A → B) → is_equiv.{l_1, l_2} A B f → is_trunc.{l_1} n A → is_trunc.{l_2} n B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (n : trunc_index) => fun (f : A → B) => fun (H : is_equiv.{l_1, l_2} A B f) => fun (HA : is_trunc.{l_1} n A) => trunc_index.rec.{max (l_1 + 1) (max l_1 (max (l_2 + 1) (max l_1 l_2)))} (fun (n_1 : trunc_index) => (A_1 : Type l_1) → is_trunc.{l_1} n_1 A_1 → (B_1 : Type l_2) → (f_1 : A_1 → B_1) → is_equiv.{l_1, l_2} A_1 B_1 f_1 → is_trunc.{l_2} n_1 B_1) (fun (A_1 : Type l_1) => fun (HA_1 : is_trunc.{l_1} trunc_index.minus_two A_1) => fun (B_1 : Type l_2) => fun (f_1 : A_1 → B_1) => fun (H_1 : is_equiv.{l_1, l_2} A_1 B_1 f_1) => is_trunc.is_contr_is_equiv_closed.{l_1, l_2} A_1 B_1 f_1 H_1 HA_1) (fun (n_1 : trunc_index) => fun (IH : (A_1 : Type l_1) → is_trunc.{l_1} n_1 A_1 → (B_1 : Type l_2) → (f_1 : A_1 → B_1) → is_equiv.{l_1, l_2} A_1 B_1 f_1 → is_trunc.{l_2} n_1 B_1) => fun (A_1 : Type l_1) => fun (HA_1 : is_trunc.{l_1} (trunc_index.succ n_1) A_1) => fun (B_1 : Type l_2) => fun (f_1 : A_1 → B_1) => fun (H_1 : is_equiv.{l_1, l_2} A_1 B_1 f_1) => is_trunc.is_trunc_succ_intro.{l_2} B_1 n_1 (fun (x : B_1) => fun (y : B_1) => IH (eq.{l_1} A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 x) (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 y)) (is_trunc.is_trunc_eq.{l_1} A_1 n_1 HA_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 x) (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 y)) (eq.{l_2} B_1 x y) (is_equiv.inv.{l_2, l_1} (eq.{l_2} B_1 x y) (eq.{l_1} A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 x) (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 y)) (eq.ap.{l_2, l_1} B_1 A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1) x y) (is_equiv.is_equiv_ap.{l_2, l_1} B_1 A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1) (is_equiv.is_equiv_inv.{l_1, l_2} A_1 B_1 f_1 H_1) x y)) (is_equiv.is_equiv_inv.{l_2, l_1} (eq.{l_2} B_1 x y) (eq.{l_1} A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 x) (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1 y)) (eq.ap.{l_2, l_1} B_1 A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1) x y) (is_equiv.is_equiv_ap.{l_2, l_1} B_1 A_1 (is_equiv.inv.{l_1, l_2} A_1 B_1 f_1 H_1) (is_equiv.is_equiv_inv.{l_1, l_2} A_1 B_1 f_1 H_1) x y)))) n A HA B f H
+
+def is_trunc.is_trunc_is_equiv_closed_rev.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (n : trunc_index) → (f : A → B) → is_equiv.{l_1, l_2} A B f → is_trunc.{l_2} n B → is_trunc.{l_1} n A :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (n : trunc_index) => fun (f : A → B) => fun (H : is_equiv.{l_1, l_2} A B f) => is_trunc.is_trunc_is_equiv_closed.{l_2, l_1} B A n (is_equiv.inv.{l_1, l_2} A B f H) (is_equiv.is_equiv_inv.{l_1, l_2} A B f H)
+
+def is_trunc.is_trunc_equiv_closed.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (n : trunc_index) → equiv.{l_1, l_2} A B → is_trunc.{l_1} n A → is_trunc.{l_2} n B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (n : trunc_index) => fun (f : equiv.{l_1, l_2} A B) => is_trunc.is_trunc_is_equiv_closed.{l_1, l_2} A B n (equiv.to_fun.{l_1, l_2} A B f) (equiv.to_is_equiv.{l_1, l_2} A B f)
+
+def is_trunc.is_trunc_equiv_closed_rev.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (n : trunc_index) → equiv.{l_1, l_2} A B → is_trunc.{l_2} n B → is_trunc.{l_1} n A :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (n : trunc_index) => fun (f : equiv.{l_1, l_2} A B) => is_trunc.is_trunc_is_equiv_closed.{l_2, l_1} B A n (equiv.to_inv.{l_1, l_2} A B f) (is_equiv.is_equiv_inv.{l_1, l_2} A B (equiv.to_fun.{l_1, l_2} A B f) (equiv.to_is_equiv.{l_1, l_2} A B f))
+
+def is_trunc.is_equiv_of_is_prop.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (f : A → B) → (B → A) → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A → is_trunc.{l_2} (trunc_index.succ trunc_index.minus_two) B → is_equiv.{l_1, l_2} A B f :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : A → B) => fun (g : B → A) => fun (HA : is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A) => fun (HB : is_trunc.{l_2} (trunc_index.succ trunc_index.minus_two) B) => is_equiv.mk.{l_1, l_2} A B f g (fun (b : B) => is_trunc.is_prop.elim.{l_2} B HB (f (g b)) b) (fun (a : A) => is_trunc.is_prop.elim.{l_1} A HA (g (f a)) a) (fun (a : A) => is_trunc.is_set.elim.{l_2} B (is_trunc.is_trunc_succ.{l_2} B (trunc_index.succ trunc_index.minus_two) HB) (f (g (f a))) (f a) ((fun (b : B) => is_trunc.is_prop.elim.{l_2} B HB (f (g b)) b) (f a)) (eq.ap.{l_1, l_2} A B f (g (f a)) a ((fun (a_1 : A) => is_trunc.is_prop.elim.{l_1} A HA (g (f a_1)) a_1) a)))
+
+def is_trunc.is_equiv_of_is_contr.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (f : A → B) → is_trunc.{l_1} trunc_index.minus_two A → is_trunc.{l_2} trunc_index.minus_two B → is_equiv.{l_1, l_2} A B f :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : A → B) => fun (HA : is_trunc.{l_1} trunc_index.minus_two A) => fun (HB : is_trunc.{l_2} trunc_index.minus_two B) => is_equiv.mk.{l_1, l_2} A B f (fun (x : B) => is_trunc.center.{l_1} A HA) (fun (b : B) => is_trunc.is_prop.elim.{l_2} B (is_trunc.is_trunc_succ.{l_2} B trunc_index.minus_two HB) (f ((fun (x : B) => is_trunc.center.{l_1} A HA) b)) b) (fun (a : A) => is_trunc.is_prop.elim.{l_1} A (is_trunc.is_trunc_succ.{l_1} A trunc_index.minus_two HA) ((fun (x : B) => is_trunc.center.{l_1} A HA) (f a)) a) (fun (a : A) => is_trunc.is_set.elim.{l_2} B (is_trunc.is_trunc_succ.{l_2} B (trunc_index.succ trunc_index.minus_two) (is_trunc.is_trunc_succ.{l_2} B trunc_index.minus_two HB)) (f ((fun (x : B) => is_trunc.center.{l_1} A HA) (f a))) (f a) ((fun (b : B) => is_trunc.is_prop.elim.{l_2} B (is_trunc.is_trunc_succ.{l_2} B trunc_index.minus_two HB) (f ((fun (x : B) => is_trunc.center.{l_1} A HA) b)) b) (f a)) (eq.ap.{l_1, l_2} A B f ((fun (x : B) => is_trunc.center.{l_1} A HA) (f a)) a ((fun (a_1 : A) => is_trunc.is_prop.elim.{l_1} A (is_trunc.is_trunc_succ.{l_1} A trunc_index.minus_two HA) ((fun (x : B) => is_trunc.center.{l_1} A HA) (f a_1)) a_1) a)))
+
+def is_trunc.equiv_of_is_contr.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → is_trunc.{l_1} trunc_index.minus_two A → is_trunc.{l_2} trunc_index.minus_two B → equiv.{l_1, l_2} A B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (HA : is_trunc.{l_1} trunc_index.minus_two A) => fun (HB : is_trunc.{l_2} trunc_index.minus_two B) => equiv.mk.{l_1, l_2} A B (fun (a : A) => is_trunc.center.{l_2} B HB) (is_trunc.is_equiv_of_is_contr.{l_1, l_2} A B (fun (a : A) => is_trunc.center.{l_2} B HB) HA HB)
+
+def is_trunc.equiv_of_is_prop.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (A → B) → (B → A) → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A → is_trunc.{l_2} (trunc_index.succ trunc_index.minus_two) B → equiv.{l_1, l_2} A B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : A → B) => fun (g : B → A) => fun (HA : is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A) => fun (HB : is_trunc.{l_2} (trunc_index.succ trunc_index.minus_two) B) => equiv.mk.{l_1, l_2} A B f (is_trunc.is_equiv_of_is_prop.{l_1, l_2} A B f g HA HB)
+
+def is_trunc.equiv_of_iff_of_is_prop.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → iff.{l_1, l_2} A B → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) A → is_trunc.{l_2} (trunc_index.succ trunc_index.minus_two) B → equiv.{l_1, l_2} A B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (H : iff.{l_1, l_2} A B) => is_trunc.equiv_of_is_prop.{l_1, l_2} A B (iff.elim_left.{l_1, l_2} A B H) (iff.elim_right.{l_1, l_2} A B H)
+
+def is_trunc.is_trunc_lift.{l_3, l_4} : (A : Type l_3) → (n : trunc_index) → is_trunc.{l_3} n A → is_trunc.{max l_3 l_4} n (lift.{l_3, l_4} A) :=
+  fun (A : Type l_3) => fun (n : trunc_index) => is_trunc.is_trunc_equiv_closed.{l_3, max l_3 l_4} A (lift.{l_3, l_4} A) n (equiv.equiv_lift.{l_3, l_4} A)
+
+def is_trunc.equiv_unit_of_is_contr.{l_1} : (A : Type l_1) → is_trunc.{l_1} trunc_index.minus_two A → equiv.{l_1, 0} A unit :=
+  fun (A : Type l_1) => fun (H : is_trunc.{l_1} trunc_index.minus_two A) => is_trunc.equiv_of_is_contr.{l_1, 0} A unit H (is_trunc.is_trunc_unit trunc_index.minus_two)
+
+def is_trunc.is_trunc_pathover.{l_1, l_3} : (A : Type l_1) → (C : A → Type l_3) → (a : A) → (a₂ : A) → (p : eq.{l_1} A a a₂) → (c : C a) → (c₂ : C a₂) → (n : trunc_index) → is_trunc.{l_3} (trunc_index.succ n) (C a) → is_trunc.{l_3} n (eq.pathover.{l_1, l_3} A a C c a₂ p c₂) :=
+  fun (A : Type l_1) => fun (C : A → Type l_3) => fun (a : A) => fun (a₂ : A) => fun (p : eq.{l_1} A a a₂) => fun (c : C a) => fun (c₂ : C a₂) => fun (n : trunc_index) => fun (H : is_trunc.{l_3} (trunc_index.succ n) (C a)) => is_trunc.is_trunc_equiv_closed_rev.{l_3, l_3} (eq.pathover.{l_1, l_3} A a C c a₂ p c₂) (eq.{l_3} (C a) c (eq.transport.{l_1, l_3} A C a₂ a (eq.inverse.{l_1} A a a₂ p) c₂)) n (eq.pathover_equiv_eq_tr.{l_1, l_3} A C a a₂ p c c₂) (is_trunc.is_trunc_eq.{l_3} (C a) n H c (eq.transport.{l_1, l_3} A C a₂ a (eq.inverse.{l_1} A a a₂ p) c₂))
+
+def is_trunc.is_prop.elimo.{l_1, l_3} : (A : Type l_1) → (C : A → Type l_3) → (a : A) → (a₂ : A) → (p : eq.{l_1} A a a₂) → (c : C a) → (c₂ : C a₂) → is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) (C a) → eq.pathover.{l_1, l_3} A a C c a₂ p c₂ :=
+  fun (A : Type l_1) => fun (C : A → Type l_3) => fun (a : A) => fun (a₂ : A) => fun (p : eq.{l_1} A a a₂) => fun (c : C a) => fun (c₂ : C a₂) => fun (H : is_trunc.{l_3} (trunc_index.succ trunc_index.minus_two) (C a)) => eq.pathover_of_eq_tr.{l_1, l_3} A C a a₂ p c c₂ (is_trunc.is_prop.elim.{l_3} (C a) H c (eq.transport.{l_1, l_3} A C a₂ a (eq.inverse.{l_1} A a a₂ p) c₂))
+
+def is_trunc.is_prop_elimo_self.{l_4, l_5} : (A : Type l_4) → (B : A → Type l_5) → (a : A) → (b : B a) → (H : is_trunc.{l_5} (trunc_index.succ trunc_index.minus_two) (B a)) → eq.{l_5} (eq.pathover.{l_4, l_5} A a B b a (eq.idp.{l_4} A a) b) (is_trunc.is_prop.elimo.{l_4, l_5} A B a a (eq.idp.{l_4} A a) b b H) (eq.idpo.{l_4, l_5} A B a b) :=
+  fun (A : Type l_4) => fun (B : A → Type l_5) => fun (a : A) => fun (b : B a) => fun (H : is_trunc.{l_5} (trunc_index.succ trunc_index.minus_two) (B a)) => is_trunc.is_prop.elim.{l_5} (eq.pathover.{l_4, l_5} A a B b a (eq.idp.{l_4} A a) b) (is_trunc.is_trunc_pathover.{l_4, l_5} A B a a (eq.idp.{l_4} A a) b b (trunc_index.succ trunc_index.minus_two) (is_trunc.is_trunc_succ.{l_5} (B a) (trunc_index.succ trunc_index.minus_two) H)) (is_trunc.is_prop.elimo.{l_4, l_5} A B a a (eq.idp.{l_4} A a) b b H) (eq.idpo.{l_4, l_5} A B a b)
+
+def is_trunc.is_set.elimo.{l_1, l_3} : (A : Type l_1) → (C : A → Type l_3) → (a : A) → (a₂ : A) → (p : eq.{l_1} A a a₂) → (c : C a) → (c₂ : C a₂) → (q : eq.pathover.{l_1, l_3} A a C c a₂ p c₂) → (q' : eq.pathover.{l_1, l_3} A a C c a₂ p c₂) → is_trunc.{l_3} (zero.{0} trunc_index has_zero_trunc_index) (C a) → eq.{l_3} (eq.pathover.{l_1, l_3} A a C c a₂ p c₂) q q' :=
+  fun (A : Type l_1) => fun (C : A → Type l_3) => fun (a : A) => fun (a₂ : A) => fun (p : eq.{l_1} A a a₂) => fun (c : C a) => fun (c₂ : C a₂) => fun (q : eq.pathover.{l_1, l_3} A a C c a₂ p c₂) => fun (q' : eq.pathover.{l_1, l_3} A a C c a₂ p c₂) => fun (H : is_trunc.{l_3} (zero.{0} trunc_index has_zero_trunc_index) (C a)) => is_trunc.is_prop.elim.{l_3} (eq.pathover.{l_1, l_3} A a C c a₂ p c₂) (is_trunc.is_trunc_pathover.{l_1, l_3} A C a a₂ p c c₂ (trunc_index.succ trunc_index.minus_two) H) q q'
+
+inductive trunctype.{l_1} (n : trunc_index) : Type (l_1 + 1) where
+  | mk : (carrier : Type l_1) → is_trunc.{l_1} n carrier → trunctype.{l_1} n
+
+def trunctype.carrier.{l_1} : (n : trunc_index) → trunctype.{l_1} n → Type l_1 :=
+  fun (n : trunc_index) => fun (c : trunctype.{l_1} n) => trunctype.rec.{l_1 + 1, l_1} n (fun (c_1 : trunctype.{l_1} n) => Type l_1) (fun (carrier : Type l_1) => fun (struct : is_trunc.{l_1} n carrier) => carrier) c
+
+def trunctype.struct.{l_1} : (n : trunc_index) → (c : trunctype.{l_1} n) → is_trunc.{l_1} n (trunctype.carrier.{l_1} n c) :=
+  fun (n : trunc_index) => fun (c : trunctype.{l_1} n) => trunctype.rec.{l_1, l_1} n (fun (c_1 : trunctype.{l_1} n) => is_trunc.{l_1} n (trunctype.carrier.{l_1} n c_1)) (fun (carrier : Type l_1) => fun (struct : is_trunc.{l_1} n carrier) => struct) c
+
+def trunctype.rec_on.{l, l_1} : (n : trunc_index) → (C : trunctype.{l_1} n → Type l) → (n_1 : trunctype.{l_1} n) → ((carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) → C n_1 :=
+  fun (n : trunc_index) => fun (C : trunctype.{l_1} n → Type l) => fun (n_1 : trunctype.{l_1} n) => fun (e_1 : (carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) => trunctype.rec.{l, l_1} n C e_1 n_1
+
+def trunctype.destruct.{l, l_1} : (n : trunc_index) → (C : trunctype.{l_1} n → Type l) → (n_1 : trunctype.{l_1} n) → ((carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) → C n_1 :=
+  fun (n : trunc_index) => fun (C : trunctype.{l_1} n → Type l) => fun (n_1 : trunctype.{l_1} n) => fun (e_1 : (carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) => trunctype.rec.{l, l_1} n C e_1 n_1
+
+def trunctype.cases_on.{l, l_1} : (n : trunc_index) → (C : trunctype.{l_1} n → Type l) → (n_1 : trunctype.{l_1} n) → ((carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) → C n_1 :=
+  fun (n : trunc_index) => fun (C : trunctype.{l_1} n → Type l) => fun (n_1 : trunctype.{l_1} n) => fun (e_1 : (carrier : Type l_1) → (struct : is_trunc.{l_1} n carrier) → C (trunctype.mk.{l_1} n carrier struct)) => trunctype.rec.{l, l_1} n C e_1 n_1
+
+def trunctype.no_confusion_type.{l, l_1} : (n : trunc_index) → Type l → trunctype.{l_1} n → trunctype.{l_1} n → Type (max l (l_1 + 1)) :=
+  fun (n : trunc_index) => fun (P : Type l) => fun (v1 : trunctype.{l_1} n) => fun (v2 : trunctype.{l_1} n) => trunctype.cases_on.{max l (l_1 + 1) + 1, l_1} n (fun (v1_1 : trunctype.{l_1} n) => Type (max l (l_1 + 1))) v1 (fun (carrier : Type l_1) => fun (struct : is_trunc.{l_1} n carrier) => trunctype.cases_on.{max l (l_1 + 1) + 1, l_1} n (fun (v1_1 : trunctype.{l_1} n) => Type (max l (l_1 + 1))) v2 (fun (carrier_1 : Type l_1) => fun (struct_1 : is_trunc.{l_1} n carrier_1) => ((e_1 : eq.{l_1 + 1} Type l_1 carrier carrier_1) → eq.{l_1} (is_trunc.{l_1} n carrier_1) (eq.rec.{l_1, l_1 + 1} Type l_1 carrier (fun (carrier_2 : Type l_1) => fun (e_1_1 : eq.{l_1 + 1} Type l_1 carrier carrier_2) => is_trunc.{l_1} n carrier_2) struct carrier_1 e_1) struct_1 → P) → lift.{l, l_1 + 1} P))
+
+def trunctype.no_confusion.{l, l_1} : (n : trunc_index) → (P : Type l) → (v1 : trunctype.{l_1} n) → (v2 : trunctype.{l_1} n) → eq.{l_1 + 1} (trunctype.{l_1} n) v1 v2 → trunctype.no_confusion_type.{l, l_1} n P v1 v2 :=
+  fun (n : trunc_index) => fun (P : Type l) => fun (v1 : trunctype.{l_1} n) => fun (v2 : trunctype.{l_1} n) => fun (H12 : eq.{l_1 + 1} (trunctype.{l_1} n) v1 v2) => eq.rec.{max l (l_1 + 1), l_1 + 1} (trunctype.{l_1} n) v1 (fun (a : trunctype.{l_1} n) => fun (H1a : eq.{l_1 + 1} (trunctype.{l_1} n) v1 a) => trunctype.no_confusion_type.{l, l_1} n P v1 a) (trunctype.cases_on.{max l (l_1 + 1), l_1} n (fun (v1_1 : trunctype.{l_1} n) => trunctype.no_confusion_type.{l, l_1} n P v1_1 v1_1) v1 (fun (carrier : Type l_1) => fun (struct : is_trunc.{l_1} n carrier) => fun (a : (e_1 : eq.{l_1 + 1} Type l_1 carrier carrier) → eq.{l_1} (is_trunc.{l_1} n carrier) (eq.rec.{l_1, l_1 + 1} Type l_1 carrier (fun (carrier_1 : Type l_1) => fun (e_1_1 : eq.{l_1 + 1} Type l_1 carrier carrier_1) => is_trunc.{l_1} n carrier_1) struct carrier e_1) struct → P) => lift.up.{l, l_1 + 1} P (a (eq.refl.{l_1 + 1} Type l_1 carrier) (eq.refl.{l_1} (is_trunc.{l_1} n carrier) struct)))) v2 H12
+
+def Prop.{l_1} : Type (l_1 + 1) :=
+  trunctype.{l_1} (trunc_index.succ trunc_index.minus_two)
+
+def Set.{l_1} : Type (l_1 + 1) :=
+  trunctype.{l_1} (zero.{0} trunc_index has_zero_trunc_index)
+
+def Prop.mk.{l_1} : (carrier : Type l_1) → is_trunc.{l_1} (trunc_index.succ trunc_index.minus_two) carrier → trunctype.{l_1} (trunc_index.succ trunc_index.minus_two) :=
+  trunctype.mk.{l_1} (trunc_index.succ trunc_index.minus_two)
+
+def Set.mk.{l_1} : (carrier : Type l_1) → is_trunc.{l_1} (trunc_index.succ (trunc_index.succ trunc_index.minus_two)) carrier → trunctype.{l_1} (trunc_index.succ (trunc_index.succ trunc_index.minus_two)) :=
+  trunctype.mk.{l_1} (trunc_index.succ (trunc_index.succ trunc_index.minus_two))
+
+def trunctype.mk'.{l_1} : (n : trunc_index) → (A : Type l_1) → is_trunc.{l_1} n A → trunctype.{l_1} n :=
+  trunctype.mk.{l_1}
+
+def is_trunc.tlift.{u, v} : (n : trunc_index) → trunctype.{u} n → trunctype.{max u v} n :=
+  fun (n : trunc_index) => fun (A : trunctype.{u} n) => trunctype.mk.{max u v} n (lift.{u, max u v} (trunctype.carrier.{u} n A)) (is_trunc.is_trunc_lift.{u, max u v} (trunctype.carrier.{u} n A) n (trunctype.struct.{u} n A))
+

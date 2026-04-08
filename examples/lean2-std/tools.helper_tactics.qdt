@@ -1,0 +1,6 @@
+import init
+import eq
+
+def helper_tactics.apply_refl : tactic :=
+  tactic.apply tactic.expr.builtin
+

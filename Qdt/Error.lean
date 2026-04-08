@@ -141,13 +141,16 @@ instance {α} : Monoid (Array α) where
 structure ElabInfo where
   diagnostics : Array Diagnostic
   hovers : Array HoverInfo
-deriving Hashable
+  betaCount : Nat := 0
+  evalCount : Nat := 0
+  whnfCount : Nat := 0
+deriving Hashable, Inhabited
 
 instance : Monoid ElabInfo where
-  one := ⟨#[], #[]⟩
-  mul | ⟨d₁, h₁⟩, ⟨d₂, h₂⟩ => ⟨d₁ ++ d₂, h₁ ++ h₂⟩
+  one := ⟨#[], #[], 0, 0, 0⟩
+  mul | ⟨d₁, h₁, b₁, e₁, w₁⟩, ⟨d₂, h₂, b₂, e₂, w₂⟩ => ⟨d₁ ++ d₂, h₁ ++ h₂, b₁ + b₂, e₁ + e₂, w₁ + w₂⟩
   one_mul := by simp [HMul.hMul]
   mul_one := by simp [HMul.hMul]
-  mul_assoc := by simp [HMul.hMul]
+  mul_assoc := by intros; simp [HMul.hMul]; refine ⟨?_, ?_, ?_⟩ <;> ac_rfl
 
 end Qdt

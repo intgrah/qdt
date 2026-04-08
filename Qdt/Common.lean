@@ -25,17 +25,17 @@ instance : Incremental.Input config Input where
   get := DHashMap.get?
   set m i v := m.alter i (fun _ => v)
 
--- unsafe def selectBuild' : BuildSystem → Build Monad config Input
---   | .busy => Busy config Input
---   | .lessBusy => LessBusy config Input
---   | .salsa => Salsa config Input
---   | .salsaC => SalsaC config Input
---   | .shake => Shake config Input
---   | .shakeC => ShakeC config Input
---   | .shakeCPS => ShakeCPS config Input
---   | .shakeEState => ShakeEState config Input
+unsafe def selectBuild' : BuildSystem → Build Monad config Input
+  | .busy => Busy config Input
+  | .lessBusy => LessBusy config Input
+  | .salsa => Salsa config Input
+  | .salsaC => SalsaC config Input
+  | .shake => Shake config Input
+  | .shakeC => ShakeC config Input
+  | .shakeCPS => ShakeCPS config Input
+  | .shakeEState => ShakeEState config Input
 
--- @[implemented_by selectBuild']
+@[implemented_by selectBuild']
 def selectBuild : BuildSystem → Build Monad config Input
   | .busy => Busy config Input
   | .lessBusy => LessBusy config Input

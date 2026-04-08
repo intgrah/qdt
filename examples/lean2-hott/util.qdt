@@ -1,0 +1,5 @@
+import trunc
+
+def eq_rec_eq.{l₁, l₂} : (A : Type l₁) → (B : A → Type l₂) → is_trunc.{l₁} (zero.{0} trunc_index has_zero_trunc_index) A → (a : A) → (b : B a) → (p : eq.{l₁} A a a) → eq.{l₂} (B a) b (eq.rec.{l₂, l₁} A a (fun (a' : A) => fun (h_1 : eq.{l₁} A a a') => B a') b a p) :=
+  fun (A : Type l₁) => fun (B : A → Type l₂) => fun (h : is_trunc.{l₁} (zero.{0} trunc_index has_zero_trunc_index) A) => fun (a : A) => fun (b : B a) => fun (p : eq.{l₁} A a a) => eq.rec_on.{l₂, l₁} (eq.{l₁} A a a) (eq.refl.{l₁} A a) (fun (a_1 : eq.{l₁} A a a) => fun (n : eq.{l₁} (eq.{l₁} A a a) (eq.refl.{l₁} A a) a_1) => eq.{l₂} (B a) b (eq.rec.{l₂, l₁} A a (fun (a' : A) => fun (h_1 : eq.{l₁} A a a') => B a') b a a_1)) p (is_trunc.is_set.elim.{l₁} A h a a (eq.refl.{l₁} A a) p) (eq.refl.{l₂} (B a) (eq.rec_on.{l₂, l₁} A a (fun (a_1 : A) => fun (n : eq.{l₁} A a a_1) => B a_1) a (eq.refl.{l₁} A a) b))
+

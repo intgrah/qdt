@@ -1,0 +1,33 @@
+import num
+import relation
+
+def empty.has_decidable_eq : decidable_eq.{0} empty :=
+  fun (a : empty) => fun (b : empty) => decidable.inl.{0} (eq.{0} empty a b) (empty.elim.{0} (eq.{0} empty a b) a)
+
+def dpair.{l_1, l_2} : (A : Type l_1) → (B : A → Type l_2) → (a : A) → B a → sigma.{l_1, l_2} A B :=
+  sigma.mk.{l_1, l_2}
+
+def sigma.ops.pr₁.{l_1, l_2} : (A : Type l_1) → (B : A → Type l_2) → sigma.{l_1, l_2} A B → A :=
+  sigma.pr1.{l_1, l_2}
+
+def sigma.ops.pr₂.{l_1, l_2} : (A : Type l_1) → (B : A → Type l_2) → (p : sigma.{l_1, l_2} A B) → B (sigma.pr1.{l_1, l_2} A B p) :=
+  sigma.pr2.{l_1, l_2}
+
+def sum.sum_of_sum_of_imp_of_imp.{l_1, l_2, l_3, l_4} : (a : Type l_1) → (b : Type l_2) → (c : Type l_3) → (d : Type l_4) → sum.{l_1, l_2} a b → (a → c) → (b → d) → sum.{l_3, l_4} c d :=
+  fun (a : Type l_1) => fun (b : Type l_2) => fun (c : Type l_3) => fun (d : Type l_4) => fun (H₁ : sum.{l_1, l_2} a b) => fun (H₂ : a → c) => fun (H₃ : b → d) => sum.rec_on.{max l_3 l_4, l_1, l_2} a b (fun (n : sum.{l_1, l_2} a b) => sum.{l_3, l_4} c d) H₁ (fun (Ha : a) => sum.inl.{l_3, l_4} c d (H₂ Ha)) (fun (Hb : b) => sum.inr.{l_3, l_4} c d (H₃ Hb))
+
+def sum.sum_of_sum_of_imp_left.{l_1, l_2, l_3} : (a : Type l_1) → (b : Type l_2) → (c : Type l_3) → sum.{l_1, l_3} a c → (a → b) → sum.{l_2, l_3} b c :=
+  fun (a : Type l_1) => fun (b : Type l_2) => fun (c : Type l_3) => fun (H₁ : sum.{l_1, l_3} a c) => fun (H : a → b) => sum.rec_on.{max l_2 l_3, l_1, l_3} a c (fun (n : sum.{l_1, l_3} a c) => sum.{l_2, l_3} b c) H₁ (fun (H₂ : a) => sum.inl.{l_2, l_3} b c (H H₂)) (sum.inr.{l_2, l_3} b c)
+
+def sum.sum_of_sum_of_imp_right.{l_1, l_2, l_3} : (a : Type l_1) → (b : Type l_2) → (c : Type l_3) → sum.{l_3, l_1} c a → (a → b) → sum.{l_3, l_2} c b :=
+  fun (a : Type l_1) => fun (b : Type l_2) => fun (c : Type l_3) => fun (H₁ : sum.{l_3, l_1} c a) => fun (H : a → b) => sum.rec_on.{max l_2 l_3, l_3, l_1} c a (fun (n : sum.{l_3, l_1} c a) => sum.{l_3, l_2} c b) H₁ (sum.inl.{l_3, l_2} c b) (fun (H₂ : a) => sum.inr.{l_3, l_2} c b (H H₂))
+
+def prod.ops.pr₁.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → prod.{l_1, l_2} A B → A :=
+  prod.pr1.{l_1, l_2}
+
+def prod.ops.pr₂.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → prod.{l_1, l_2} A B → B :=
+  prod.pr2.{l_1, l_2}
+
+def prod.flip.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → prod.{l_1, l_2} A B → prod.{l_2, l_1} B A :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (a : prod.{l_1, l_2} A B) => prod.mk.{l_2, l_1} B A (prod.pr2.{l_1, l_2} A B a) (prod.pr1.{l_1, l_2} A B a)
+

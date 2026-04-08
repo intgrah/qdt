@@ -1,22 +1,8 @@
 import Std.Eq
 import Std.Init
 import Std.Nat
-
-structure Iso.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
-  (hom : α → β)
-  (inv : β → α)
-  (hom_inv_id : comp.{u, v, u} α β α inv hom = id.{u} α)
-  (inv_hom_id : comp.{v, u, v} β α β hom inv = id.{v} β)
-
-def Iso.refl.{u} (α : Type u) : Iso.{u, u} α α :=
-  Iso.mk.{u, u} α α (id.{u} α) (id.{u} α) (Eq.refl.{u} (α → α) (id.{u} α)) (Eq.refl.{u} (α → α) (id.{u} α))
-
-def Iso.symm.{u, v} (α : Type u) (β : Type v) (iso : Iso.{u, v} α β) : Iso.{v, u} β α :=
-  Iso.mk.{v, u} β α
-    (Iso.inv.{u, v} α β iso)
-    (Iso.hom.{u, v} α β iso)
-    (Iso.inv_hom_id.{u, v} α β iso)
-    (Iso.hom_inv_id.{u, v} α β iso)
+import Std.HSet
+import Std.Equiv
 
 structure Even where
   (val : Nat)
@@ -48,11 +34,11 @@ def right_inv_pointwise (e : Even) : Nat.toEven (Even.half e) = e :=
       (fun (p : n = double) => Even.mk n half p)
       (Eq.symm.{0} Nat double n double_eq_n)
       half_spec
-      (Eq.ext.{0} Nat n double (Eq.symm.{0} Nat double n double_eq_n) half_spec);
+      (Nat.isSet n double (Eq.symm.{0} Nat double n double_eq_n) half_spec);
   Eq.trans.{0} Even (Nat.toEven half) (mkEven n double_eq_n) e step1 step2
 
 def right_inv : comp.{0, 0, 0} Even Nat Even Nat.toEven Even.half = id.{0} Even :=
   funext.{0, 0} Even (fun _ => Even) (comp.{0, 0, 0} Even Nat Even Nat.toEven Even.half) (id.{0} Even) right_inv_pointwise
 
-def iso_nat_even : Iso.{0, 0} Nat Even :=
-  Iso.mk.{0, 0} Nat Even Nat.toEven Even.half left_inv right_inv
+def equiv_nat_even : Equiv.{0, 0} Nat Even :=
+  Equiv.mk.{0, 0} Nat Even Nat.toEven Even.half left_inv right_inv

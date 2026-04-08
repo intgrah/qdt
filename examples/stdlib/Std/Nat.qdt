@@ -2,6 +2,8 @@ import Std.Eq
 import Std.True
 import Std.False
 import Std.WF
+import Std.Decidable
+import Std.HSet
 
 inductive Nat where
   | zero
@@ -118,3 +120,27 @@ def Nat.lt_acc (n : Nat) : Acc.{0, 0} Nat Nat.lt n :=
 
 def Nat.lt_wf : WellFounded.{0, 0} Nat Nat.lt :=
   WellFounded.intro.{0, 0} Nat Nat.lt Nat.lt_acc
+
+def Nat.succ_ne_zero (n : Nat) : Not (Nat.succ n = Nat.zero) :=
+  fun h => Nat.zero_ne_succ n (Eq.symm.{0} Nat (Nat.succ n) Nat.zero h)
+
+def Nat.decEq : (m n : Nat) → Decidable.{0} (Eq.{0} Nat m n) :=
+  Nat.rec.{0} (fun m => (n : Nat) → Decidable.{0} (Eq.{0} Nat m n))
+    (fun n => Nat.rec.{0} (fun n => Decidable.{0} (Eq.{0} Nat Nat.zero n))
+      (Decidable.isTrue.{0} (Eq.{0} Nat Nat.zero Nat.zero) (Eq.refl.{0} Nat Nat.zero))
+      (fun n' _ => Decidable.isFalse.{0} (Eq.{0} Nat Nat.zero (Nat.succ n')) (Nat.zero_ne_succ n'))
+      n)
+    (fun m' ih n =>
+      Nat.rec.{0} (fun n => Decidable.{0} (Eq.{0} Nat (Nat.succ m') n))
+        (Decidable.isFalse.{0} (Eq.{0} Nat (Nat.succ m') Nat.zero) (Nat.succ_ne_zero m'))
+        (fun n' _ =>
+          Decidable.rec.{0, 0} (Eq.{0} Nat m' n')
+            (fun _ => Decidable.{0} (Eq.{0} Nat (Nat.succ m') (Nat.succ n')))
+            (fun h => Decidable.isTrue.{0} (Eq.{0} Nat (Nat.succ m') (Nat.succ n'))
+              (congrArg.{0, 0} Nat Nat Nat.succ m' n' h))
+            (fun nh => Decidable.isFalse.{0} (Eq.{0} Nat (Nat.succ m') (Nat.succ n'))
+              (fun h => nh (Nat.succ_inj m' n' h)))
+            (ih n'))
+        n)
+
+def Nat.isSet : isSet.{0} Nat := hedberg.{0} Nat Nat.decEq

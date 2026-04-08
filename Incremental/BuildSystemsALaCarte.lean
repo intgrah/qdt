@@ -34,7 +34,7 @@ def Task (q : Q) := ∀ {f} [c f], (∀ q, f (R q)) → f (R q)
 def Tasks := ∀ q, Option (Task c Q R q)
 def Build := Tasks c Q R → Q → Store I Q R → Store I Q R
 
-/-- MonadState σ m doesn't actually impose Monad m, so we extend it -/
+/
 class MonadStateM σ m extends MonadState σ m, Monad m
 instance {σ} : MonadStateM σ (StateM σ) where
 
@@ -73,10 +73,10 @@ def store : Store Unit String fun _ => Nat where
 
 unsafe def result := busy sprsh₁ "B2" store
 
-/-- info: 30 -/
+/
 #guard_msgs in
 #eval result.values "B1"
-/-- info: 60 -/
+/
 #guard_msgs in
 #eval result.values "B2"
 
@@ -110,9 +110,7 @@ def Build.Correct
     (store : Store I Q R) :=
   let result := build tasks q store
   ∀ q, result.values q = match tasks q with
-  -- Agree on inputs
   | none => store.values q
-  -- Consistent
   | some task => compute task result
 
 end Correctness
@@ -134,13 +132,13 @@ def dependencies {q} (task : Task Applicative Q R q) : List Q :=
   letI fetch : ∀ q, Const (List Q) (R q) := List.singleton
   task fetch
 
-/-- info:
+/
 some ["A1", "A2"]
 -/
 #guard_msgs in
 #eval (sprsh₁ "B1").map dependencies
 
-/-- info:
+/
 some ["B1"]
 -/
 #guard_msgs in
@@ -158,19 +156,17 @@ def fetchIO (mock : String → Nat) (q : String) : IO Nat := do
   println! "{q}: {r}"
   return r
 
-/-- info:
+/
 C1: 1
 B2: 10
---- info:
 some (10, [⟨"C1", 1⟩, ⟨"B2", 10⟩])
 -/
 #guard_msgs in
 #eval (sprsh₂ "B1").mapM (track (q := "B1") · (fetchIO fun | "C1" => 1 | "B2" => 10 | _ => 0))
 
-/-- info:
+/
 C1: 2
 A2: 20
---- info:
 some (20, [⟨"C1", 2⟩, ⟨"A2", 20⟩])
 -/
 #guard_msgs in
@@ -179,9 +175,9 @@ some (20, [⟨"C1", 2⟩, ⟨"A2", 20⟩])
 section Traces
 
 variable (Q : Type u) (R : Q → Type u) (Hash : Type u → Type u)
-/-- 4.2.2 Verifying Traces -/
+/
 def VT := List (Σ q, Hash (R q) × List (Σ d, Hash (R d)))
-/-- 4.2.3 Constructive Traces -/
+/
 def CT := List (Σ q, R q × List (Σ d, Hash (R d)))
 
 variable {Q : Type u} [DecidableEq Q] {R : Q → Type u} {Hash : Type u → Type u} [∀ α, DecidableEq (Hash α)] {m} [Monad m]

@@ -1,0 +1,33 @@
+import trunc
+import pathover
+
+axiom trunc.{u} : trunc_index → Type u → Type u
+
+axiom trunc.tr.{l_1} : (n : trunc_index) → (A : Type l_1) → A → trunc.{l_1} n A
+
+axiom trunc.is_trunc_trunc.{l_1} : (n : trunc_index) → (A : Type l_1) → is_trunc.{l_1} n (trunc.{l_1} n A)
+
+axiom trunc.rec.{l_1, l_2} : (n : trunc_index) → (A : Type l_1) → (P : trunc.{l_1} n A → Type l_2) → ((aa : trunc.{l_1} n A) → is_trunc.{l_2} n (P aa)) → ((a : A) → P (trunc.tr.{l_1} n A a)) → (aa : trunc.{l_1} n A) → P aa
+
+def trunc.rec_on.{l_1, l_2} : (n : trunc_index) → (A : Type l_1) → (P : trunc.{l_1} n A → Type l_2) → (aa : trunc.{l_1} n A) → ((aa_1 : trunc.{l_1} n A) → is_trunc.{l_2} n (P aa_1)) → ((a : A) → P (trunc.tr.{l_1} n A a)) → P aa :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (P : trunc.{l_1} n A → Type l_2) => fun (aa : trunc.{l_1} n A) => fun (Pt : (aa_1 : trunc.{l_1} n A) → is_trunc.{l_2} n (P aa_1)) => fun (H : (a : A) → P (trunc.tr.{l_1} n A a)) => trunc.rec.{l_1, l_2} n A P Pt H aa
+
+axiom quotient.{u, v} : (A : Type u) → (A → A → Type v) → Type (max u v)
+
+axiom quotient.class_of.{l_1, l_2} : (A : Type l_1) → (R : A → A → Type l_2) → A → quotient.{l_1, l_2} A R
+
+axiom quotient.eq_of_rel.{l_1, l_2} : (A : Type l_1) → (R : A → A → Type l_2) → (a : A) → (a' : A) → R a a' → eq.{max l_1 l_2} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) (quotient.class_of.{l_1, l_2} A R a')
+
+axiom quotient.rec.{l_1, l_2, l_3} : (A : Type l_1) → (R : A → A → Type l_2) → (P : quotient.{l_1, l_2} A R → Type l_3) → (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) → ((a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) → (x : quotient.{l_1, l_2} A R) → P x
+
+def quotient.rec_on.{l_1, l_2, l_3} : (A : Type l_1) → (R : A → A → Type l_2) → (P : quotient.{l_1, l_2} A R → Type l_3) → (x : quotient.{l_1, l_2} A R) → (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) → ((a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) → P x :=
+  fun (A : Type l_1) => fun (R : A → A → Type l_2) => fun (P : quotient.{l_1, l_2} A R → Type l_3) => fun (x : quotient.{l_1, l_2} A R) => fun (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) => fun (Pp : (a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) => quotient.rec.{l_1, l_2, l_3} A R P Pc Pp x
+
+def trunc.rec_tr.{l_1, l_2} : (n : trunc_index) → (A : Type l_1) → (P : trunc.{l_1} n A → Type l_2) → (Pt : (aa : trunc.{l_1} n A) → is_trunc.{l_2} n (P aa)) → (H : (a : A) → P (trunc.tr.{l_1} n A a)) → (a : A) → eq.{l_2} (P (trunc.tr.{l_1} n A a)) (trunc.rec.{l_1, l_2} n A P Pt H (trunc.tr.{l_1} n A a)) (H a) :=
+  fun (n : trunc_index) => fun (A : Type l_1) => fun (P : trunc.{l_1} n A → Type l_2) => fun (Pt : (aa : trunc.{l_1} n A) → is_trunc.{l_2} n (P aa)) => fun (H : (a : A) → P (trunc.tr.{l_1} n A a)) => fun (a : A) => eq.idp.{l_2} (P (trunc.tr.{l_1} n A a)) (trunc.rec.{l_1, l_2} n A P Pt H (trunc.tr.{l_1} n A a))
+
+def quotient.rec_class_of.{l_1, l_2, l_3} : (A : Type l_1) → (R : A → A → Type l_2) → (P : quotient.{l_1, l_2} A R → Type l_3) → (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) → (Pp : (a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) → (a : A) → eq.{l_3} (P (quotient.class_of.{l_1, l_2} A R a)) (quotient.rec.{l_1, l_2, l_3} A R P Pc Pp (quotient.class_of.{l_1, l_2} A R a)) (Pc a) :=
+  fun (A : Type l_1) => fun (R : A → A → Type l_2) => fun (P : quotient.{l_1, l_2} A R → Type l_3) => fun (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) => fun (Pp : (a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) => fun (a : A) => eq.idp.{l_3} (P (quotient.class_of.{l_1, l_2} A R a)) (quotient.rec.{l_1, l_2, l_3} A R P Pc Pp (quotient.class_of.{l_1, l_2} A R a))
+
+axiom quotient.rec_eq_of_rel.{l_1, l_2, l_3} : (A : Type l_1) → (R : A → A → Type l_2) → (P : quotient.{l_1, l_2} A R → Type l_3) → (Pc : (a : A) → P (quotient.class_of.{l_1, l_2} A R a)) → (Pp : (a : A) → (a' : A) → (H : R a a') → eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (Pc a) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (Pc a')) → (a : A) → (a' : A) → (H : R a a') → eq.{l_3} (eq.pathover.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) (quotient.class_of.{l_1, l_2} A R a) P (quotient.rec.{l_1, l_2, l_3} A R P Pc Pp (quotient.class_of.{l_1, l_2} A R a)) (quotient.class_of.{l_1, l_2} A R a') (quotient.eq_of_rel.{l_1, l_2} A R a a' H) (quotient.rec.{l_1, l_2, l_3} A R P Pc Pp (quotient.class_of.{l_1, l_2} A R a'))) (eq.apd.{max l_1 l_2, l_3} (quotient.{l_1, l_2} A R) P (quotient.class_of.{l_1, l_2} A R a) (quotient.class_of.{l_1, l_2} A R a') (quotient.rec.{l_1, l_2, l_3} A R P Pc Pp) (quotient.eq_of_rel.{l_1, l_2} A R a a' H)) (Pp a a' H)
+

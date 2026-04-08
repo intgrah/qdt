@@ -30,6 +30,9 @@ structure ElabState where
   entryCache : Std.HashMap Name (Option Constant)
   diagnostics : Array Diagnostic := #[]
   hovers : Array HoverInfo := #[]
+  betaCount : Nat := 0
+  evalCount : Nat := 0
+  whnfCount : Nat := 0
 deriving Inhabited
 
 abbrev ElabM :=
@@ -150,6 +153,8 @@ def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM ι₀ q₀ α) :
     entryCache := ∅
   }
   let (result, st) ← StateT.run (action ctx) state
-  return (result, st.localEnv, { diagnostics := st.diagnostics, hovers := st.hovers })
+  return (result, st.localEnv,
+    { diagnostics := st.diagnostics, hovers := st.hovers
+    , betaCount := st.betaCount, evalCount := st.evalCount, whnfCount := st.whnfCount })
 
 end Qdt

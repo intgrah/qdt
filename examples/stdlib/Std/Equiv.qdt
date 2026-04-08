@@ -1,0 +1,15 @@
+import Std.Eq
+import Std.Init
+
+structure Equiv.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
+  (toFun : α → β)
+  (invFun : β → α)
+  (left_inv : comp.{u, v, u} α β α invFun toFun = id.{u} α)
+  (right_inv : comp.{v, u, v} β α β toFun invFun = id.{v} β)
+
+def Equiv.refl.{u} (α : Type u) : Equiv.{u, u} α α :=
+  Equiv.mk.{u, u} α α (id.{u} α) (id.{u} α)
+    (Eq.refl.{u} (α → α) (id.{u} α))
+    (Eq.refl.{u} (α → α) (id.{u} α))
+
+axiom ua.{u} (α β : Type u) (e : Equiv.{u, u} α β) : Eq.{u + 1} (Type u) α β

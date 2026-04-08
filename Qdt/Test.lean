@@ -12,7 +12,7 @@ open Incremental
 open System (FilePath)
 open Std (DHashMap)
 
-opaque testBuild : Build Monad InputKey InputV Key Val Input :=
+opaque testBuild : Build Monad config Input :=
   selectBuild .shake
 
 def check (src : String) : IO (Array Diagnostic) := do
@@ -21,10 +21,8 @@ def check (src : String) : IO (Array Diagnostic) := do
   let inputs := inputs.insert (.text dummyPath) src
   let inputs := inputs.insert .inputFiles ({dummyPath} : Std.HashSet FilePath)
   let store := testBuild.init inputs
-
-  match StateT.run (s := store) <| testBuild.build tasks (Key.checkFile dummyPath) with
-  | .ok (diags, _) => return diags
-  | .error .cycle => return #[⟨[], .msg "cycle detected"⟩]
+  let (diags, _) := StateT.run (s := store) <| testBuild.build tasks (Key.checkFile dummyPath)
+  return diags
 
 def assertNoDiags (diags : Array Diagnostic) : IO Unit := do
   if !diags.isEmpty then
@@ -36,25 +34,29 @@ def assertHasError (check : Error → Bool) (diags : Array Diagnostic) : IO Unit
   if !(diags.any (fun d => check d.error)) then
     throw (IO.userError s!"wrong error: {diags.map (·.error)}")
 
-syntax "qdt!" "(" command* ")" : term
+declare_syntax_cat qdtCmd
+syntax command : qdtCmd
+syntax "import " ident : qdtCmd
+
+syntax "qdt!" "(" qdtCmd* ")" : term
 
 macro_rules
-  | `(qdt! ($[$cs:command]*)) => do
+  | `(qdt! ($[$cs:qdtCmd]*)) => do
     let src := String.join (cs.toList.filterMap (·.raw.reprint))
     `($(Lean.quote src))
 
-syntax "#pass" "(" command* ")" : command
+syntax "#pass" "(" qdtCmd* ")" : command
 
 macro_rules
-  | `(command| #pass ($[$cs:command]*)) => do
+  | `(command| #pass ($[$cs:qdtCmd]*)) => do
     let src := String.join (cs.toList.filterMap (·.raw.reprint))
-    `(command| #eval Qdt.Test.check $(Lean.quote src) >>= Qdt.Test.assertNoDiags)
+    `(command| #eval! Qdt.Test.check $(Lean.quote src) >>= Qdt.Test.assertNoDiags)
 
-syntax "#fail" "(" command* ")" "with" term : command
+syntax "#fail" "(" qdtCmd* ")" "with" term : command
 
 macro_rules
-  | `(command| #fail ($[$cs:command]*) with $pat:term) => do
+  | `(command| #fail ($[$cs:qdtCmd]*) with $pat:term) => do
     let src := String.join (cs.toList.filterMap (·.raw.reprint))
-    `(command| #eval Qdt.Test.check $(Lean.quote src) >>= Qdt.Test.assertHasError (· matches $pat))
+    `(command| #eval! Qdt.Test.check $(Lean.quote src) >>= Qdt.Test.assertHasError (· matches $pat))
 
 end Qdt.Test

@@ -1,0 +1,296 @@
+import datatypes
+import reserved_notation
+import num
+
+inductive tactic : Type 0 where
+  | builtin : tactic
+
+def tactic.rec_on.{l} : (C : tactic → Type l) → (n : tactic) → C tactic.builtin → C n :=
+  fun (C : tactic → Type l) => fun (n : tactic) => fun (e_1 : C tactic.builtin) => tactic.rec.{l} C e_1 n
+
+def tactic.cases_on.{l} : (C : tactic → Type l) → (n : tactic) → C tactic.builtin → C n :=
+  fun (C : tactic → Type l) => fun (n : tactic) => fun (e_1 : C tactic.builtin) => tactic.rec.{l} C e_1 n
+
+def tactic.no_confusion_type.{l} : Type l → tactic → tactic → Type l :=
+  fun (P : Type l) => fun (v1 : tactic) => fun (v2 : tactic) => tactic.cases_on.{l + 1} (fun (v1_1 : tactic) => Type l) v1 (tactic.cases_on.{l + 1} (fun (v1_1 : tactic) => Type l) v2 (P → lift.{l, 0} P))
+
+def tactic.no_confusion.{l} : (P : Type l) → (v1 : tactic) → (v2 : tactic) → eq.{0} tactic v1 v2 → tactic.no_confusion_type.{l} P v1 v2 :=
+  fun (P : Type l) => fun (v1 : tactic) => fun (v2 : tactic) => fun (H12 : eq.{0} tactic v1 v2) => eq.rec.{l, 0} tactic v1 (fun (a : tactic) => fun (H1a : eq.{0} tactic v1 a) => tactic.no_confusion_type.{l} P v1 a) (tactic.cases_on.{l} (fun (v1_1 : tactic) => tactic.no_confusion_type.{l} P v1_1 v1_1) v1 (fun (a : P) => lift.up.{l, 0} P a)) v2 H12
+
+def tactic.and_then : tactic → tactic → tactic :=
+  fun (t1 : tactic) => fun (t2 : tactic) => tactic.builtin
+
+def tactic.or_else : tactic → tactic → tactic :=
+  fun (t1 : tactic) => fun (t2 : tactic) => tactic.builtin
+
+def tactic.par : tactic → tactic → tactic :=
+  fun (t1 : tactic) => fun (t2 : tactic) => tactic.builtin
+
+def tactic.fixpoint : (tactic → tactic) → tactic :=
+  fun (f : tactic → tactic) => tactic.builtin
+
+def tactic.repeat : tactic → tactic :=
+  fun (t : tactic) => tactic.builtin
+
+def tactic.at_most : tactic → num → tactic :=
+  fun (t : tactic) => fun (k : num) => tactic.builtin
+
+def tactic.discard : tactic → num → tactic :=
+  fun (t : tactic) => fun (k : num) => tactic.builtin
+
+def tactic.focus_at : tactic → num → tactic :=
+  fun (t : tactic) => fun (i : num) => tactic.builtin
+
+def tactic.try_for : tactic → num → tactic :=
+  fun (t : tactic) => fun (ms : num) => tactic.builtin
+
+def tactic.all_goals : tactic → tactic :=
+  fun (t : tactic) => tactic.builtin
+
+def tactic.now : tactic :=
+  tactic.builtin
+
+def tactic.assumption : tactic :=
+  tactic.builtin
+
+def tactic.eassumption : tactic :=
+  tactic.builtin
+
+def tactic.state : tactic :=
+  tactic.builtin
+
+def tactic.fail : tactic :=
+  tactic.builtin
+
+def tactic.id : tactic :=
+  tactic.builtin
+
+def tactic.beta : tactic :=
+  tactic.builtin
+
+def tactic.info : tactic :=
+  tactic.builtin
+
+def tactic.whnf : tactic :=
+  tactic.builtin
+
+def tactic.contradiction : tactic :=
+  tactic.builtin
+
+def tactic.exfalso : tactic :=
+  tactic.builtin
+
+def tactic.congruence : tactic :=
+  tactic.builtin
+
+def tactic.rotate_left : num → tactic :=
+  fun (k : num) => tactic.builtin
+
+def tactic.rotate_right : num → tactic :=
+  fun (k : num) => tactic.builtin
+
+def tactic.rotate : num → tactic :=
+  tactic.rotate_left
+
+inductive tactic.expr : Type 0 where
+  | builtin : tactic.expr
+
+def tactic.expr.rec_on.{l} : (C : tactic.expr → Type l) → (n : tactic.expr) → C tactic.expr.builtin → C n :=
+  fun (C : tactic.expr → Type l) => fun (n : tactic.expr) => fun (e_1 : C tactic.expr.builtin) => tactic.expr.rec.{l} C e_1 n
+
+def tactic.expr.cases_on.{l} : (C : tactic.expr → Type l) → (n : tactic.expr) → C tactic.expr.builtin → C n :=
+  fun (C : tactic.expr → Type l) => fun (n : tactic.expr) => fun (e_1 : C tactic.expr.builtin) => tactic.expr.rec.{l} C e_1 n
+
+def tactic.expr.no_confusion_type.{l} : Type l → tactic.expr → tactic.expr → Type l :=
+  fun (P : Type l) => fun (v1 : tactic.expr) => fun (v2 : tactic.expr) => tactic.expr.cases_on.{l + 1} (fun (v1_1 : tactic.expr) => Type l) v1 (tactic.expr.cases_on.{l + 1} (fun (v1_1 : tactic.expr) => Type l) v2 (P → lift.{l, 0} P))
+
+def tactic.expr.no_confusion.{l} : (P : Type l) → (v1 : tactic.expr) → (v2 : tactic.expr) → eq.{0} tactic.expr v1 v2 → tactic.expr.no_confusion_type.{l} P v1 v2 :=
+  fun (P : Type l) => fun (v1 : tactic.expr) => fun (v2 : tactic.expr) => fun (H12 : eq.{0} tactic.expr v1 v2) => eq.rec.{l, 0} tactic.expr v1 (fun (a : tactic.expr) => fun (H1a : eq.{0} tactic.expr v1 a) => tactic.expr.no_confusion_type.{l} P v1 a) (tactic.expr.cases_on.{l} (fun (v1_1 : tactic.expr) => tactic.expr.no_confusion_type.{l} P v1_1 v1_1) v1 (fun (a : P) => lift.up.{l, 0} P a)) v2 H12
+
+inductive tactic.expr_list : Type 0 where
+  | nil : tactic.expr_list
+  | cons : tactic.expr → tactic.expr_list → tactic.expr_list
+
+def tactic.expr_list.rec_on.{l} : (C : tactic.expr_list → Type l) → (n : tactic.expr_list) → C tactic.expr_list.nil → ((a : tactic.expr) → (a_1 : tactic.expr_list) → C a_1 → C (tactic.expr_list.cons a a_1)) → C n :=
+  fun (C : tactic.expr_list → Type l) => fun (n : tactic.expr_list) => fun (e_1 : C tactic.expr_list.nil) => fun (e_2 : (a : tactic.expr) → (a_1 : tactic.expr_list) → C a_1 → C (tactic.expr_list.cons a a_1)) => tactic.expr_list.rec.{l} C e_1 e_2 n
+
+def tactic.expr_list.cases_on.{l} : (C : tactic.expr_list → Type l) → (n : tactic.expr_list) → C tactic.expr_list.nil → ((a : tactic.expr) → (a_1 : tactic.expr_list) → C (tactic.expr_list.cons a a_1)) → C n :=
+  fun (C : tactic.expr_list → Type l) => fun (n : tactic.expr_list) => fun (e_1 : C tactic.expr_list.nil) => fun (e_2 : (a : tactic.expr) → (a_1 : tactic.expr_list) → C (tactic.expr_list.cons a a_1)) => tactic.expr_list.rec.{l} C e_1 (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => fun (v_0 : C a_1) => e_2 a a_1) n
+
+def tactic.expr_list.no_confusion_type.{l} : Type l → tactic.expr_list → tactic.expr_list → Type l :=
+  fun (P : Type l) => fun (v1 : tactic.expr_list) => fun (v2 : tactic.expr_list) => tactic.expr_list.cases_on.{l + 1} (fun (v1_1 : tactic.expr_list) => Type l) v1 (tactic.expr_list.cases_on.{l + 1} (fun (v1_1 : tactic.expr_list) => Type l) v2 (P → lift.{l, 0} P) (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => lift.{l, 0} P)) (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => tactic.expr_list.cases_on.{l + 1} (fun (v1_1 : tactic.expr_list) => Type l) v2 (lift.{l, 0} P) (fun (a_2 : tactic.expr) => fun (a_3 : tactic.expr_list) => (eq.{0} tactic.expr a a_2 → eq.{0} tactic.expr_list a_1 a_3 → P) → lift.{l, 0} P))
+
+def tactic.expr_list.no_confusion.{l} : (P : Type l) → (v1 : tactic.expr_list) → (v2 : tactic.expr_list) → eq.{0} tactic.expr_list v1 v2 → tactic.expr_list.no_confusion_type.{l} P v1 v2 :=
+  fun (P : Type l) => fun (v1 : tactic.expr_list) => fun (v2 : tactic.expr_list) => fun (H12 : eq.{0} tactic.expr_list v1 v2) => eq.rec.{l, 0} tactic.expr_list v1 (fun (a : tactic.expr_list) => fun (H1a : eq.{0} tactic.expr_list v1 a) => tactic.expr_list.no_confusion_type.{l} P v1 a) (tactic.expr_list.cases_on.{l} (fun (v1_1 : tactic.expr_list) => tactic.expr_list.no_confusion_type.{l} P v1_1 v1_1) v1 (fun (a : P) => lift.up.{l, 0} P a) (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => fun (a_2 : eq.{0} tactic.expr a a → eq.{0} tactic.expr_list a_1 a_1 → P) => lift.up.{l, 0} P (a_2 (eq.refl.{0} tactic.expr a) (eq.refl.{0} tactic.expr_list a_1)))) v2 H12
+
+def tactic.expr_list.below.{l} : (tactic.expr_list → Type l) → tactic.expr_list → Type (max (1) l) :=
+  fun (C : tactic.expr_list → Type l) => fun (n : tactic.expr_list) => tactic.expr_list.rec.{max (1) l + 1} (fun (n_1 : tactic.expr_list) => Type (max (1) l)) poly_unit.{max (1) l} (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => fun (v_0 : Type (max (1) l)) => prod.{l, max (1) l} (C a_1) v_0) n
+
+def tactic.expr_list.brec_on.{l} : (C : tactic.expr_list → Type l) → (n : tactic.expr_list) → ((n_1 : tactic.expr_list) → tactic.expr_list.below.{l} C n_1 → C n_1) → C n :=
+  fun (C : tactic.expr_list → Type l) => fun (n : tactic.expr_list) => fun (F_1 : (n_1 : tactic.expr_list) → tactic.expr_list.below.{l} C n_1 → C n_1) => prod.pr1.{l, max (1) l} (C n) (tactic.expr_list.below.{l} C n) (tactic.expr_list.rec.{max (1) l} (fun (n_1 : tactic.expr_list) => prod.{l, max (1) l} (C n_1) (tactic.expr_list.below.{l} C n_1)) (prod.mk.{l, max (1) l} (C tactic.expr_list.nil) poly_unit.{max (1) l} (F_1 tactic.expr_list.nil poly_unit.star.{max (1) l}) poly_unit.star.{max (1) l}) (fun (a : tactic.expr) => fun (a_1 : tactic.expr_list) => fun (v_0 : prod.{l, max (1) l} (C a_1) (tactic.expr_list.below.{l} C a_1)) => prod.mk.{l, max (1) l} (C (tactic.expr_list.cons a a_1)) (prod.{l, max (1) l} (C a_1) (tactic.expr_list.below.{l} C a_1)) (F_1 (tactic.expr_list.cons a a_1) v_0) v_0) n)
+
+def tactic.opt_expr_list : Type 0 :=
+  tactic.expr_list
+
+def tactic.identifier : Type 0 :=
+  tactic.expr
+
+def tactic.identifier_list : Type 0 :=
+  tactic.expr_list
+
+def tactic.opt_identifier_list : Type 0 :=
+  tactic.expr_list
+
+def tactic.location : Type 0 :=
+  tactic.expr
+
+def tactic.with_expr : Type 0 :=
+  tactic.expr
+
+def tactic.using_expr : Type 0 :=
+  tactic.expr
+
+def tactic.none_expr : tactic.expr :=
+  tactic.expr.builtin
+
+def tactic.apply : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.eapply : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.fapply : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.rename : tactic.identifier → tactic.identifier → tactic :=
+  fun (a : tactic.identifier) => fun (b : tactic.identifier) => tactic.builtin
+
+def tactic.intro : tactic.opt_identifier_list → tactic :=
+  fun (e : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.generalize_tac : tactic.expr → tactic.identifier → tactic :=
+  fun (e : tactic.expr) => fun (id : tactic.identifier) => tactic.builtin
+
+def tactic.clear : tactic.identifier_list → tactic :=
+  fun (e : tactic.identifier_list) => tactic.builtin
+
+def tactic.revert : tactic.identifier_list → tactic :=
+  fun (e : tactic.identifier_list) => tactic.builtin
+
+def tactic.refine : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.exact : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.rexact : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.check_expr : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.trace : string → tactic :=
+  fun (s : string) => tactic.builtin
+
+def tactic.rewrite_tac : tactic.expr_list → tactic :=
+  fun (e : tactic.expr_list) => tactic.builtin
+
+def tactic.xrewrite_tac : tactic.expr_list → tactic :=
+  fun (e : tactic.expr_list) => tactic.builtin
+
+def tactic.krewrite_tac : tactic.expr_list → tactic :=
+  fun (e : tactic.expr_list) => tactic.builtin
+
+def tactic.replace : tactic.expr → tactic.with_expr → tactic.location → tactic :=
+  fun (old : tactic.expr) => fun (new : tactic.with_expr) => fun (loc : tactic.location) => tactic.builtin
+
+def tactic.blast : tactic.opt_identifier_list → tactic.opt_identifier_list → tactic :=
+  fun (ls : tactic.opt_identifier_list) => fun (ds : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.with_options_tac : tactic.expr → tactic → tactic :=
+  fun (o : tactic.expr) => fun (t : tactic) => tactic.builtin
+
+def tactic.with_attributes_tac : tactic.expr → tactic.identifier_list → tactic → tactic :=
+  fun (o : tactic.expr) => fun (n : tactic.identifier_list) => fun (t : tactic) => tactic.builtin
+
+def tactic.cases : tactic.expr → tactic.opt_identifier_list → tactic :=
+  fun (h : tactic.expr) => fun (ids : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.induction : tactic.expr → tactic.using_expr → tactic.opt_identifier_list → tactic :=
+  fun (h : tactic.expr) => fun (rec : tactic.using_expr) => fun (ids : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.intros : tactic.opt_identifier_list → tactic :=
+  fun (ids : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.generalizes : tactic.expr_list → tactic :=
+  fun (es : tactic.expr_list) => tactic.builtin
+
+def tactic.clears : tactic.identifier_list → tactic :=
+  fun (ids : tactic.identifier_list) => tactic.builtin
+
+def tactic.reverts : tactic.identifier_list → tactic :=
+  fun (ids : tactic.identifier_list) => tactic.builtin
+
+def tactic.change : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.assert_hypothesis : tactic.identifier → tactic.expr → tactic :=
+  fun (id : tactic.identifier) => fun (e : tactic.expr) => tactic.builtin
+
+def tactic.note_tac : tactic.identifier → tactic.expr → tactic :=
+  fun (id : tactic.identifier) => fun (e : tactic.expr) => tactic.builtin
+
+def tactic.constructor : option.{0} num → tactic :=
+  fun (k : option.{0} num) => tactic.builtin
+
+def tactic.fconstructor : option.{0} num → tactic :=
+  fun (k : option.{0} num) => tactic.builtin
+
+def tactic.existsi : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.split : tactic :=
+  tactic.builtin
+
+def tactic.left : tactic :=
+  tactic.builtin
+
+def tactic.right : tactic :=
+  tactic.builtin
+
+def tactic.injection : tactic.expr → tactic.opt_identifier_list → tactic :=
+  fun (e : tactic.expr) => fun (ids : tactic.opt_identifier_list) => tactic.builtin
+
+def tactic.subst : tactic.identifier_list → tactic :=
+  fun (ids : tactic.identifier_list) => tactic.builtin
+
+def tactic.substvars : tactic :=
+  tactic.builtin
+
+def tactic.reflexivity : tactic :=
+  tactic.builtin
+
+def tactic.symmetry : tactic :=
+  tactic.builtin
+
+def tactic.transitivity : tactic.expr → tactic :=
+  fun (e : tactic.expr) => tactic.builtin
+
+def tactic.try : tactic → tactic :=
+  fun (t : tactic) => tactic.or_else t tactic.id
+
+def tactic.repeat1 : tactic → tactic :=
+  fun (t : tactic) => tactic.and_then t (tactic.repeat t)
+
+def tactic.focus : tactic → tactic :=
+  fun (t : tactic) => tactic.focus_at t (zero.{0} num num_has_zero)
+
+def tactic.determ : tactic → tactic :=
+  fun (t : tactic) => tactic.at_most t (one.{0} num num_has_one)
+
+def tactic.trivial : tactic :=
+  tactic.or_else (tactic.apply tactic.expr.builtin) tactic.assumption
+
+def tactic.do : nat → tactic → tactic :=
+  fun (n : nat) => fun (t : tactic) => nat.rec.{0} (fun (a : nat) => tactic) tactic.id (fun (n_1 : nat) => tactic.and_then t) n
+

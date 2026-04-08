@@ -1,0 +1,72 @@
+import Std.Eq
+import Std.False
+import Std.Decidable
+
+def isProp.{u} (α : Type u) := (x y : α) → x = y
+def isSet.{u} (α : Type u) := (x y : α) → isProp.{u} (x = y)
+
+def trans_sym_left.{u} (α : Type u) (x z : α) (h : Eq.{u} α x z) :
+    Eq.{u} (Eq.{u} α z z) (Eq.trans.{u} α z x z (Eq.symm.{u} α x z h) h) (Eq.refl.{u} α z) :=
+  Eq.rec.{u, u} α x
+    (fun z h => Eq.trans.{u} α z x z (Eq.symm.{u} α x z h) h = Eq.refl.{u} α z)
+    (Eq.refl.{u} (Eq.{u} α x x) (Eq.refl.{u} α x))
+    z h
+
+def hedberg_f.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x y))
+    (x y : α) (p : Eq.{u} α x y) : Eq.{u} α x y :=
+  Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y)
+    (fun h => h)
+    (fun nh => False.elim.{u} (Eq.{u} α x y) (nh p))
+    (dec x y)
+
+def hedberg_f_const.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x y))
+    (x y : α) (p q : Eq.{u} α x y) :
+    hedberg_f.{u} α dec x y p = hedberg_f.{u} α dec x y q :=
+  Decidable.rec.{u, u} (Eq.{u} α x y)
+    (fun d =>
+      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => False.elim.{u} (Eq.{u} α x y) (nh p)) d
+      =
+      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => False.elim.{u} (Eq.{u} α x y) (nh q)) d)
+    (fun h => Eq.refl.{u} (Eq.{u} α x y) h)
+    (fun nh => False.elim.{u}
+      (False.elim.{u} (Eq.{u} α x y) (nh p) = False.elim.{u} (Eq.{u} α x y) (nh q))
+      (nh p))
+    (dec x y)
+
+def hedberg_g_id.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x y))
+    (x y : α) (p : Eq.{u} α x y) :
+    Eq.trans.{u} α x x y
+      (Eq.symm.{u} α x x (hedberg_f.{u} α dec x x (Eq.refl.{u} α x)))
+      (hedberg_f.{u} α dec x y p)
+    = p :=
+  Eq.rec.{u, u} α x
+    (fun y p =>
+      Eq.trans.{u} α x x y
+        (Eq.symm.{u} α x x (hedberg_f.{u} α dec x x (Eq.refl.{u} α x)))
+        (hedberg_f.{u} α dec x y p)
+      = p)
+    (trans_sym_left.{u} α x x (hedberg_f.{u} α dec x x (Eq.refl.{u} α x)))
+    y p
+
+def hedberg.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x y)) : isSet.{u} α :=
+  fun x y p q =>
+    let f := hedberg_f.{u} α dec;
+    let f_const := hedberg_f_const.{u} α dec x y p q;
+    let g_id_p := hedberg_g_id.{u} α dec x y p;
+    let g_id_q := hedberg_g_id.{u} α dec x y q;
+    let g_const : Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y p)
+               = Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y q) :=
+      congrArg.{u, u} (Eq.{u} α x y) (Eq.{u} α x y)
+        (Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))))
+        (f x y p) (f x y q) f_const;
+    Eq.trans.{u} (Eq.{u} α x y) p
+      (Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y p))
+      q
+      (Eq.symm.{u} (Eq.{u} α x y)
+        (Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y p))
+        p g_id_p)
+      (Eq.trans.{u} (Eq.{u} α x y)
+        (Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y p))
+        (Eq.trans.{u} α x x y (Eq.symm.{u} α x x (f x x (Eq.refl.{u} α x))) (f x y q))
+        q
+        g_const g_id_q)

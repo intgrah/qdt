@@ -1,6 +1,7 @@
 module
 
 public import Qdt.Error
+public import Qdt.Semantics
 public import Qdt.Theory.Global
 public import Incremental.Basic
 
@@ -46,6 +47,7 @@ inductive Key : Type
   | transitiveImports (filepath : FilePath)
   | type (filepath : FilePath) (name : Name)
   | moduleFile (modName : Name)
+  | eval (filepath : FilePath) (name : Name) (univs : List Universe)
   | checkFile (filepath : FilePath)
   | checkProject
 deriving DecidableEq, Repr, Inhabited, Hashable
@@ -65,9 +67,34 @@ def Key.tag : Key → String
   | .constant _ _ => "constant"
   | .transitiveImports _ => "transitiveImports"
   | .type _ _ => "type"
+  | .eval _ _ _ => "eval"
   | .moduleFile _ => "moduleFile"
   | .checkFile _ => "checkFile"
   | .checkProject => "checkProject"
+
+def Key.display : Key → String
+  | .cst p => s!"cst:{p}"
+  | .astSourceMap p => s!"astSourceMap:{p}"
+  | .ast p => s!"ast:{p}"
+  | .sourceMap p => s!"sourceMap:{p}"
+  | .imports p => s!"imports:{p}"
+  | .declarationIndex p => s!"declarationIndex:{p}"
+  | .declAst p n => s!"declAst:{p}:{n}"
+  | .elabCmdAt p i => s!"elabCmdAt:{p}:{i}"
+  | .elabDecl p n => s!"elabDecl:{p}:{n}"
+  | .lookup p n => s!"lookup:{p}:{n}"
+  | .lookupInfo p n => s!"lookupInfo:{p}:{n}"
+  | .constant p n => s!"constant:{p}:{n}"
+  | .transitiveImports p => s!"transitiveImports:{p}"
+  | .type p n => s!"type:{p}:{n}"
+  | .eval p n us => s!"eval:{p}:{n}:{us}"
+  | .moduleFile m => s!"moduleFile:{m}"
+  | .checkFile p => s!"checkFile:{p}"
+  | .checkProject => "checkProject"
+
+def InputKey.display : InputKey → String
+  | .text p => s!"text:{p}"
+  | .inputFiles => "inputFiles"
 
 abbrev Val : Key → Type
   | .cst _ => Cst × Array ParseError
@@ -84,6 +111,7 @@ abbrev Val : Key → Type
   | .constant _ _ => Option (Constant × Origin)
   | .transitiveImports _ => HashSet FilePath
   | .type _ _ => Option ConstantInfo
+  | .eval _ _ _ => EvalResult
   | .moduleFile _ => Option FilePath
   | .checkFile _ => Array Diagnostic
   | .checkProject => Array Diagnostic
@@ -95,6 +123,9 @@ instance {α} [BEq α] [Hashable α] : Hashable (HashSet α) where
   hash m := hash <| m.toArray
 
 instance {q} : Hashable (Val q) := by
+  cases q <;> infer_instance
+
+instance {q} : Inhabited (Val q) := by
   cases q <;> infer_instance
 
 instance {i} : Hashable (InputVal i) := by

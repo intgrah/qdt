@@ -1,0 +1,36 @@
+import reserved_notation
+import types
+
+def function.compose.{l_1, l_2, l_3} : (A : Type l_1) → (B : Type l_2) → (C : Type l_3) → (B → C) → (A → B) → A → C :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : Type l_3) => fun (f : B → C) => fun (g : A → B) => fun (x : A) => f (g x)
+
+def function.compose_right.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (B → B → B) → (A → B) → B → A → B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : B → B → B) => fun (g : A → B) => fun (b : B) => fun (a : A) => f b (g a)
+
+def function.compose_left.{l_1, l_2} : (A : Type l_1) → (B : Type l_2) → (B → B → B) → (A → B) → A → B → B :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (f : B → B → B) => fun (g : A → B) => fun (a : A) => f (g a)
+
+def function.on_fun.{l_1, l_2, l_3} : (A : Type l_1) → (B : Type l_2) → (C : Type l_3) → (B → B → C) → (A → B) → A → A → C :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : Type l_3) => fun (f : B → B → C) => fun (g : A → B) => fun (x : A) => fun (y : A) => f (g x) (g y)
+
+def function.combine.{l_1, l_2, l_3, l_4, l_5} : (A : Type l_1) → (B : Type l_2) → (C : Type l_3) → (D : Type l_4) → (E : Type l_5) → (A → B → C) → (C → D → E) → (A → B → D) → A → B → E :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : Type l_3) => fun (D : Type l_4) => fun (E : Type l_5) => fun (f : A → B → C) => fun (op : C → D → E) => fun (g : A → B → D) => fun (x : A) => fun (y : B) => op (f x y) (g x y)
+
+def function.const.{l_1, l_6} : (A : Type l_1) → (B : Type l_6) → A → B → A :=
+  fun (A : Type l_1) => fun (B : Type l_6) => fun (a : A) => fun (x : B) => a
+
+def function.dcompose.{l_1, l_6, l_7} : (A : Type l_1) → (B : A → Type l_6) → (C : (x : A) → B x → Type l_7) → ((x : A) → (y : B x) → C x y) → (g : (x : A) → B x) → (x : A) → C x (g x) :=
+  fun (A : Type l_1) => fun (B : A → Type l_6) => fun (C : (x : A) → B x → Type l_7) => fun (f : (x : A) → (y : B x) → C x y) => fun (g : (x : A) → B x) => fun (x : A) => f x (g x)
+
+def function.flip.{l_1, l_2, l_6} : (A : Type l_1) → (B : Type l_2) → (C : A → B → Type l_6) → ((x : A) → (y : B) → C x y) → (y : B) → (x : A) → C x y :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : A → B → Type l_6) => fun (f : (x : A) → (y : B) → C x y) => fun (y : B) => fun (x : A) => f x y
+
+def function.app.{l_1, l_6} : (A : Type l_1) → (B : A → Type l_6) → ((x : A) → B x) → (x : A) → B x :=
+  fun (A : Type l_1) => fun (B : A → Type l_6) => fun (f : (x : A) → B x) => f
+
+def function.curry.{l_1, l_2, l_3} : (A : Type l_1) → (B : Type l_2) → (C : Type l_3) → (prod.{l_1, l_2} A B → C) → A → B → C :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : Type l_3) => fun (f : prod.{l_1, l_2} A B → C) => fun (a : A) => fun (b : B) => f (prod.mk.{l_1, l_2} A B a b)
+
+def function.uncurry.{l_1, l_2, l_3} : (A : Type l_1) → (B : Type l_2) → (C : Type l_3) → (A → B → C) → prod.{l_1, l_2} A B → C :=
+  fun (A : Type l_1) => fun (B : Type l_2) => fun (C : Type l_3) => fun (f : A → B → C) => fun (p : prod.{l_1, l_2} A B) => prod.cases_on.{l_3, l_1, l_2} A B (fun (n18.n853 : prod.{l_1, l_2} A B) => C) p f
+

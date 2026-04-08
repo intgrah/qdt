@@ -18,7 +18,7 @@ with
   width : Cst → Nat
     | .token _ val => val.length
     | .node _ children => children.map width |>.sum
-deriving Hashable
+deriving Hashable, Inhabited
 
 structure Span where
   startPos : Nat
@@ -73,6 +73,7 @@ end Cst
 structure SourceMap where
   cstToAst : HashMap Path Path
   astToCst : HashMap Path Path
+deriving Inhabited
 
 instance : Hashable SourceMap where
   hash sm := mixHash (hash sm.cstToAst.size) (hash sm.astToCst.size)

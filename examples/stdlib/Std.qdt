@@ -9,7 +9,10 @@ import Std.False
 import Std.Fin
 import Std.HEq
 import Std.Init
-import Std.Iso
+import Std.Even
+import Std.Equiv
+import Std.Decidable
+import Std.HSet
 import Std.List
 import Std.Monad
 import Std.Nat

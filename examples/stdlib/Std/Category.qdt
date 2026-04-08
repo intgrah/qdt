@@ -1,5 +1,6 @@
 import Std.Eq
 import Std.Init
+import Std.HSet
 
 structure Category.{v, u} (Ob : Type u) : Type (max u (v + 1)) where
   (Hom : Ob → Ob → Type v)
@@ -21,18 +22,17 @@ def Category.Set.{u} : Category.Large.{u} (Type u) :=
     (fun A B f => Eq.refl.{u} (A → B) f)
     (fun A B C D f g h => Eq.refl.{u} (A → D) (comp.{u, u, u} A C D h (comp.{u, u, u} A B C g f)))
 
-def Category.Discrete.{u} (A : Type u) : Category.Small.{u} A :=
+def Category.Discrete.{u} (A : Type u) (hset : isSet.{u} A) : Category.Small.{u} A :=
   let EqA := Eq.{u} A;
   let refl := Eq.refl.{u} A;
   let trans := Eq.trans.{u} A;
-  let ext := Eq.ext.{u} A;
   Category.mk.{u, u} A
     EqA
     refl
     trans
-    (fun a b f => ext a b (trans a a b (refl a) f) f)
-    (fun a b f => ext a b (trans a b b f (refl b)) f)
-    (fun a b c d f g h => ext a d (trans a c d (trans a b c f g) h) (trans a b d f (trans b c d g h)))
+    (fun a b f => hset a b (trans a a b (refl a) f) f)
+    (fun a b f => hset a b (trans a b b f (refl b)) f)
+    (fun a b c d f g h => hset a d (trans a c d (trans a b c f g) h) (trans a b d f (trans b c d g h)))
 
 def Category.op.{v, u} (C : Type u) (cat : Category.{v, u} C) : Category.{v, u} C :=
   let Hom := Category.Hom.{v, u} C cat;
