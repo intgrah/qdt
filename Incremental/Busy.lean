@@ -8,18 +8,17 @@ variable
   (ℭ : BuildConfig)
   (J : Type) [Input ℭ J]
 
-public def Busy : Build Monad ℭ J where
+/
+`compute`.  The correctness proof is `rfl` — `Busy` *is* `compute`
+by definition. -/
+public def Busy {c : (Type → Type) → Type 1} (cId : c Id) :
+    Build c ℭ J where
+  cId := cId
   σ := J
   init := id
   inputs := Input.get
   set i v := modify fun store => Input.set store i v
-  build tasks q₀ := do
-    let store ← get
-    let ι₀ := Input.get store
-    let rec fetch (q : ℭ.Q) : ℭ.R q :=
-      tasks ι₀ q Id ι₀ (fun q₁ _hq => fetch q₁)
-    termination_by (ℭ.wf ι₀).wrap q
-    decreasing_by exact _hq
-    return fetch q₀
+  build tasks q := fun store =>
+    (⟨compute cId tasks (Input.get store) q, rfl⟩, store)
 
 end Incremental
