@@ -28,10 +28,8 @@ structure BuildConfig : Type 1 where
   rel : (∀ i, V i) → Q → Q → Prop
   wf : ∀ ι, WellFounded (rel ι)
 
-variable
-  (c : (Type → Type) → Type 1) [hc : c Id] (ℭ : BuildConfig)
-  (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-  (m : Type → Type)
+variable (c : (Type → Type) → Type 1) [hc : c Id]
+variable (ℭ : BuildConfig) (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
 
 def Task (α : Type) : Type 1 :=
   ∀ (f : Type → Type) [c f],
@@ -41,9 +39,7 @@ def Task (α : Type) : Type 1 :=
 
 namespace Task
 
-variable
-  {c : (Type → Type) → Type 1} {ℭ : BuildConfig}
-  {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
+variable {ℭ : BuildConfig} {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
 
 def input (i : ℭ.I) :
     Task c ℭ ι₀ q₀ (ℭ.V i) :=
@@ -85,6 +81,6 @@ structure Build (J : Type) [Input ℭ J] : Type 1 where
   set : ∀ i, ℭ.V i → σ → σ
   build :
     ∀ (tasks : Tasks c ℭ) (store : σ) (q₀ : ℭ.Q),
-    m ({ r : ℭ.R q₀ // r = tasks.eval (hc := hc) (inputs store) q₀ } × σ)
+    { r : ℭ.R q₀ // r = tasks.eval (hc := hc) (inputs store) q₀ } × σ
 
 end Incremental
