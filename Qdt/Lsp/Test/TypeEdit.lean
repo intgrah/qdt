@@ -5,9 +5,9 @@ open Qdt.Lsp.Test
 #eval! test do
 
 setText qdt!(
-def foo := Type
+def foo : Type 1 := Type
 --  ^
-def bar := foo
+def bar : Type 1 := foo
 --  ^
 )
 
@@ -16,12 +16,8 @@ hover ⟨1, 4⟩ "foo : Type 1" ⟨1, 4⟩ ⟨1, 7⟩
 hover ⟨3, 4⟩ "bar : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
 
 setText qdt!(
-def bar := foo
---  ^
-def foo := Type
---  ^
+def foo : Type 2 := Type 1
+def bar : Type 1 := foo
 )
 
-diagnostics (· matches #[⟨_, .unboundVariable `foo⟩])
-noHover ⟨1, 4⟩
-hover ⟨3, 4⟩ "foo : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
+diagnostics (· matches #[⟨_, .typeMismatch ..⟩])
