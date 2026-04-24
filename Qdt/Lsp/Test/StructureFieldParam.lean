@@ -2,7 +2,7 @@ import Qdt.Lsp.Test
 
 open Qdt.Lsp.Test
 
-#eval test do
+#eval! test do
 
 setText qdt!(
 structure Foo : Type 1 where

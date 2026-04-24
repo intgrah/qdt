@@ -2,7 +2,7 @@ import Qdt.Lsp.Test
 
 open Qdt.Lsp.Test
 
-#eval test do
+#eval! test do
 
 setText qdt!(
 example : Type 2 → Type → Type 1 := fun a b => Type

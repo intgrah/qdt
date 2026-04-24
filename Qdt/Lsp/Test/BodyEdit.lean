@@ -16,12 +16,12 @@ hover ⟨1, 4⟩ "foo : Type 1" ⟨1, 4⟩ ⟨1, 7⟩
 hover ⟨3, 4⟩ "bar : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
 
 setText qdt!(
-def bar : Type 1 := foo
+def foo : Type 1 := (fun (A : Type 1) => A) Type
 --  ^
-def foo : Type 1 := Type
+def bar : Type 1 := foo
 --  ^
 )
 
-diagnostics (· matches #[⟨_, .unboundVariable `foo⟩])
-hover ⟨1, 4⟩ "bar : Type 1" ⟨1, 4⟩ ⟨1, 7⟩
-hover ⟨3, 4⟩ "foo : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
+noDiagnostics
+hover ⟨1, 4⟩ "foo : Type 1" ⟨1, 4⟩ ⟨1, 7⟩
+hover ⟨3, 4⟩ "bar : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
