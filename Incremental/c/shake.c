@@ -114,7 +114,8 @@ static lean_object *shake_fetch_cb(lean_object *beqQ, lean_object *hashQ,
     lean_object *hashR, lean_object *beqI, lean_object *hashI,
     lean_object *hashV, lean_object *input_fn, lean_object *tasks,
     lean_object *cache_ref, lean_object *started_ref, lean_object *stack_ref,
-    lean_object *deps_ref, lean_object *key) {
+    lean_object *deps_ref, lean_object *key, lean_object *_proof) {
+  (void)_proof;
   lean_object *value = shake_fetch(beqI, hashI, hashV, beqQ, hashQ, hashR,
       input_fn, tasks, cache_ref, started_ref, stack_ref, key);
   if (IS_CYCLE(value)) {
@@ -318,7 +319,7 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
   lean_inc(stack_ref);
   lean_inc(deps_ref);
   lean_object *fetch_closure =
-      lean_alloc_closure((void *)shake_fetch_cb, 13, 12);
+      lean_alloc_closure((void *)shake_fetch_cb, 14, 12);
   lean_closure_set(fetch_closure, 0, beqQ);
   lean_closure_set(fetch_closure, 1, hashQ);
   lean_closure_set(fetch_closure, 2, hashR);
@@ -477,7 +478,8 @@ recompute:;
   {
     lean_inc(key);
     lean_inc_ref(tasks);
-    lean_object *task = lean_apply_1(tasks, key);
+    lean_inc_ref(input_fn);
+    lean_object *task = lean_apply_2(tasks, input_fn, key);
 
     lean_object *deps, *input_deps;
     value = run_task(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn, tasks,
@@ -534,10 +536,12 @@ done:
 
 /* build tasks q := fun store => ...
  *   return (← fetch q, ⟨store.inputs, ← memos.get⟩) */
-LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
-    lean_object *hashV, lean_object *beqQ, lean_object *hashQ,
-    lean_object *hashR, lean_object *inputInst, lean_object *tasks,
-    lean_object *target, lean_object *store) {
+LEAN_EXPORT lean_object *lean_shake_build(lean_object *_config,
+    lean_object *beqI, lean_object *hashI, lean_object *hashV,
+    lean_object *beqQ, lean_object *hashQ, lean_object *hashR,
+    lean_object *inputInst, lean_object *tasks, lean_object *target,
+    lean_object *store) {
+  (void)_config;
   /* let inputs := store.inputs */
   lean_object *inputs = lean_ctor_get(store, 0);
   lean_inc(inputs);
@@ -572,21 +576,21 @@ LEAN_EXPORT lean_object *lean_shake_build(lean_object *beqI, lean_object *hashI,
 
   lean_object *result;
   if (!IS_CYCLE(value)) {
-    /* Except.ok (value, ⟨inputs, ← memos.get⟩) */
     lean_object *final_cache = lean_st_ref_get(cache_ref);
     lean_object *new_store = lean_alloc_ctor(0, 2, 0);
     lean_ctor_set(new_store, 0, inputs);
     lean_ctor_set(new_store, 1, final_cache);
-    lean_object *pair = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(pair, 0, value);
-    lean_ctor_set(pair, 1, new_store);
-    result = lean_alloc_ctor(1, 1, 0);
-    lean_ctor_set(result, 0, pair);
+    result = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(result, 0, value);
+    lean_ctor_set(result, 1, new_store);
   } else {
-    /* Except.error BuildError.cycle */
-    lean_dec(inputs);
-    result = lean_alloc_ctor(0, 1, 0);
+    lean_object *final_cache = lean_st_ref_get(cache_ref);
+    lean_object *new_store = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(new_store, 0, inputs);
+    lean_ctor_set(new_store, 1, final_cache);
+    result = lean_alloc_ctor(0, 2, 0);
     lean_ctor_set(result, 0, lean_box(0));
+    lean_ctor_set(result, 1, new_store);
   }
 
   lean_dec(cache_ref);
