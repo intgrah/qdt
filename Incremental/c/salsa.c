@@ -85,7 +85,8 @@ static lean_object *salsa_fetch_cb(lean_object *beqI, lean_object *hashI,
     lean_object *beqQ, lean_object *hashQ, lean_object *hashR,
     lean_object *input_fn, lean_object *tasks, lean_object *store,
     lean_object *memos_ref, lean_object *stack_ref, lean_object *deps_ref,
-    lean_object *key) {
+    lean_object *key, lean_object *_proof) {
+  (void)_proof;
   lean_object *value = salsa_fetch(beqI, hashI, beqQ, hashQ, hashR, input_fn,
       tasks, store, memos_ref, stack_ref, key);
 
@@ -363,7 +364,7 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
     lean_inc(stack_ref);
     lean_inc(deps_ref);
     lean_object *fetch_closure =
-        lean_alloc_closure((void *)salsa_fetch_cb, 12, 11);
+        lean_alloc_closure((void *)salsa_fetch_cb, 13, 11);
     lean_closure_set(fetch_closure, 0, beqI);
     lean_closure_set(fetch_closure, 1, hashI);
     lean_closure_set(fetch_closure, 2, beqQ);
@@ -378,7 +379,8 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
 
     lean_inc(key);
     lean_inc_ref(tasks);
-    lean_object *task = lean_apply_1(tasks, key);
+    lean_inc_ref(input_fn);
+    lean_object *task = lean_apply_2(tasks, input_fn, key);
     lean_inc(task);
     lean_inc(g_monad_inst);
     lean_object *result = lean_apply_4(
@@ -438,10 +440,11 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
   }
 }
 
-LEAN_EXPORT lean_object *lean_salsa_build(lean_object *beqI, lean_object *hashI,
-    lean_object *beqQ, lean_object *hashQ, lean_object *hashR,
-    lean_object *inputInst, lean_object *tasks, lean_object *target,
-    lean_object *store) {
+LEAN_EXPORT lean_object *lean_salsa_build(lean_object *_config,
+    lean_object *beqI, lean_object *hashI, lean_object *beqQ,
+    lean_object *hashQ, lean_object *hashR, lean_object *inputInst,
+    lean_object *tasks, lean_object *target, lean_object *store) {
+  (void)_config;
   lean_object *inputs = lean_ctor_get(store, 0);
   lean_inc(inputs);
   lean_inc(inputs);
@@ -469,29 +472,25 @@ LEAN_EXPORT lean_object *lean_salsa_build(lean_object *beqI, lean_object *hashI,
       tasks, store, memos_ref, stack_ref, target);
 
   lean_object *ret;
+  lean_object *final_memos = lean_st_ref_get(memos_ref);
+  lean_object *new_store = lean_alloc_ctor(0, 4, 0);
+  lean_ctor_set(new_store, 0, inputs);
+  lean_ctor_set(new_store, 1, revision);
+  lean_ctor_set(new_store, 2, final_memos);
+  lean_ctor_set(new_store, 3, input_revisions);
+
   if (lean_obj_tag(result) == 1) {
     lean_object *value = lean_ctor_get(result, 0);
     lean_inc(value);
     lean_dec_ref(result);
-
-    lean_object *final_memos = lean_st_ref_get(memos_ref);
-    lean_object *new_store = lean_alloc_ctor(0, 4, 0);
-    lean_ctor_set(new_store, 0, inputs);
-    lean_ctor_set(new_store, 1, revision);
-    lean_ctor_set(new_store, 2, final_memos);
-    lean_ctor_set(new_store, 3, input_revisions);
-
-    lean_object *pair = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(pair, 0, value);
-    lean_ctor_set(pair, 1, new_store);
-
-    ret = lean_alloc_ctor(1, 1, 0);
-    lean_ctor_set(ret, 0, pair);
+    ret = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(ret, 0, value);
+    lean_ctor_set(ret, 1, new_store);
   } else {
-    lean_dec(inputs);
-    lean_dec(revision);
-    lean_dec(input_revisions);
-    ret = result;
+    lean_dec_ref(result);
+    ret = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(ret, 0, lean_box(0));
+    lean_ctor_set(ret, 1, new_store);
   }
 
   lean_dec(memos_ref);
