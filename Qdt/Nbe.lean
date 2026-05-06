@@ -34,12 +34,10 @@ partial def Tm.eval {n c} : Tm c → SemM ι₀ q₀ n c (VTm n)
     return (← read).get i
   | .const name us => do
     modify fun st => { st with evalCount := st.evalCount + 1 }
-    let some _ ← fetchConstantInfo ι₀ q₀ name
-      | return .neutral ⟨.const name us, .nil⟩
-    if (← fetchDefinition ι₀ q₀ name).isSome then
-      return .glued ⟨.const name us, .nil⟩ name us
-    else
-      return .neutral ⟨.const name us, .nil⟩
+    match ← fetchConstant ι₀ q₀ name with
+    | some (.definition _) => return .glued ⟨.const name us, .nil⟩ name us
+    | some _ => return .neutral ⟨.const name us, .nil⟩
+    | none => return .neutral ⟨.const name us, .nil⟩
   | .lam x a body => return .lam x (← a.eval) ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
   | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
@@ -68,10 +66,9 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM ι₀ q₀ (Option (VTm n)) := do
-  let some tm ← fetchDefinition ι₀ q₀ name | return none
-  let some info ← fetchConstantInfo ι₀ q₀ name | return none
+  let some (.definition info) ← fetchConstant ι₀ q₀ name | return none
   let subst := info.univParams.zip us
-  let v : VTm 0 ← (tm.substLevels subst).eval .nil
+  let v := info.vtm.substLevels subst
   return some (VTm.weaken (Nat.zero_le n) v)
 
 partial def applySpine {n} : Spine n → VTm n → ElabM ι₀ q₀ (VTm n)

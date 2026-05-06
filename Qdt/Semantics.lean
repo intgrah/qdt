@@ -10,7 +10,7 @@ open Lean (Name)
 
 /-- de Bruijn levels -/
 def Lvl n := Fin n
-deriving Repr, DecidableEq
+deriving Repr, DecidableEq, Hashable
 
 mutual
 
@@ -18,7 +18,7 @@ inductive VTy : Nat → Type
   | u {n} : Universe → VTy n
   | pi {n} : Name → VTy n → ClosTy n → VTy n
   | el {n} : Neutral n → VTy n
-deriving Repr
+deriving Repr, Hashable
 
 inductive VTm : Nat → Type
   | u' {n} : Universe → VTm n
@@ -26,51 +26,81 @@ inductive VTm : Nat → Type
   | lam {n} : Name → VTy n → ClosTm n → VTm n
   | pi' {n} : Name → VTm n → ClosTm n → VTm n
   | glued {n} : Neutral n → Name → List Universe → VTm n
-deriving Repr
+deriving Repr, Hashable
 
 inductive Neutral : Nat → Type
   | mk {n} : Head n → Spine n → Neutral n
-deriving Repr
+deriving Repr, Hashable
 
 inductive Head : Nat → Type
   | var {n} : Lvl n → Head n
   | const {n} : Name → List Universe → Head n
-deriving Repr
+deriving Repr, Hashable
 
 inductive Spine : Nat → Type
   | nil {n} : Spine n
   | app {n} : Spine n → VTm n → Spine n
   | proj {n} : Spine n → Nat → Spine n
-deriving Repr
+deriving Repr, Hashable
 
 /-- Type closures -/
 inductive ClosTy : Nat → Type
   | mk {n m} : Env n m → Ty (m + 1) → ClosTy n
-deriving Repr
+deriving Repr, Hashable
 
 /-- Term closures -/
 inductive ClosTm : Nat → Type
   | mk {n m} : Env n m → Tm (m + 1) → ClosTm n
-deriving Repr
+deriving Repr, Hashable
 
 /-- Environments -/
 inductive Env : Nat → Nat → Type
   | nil {n} : Env n 0
   | cons {n m} : VTm n → Env n m → Env n (m + 1)
-deriving Repr
+deriving Repr, Hashable
 
 end
 
 instance {n} : Inhabited (VTy n) := ⟨.u .zero⟩
 instance {n} : Inhabited (VTm n) := ⟨.u' .zero⟩
 
-structure EvalResult where
-  value : VTm 0
-  sourceHash : UInt64
-deriving Inhabited
+mutual
 
-instance : Hashable EvalResult where
-  hash r := r.sourceHash
+def VTy.substLevels {n} (subst : List (Name × Universe)) : VTy n → VTy n
+  | .u i => .u (i.subst subst)
+  | .pi x dom codom => .pi x (dom.substLevels subst) (codom.substLevels subst)
+  | .el ne => .el (ne.substLevels subst)
+
+def VTm.substLevels {n} (subst : List (Name × Universe)) : VTm n → VTm n
+  | .u' i => .u' (i.subst subst)
+  | .neutral ne => .neutral (ne.substLevels subst)
+  | .lam x ty body => .lam x (ty.substLevels subst) (body.substLevels subst)
+  | .pi' x dom codom => .pi' x (dom.substLevels subst) (codom.substLevels subst)
+  | .glued ne name us => .glued (ne.substLevels subst) name (us.map (·.subst subst))
+
+def Neutral.substLevels {n} (subst : List (Name × Universe)) : Neutral n → Neutral n
+  | ⟨head, spine⟩ => ⟨head.substLevels subst, spine.substLevels subst⟩
+
+def Head.substLevels {n} (subst : List (Name × Universe)) : Head n → Head n
+  | .var lvl => .var lvl
+  | .const name us => .const name (us.map (·.subst subst))
+
+def Spine.substLevels {n} (subst : List (Name × Universe)) : Spine n → Spine n
+  | .nil => .nil
+  | .app sp t => .app (sp.substLevels subst) (t.substLevels subst)
+  | .proj sp i => .proj (sp.substLevels subst) i
+
+def ClosTy.substLevels {n} (subst : List (Name × Universe)) : ClosTy n → ClosTy n
+  | ⟨env, ty⟩ => ⟨env.substLevels subst, ty.substLevels subst⟩
+
+def ClosTm.substLevels {n} (subst : List (Name × Universe)) : ClosTm n → ClosTm n
+  | ⟨env, tm⟩ => ⟨env.substLevels subst, tm.substLevels subst⟩
+
+def Env.substLevels {n m} (subst : List (Name × Universe)) : Env n m → Env n m
+  | .nil => .nil
+  | .cons t rest => .cons (t.substLevels subst) (rest.substLevels subst)
+
+end
 
 def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
 def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩

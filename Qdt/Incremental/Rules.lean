@@ -180,19 +180,8 @@ public def tasks : Tasks Monad config
     match ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.type filepath name) (Key.constant filepath name) sorry : Task Monad config ι₀ (Key.type filepath name) _) with
     | some (constant, _) => return some constant.toConstantInfo
     | none => return none
-  | ι₀, .eval filepath name univs => do
-    match ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.eval filepath name univs) (Key.constant filepath name) sorry : Task Monad config ι₀ (Key.eval filepath name univs) _) with
-    | some (constant, _) =>
-        match constant with
-        | .definition info =>
-            let subst := info.univParams.zip univs
-            let body := info.tm.substLevels subst
-            let sourceHash := hash body
-            let elabCtx : ElabContext := { filepath, univParams := [], collectHovers := false, currentDecl := name, path := [] }
-            let (value, _, _) ← (body.eval ι₀ (Key.eval filepath name univs) .nil : ElabM ι₀ (Key.eval filepath name univs) (VTm 0)).run ι₀ (Key.eval filepath name univs) elabCtx
-            return { value, sourceHash }
-        | _ => return default
-    | none => return default
+  | _ι₀, .eval _filepath _name _univs => do
+    return none
   | ι₀, .checkFile filepath => do
     let (_, _, parseDiags) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkFile filepath) (Key.astSourceMap filepath) sorry : Task Monad config ι₀ (Key.checkFile filepath) _)
     let (decls, dupDiags) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkFile filepath) (Key.declarationIndex filepath) sorry : Task Monad config ι₀ (Key.checkFile filepath) _)

@@ -182,7 +182,8 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM ι₀ q₀) Struc
           Tm.lam `self majorTy projBody
 
         let univParams ← getUnivParams ι₀ q₀
-        let entry : Name × Constant := (projName, .definition { univParams, ty := projTy, tm := projTm })
+        let projVtm ← projTm.eval ι₀ q₀ .nil
+        let entry : Name × Constant := (projName, .definition { univParams, ty := projTy, tm := projTm, vtm := projVtm })
         let _ ← addConstant ι₀ q₀ projName entry.2
         withChild ι₀ q₀ (4 + fieldIdx) (emitHover ι₀ q₀ (.signature projName (paramTys.snoc ⟨`self, majorTy⟩) ftyTy))
         return acc ++ [entry]

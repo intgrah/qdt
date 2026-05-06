@@ -1,6 +1,6 @@
 module
 
-public import Qdt.Theory.Syntax
+public import Qdt.Semantics
 public import Std.Data.HashMap.Basic
 
 @[expose] public section
@@ -19,6 +19,7 @@ deriving Repr, Hashable
 
 structure DefinitionInfo extends ConstantInfo where
   tm : Tm 0
+  vtm : VTm 0
 deriving Repr, Hashable
 
 structure OpaqueInfo extends ConstantInfo where

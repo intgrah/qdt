@@ -118,7 +118,8 @@ def Definition.elab (d : Definition) : OptionT (ElabM ι₀ q₀) Unit := do
   withChild ι₀ q₀ 0 (emitHover ι₀ q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant ι₀ q₀ d.name (.definition { univParams := d.univParams, ty, tm })
+  let vtm ← tm.eval ι₀ q₀ .nil
+  let _ ← addConstant ι₀ q₀ d.name (.definition { univParams := d.univParams, ty, tm, vtm })
 
 def Example.elab (e : Example) : OptionT (ElabM ι₀ q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then

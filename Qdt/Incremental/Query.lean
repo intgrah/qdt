@@ -111,7 +111,7 @@ abbrev Val : Key → Type
   | .constant _ _ => Option (Constant × Origin)
   | .transitiveImports _ => HashSet FilePath
   | .type _ _ => Option ConstantInfo
-  | .eval _ _ _ => EvalResult
+  | .eval _ _ _ => Option (VTm 0)
   | .moduleFile _ => Option FilePath
   | .checkFile _ => Array Diagnostic
   | .checkProject => Array Diagnostic
