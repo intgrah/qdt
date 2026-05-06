@@ -762,7 +762,8 @@ def desugarProgram (module : Cst) : Ast × SourceMap :=
         return .node `Module result
     | .node _ _
     | .token _ _ => return .node `missing #[]
-  let init : DesugarState := { sourceMap := ⟨∅, ∅⟩, cstPath := [], astPath := [] }
+  let cap := module.width / 10
+  let init : DesugarState := { sourceMap := ⟨Std.HashMap.emptyWithCapacity cap, Std.HashMap.emptyWithCapacity cap⟩, cstPath := [], astPath := [] }
   let (prog, st) := action.run init
   (prog, st.sourceMap)
 
