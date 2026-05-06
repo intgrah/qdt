@@ -21,7 +21,7 @@ structure State where
   errors : Array ParseError
 deriving Inhabited
 
-abbrev ParserM := StateT State (Except ParseError)
+abbrev ParserM := EStateM ParseError State
 
 def getPos : ParserM Nat := return (← get).pos
 def setPos (pos : Nat) : ParserM Unit := modify fun st => { st with pos }
@@ -473,8 +473,8 @@ def parseProgram : ParserM Cst :=
 
 def parse (input : String) : Cst × Array ParseError :=
   let init : State := { input, pos := 0, errors := #[] }
-  match parseProgram.run init with
-  | .ok (cst, st) => (cst, st.errors)
-  | .error e => (.token `missing input, #[e])
+  match parseProgram init with
+  | .ok cst st => (cst, st.errors)
+  | .error e st => (.token `missing input, st.errors.push e)
 
 end Qdt.Frontend.Parser
