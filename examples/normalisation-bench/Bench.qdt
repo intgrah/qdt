@@ -47,7 +47,7 @@ inductive Eq.{u} (α : Type u) : α → α → Type u where
   | refl (a : α) : Eq.{u} α a a
 
 def test₁ : Eq.{1} Nat.{0} n5000000.{0} n5000000'.{0} := Eq.refl.{1} Nat.{0} n5000000.{0}
--- def test₂ : Eq.{1} Nat.{0} n10000000.{0} n10000000'.{0} := Eq.refl.{1} Nat.{0} n10000000.{0}
--- def test₃ : Eq.{1} Tree t2097151 t2097151' := Eq.refl.{1} Tree t2097151
--- def test₄ : Eq.{1} Tree t4194303 t4194303' := Eq.refl.{1} Tree t4194303
--- def test₅ : Eq.{1} Tree t8388607 t8388607' := Eq.refl.{1} Tree t8388607
+def test₂ : Eq.{1} Nat.{0} n10000000.{0} n10000000'.{0} := Eq.refl.{1} Nat.{0} n10000000.{0}
+def test₃ : Eq.{1} Tree t2097151 t2097151' := Eq.refl.{1} Tree t2097151
+def test₄ : Eq.{1} Tree t4194303 t4194303' := Eq.refl.{1} Tree t4194303
+def test₅ : Eq.{1} Tree t8388607 t8388607' := Eq.refl.{1} Tree t8388607
