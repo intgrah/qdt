@@ -21,10 +21,10 @@ public partial def VTm.conv {n} (a b : VTm n) (cs : ConvState := .rigid) : ElabM
   | .glued ne₁ _ _, .glued ne₂ _ _ => do
       match cs with
       | .flex => ne₁.conv ne₂ cs
-      | _ =>
-        let a' ← a.whnf ι₀ q₀
-        let b' ← b.whnf ι₀ q₀
-        a'.conv b' cs
+      | .rigid =>
+        if ← ne₁.conv ne₂ .flex then return true
+        (← a.whnf ι₀ q₀).conv (← b.whnf ι₀ q₀) .full
+      | .full => (← a.whnf ι₀ q₀).conv (← b.whnf ι₀ q₀) cs
   | .glued _ _ _, other => do (← a.whnf ι₀ q₀).conv other cs
   | other, .glued _ _ _ => do other.conv (← b.whnf ι₀ q₀) cs
   | .neutral n₁, .neutral n₂ => do
