@@ -16,7 +16,6 @@ import ua
 import funext
 import hedberg
 import nat
-import hit
 import pathover
 import pointed
 
