@@ -39,16 +39,7 @@ def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateM b.σ (Array String × Nat × Nat × Nat) := do
   let transImports ← b.build tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
-  let mut totalBeta : Nat := 0
-  let mut totalEval : Nat := 0
-  let mut totalWhnf : Nat := 0
   for file in transImports.toList ++ [filepath] do
-    let (declIdx, _) ← b.build tasks (Key.declarationIndex file)
-    for (name, _) in declIdx.toList do
-      let (_, info) ← b.build tasks (Key.elabDecl file name)
-      totalBeta := totalBeta + info.betaCount
-      totalEval := totalEval + info.evalCount
-      totalWhnf := totalWhnf + info.whnfCount
     let diags ← b.build tasks (Key.checkFile file)
     if diags.isEmpty then continue
     let text := (inputs.get? (.text file)).getD ""
@@ -56,7 +47,7 @@ def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     let (cst, _) ← b.build tasks (Key.cst file)
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
-  return (msgs, totalBeta, totalEval, totalWhnf)
+  return (msgs, 0, 0, 0)
 
 def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
     (Array String × Nat × Nat × Nat) × b.σ :=
