@@ -23,22 +23,22 @@ deriving Inhabited
 
 abbrev ParserM := EStateM ParseError State
 
-def getPos : ParserM Nat := return (← get).pos
-def setPos (pos : Nat) : ParserM Unit := modify fun st => { st with pos }
-def isEof : ParserM Bool := do let st ← get; return st.pos ≥ st.input.utf8ByteSize
-def fail {α} (msg : String) : ParserM α := do throw ⟨msg, ← getPos⟩
+@[inline] def getPos : ParserM Nat := return (← get).pos
+@[inline] def setPos (pos : Nat) : ParserM Unit := modify fun st => { st with pos }
+@[inline] def isEof : ParserM Bool := do let st ← get; return st.pos ≥ st.input.utf8ByteSize
+@[inline] def fail {α} (msg : String) : ParserM α := do throw ⟨msg, ← getPos⟩
 
-def peekChar? : ParserM (Option Char) := do
+@[inline] def peekChar? : ParserM (Option Char) := do
   let st ← get
   if st.pos ≥ st.input.utf8ByteSize then return none
   else return some (String.Pos.Raw.get st.input ⟨st.pos⟩)
 
-def peekString (n : Nat) : ParserM String := do
+@[inline] def peekString (n : Nat) : ParserM String := do
   let st ← get
   let endPos := min (st.pos + n) st.input.utf8ByteSize
   return String.Pos.Raw.extract st.input ⟨st.pos⟩ ⟨endPos⟩
 
-def advanceChar : ParserM Unit := do
+@[inline] def advanceChar : ParserM Unit := do
   let st ← get
   if st.pos ≥ st.input.utf8ByteSize then fail "unexpected end of input"
   else
@@ -104,7 +104,7 @@ def atomRaw (s : String) : ParserM Cst := do
     | none => fail s!"expected '{s}'"
   return .token `atom s
 
-def readIdentChars : ParserM String := do
+@[inline] def readIdentChars : ParserM String := do
   let some c ← peekChar? | fail "expected identifier"
   if !Lean.isIdFirst c then fail "expected identifier"
   let mut acc := ""
@@ -146,7 +146,7 @@ def numRaw : ParserM Cst := do
     | none => break
   return .token `num s
 
-def tryParse {α} (p : ParserM α) : ParserM (Option α) := do
+@[inline] def tryParse {α} (p : ParserM α) : ParserM (Option α) := do
   let pos ← getPos
   (do let a ← p; return some a) <|> (do setPos pos; return none)
 
@@ -156,7 +156,7 @@ instance {α} : OrElse (ParserM α) where
     | some a => return a
     | none => q ()
 
-def peekIdentStr : ParserM (Option String) := do
+@[inline] def peekIdentStr : ParserM (Option String) := do
   let pos ← getPos
   match ← peekChar? with
   | some c =>
