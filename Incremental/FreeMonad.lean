@@ -59,14 +59,9 @@ def evalTrace_inputs {α : Type} (ι : ∀ i, ℭ.V i)
   | .input i k => ⟨i, ι i⟩ :: evalTrace_inputs ι rec (k (ι i))
   | .fetch q hq k => evalTrace_inputs ι rec (k (rec q hq))
 
-structure DepTrace (q₀ : ℭ.Q) where
-  q : ℭ.Q
-  hq : ℭ.rel q q₀
-  val : ℭ.R q
-
 def evalTrace_deps {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
-    FM ℭ q₀ α → List (DepTrace q₀)
+    FM ℭ q₀ α → List (Σ' (q : ℭ.Q) (_ : ℭ.rel q q₀), ℭ.R q)
   | .pure _ => []
   | .input i k => evalTrace_deps ι rec (k (ι i))
   | .fetch q hq k => ⟨q, hq, rec q hq⟩ :: evalTrace_deps ι rec (k (rec q hq))
