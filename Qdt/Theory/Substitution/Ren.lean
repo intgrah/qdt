@@ -43,7 +43,7 @@ section Lemmas
 theorem Ren.id_comp {m n} (ξ : Ren m n) : Ren.comp (Ren.id m) ξ = ξ :=
   Function.id_comp ξ
 
-theorem Ren.comp_id {m n}(ξ : Ren m n) : Ren.comp ξ (Ren.id n) = ξ :=
+theorem Ren.comp_id {m n} (ξ : Ren m n) : Ren.comp ξ (Ren.id n) = ξ :=
   Function.comp_id ξ
 
 theorem Ren.comp_assoc {k l m n} (ξ : Ren k l) (ζ : Ren l m) (η : Ren m n) :
@@ -51,31 +51,31 @@ theorem Ren.comp_assoc {k l m n} (ξ : Ren k l) (ζ : Ren l m) (η : Ren m n) :
 
 @[simp]
 theorem Ren.up_id (n : Nat) : (Ren.id n).up = Ren.id (n + 1) := by
-  funext ⟨i, hi⟩; cases i <;> rfl
+  funext ⟨i, _⟩; cases i <;> rfl
 
 @[simp]
 theorem Ren.up_comp {l m n : Nat} (ξ : Ren l m) (ζ : Ren m n) :
     (ξ.comp ζ).up = ξ.up.comp ζ.up := by
-  funext ⟨i, hi⟩; cases i <;> rfl
+  funext ⟨i, _⟩; cases i <;> rfl
 
 mutual
 
 @[simp]
 theorem Ty.ren_id {n} : ∀ A : Ty n, A.ren (Ren.id n) = A
   | .u .. => rfl
-  | .pi .. => by simp [Ty.ren, Ty.ren_id]
-  | .el .. => by simp [Ty.ren, Tm.ren_id]
+  | .pi .. => by simp only [Ty.ren, Ty.ren_id, Ren.up_id]
+  | .el .. => by simp only [Ty.ren, Tm.ren_id]
 
 @[simp]
 theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
   | .u' .. => rfl
   | .var .. => rfl
   | .const .. => rfl
-  | .lam .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
+  | .lam .. => by simp only [Tm.ren, Ty.ren_id, Tm.ren_id, Ren.up_id]
   | .app .. => by simp only [Tm.ren, Tm.ren_id]
-  | .pi' .. => by simp [Tm.ren, Tm.ren_id]
+  | .pi' .. => by simp only [Tm.ren, Tm.ren_id, Ren.up_id]
   | .proj .. => by simp only [Tm.ren, Tm.ren_id]
-  | .letE .. => by simp [Tm.ren, Ty.ren_id, Tm.ren_id]
+  | .letE .. => by simp only [Tm.ren, Ty.ren_id, Tm.ren_id, Ren.up_id]
 
 end
 
@@ -88,7 +88,7 @@ mutual
 theorem Ty.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
     ∀ A : Ty l, A.ren (ξ.comp ζ) = (A.ren ξ).ren ζ
   | .u .. => rfl
-  | .pi .. => by simp [Ty.ren, Ty.comp_ren]
+  | .pi .. => by simp only [Ty.ren, Ty.comp_ren, Ren.up_comp]
   | .el .. => by simp only [Ty.ren, Tm.comp_ren]
 
 @[simp]
@@ -97,11 +97,11 @@ theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
   | .u' .. => rfl
   | .var .. => rfl
   | .const .. => rfl
-  | .lam .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
+  | .lam .. => by simp only [Tm.ren, Ty.comp_ren, Tm.comp_ren, Ren.up_comp]
   | .app .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .pi' .. => by simp [Tm.ren, Tm.comp_ren]
+  | .pi' .. => by simp only [Tm.ren, Tm.comp_ren, Ren.up_comp]
   | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
-  | .letE .. => by simp [Tm.ren, Ty.comp_ren, Tm.comp_ren]
+  | .letE .. => by simp only [Tm.ren, Ty.comp_ren, Tm.comp_ren, Ren.up_comp]
 
 end
 

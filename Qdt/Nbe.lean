@@ -67,8 +67,7 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
 
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (Option (VTm n)) := do
   let some (.definition info) ← fetchConstant q₀ name | return none
-  let subst := info.univParams.zip us
-  let v := info.vtm.substLevels subst
+  let v ← (info.tm.substLevels us).eval Env.nil
   return some (VTm.weaken (Nat.zero_le n) v)
 
 partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
@@ -127,8 +126,7 @@ partial def iotaReduction {n}
   let envList := args.reverse
   let env := Env.ofList envList
   let numFields := rule.numFields
-  let univSubst := info.univParams.zip recUs
-  let rhs := rule.rhs.substLevels univSubst
+  let rhs := rule.rhs.substLevels recUs
   if h : envList.length = numParamsMotivesMinors + numFields then
     let env' : Env n (numParamsMotivesMinors + numFields) := h ▸ env
     let result ← rhs.eval env'

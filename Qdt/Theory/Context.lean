@@ -41,6 +41,23 @@ theorem subst_nil {n} {a : Tm n} : subst a Tele.nil = Tele.nil := by
   unfold subst
   rfl
 
+/-!
+## Lookup equations for `snoc` (Step 01)
+
+These are the building blocks for `Derives.weakenAt` in Step 07.
+-/
+
+@[simp]
+theorem get_snoc_zero {n} {x : Lean.Name} {A : Ty n} {Γ : Ctx 0 n}
+    (h : (0 : Nat) < n + 1 := by omega) :
+    Ctx.get ⟨0, h⟩ (Γ.snoc ⟨x, A⟩) = A.weaken := rfl
+
+@[simp]
+theorem get_snoc_succ {n} {x : Lean.Name} {A : Ty n} {Γ : Ctx 0 n}
+    (i : Idx n) :
+    Ctx.get ⟨i.val + 1, by have := i.isLt; omega⟩ (Γ.snoc ⟨x, A⟩)
+      = (Ctx.get i Γ).weaken := rfl
+
 end Ctx
 
 end Qdt

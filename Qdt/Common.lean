@@ -8,7 +8,6 @@ public import Incremental.SalsaC
 public import Incremental.Shake
 public import Incremental.ShakeStore
 public import Incremental.ShakeCPS
-public import Incremental.ShakeEState
 public import Incremental.ShakeC
 public import Qdt.Incremental.Query
 
@@ -34,7 +33,6 @@ unsafe def selectBuild' : BuildSystem → Build Monad config Input
   | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
   | .shakeC => ShakeC config Input
   | .shakeCPS => ShakeCPS config Input
-  | .shakeEState => ShakeEState config Input
 
 @[implemented_by selectBuild']
 def selectBuild : BuildSystem → Build Monad config Input
@@ -43,9 +41,8 @@ def selectBuild : BuildSystem → Build Monad config Input
   | .salsa => Salsa config Input
   | .salsaC => Salsa config Input
   | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
-  | .shakeC => ShakeEState config Input
+  | .shakeC => ShakeCPS config Input
   | .shakeCPS => ShakeCPS config Input
-  | .shakeEState => ShakeEState config Input
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []

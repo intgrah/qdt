@@ -99,18 +99,21 @@ def Tm.lams {a b} : Ctx a b → Tm b → Tm a
 
 mutual
 
-def Universe.subst (subst : List (Name × Universe)) : Universe → Universe
-  | .level n => subst.lookup n |>.getD (.level n)
+/-- Universe-level substitution.  `subst : List Universe` maps each
+    parameter (by **de Bruijn index**) to its replacement; out-of-range
+    indices are left as-is. -/
+def Universe.subst (subst : List Universe) : Universe → Universe
+  | .level i => (subst[i]?.getD (.level i)).normalise
   | .zero => .zero
   | .succ u => (u.subst subst).mkSucc
   | .max u v => (u.subst subst).mkMax (v.subst subst)
 
-def Ty.substLevels {n} (subst : List (Name × Universe)) : Ty n → Ty n
+def Ty.substLevels {n} (subst : List Universe) : Ty n → Ty n
   | .u u => .u (u.subst subst)
   | .pi name ty b => .pi name (ty.substLevels subst) (b.substLevels subst)
   | .el t => .el (t.substLevels subst)
 
-def Tm.substLevels {n} (subst : List (Name × Universe)) : Tm n → Tm n
+def Tm.substLevels {n} (subst : List Universe) : Tm n → Tm n
   | .u' u => .u' (u.subst subst)
   | .var i => .var i
   | .const c us => .const c (us.map (·.subst subst))
@@ -121,6 +124,79 @@ def Tm.substLevels {n} (subst : List (Name × Universe)) : Tm n → Tm n
   | .letE name ty rhs body =>
       .letE name (ty.substLevels subst) (rhs.substLevels subst) (body.substLevels subst)
 
+/-- Shift all universe-level references in a `Ty` up by `k`.  Used when
+    embedding a syntactic object elaborated in one universe-binder frame
+    into another that prepends `k` fresh universe parameters (e.g. the
+    recursor prepends one universe — the motive's — to the inductive's
+    own universe parameters). -/
+def Ty.shiftLevels {n} (k : Nat) : Ty n → Ty n
+  | .u u => .u (u.shift k)
+  | .pi name ty b => .pi name (ty.shiftLevels k) (b.shiftLevels k)
+  | .el t => .el (t.shiftLevels k)
+
+def Tm.shiftLevels {n} (k : Nat) : Tm n → Tm n
+  | .u' u => .u' (u.shift k)
+  | .var i => .var i
+  | .const c us => .const c (us.map (·.shift k))
+  | .lam name ty b => .lam name (ty.shiftLevels k) (b.shiftLevels k)
+  | .app f a => .app (f.shiftLevels k) (a.shiftLevels k)
+  | .pi' name a b => .pi' name (a.shiftLevels k) (b.shiftLevels k)
+  | .proj i t => .proj i (t.shiftLevels k)
+  | .letE name ty rhs body =>
+      .letE name (ty.shiftLevels k) (rhs.shiftLevels k) (body.shiftLevels k)
+
 end
+
+/-! ## Bounded universe levels in types and terms
+
+`Ty.Bounded k A` / `Tm.Bounded k a` say every `Universe` expression in
+`A` (resp `a`) is `Universe.Bounded k`.  The `.const` case bounds the
+universe-instantiation list — so a stored `info.ty` with
+`info.ty.Bounded info.numUnivParams` is universe-scope-correct
+when used at any `(.const name us)` with `us.length = info.numUnivParams`. -/
+
+mutual
+
+def Ty.Bounded (k : Nat) {n : Nat} : Ty n → Prop
+  | .u u => Universe.Bounded k u
+  | .el t => Tm.Bounded k t
+  | .pi _ A B => Ty.Bounded k A ∧ Ty.Bounded k B
+
+def Tm.Bounded (k : Nat) {n : Nat} : Tm n → Prop
+  | .u' u => Universe.Bounded k u
+  | .var _ => True
+  | .const _ us => ∀ u ∈ us, Universe.Bounded k u
+  | .lam _ A b => Ty.Bounded k A ∧ Tm.Bounded k b
+  | .app f a => Tm.Bounded k f ∧ Tm.Bounded k a
+  | .pi' _ a b => Tm.Bounded k a ∧ Tm.Bounded k b
+  | .proj _ t => Tm.Bounded k t
+  | .letE _ A e b => Ty.Bounded k A ∧ Tm.Bounded k e ∧ Tm.Bounded k b
+
+end
+
+/-! ## `Universe.subst` preserves `Bounded`
+
+When all entries of `us` are bounded by `k`, substituting them into a
+`u` bounded by `us.length` yields a result bounded by `k`. -/
+
+theorem Universe.Bounded.subst {k : Nat} {us : List Universe}
+    (hus : ∀ u ∈ us, Universe.Bounded k u) :
+    ∀ {u : Universe}, u.Bounded us.length → (u.subst us).Bounded k
+  | .level i, h => by
+      show (us[i]?.getD (.level i)).normalise.Bounded k
+      have hi : i < us.length := h
+      have hSome : us[i]? = some us[i] := List.getElem?_eq_getElem hi
+      rw [hSome]
+      exact Universe.Bounded.normalise (hus _ (List.getElem_mem hi))
+  | .zero, _ => trivial
+  | .succ u, h => by
+      show (Universe.subst us u).mkSucc.Bounded k
+      exact Universe.mkSucc_bounded (Universe.Bounded.subst hus (u := u) h)
+  | .max u v, h => by
+      have ⟨hu, hv⟩ : u.Bounded us.length ∧ v.Bounded us.length := h
+      show ((Universe.subst us u).mkMax (Universe.subst us v)).Bounded k
+      exact Universe.mkMax_bounded
+        (Universe.Bounded.subst hus (u := u) hu)
+        (Universe.Bounded.subst hus (u := v) hv)
 
 end Qdt

@@ -147,7 +147,7 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
   let x : VTm np1 := VTm.varAt numParams
 
   let univParams ← getUnivParams q₀
-  let structUnivs := univParams.map Universe.level
+  let structUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
   let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps q₀ paramsVal
   let majorTy ← majorTy.quote q₀
@@ -181,9 +181,8 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
           Tm.lams paramTys <|
           Tm.lam `self majorTy projBody
 
-        let univParams ← getUnivParams q₀
-        let projVtm ← projTm.eval q₀ .nil
-        let entry : Name × Constant := (projName, .definition { univParams, ty := projTy, tm := projTm, vtm := projVtm })
+        let univParams' ← getUnivParams q₀
+        let entry : Name × Constant := (projName, .definition { numUnivParams := univParams'.length, ty := projTy, tm := projTm })
         let _ ← addConstant q₀ projName entry.2
         withChild q₀ (4 + fieldIdx) (emitHover q₀ (.signature projName (paramTys.snoc ⟨`self, majorTy⟩) ftyTy))
         return acc ++ [entry]

@@ -63,7 +63,7 @@ public partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM q₀ Univ
   | .el ⟨.const name us, _sp⟩ => do
       let some info ← fetchConstantInfo q₀ name
         | panic! s!"inferLevel: unknown constant {name}"
-      let ty := info.ty.substLevels (info.univParams.zip us)
+      let ty := info.ty.substLevels us
       let some u := ty.getResultUniverse?
         | panic! s!"inferLevel: could not determine universe for {name}"
       return u

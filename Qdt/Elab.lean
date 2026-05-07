@@ -118,8 +118,7 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   withChild q₀ 0 (emitHover q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
-  let vtm ← tm.eval q₀ .nil
-  let _ ← addConstant q₀ d.name (.definition { univParams := d.univParams, ty, tm, vtm })
+  let _ ← addConstant q₀ d.name (.definition { numUnivParams := d.univParams.length, ty, tm })
 
 def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
@@ -140,7 +139,7 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   let ty ← OptionT.lift (withChild q₀ 3 (checkTy q₀ paramCtx a.ty))
   withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant q₀ a.name (.axiom { univParams := a.univParams, ty })
+  let _ ← addConstant q₀ a.name (.axiom { numUnivParams := a.univParams.length, ty })
 
 def Inductive.elab (info : Inductive) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then

@@ -18,7 +18,6 @@ inductive BuildSystem where
   | shake
   | shakeC
   | shakeCPS
-  | shakeEState
 deriving Repr, Inhabited
 
 instance : Cli.ParseableType BuildSystem where
@@ -31,7 +30,6 @@ instance : Cli.ParseableType BuildSystem where
     | "shake" => some .shake
     | "shake-c" => some .shakeC
     | "shake-cps" => some .shakeCPS
-    | "shake-estate" => some .shakeEState
     | _ => none
 
 structure Config where

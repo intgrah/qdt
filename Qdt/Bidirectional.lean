@@ -27,7 +27,12 @@ public partial def checkAstUniverse : Ast → OptionT (ElabM q₀) Universe
   | .node `Level.zero _ => do return .zero
   | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
   | .node `Level.max cs => do return (← checkAstUniverse cs[0]!).mkMax (← checkAstUniverse cs[1]!)
-  | .node `Level.name cs => do return .level cs[0]!.getName
+  | .node `Level.name cs => do
+      let name := cs[0]!.getName
+      let univParams ← getUnivParams q₀
+      let some idx := univParams.findIdx? (· == name)
+        | raiseError q₀ (.unboundUniverseVariable name)
+      return .level idx
   | _ => failure
 
 def checkAstUniverses : Ast → OptionT (ElabM q₀) (List Universe)
@@ -36,15 +41,14 @@ def checkAstUniverses : Ast → OptionT (ElabM q₀) (List Universe)
 
 def checkUniverseLevel (level : Universe) : OptionT (ElabM q₀) Unit := do
   let univParams ← getUnivParams q₀
-  match level.checkLevels univParams with
-  | .error name => raiseError q₀ (.unboundUniverseVariable name)
-  | .ok () => return
+  if let .error i := level.checkLevels univParams.length then
+    raiseError q₀ (.unboundUniverseVariable ((`_univ).num i))
 
-def instantiateLevels (name : Name) (declParams : List Name) (ty : Ty 0) (univs : List Universe) :
+def instantiateLevels (name : Name) (numDeclParams : Nat) (ty : Ty 0) (univs : List Universe) :
     OptionT (ElabM q₀) (Ty 0) := do
-  if univs.length != declParams.length then
-    raiseError q₀ (.universeArgCountMismatch name declParams.length univs.length)
-  return ty.substLevels (declParams.zip univs)
+  if univs.length != numDeclParams then
+    raiseError q₀ (.universeArgCountMismatch name numDeclParams univs.length)
+  return ty.substLevels univs
 
 def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Universe) :
     OptionT (ElabM q₀) (Tm n × VTy n) := do
@@ -57,7 +61,7 @@ def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Unive
           checkUniverseLevel q₀ univ
         let ty ←
           if univs.isEmpty then pure info.ty
-          else instantiateLevels q₀ name info.univParams info.ty univs
+          else instantiateLevels q₀ name info.numUnivParams info.ty univs
         return (.const name univs, ← ty.eval q₀ .nil)
     | none => raiseError q₀ (.unboundVariable name)
 
@@ -71,11 +75,11 @@ def emitSorryAxiom {n : Nat}
   let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote q₀⟩
   let univParams ← getUnivParams q₀
   let _ ← addConstant q₀ sorryName (.axiom {
-    univParams
+    numUnivParams := univParams.length
     ty := Ty.pis locals retTy
   })
   let args := List.finRange n |>.map (fun i => Tm.var i.rev)
-  let sorryUnivs := univParams.map Universe.level
+  let sorryUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
   return Tm.const sorryName sorryUnivs |>.apps args
 
 def emitSorryTm {n : Nat}

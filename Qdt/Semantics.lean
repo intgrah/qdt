@@ -66,37 +66,37 @@ instance {n} : Inhabited (VTm n) := ⟨.u' .zero⟩
 
 mutual
 
-def VTy.substLevels {n} (subst : List (Name × Universe)) : VTy n → VTy n
+def VTy.substLevels {n} (subst : List Universe) : VTy n → VTy n
   | .u i => .u (i.subst subst)
   | .pi x dom codom => .pi x (dom.substLevels subst) (codom.substLevels subst)
   | .el ne => .el (ne.substLevels subst)
 
-def VTm.substLevels {n} (subst : List (Name × Universe)) : VTm n → VTm n
+def VTm.substLevels {n} (subst : List Universe) : VTm n → VTm n
   | .u' i => .u' (i.subst subst)
   | .neutral ne => .neutral (ne.substLevels subst)
   | .lam x ty body => .lam x (ty.substLevels subst) (body.substLevels subst)
   | .pi' x dom codom => .pi' x (dom.substLevels subst) (codom.substLevels subst)
   | .glued ne name us => .glued (ne.substLevels subst) name (us.map (·.subst subst))
 
-def Neutral.substLevels {n} (subst : List (Name × Universe)) : Neutral n → Neutral n
+def Neutral.substLevels {n} (subst : List Universe) : Neutral n → Neutral n
   | ⟨head, spine⟩ => ⟨head.substLevels subst, spine.substLevels subst⟩
 
-def Head.substLevels {n} (subst : List (Name × Universe)) : Head n → Head n
+def Head.substLevels {n} (subst : List Universe) : Head n → Head n
   | .var lvl => .var lvl
   | .const name us => .const name (us.map (·.subst subst))
 
-def Spine.substLevels {n} (subst : List (Name × Universe)) : Spine n → Spine n
+def Spine.substLevels {n} (subst : List Universe) : Spine n → Spine n
   | .nil => .nil
   | .app sp t => .app (sp.substLevels subst) (t.substLevels subst)
   | .proj sp i => .proj (sp.substLevels subst) i
 
-def ClosTy.substLevels {n} (subst : List (Name × Universe)) : ClosTy n → ClosTy n
+def ClosTy.substLevels {n} (subst : List Universe) : ClosTy n → ClosTy n
   | ⟨env, ty⟩ => ⟨env.substLevels subst, ty.substLevels subst⟩
 
-def ClosTm.substLevels {n} (subst : List (Name × Universe)) : ClosTm n → ClosTm n
+def ClosTm.substLevels {n} (subst : List Universe) : ClosTm n → ClosTm n
   | ⟨env, tm⟩ => ⟨env.substLevels subst, tm.substLevels subst⟩
 
-def Env.substLevels {n m} (subst : List (Name × Universe)) : Env n m → Env n m
+def Env.substLevels {n m} (subst : List Universe) : Env n m → Env n m
   | .nil => .nil
   | .cons t rest => .cons (t.substLevels subst) (rest.substLevels subst)
 

@@ -136,6 +136,9 @@ def Ctx.shiftAt {a b : Nat} (cutoff s : Nat) (tele : Ctx a b) : Ctx (a + s) (b +
 
 def Ctx.shift {m k : Nat} := @Ctx.shiftAt m k 0
 
+def Ctx.shiftLevels {a b : Nat} (k : Nat) (tele : Ctx a b) : Ctx a b :=
+  tele.map fun ⟨name, ty⟩ => ⟨name, ty.shiftLevels k⟩
+
 def indConsistency {n : Nat}
     (numParams numIndices : Nat)
     (indName ctorName : Name)
@@ -315,7 +318,10 @@ def buildIhs
           let t : Tm (info.nestedEnd + minorsAfter + fieldsAfter) := this ▸ t.shiftAfter (info.nestedEnd - numParamsMotivesIthMinor + fieldsAfter) minorsAfter
           hEnd₂ ▸ t
 
-      let fieldIdx : Fin numFields := ⟨idx - numParamsMotivesIthMinor, by have := fs.le; omega⟩
+      have hFieldIdx : idx - numParamsMotivesIthMinor < numFields := by
+        have := fs.le
+        omega
+      let fieldIdx : Fin numFields := ⟨idx - numParamsMotivesIthMinor, hFieldIdx⟩
       let recFields := recFields ++ [{ fieldIdx, nestedEnd := nestedEnd₂, nestedTele := nestedTele₂, indices := indices₂ }]
       return ⟨k + 1, ihTele, recFields⟩
 
@@ -387,8 +393,7 @@ def buildMinorTy
 @[specialize]
 def buildRecRule {numParams numMinors}
     (motiveVal : VTm (numParams + 1))
-    (motiveUnivName : Name)
-    (indUnivs : List Universe)
+    (recIndUnivs : List Universe)
     (recName : Name)
     (params : List (VTm numParams))
     (i : Fin numMinors)
@@ -415,7 +420,7 @@ def buildRecRule {numParams numMinors}
     let majorArg : VTm numParamsMotivesMinorsFieldsNested := VTm.varAt (numParamsMotivesMinors + rf.fieldIdx.val)
     let majorArg ← majorArg.apps q₀ nestedArgs
 
-    let recUnivs := .level motiveUnivName :: indUnivs
+    let recUnivs := .level 0 :: recIndUnivs
     let recVal : VTm numParamsMotivesMinorsFieldsNested := VTm.const recName recUnivs
     let recVal ← recVal.apps q₀ (weaken params (by omega))
     let recVal ← recVal.app q₀ (motiveVal.weaken (by omega))
@@ -481,8 +486,9 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
   withChild q₀ 0 (emitHover q₀ (.signature ind.name paramTys resultTy))
   let indTy : Ty 0 := Ty.pis paramTys resultTy
   let univParams ← getUnivParams q₀
+  let numUnivParams := univParams.length
 
-  let _ ← addConstant q₀ ind.name (.opaque { univParams, ty := indTy })
+  let _ ← addConstant q₀ ind.name (.opaque { numUnivParams, ty := indTy })
 
   let ⟨numParamsIndices, indexTys, returnTy⟩ := resultTy.getTele
   let numIndices := numParamsIndices - numParams
@@ -491,22 +497,24 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
     | .el _ => raiseError q₀ (.inductiveReturnTypeMustBeTypeUniverse ind.name)
     | .pi _ _ _ => raiseError q₀ (.msg "internal error")
 
-  let indUnivs := univParams.map Universe.level
+  let indUnivs := List.finRange numUnivParams |>.map fun i => Universe.level i.val
+  let recIndUnivs := List.finRange numUnivParams |>.map fun i => Universe.level (i.val + 1)
   let indVal : VTm 0 := VTm.const ind.name indUnivs
 
   let motiveIndices : List (VTm numParamsIndices) :=
     List.finRange numIndices |>.map fun i => VTm.varAt (numParams + i.val)
 
-  let motiveInd : VTm numParamsIndices := indVal.weaken
+  let indValRec : VTm 0 := VTm.const ind.name recIndUnivs
+  let motiveInd : VTm numParamsIndices := indValRec.weaken
   let motiveInd ← motiveInd.apps q₀ (weaken params indexTys.le)
   let motiveInd ← motiveInd.apps q₀ motiveIndices
   let motiveInd ← motiveInd.quote q₀
 
-  let motiveUnivName := Universe.freshName univParams
+  let indexTysRec : Ctx numParams numParamsIndices := indexTys.shiftLevels 1
   let motiveTy : Ty numParams :=
-    Ty.pis indexTys <|
+    Ty.pis indexTysRec <|
     Ty.arrow (Ty.el motiveInd) <|
-    Ty.u (.level motiveUnivName)
+    Ty.u (.level 0)
   let motiveVal : VTm numParamsMotives := VTm.varAt numParams
 
   let numMinors := ind.ctors.length
@@ -519,7 +527,7 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
 
   let ctorEntries : List (Name × Constant) := ctors.toList.map fun (name, ctorFieldsTy) =>
     let ctorFieldsTy := Ty.pis paramTys ctorFieldsTy
-    (name, .constructor { univParams, ty := ctorFieldsTy, indName := ind.name })
+    (name, .constructor { numUnivParams, ty := ctorFieldsTy, indName := ind.name })
 
   for (name, entry) in ctorEntries do
     let _ ← addConstant q₀ name entry
@@ -529,7 +537,7 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
   let ctorNames := ctors.map Prod.fst
 
   let indInfo : InductiveInfo := {
-    univParams
+    numUnivParams
     ty := indTy
     numParams
     numIndices
@@ -540,19 +548,22 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
 
   let recName := ind.recName
 
+  let ctorsRec := ctors.map fun (n, ty) => (n, ty.shiftLevels 1)
   let (minorTys, seeds) ←
-    goMinors q₀ numParams numIndices numMinors ind.name indUnivs motiveVal params ctors 0 (Nat.zero_le numMinors) .nil ⟨#[], rfl⟩
+    goMinors q₀ numParams numIndices numMinors ind.name recIndUnivs motiveVal params ctorsRec 0 (Nat.zero_le numMinors) .nil ⟨#[], rfl⟩
 
   let numParamsMotivesMinorsIndices := numParamsMotivesMinors + numIndices
   let indexTys' : Ctx numParamsMotivesMinors numParamsMotivesMinorsIndices :=
     have h1 : numParams + (1 + numMinors) = numParamsMotivesMinors := by omega
-    have h2 : numParamsIndices + (1 + numMinors) = numParamsMotivesMinorsIndices := by have := indexTys.le; omega
+    have h2 : numParamsIndices + (1 + numMinors) = numParamsMotivesMinorsIndices := by
+      have := indexTys.le
+      omega
     h2 ▸ h1 ▸ shiftIndexTys (1 + numMinors) indexTys
 
   let recRules ← Vector.finRange numMinors
     |>.zip seeds
     |>.mapM fun (i, seed) =>
-    buildRecRule q₀ motiveVal motiveUnivName indUnivs recName params i seed
+    buildRecRule q₀ motiveVal recIndUnivs recName params i seed
 
   let indicesVals : List (VTm numParamsMotivesMinorsIndices) :=
     List.finRange numIndices |>.map fun j => VTm.varAt (numParamsMotivesMinors + j.val)
@@ -571,16 +582,15 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
   let conclusionTy := Ty.el conclusionTy
 
   let recTy : Ty 0 :=
-    Ty.pis paramTys <|
+    Ty.pis (paramTys.shiftLevels 1) <|
     Ty.pi `motive motiveTy <|
     Ty.pis minorTys <|
-    Ty.pis indexTys' <|
-    Ty.arrow majorTy <|
-    conclusionTy
+    Ty.pis (indexTys'.shiftLevels 1) <|
+    Ty.arrow (majorTy.shiftLevels 1) <|
+    conclusionTy.shiftLevels 1
 
-  let recUnivParams := motiveUnivName :: univParams
   let recInfo : RecursorInfo := {
-    univParams := recUnivParams
+    numUnivParams := numUnivParams + 1
     ty := recTy
     recName
     numParams

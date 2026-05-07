@@ -8,8 +8,9 @@ namespace Qdt
 
 open Lean (Name)
 
+/-- Universe-level expression with de Bruijn-indexed level references. -/
 inductive Universe where
-  | level (n : Name)
+  | level (i : Nat)
   | zero
   | succ (u : Universe)
   | max (u v : Universe)
@@ -29,7 +30,7 @@ def parenIf (p : Bool) : Std.Format → Std.Format :=
 protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
   match u with
   | .zero => "0"
-  | .level n => toString n
+  | .level i => "u#" ++ repr i
   | .succ u' =>
     let rec countSuccs (acc : Nat) : Universe → Nat × Std.Format
       | .succ u'' => countSuccs (acc + 1) u''
@@ -45,105 +46,79 @@ instance : Repr Universe where
 instance : ToString Universe where
   toString u := (repr u).pretty
 
-#guard toString (Universe.level `u |>.succ.succ.succ.succ) == "u + 4"
-
-/- This code is copied from Lean 4 `src/Lean/Level.lean` -/
+#guard toString (Universe.level 0 |>.succ.succ.succ.succ) == "u#0 + 4"
 
 def addOffset (u : Universe) : Nat → Universe
   | 0 => u
   | n + 1 => addOffset u.succ n
 
+/-- Number of leading `.succ` constructors. -/
 def getOffset : Universe → Nat
   | .succ u => getOffset u + 1
   | _ => 0
 
+/-- Strip leading `.succ` constructors. -/
 def getLevelOffset : Universe → Universe
   | .succ u => getLevelOffset u
   | u => u
 
-def ctorToNat : Universe → Nat
-  | .zero   => 0
-  | .level _ => 1
-  | .succ _ => 2
-  | .max _ _ => 3
+structure NF where
+  constant : Nat
+  levels : List (Nat × Nat)
+  deriving Repr, DecidableEq
 
-def normLtAux : Universe → Nat → Universe → Nat → Bool
-  | .succ l₁, k₁, l₂, k₂ => normLtAux l₁ (k₁+1) l₂ k₂
-  | l₁, k₁, .succ l₂, k₂ => normLtAux l₁ k₁ l₂ (k₂+1)
-  | l₁@(.max l₁₁ l₁₂), k₁, l₂@(.max l₂₁ l₂₂), k₂ =>
-    if l₁ == l₂ then k₁ < k₂
-    else if l₁₁ != l₂₁ then normLtAux l₁₁ 0 l₂₁ 0
-    else normLtAux l₁₂ 0 l₂₂ 0
-  | .level n₁, k₁, .level n₂, k₂ => if n₁ == n₂ then k₁ < k₂ else Name.lt n₁ n₂
-  | l₁, k₁, l₂, k₂ => if l₁ == l₂ then k₁ < k₂ else ctorToNat l₁ < ctorToNat l₂
+namespace NF
 
-def normLt (l₁ l₂ : Universe) : Bool :=
-  normLtAux l₁ 0 l₂ 0
+def zero : NF := ⟨0, []⟩
 
-@[specialize] partial def getMaxArgsAux (normalise : Universe → Universe)
-    : Universe → Bool → Array Universe → Array Universe
-  | .max l₁ l₂, alreadyNorm, lvls =>
-      lvls
-      |> getMaxArgsAux normalise l₁ alreadyNorm
-      |> getMaxArgsAux normalise l₂ alreadyNorm
-  | l, false, lvls  => getMaxArgsAux normalise (normalise l) true lvls
-  | l, true,  lvls  => lvls.push l
+def level (i : Nat) : NF := ⟨0, [(i, 0)]⟩
 
-def accMax (result : Universe) (prev : Universe) (offset : Nat) : Universe :=
-  if result = .zero then addOffset prev offset
-  else .max result (addOffset prev offset)
+/-- Maximum offset appearing in a list of indexed offsets. -/
+def maxOffset : List (Nat × Nat) → Nat
+  | [] => 0
+  | (_, k) :: rest => Nat.max k (maxOffset rest)
 
-def mkMaxAux (lvls : Array Universe) (extraK : Nat) (i : Nat)
-    (prev : Universe) (prevK : Nat) (result : Universe) : Universe :=
-  if h : i < lvls.size then
-    let lvl := lvls[i]
-    let curr := getLevelOffset lvl
-    let currK := getOffset lvl
-    if curr = prev then
-      mkMaxAux lvls extraK (i+1) curr currK result
-    else
-      mkMaxAux lvls extraK (i+1) curr currK (accMax result prev (extraK + prevK))
-  else
-    accMax result prev (extraK + prevK)
+/-- Drop the constant floor if it is dominated by some indexed offset. -/
+def canonicaliseConstant (c : Nat) : List (Nat × Nat) → NF
+  | [] => ⟨c, []⟩
+  | L => if c ≤ maxOffset L then ⟨0, L⟩ else ⟨c, L⟩
 
-def skipExplicit (lvls : Array Universe) (i : Nat) : Nat :=
-  if h : i < lvls.size then
-    let lvl := lvls[i]
-    if getLevelOffset lvl = .zero then skipExplicit lvls (i + 1) else i
-  else
-    i
+def succ : NF → NF
+  | ⟨c, L⟩ => canonicaliseConstant (c + 1) (L.map fun p => (p.1, p.2 + 1))
 
-def isExplicitSubsumedAux (lvls : Array Universe) (maxExplicit : Nat) (i : Nat) : Bool :=
-  if h : i < lvls.size then
-    let lvl := lvls[i]
-    if getOffset lvl ≥ maxExplicit then true
-    else isExplicitSubsumedAux lvls maxExplicit (i + 1)
-  else
-    false
+/-- Sorted merge by the index `Nat`; on collision, take the max offset. -/
+def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
+  | [], ys => ys
+  | xs, [] => xs
+  | (i₁, k₁) :: xs, (i₂, k₂) :: ys =>
+    if i₁ < i₂      then (i₁, k₁) :: merge xs ((i₂, k₂) :: ys)
+    else if i₁ > i₂ then (i₂, k₂) :: merge ((i₁, k₁) :: xs) ys
+    else                 (i₁, Nat.max k₁ k₂) :: merge xs ys
 
-def isExplicitSubsumed (lvls : Array Universe) (firstNonExplicit : Nat) : Bool :=
-  if firstNonExplicit = 0 then false
-  else
-    let max := getOffset (lvls[firstNonExplicit - 1]!)
-    isExplicitSubsumedAux lvls max firstNonExplicit
+def maxOf : NF → NF → NF
+  | ⟨c₁, L₁⟩, ⟨c₂, L₂⟩ => canonicaliseConstant (Nat.max c₁ c₂) (merge L₁ L₂)
 
-partial def normalise (l : Universe) : Universe :=
-  let k := getOffset l
-  let u := getLevelOffset l
-  match u with
-  | .max l₁ l₂ =>
-      let lvls  := getMaxArgsAux normalise l₁ false #[]
-      let lvls  := getMaxArgsAux normalise l₂ false lvls
-      let lvls  := lvls.qsort normLt
-      let first := skipExplicit lvls 0
-      let i     := if isExplicitSubsumed lvls first then first else first - 1
-      let lvl₁  := lvls[i]!
-      let prev  := getLevelOffset lvl₁
-      let prevK := getOffset lvl₁
-      mkMaxAux lvls k (i + 1) prev prevK .zero
-  | .zero      => addOffset .zero k
-  | .level n   => addOffset (.level n) k
-  | .succ u    => addOffset (normalise u) (k+1)
+def ofUniverse : Universe → NF
+  | .zero => zero
+  | .level i => level i
+  | .succ u => succ (ofUniverse u)
+  | .max u v => maxOf (ofUniverse u) (ofUniverse v)
+
+/-- Fold indexed offsets into a `Universe` using left-growing `.max`. -/
+def reifyLevels : Universe → List (Nat × Nat) → Universe :=
+  List.foldl (fun acc (i, k) => Universe.max acc ((Universe.level i).addOffset k))
+
+def toUniverse : NF → Universe
+  | ⟨c, []⟩ => Universe.zero.addOffset c
+  | ⟨0, (i, k) :: rest⟩ => reifyLevels ((Universe.level i).addOffset k) rest
+  | ⟨c + 1, (i, k) :: rest⟩ =>
+    Universe.max
+      (reifyLevels ((Universe.level i).addOffset k) rest)
+      ((Universe.zero).addOffset (c + 1))
+
+end NF
+
+def normalise (u : Universe) : Universe := (NF.ofUniverse u).toUniverse
 
 def mkSucc (u : Universe) : Universe :=
   normalise (.succ u)
@@ -151,29 +126,19 @@ def mkSucc (u : Universe) : Universe :=
 def mkMax (u v : Universe) : Universe :=
   normalise (.max u v)
 
-def checkLevels (allowed : List Name) : Universe → Except Name Unit
-  | .level n => do if n ∉ allowed then throw n else return
+/-- Verify all level indices are `< numParams`. -/
+def checkLevels (numParams : Nat) : Universe → Except Nat Unit
+  | .level i => do if i < numParams then return else throw i
   | .zero => do return
-  | .succ u => do u.checkLevels allowed
-  | .max u v => do u.checkLevels allowed; v.checkLevels allowed
+  | .succ u => do u.checkLevels numParams
+  | .max u v => do u.checkLevels numParams; v.checkLevels numParams
 
-/-- Fresh universe name of the form `u`, `u_1`, `u_2` -/
-def freshName (existing : List Name) : Name :=
-  if `u ∉ existing then `u
-  else go 1 existing.length
-where
-  go (n fuel : Nat) : Name :=
-    let name := Name.mkStr1 s!"u_{n}"
-    match fuel with
-    | 0 => name
-    | fuel + 1 =>
-      if name ∈ existing then go (n + 1) fuel
-      else name
-
-#guard freshName [] == `u
-#guard freshName [`v] == `u
-#guard freshName [`u] == `u_1
-#guard freshName [`u, `u_1] == `u_2
+/-- Shift all level indices up by `k`. -/
+def shift (k : Nat) : Universe → Universe
+  | .level i => .level (i + k)
+  | .zero => .zero
+  | .succ u => .succ (u.shift k)
+  | .max u v => .max (u.shift k) (v.shift k)
 
 def le (u v : Universe) : Bool :=
   go u v
@@ -196,8 +161,8 @@ section Tests
 
 open Universe
 
-private abbrev u : Universe := .level `u
-private abbrev v : Universe := .level `v
+private abbrev u : Universe := .level 0
+private abbrev v : Universe := .level 1
 
 #guard normalise u == u
 #guard normalise 0 == 0
@@ -207,6 +172,9 @@ private abbrev v : Universe := .level `v
 #guard normalise (max v (u + 1) + 2) == max (u + 3) (v + 2)
 #guard normalise (max u (u + 1)) == u + 1
 #guard normalise (max 2 3) == 3
+#guard normalise (max 5 u + 1) == max (u + 1) 6
+#guard normalise (max 5 u + 2) == max (u + 2) 7
+#guard normalise (max 3 (max u (v + 2)) + 1) == max (max (u + 1) (v + 3)) 4
 
 #guard le 0 0
 #guard le 0 u
@@ -228,6 +196,153 @@ private abbrev v : Universe := .level `v
 #guard le (max u (v + 1)) (max (v + 1) u)
 
 end Tests
+
+/-- `Universe` expression is `Bounded k` when every `.level i` reference
+satisfies `i < k`. -/
+def Bounded (k : Nat) : Universe → Prop
+  | .level i => i < k
+  | .zero => True
+  | .succ u => u.Bounded k
+  | .max u v => u.Bounded k ∧ v.Bounded k
+
+/-- `addOffset` (= `n` extra `.succ`) preserves `Bounded`. -/
+theorem Bounded.addOffset {k : Nat} (n : Nat) :
+    ∀ {u : Universe}, u.Bounded k → (u.addOffset n).Bounded k := by
+  induction n with
+  | zero => intro u h; exact h
+  | succ n ih => intro u h; exact ih (u := u.succ) h
+
+namespace NF
+
+/-- An NF is `Bounded k` when all its level indices are < k. -/
+def Bounded (k : Nat) (nf : NF) : Prop :=
+  ∀ p ∈ nf.levels, p.1 < k
+
+theorem Bounded.zero {k : Nat} : NF.Bounded k NF.zero := by
+  intro p hp; cases hp
+
+theorem Bounded.level {k i : Nat} (h : i < k) : NF.Bounded k (NF.level i) := by
+  intro p hp
+  cases hp with
+  | head => exact h
+  | tail _ ht => cases ht
+
+theorem Bounded.canonicaliseConstant {k c : Nat} (L : List (Nat × Nat))
+    (hL : ∀ p ∈ L, p.1 < k) :
+    NF.Bounded k (NF.canonicaliseConstant c L) := by
+  cases L with
+  | nil => intro p hp; cases hp
+  | cons hd tl =>
+    by_cases h : c ≤ NF.maxOffset (hd :: tl)
+    · simp only [NF.canonicaliseConstant, h, ↓reduceIte]; exact hL
+    · simp only [NF.canonicaliseConstant, h, ↓reduceIte]; exact hL
+
+theorem Bounded.succ {k : Nat} {nf : NF} (h : NF.Bounded k nf) :
+    NF.Bounded k (NF.succ nf) := by
+  unfold NF.succ
+  cases nf with
+  | mk c L =>
+    apply Bounded.canonicaliseConstant
+    intro p hp
+    rw [List.mem_map] at hp
+    have ⟨p', hp', hpEq⟩ := hp
+    rw [← hpEq]
+    exact h p' hp'
+
+private theorem Bounded.merge_aux {k : Nat} :
+    ∀ (L₁ L₂ : List (Nat × Nat)),
+    (∀ p ∈ L₁, p.1 < k) → (∀ p ∈ L₂, p.1 < k) →
+    ∀ p ∈ NF.merge L₁ L₂, p.1 < k
+  | [], _, _, h₂ => fun p hp => h₂ p (by simpa [NF.merge] using hp)
+  | (i₁, k₁) :: _, [], h₁, _ => fun p hp =>
+    h₁ p (by simpa [NF.merge] using hp)
+  | (i₁, k₁) :: xs, (i₂, k₂) :: ys, h₁, h₂ => by
+    intro p hp
+    unfold NF.merge at hp
+    split at hp
+    next hLt =>
+      cases hp with
+      | head => exact h₁ (i₁, k₁) List.mem_cons_self
+      | tail _ ht =>
+        exact Bounded.merge_aux xs ((i₂, k₂) :: ys)
+          (fun p hp => h₁ p (List.mem_cons_of_mem _ hp)) h₂ p ht
+    next hNotLt =>
+      split at hp
+      next hGt =>
+        cases hp with
+        | head => exact h₂ (i₂, k₂) List.mem_cons_self
+        | tail _ ht =>
+          exact Bounded.merge_aux ((i₁, k₁) :: xs) ys h₁
+            (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
+      next hNotGt =>
+        cases hp with
+        | head => exact h₁ (i₁, k₁) List.mem_cons_self
+        | tail _ ht =>
+          exact Bounded.merge_aux xs ys
+            (fun p hp => h₁ p (List.mem_cons_of_mem _ hp))
+            (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
+
+theorem Bounded.maxOf {k : Nat} : ∀ {nf₁ nf₂ : NF},
+    NF.Bounded k nf₁ → NF.Bounded k nf₂ →
+    NF.Bounded k (NF.maxOf nf₁ nf₂)
+  | ⟨_, L₁⟩, ⟨_, L₂⟩, h₁, h₂ => by
+    apply Bounded.canonicaliseConstant
+    exact Bounded.merge_aux L₁ L₂ h₁ h₂
+
+theorem Bounded.ofUniverse {k : Nat} : ∀ {u : Universe},
+    u.Bounded k → NF.Bounded k (NF.ofUniverse u)
+  | .zero, _ => Bounded.zero
+  | .level _, h => Bounded.level h
+  | .succ u, h => Bounded.succ (Bounded.ofUniverse (u := u) h)
+  | .max _ _, ⟨hu, hv⟩ =>
+    Bounded.maxOf (Bounded.ofUniverse hu) (Bounded.ofUniverse hv)
+
+private theorem Bounded.reifyLevels_aux {k : Nat} {u : Universe}
+    (hu : u.Bounded k) :
+    ∀ (L : List (Nat × Nat)), (∀ p ∈ L, p.1 < k) →
+    (NF.reifyLevels u L).Bounded k
+  | [], _ => hu
+  | (i, j) :: rest, hL => by
+    unfold NF.reifyLevels
+    simp only [List.foldl]
+    apply Bounded.reifyLevels_aux
+    · exact ⟨hu, Universe.Bounded.addOffset j
+        (hL (i, j) List.mem_cons_self : Universe.Bounded k (Universe.level i))⟩
+    · exact fun p hp => hL p (List.mem_cons_of_mem _ hp)
+
+theorem Bounded.toUniverse {k : Nat} :
+    ∀ {nf : NF}, NF.Bounded k nf → nf.toUniverse.Bounded k
+  | ⟨c, []⟩, _ =>
+    Universe.Bounded.addOffset c (show Universe.Bounded k Universe.zero from trivial)
+  | ⟨0, (i, j) :: rest⟩, h => by
+    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
+    have hRest : ∀ p ∈ rest, p.1 < k :=
+      fun p hp => h p (List.mem_cons_of_mem _ hp)
+    exact Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest
+  | ⟨c + 1, (i, j) :: rest⟩, h => by
+    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
+    have hRest : ∀ p ∈ rest, p.1 < k :=
+      fun p hp => h p (List.mem_cons_of_mem _ hp)
+    exact ⟨Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest,
+      Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
+
+end NF
+
+/-- `Universe.normalise` preserves `Bounded`. -/
+theorem Bounded.normalise {k : Nat} {u : Universe} (h : u.Bounded k) :
+    u.normalise.Bounded k :=
+  NF.Bounded.toUniverse (NF.Bounded.ofUniverse h)
+
+/-- `mkSucc` preserves `Bounded`. -/
+theorem mkSucc_bounded {k : Nat} {u : Universe} (h : u.Bounded k) :
+    (Universe.mkSucc u).Bounded k :=
+  Bounded.normalise (h : u.succ.Bounded k)
+
+/-- `mkMax` preserves `Bounded`. -/
+theorem mkMax_bounded {k : Nat} {u v : Universe}
+    (hu : u.Bounded k) (hv : v.Bounded k) :
+    (Universe.mkMax u v).Bounded k :=
+  Bounded.normalise (⟨hu, hv⟩ : (u.max v).Bounded k)
 
 end Universe
 

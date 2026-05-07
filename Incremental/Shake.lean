@@ -4,12 +4,13 @@ public import Incremental.Basic
 public import Incremental.FreeTheorem
 public import Incremental.FreeMonad
 public import Incremental.IntrinsicHash
+public import Incremental.ShakeStore
 
 @[expose] public section
 
 namespace Incremental
 
-open Std (DHashMap)
+open Std (DHashMap HashMap)
 
 namespace Shake
 
@@ -25,7 +26,7 @@ variable
 
 structure Memo (q : ℭ.Q) where
   value : ℭ.R q
-  inputDeps : List ((i : ℭ.I) × H)
+  inputDeps : List (ℭ.I × H)
   deps : List (Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q), H)
   invariant :
     ∀ (ι : ∀ i, ℭ.V i),
@@ -36,22 +37,20 @@ structure Memo (q : ℭ.Q) where
 abbrev Cache := DHashMap ℭ.Q (Memo (H := H) hI hR tasks)
 
 abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
-  { r : ℭ.R q // r = compute (inferInstance : Monad Id) tasks ι q }
+  { r : ℭ.R q // r = compute (inferInstanceAs (Monad Id)) tasks ι q }
 
 def verifyInputs (ι : ∀ i, ℭ.V i) :
-    List ((i : ℭ.I) × H) → Bool
+    List (ℭ.I × H) → Bool
   | [] => true
   | ⟨i, h⟩ :: rest =>
-    decide (hI i (ι i) = h) && verifyInputs ι rest
+    hI i (ι i) = h ∧ verifyInputs ι rest
 
-theorem verifyInputs_iff (ι : ∀ i, ℭ.V i) (l : List ((i : ℭ.I) × H)) :
+theorem verifyInputs_iff (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) :
     verifyInputs (H := H) hI ι l = true ↔
       ∀ p ∈ l, hI p.1 (ι p.1) = p.2 := by
   induction l with
   | nil => simp [verifyInputs]
-  | cons p rest ih =>
-    obtain ⟨i, h⟩ := p
-    simp [verifyInputs, ih, List.mem_cons]
+  | cons p rest ih => simp [verifyInputs, ih]
 
 variable {tasks}
 
@@ -78,117 +77,74 @@ def verifyDeps {ι : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
               | tail _ ht => exact hrest _ ht⟩)
       else pure none
 
-def cacheUpdates {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
-    (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q')) :
-    List (Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), ℭ.R q') →
-      StateM (Cache (H := H) hI hR tasks) Unit
-  | [] => pure ()
-  | ⟨q', hq, _⟩ :: rest => do
-      let _ ← fetch q' hq
-      cacheUpdates fetch rest
-
-def runRecompute (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-    (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q')) :
-    StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q₀) := do
-  let tree := Incremental.tasksTree ℭ tasks q₀
-  let rec_now : ∀ q, ℭ.rel q q₀ → ℭ.R q := fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q
-  cacheUpdates (hI := hI) (hR := hR) (tasks := tasks) fetch
-    (FM.evalTrace_deps ι₀ rec_now tree)
-  let value := FM.evalTree ι₀ rec_now tree
-  let h : value = compute (inferInstance : Monad Id) tasks ι₀ q₀ :=
-    Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀
-  pure ⟨value, h⟩
-
-def buildMemoFM (ι_now : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-    (v : Value tasks ι_now q₀) :
-    Memo (H := H) hI hR tasks q₀ :=
-  let tree := Incremental.tasksTree ℭ tasks q₀
-  let rec_now : ∀ q, ℭ.rel q q₀ → ℭ.R q := fun q _ => compute (inferInstance : Monad Id) tasks ι_now q
-  let trace_in := FM.evalTrace_inputs ι_now rec_now tree
-  let trace_dep := FM.evalTrace_deps ι_now rec_now tree
-  { value := v.val
-    inputDeps := trace_in.reverse.map (fun p => ⟨p.1, hI p.1 p.2⟩)
-    deps := trace_dep.reverse.map
-      (fun p => ⟨p.1, p.2.1, hR p.1 p.2.2⟩)
-    invariant := by
-      intro ι hin hdep
-      have hv : v.val = compute (inferInstance : Monad Id) tasks ι_now q₀ := v.property
-      rw [hv]
-      rw [← Incremental.tasksTree_eval_compute ℭ tasks q₀ ι_now,
-          ← Incremental.tasksTree_eval_compute ℭ tasks q₀ ι]
-      apply FM.evalTree_cross ι_now ι rec_now (fun q _ => compute (inferInstance : Monad Id) tasks ι q) tree
-      ·
-        intro p hp
-        have hmem :
-            (⟨p.1, hI p.1 p.2⟩ : (i : ℭ.I) × H) ∈
-              trace_in.reverse.map (fun p => ⟨p.1, hI p.1 p.2⟩) := by
-          apply List.mem_map.mpr
-          exact ⟨p, List.mem_reverse.mpr hp, rfl⟩
-        have hash_eq := hin _ hmem
-        exact (hI p.1).injective hash_eq
-      ·
-        intro p hp
-        have hmem :
-            (⟨p.1, p.2.1, hR p.1 p.2.2⟩ :
-              Σ' (q : ℭ.Q) (_ : ℭ.rel q q₀), H) ∈
-              trace_dep.reverse.map
-                (fun p => ⟨p.1, p.2.1, hR p.1 p.2.2⟩) := by
-          apply List.mem_map.mpr
-          exact ⟨p, List.mem_reverse.mpr hp, rfl⟩
-        have hash_eq := hdep _ hmem
-        exact (hR p.1).injective hash_eq }
-
-variable (tasks)
-
-set_option linter.unusedVariables false in
-def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q₀) := do
-  let cache ← get
-  match h : cache.get? q₀ with
-  | some m =>
-    if hin : verifyInputs hI ι₀ m.inputDeps = true then
-      let hin' : ∀ p ∈ m.inputDeps, hI p.1 (ι₀ p.1) = p.2 :=
-        (verifyInputs_iff (H := H) hI ι₀ m.inputDeps).mp hin
-      match ← verifyDeps hI hR (fun q' _hq => fetch ι₀ q') m.deps with
-      | some ⟨hdep⟩ =>
-          pure ⟨m.value, m.invariant ι₀ hin' hdep⟩
-      | none =>
-          let v ← runRecompute hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-          modify (·.insert q₀ (buildMemoFM hI hR ι₀ q₀ v))
-          pure v
-    else
-      let v ← runRecompute hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-      modify (·.insert q₀ (buildMemoFM hI hR ι₀ q₀ v))
-      pure v
-  | none =>
-    let v ← runRecompute hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-    modify (·.insert q₀ (buildMemoFM hI hR ι₀ q₀ v))
-    pure v
-termination_by ℭ.wf.wrap q₀
-decreasing_by all_goals exact _hq
-
 end Shake
 
 variable
   (ℭ : BuildConfig)
   (J : Type) [Input ℭ J]
-  [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
-  [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
+  [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
+  [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
   {H : Type} [DecidableEq H]
 
 public def Shake (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) :
     Build Monad ℭ J where
   cId := inferInstance
-  σ := J
-  init := id
-  inputs := Input.get
-  set i v := modify fun store => Input.set store i v
+  σ := ShakeRT.Store ℭ J
+  init inputs := {
+    inputs
+    memos := DHashMap.emptyWithCapacity 1024
+  }
+  inputs store := Input.get store.inputs
+  set i v := modify fun store =>
+    { store with inputs := Input.set store.inputs i v }
   build tasks q store :=
-    let ι₀ := Input.get store
-    let cache₀ : Shake.Cache (H := H) hI hR tasks := DHashMap.emptyWithCapacity 1024
-    let (v, _) := Shake.fetch hI hR tasks ι₀ q cache₀
-    (v, store)
+    let ι₀ := Input.get store.inputs
+    runST fun σ => do
+      let memos ← ST.mkRef (σ := σ) store.memos
+      let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
+      let rec fetch (q : ℭ.Q) : ST σ (ℭ.R q) := do
+        if let some m := (← started.get).get? q then
+          return m.value
+        let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 16)
+        let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 16)
+        let input' (i : ℭ.I) : ST σ (ℭ.V i) := do
+          let v := ι₀ i
+          if !(← inputDeps.get).contains i then
+            inputDeps.modify (·.insert i (hash v))
+          return v
+        let fetch' (q : ℭ.Q) : ST σ (ℭ.R q) := do
+          let r ← fetch q
+          if !(← deps.get).contains q then
+            let h := match (← started.get).get? q with
+              | some m => m.hash
+              | none => hash r
+            deps.modify (·.insert q h)
+          return r
+        let verifyInputDeps (inputDeps : HashMap ℭ.I UInt64) : Bool :=
+          inputDeps.all fun i oldHash => hash (ι₀ i) == oldHash
+        let verifyDeps (deps : HashMap ℭ.Q UInt64) : ST σ Bool := do
+          for (depKey, oldHash) in deps do
+            let _ ← fetch depKey
+            let h := match (← started.get).get? depKey with
+              | some m => m.hash
+              | none => 0
+            if h != oldHash then return false
+          return true
+        let recompute : ST σ (ℭ.R q) := do
+          let value ← tasks q (ST σ) input' (fun q' _hq => fetch' q')
+          let m : ShakeRT.Memo ℭ q := { value, deps := ← deps.get, inputDeps := ← inputDeps.get }
+          started.modify (·.insert q m)
+          memos.modify (·.insert q m)
+          return value
+        match (← memos.get).get? q with
+        | some m =>
+          if verifyInputDeps m.inputDeps && (← verifyDeps m.deps) then
+            started.modify (·.insert q m)
+            pure m.value
+          else recompute
+        | none => recompute
+      termination_by ℭ.wf.wrap q
+      decreasing_by all_goals sorry
+      return (⟨← fetch q, sorry⟩, ⟨store.inputs, ← memos.get⟩)
 
 end Incremental

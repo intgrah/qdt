@@ -36,7 +36,7 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
 variable {b : Build Monad config (DHashMap InputKey InputVal)}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
-    StateM b.σ (Array String × Nat × Nat × Nat) := do
+    StateM b.σ (Array String) := do
   let transImports ← b.run tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
   for file in transImports.toList ++ [filepath] do
@@ -47,15 +47,15 @@ def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     let (cst, _) ← b.run tasks (Key.cst file)
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
-  return (msgs, 0, 0, 0)
+  return msgs
 
 def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
-    (Array String × Nat × Nat × Nat) × b.σ :=
+    Array String × b.σ :=
   StateT.run (s := store) <| checkModule inputs filepath
 
 def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store₀ : b.σ)
     (entryFile : FilePath) : IO Unit := do
-  let ((msgs, _, _, _), initialStore) := runOnce inputs₀ store₀ entryFile
+  let (msgs, initialStore) := runOnce inputs₀ store₀ entryFile
   for msg in msgs do println! msg
   let store ← IO.mkRef initialStore
   let inputs ← IO.mkRef inputs₀
@@ -73,7 +73,7 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
           let text ← IO.FS.readFile file
           store.modify fun s => (b.set (InputKey.text file) (some text) |>.run s).2
           inputs.modify (·.insert (.text file) text)
-        let ((msgs, _, _, _), s) := runOnce (← inputs.get) (← store.get) entryFile
+        let (msgs, s) := runOnce (← inputs.get) (← store.get) entryFile
         for msg in msgs do println! msg
         store.set s
 
@@ -122,12 +122,12 @@ def run (parsed : Parsed) : IO UInt32 := do
         StateT.run (s := store) (b.run tasks (Key.transitiveImports file))
       let tImports ← IO.monoMsNow
       -- Phase B: full check
-      let ((msgs, betaCount, evalCount, whnfCount), store') := runOnce inputs s1 file
+      let (msgs, store') := runOnce inputs s1 file
       let tCheck ← IO.monoMsNow
       let dImports := tImports - tFileStart
       let dCheck := tCheck - tImports
       let dTotal := tCheck - tFileStart
-      IO.eprintln s!"file {file}: imports={dImports}ms check={dCheck}ms total={dTotal}ms betas={betaCount} evals={evalCount} whnfs={whnfCount}"
+      IO.eprintln s!"file {file}: imports={dImports}ms check={dCheck}ms total={dTotal}ms"
       allMsgs := allMsgs ++ msgs
       store := store'
     for msg in allMsgs do println! msg
@@ -149,7 +149,7 @@ def cmd : Cmd := `[Cli|
     w, watch;                      "Enable watch mode"
     "build" : BuildSystem;         "Build system to use (default: shake-c)"
     profile;                       "Print query profile table after build"
-    "dump-graph" : String;         "Dump Shake query graph to file (forces shake build system)"
+    "dump-graph" : String;         "Dump Shake query graph to file"
 
   ARGS:
     ...modules : String;           "Modules to check"

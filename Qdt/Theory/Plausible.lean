@@ -33,7 +33,7 @@ def Universe.sample : Nat → Gen Universe
   | fuel + 1 => do
       match ← SampleableExt.interpSample (Fin 4) with
       | 0 => return .zero
-      | 1 => return .level #[`u, `v, `w, `x][← SampleableExt.interpSample (Fin 4)]
+      | 1 => return .level (← SampleableExt.interpSample (Fin 4))
       | 2 => return (← sample fuel).mkSucc
       | 3 => return (← sample fuel).mkMax (← sample fuel)
 
