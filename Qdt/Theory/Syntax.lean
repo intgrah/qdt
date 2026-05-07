@@ -9,21 +9,17 @@ namespace Qdt
 
 open Lean (Name)
 
-/-- de Bruijn indices -/
 def Idx n := Fin n
 deriving Repr, Hashable, DecidableEq
 
-/-- Allow natural number literals to be used as de Bruijn indices -/
 instance {n} [NeZero n] {i} : OfNat (Idx n) i where
   ofNat := Fin.ofNat n i
 
 mutual
 
-/-- Types -/
 inductive Ty : Nat → Type
   | u {n} : Universe → Ty n
   | pi {n} : Name → Ty n → Ty (n + 1) → Ty n
-  /-- If Γ ⊢ t : .u i, then Γ ⊢ .el t type -/
   | el {n} : Tm n → Ty n
 with
   @[computed_field]
@@ -36,7 +32,6 @@ with
       1 |> mixHash t.hash'
 deriving Repr
 
-/-- Terms -/
 inductive Tm : Nat → Type
   | u' {n} : Universe → Tm n
   | var {n} : Idx n → Tm n
@@ -99,9 +94,6 @@ def Tm.lams {a b} : Ctx a b → Tm b → Tm a
 
 mutual
 
-/-- Universe-level substitution.  `subst : List Universe` maps each
-    parameter (by **de Bruijn index**) to its replacement; out-of-range
-    indices are left as-is. -/
 def Universe.subst (subst : List Universe) : Universe → Universe
   | .level i => (subst[i]?.getD (.level i)).normalise
   | .zero => .zero
@@ -124,11 +116,6 @@ def Tm.substLevels {n} (subst : List Universe) : Tm n → Tm n
   | .letE name ty rhs body =>
       .letE name (ty.substLevels subst) (rhs.substLevels subst) (body.substLevels subst)
 
-/-- Shift all universe-level references in a `Ty` up by `k`.  Used when
-    embedding a syntactic object elaborated in one universe-binder frame
-    into another that prepends `k` fresh universe parameters (e.g. the
-    recursor prepends one universe — the motive's — to the inductive's
-    own universe parameters). -/
 def Ty.shiftLevels {n} (k : Nat) : Ty n → Ty n
   | .u u => .u (u.shift k)
   | .pi name ty b => .pi name (ty.shiftLevels k) (b.shiftLevels k)
@@ -146,14 +133,6 @@ def Tm.shiftLevels {n} (k : Nat) : Tm n → Tm n
       .letE name (ty.shiftLevels k) (rhs.shiftLevels k) (body.shiftLevels k)
 
 end
-
-/-! ## Bounded universe levels in types and terms
-
-`Ty.Bounded k A` / `Tm.Bounded k a` say every `Universe` expression in
-`A` (resp `a`) is `Universe.Bounded k`.  The `.const` case bounds the
-universe-instantiation list — so a stored `info.ty` with
-`info.ty.Bounded info.numUnivParams` is universe-scope-correct
-when used at any `(.const name us)` with `us.length = info.numUnivParams`. -/
 
 mutual
 
@@ -173,11 +152,6 @@ def Tm.Bounded (k : Nat) {n : Nat} : Tm n → Prop
   | .letE _ A e b => Ty.Bounded k A ∧ Tm.Bounded k e ∧ Tm.Bounded k b
 
 end
-
-/-! ## `Universe.subst` preserves `Bounded`
-
-When all entries of `us` are bounded by `k`, substituting them into a
-`u` bounded by `us.length` yields a result bounded by `k`. -/
 
 theorem Universe.Bounded.subst {k : Nat} {us : List Universe}
     (hus : ∀ u ∈ us, Universe.Bounded k u) :

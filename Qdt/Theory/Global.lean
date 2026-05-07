@@ -91,12 +91,6 @@ def findDefinition (name : Name) (g : Global) : Option DefinitionInfo := do
 def findTy (name : Name) (g : Global) : Option (Ty 0) :=
   Constant.ty <$> g[name]?
 
-/-- Look up a constant's `ConstantInfo` (universe parameters + type).
-Used by `Tm.HasType.const` to enforce that the universe-instantiation
-list provided in the term has the right arity.  Without this, the
-`.const` rule allowed `(.const name us)` with arbitrary `|us|`,
-making `Universe.subst` non-associative on `info.ty` and breaking
-universe-substLevels-preservation of typing. -/
 def findConstantInfo (name : Name) (g : Global) : Option ConstantInfo :=
   Constant.toConstantInfo <$> g[name]?
 
@@ -119,30 +113,10 @@ def findRecursor (name : Name) (g : Global) : Option RecursorInfo := do
   let .recursor info ← g[name]? | none
   return info
 
-/-! ## Axiom-freeness
-
-An `AxiomFree` global context is one whose entries are all
-definitions, opaques, inductives, recursors, or constructors — no
-`Constant.axiom`s.  This is a consistency-grade hypothesis: in the
-presence of arbitrary axioms, the fundamental lemma cannot hold (an
-axiom of type `Empty` would directly inhabit the empty type).
-
-The fundamental lemma (`Tm.HasType.fundamental`) takes `AxiomFree`
-as a hypothesis so that the `Tm.HasType.const` case can rule out the
-axiom alternative when destructing the looked-up `Constant`.
--/
-
-/-- A `Global` is *axiom-free* iff none of its entries is a
-`Constant.axiom`.  The fundamental lemma is gated on this
-hypothesis. -/
 def AxiomFree (Δ : Global) : Prop :=
   ∀ (name : Name) (entry : Constant), Δ[name]? = some entry →
     match entry with | .axiom _ => False | _ => True
 
-/-- From `AxiomFree Δ` and a successful `findTy`, recover the
-underlying entry along with a proof that it is **not** an axiom.
-This is the bridge used by the fundamental lemma's `const` case to
-discharge the otherwise-unprovable axiom alternative. -/
 theorem AxiomFree.findTy_safe {Δ : Global} (hAx : Global.AxiomFree Δ)
     {name : Name} {ty : Ty 0} (hLook : Δ.findTy name = some ty) :
     ∃ entry : Constant,

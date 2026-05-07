@@ -25,7 +25,6 @@ theorem weaken_snoc {m n x A}
   unfold weaken
   rw [Tele.dmap_snoc]
 
-/-- Apply a single-variable substitution to a context -/
 def subst {m} (a : Tm m) : {n : Nat} → Ctx (m + 1) (n + 1) → Ctx m n
   | _, .nil => .nil
   | n + 1, .snoc Γ ⟨x, B⟩ =>
@@ -40,12 +39,6 @@ instance {m n} : GetElem (Ctx (m + 1) (n + 1)) (Tm m) (Ctx m n) fun _ _ => True 
 theorem subst_nil {n} {a : Tm n} : subst a Tele.nil = Tele.nil := by
   unfold subst
   rfl
-
-/-!
-## Lookup equations for `snoc` (Step 01)
-
-These are the building blocks for `Derives.weakenAt` in Step 07.
--/
 
 @[simp]
 theorem get_snoc_zero {n} {x : Lean.Name} {A : Ty n} {Γ : Ctx 0 n}

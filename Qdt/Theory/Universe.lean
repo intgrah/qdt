@@ -8,7 +8,6 @@ namespace Qdt
 
 open Lean (Name)
 
-/-- Universe-level expression with de Bruijn-indexed level references. -/
 inductive Universe where
   | level (i : Nat)
   | zero
@@ -52,12 +51,10 @@ def addOffset (u : Universe) : Nat → Universe
   | 0 => u
   | n + 1 => addOffset u.succ n
 
-/-- Number of leading `.succ` constructors. -/
 def getOffset : Universe → Nat
   | .succ u => getOffset u + 1
   | _ => 0
 
-/-- Strip leading `.succ` constructors. -/
 def getLevelOffset : Universe → Universe
   | .succ u => getLevelOffset u
   | u => u
@@ -73,12 +70,10 @@ def zero : NF := ⟨0, []⟩
 
 def level (i : Nat) : NF := ⟨0, [(i, 0)]⟩
 
-/-- Maximum offset appearing in a list of indexed offsets. -/
 def maxOffset : List (Nat × Nat) → Nat
   | [] => 0
   | (_, k) :: rest => Nat.max k (maxOffset rest)
 
-/-- Drop the constant floor if it is dominated by some indexed offset. -/
 def canonicaliseConstant (c : Nat) : List (Nat × Nat) → NF
   | [] => ⟨c, []⟩
   | L => if c ≤ maxOffset L then ⟨0, L⟩ else ⟨c, L⟩
@@ -86,7 +81,6 @@ def canonicaliseConstant (c : Nat) : List (Nat × Nat) → NF
 def succ : NF → NF
   | ⟨c, L⟩ => canonicaliseConstant (c + 1) (L.map fun p => (p.1, p.2 + 1))
 
-/-- Sorted merge by the index `Nat`; on collision, take the max offset. -/
 def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
   | [], ys => ys
   | xs, [] => xs
@@ -104,7 +98,6 @@ def ofUniverse : Universe → NF
   | .succ u => succ (ofUniverse u)
   | .max u v => maxOf (ofUniverse u) (ofUniverse v)
 
-/-- Fold indexed offsets into a `Universe` using left-growing `.max`. -/
 def reifyLevels : Universe → List (Nat × Nat) → Universe :=
   List.foldl (fun acc (i, k) => Universe.max acc ((Universe.level i).addOffset k))
 
@@ -126,14 +119,12 @@ def mkSucc (u : Universe) : Universe :=
 def mkMax (u v : Universe) : Universe :=
   normalise (.max u v)
 
-/-- Verify all level indices are `< numParams`. -/
 def checkLevels (numParams : Nat) : Universe → Except Nat Unit
   | .level i => do if i < numParams then return else throw i
   | .zero => do return
   | .succ u => do u.checkLevels numParams
   | .max u v => do u.checkLevels numParams; v.checkLevels numParams
 
-/-- Shift all level indices up by `k`. -/
 def shift (k : Nat) : Universe → Universe
   | .level i => .level (i + k)
   | .zero => .zero
@@ -197,15 +188,12 @@ private abbrev v : Universe := .level 1
 
 end Tests
 
-/-- `Universe` expression is `Bounded k` when every `.level i` reference
-satisfies `i < k`. -/
 def Bounded (k : Nat) : Universe → Prop
   | .level i => i < k
   | .zero => True
   | .succ u => u.Bounded k
   | .max u v => u.Bounded k ∧ v.Bounded k
 
-/-- `addOffset` (= `n` extra `.succ`) preserves `Bounded`. -/
 theorem Bounded.addOffset {k : Nat} (n : Nat) :
     ∀ {u : Universe}, u.Bounded k → (u.addOffset n).Bounded k := by
   induction n with
@@ -214,7 +202,6 @@ theorem Bounded.addOffset {k : Nat} (n : Nat) :
 
 namespace NF
 
-/-- An NF is `Bounded k` when all its level indices are < k. -/
 def Bounded (k : Nat) (nf : NF) : Prop :=
   ∀ p ∈ nf.levels, p.1 < k
 
@@ -328,17 +315,14 @@ theorem Bounded.toUniverse {k : Nat} :
 
 end NF
 
-/-- `Universe.normalise` preserves `Bounded`. -/
 theorem Bounded.normalise {k : Nat} {u : Universe} (h : u.Bounded k) :
     u.normalise.Bounded k :=
   NF.Bounded.toUniverse (NF.Bounded.ofUniverse h)
 
-/-- `mkSucc` preserves `Bounded`. -/
 theorem mkSucc_bounded {k : Nat} {u : Universe} (h : u.Bounded k) :
     (Universe.mkSucc u).Bounded k :=
   Bounded.normalise (h : u.succ.Bounded k)
 
-/-- `mkMax` preserves `Bounded`. -/
 theorem mkMax_bounded {k : Nat} {u v : Universe}
     (hu : u.Bounded k) (hv : v.Bounded k) :
     (Universe.mkMax u v).Bounded k :=

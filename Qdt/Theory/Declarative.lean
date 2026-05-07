@@ -22,7 +22,6 @@ notation:50 Δ "; " Γ " ⊢ " A " ≡ " B " type" => Ty.Eq Δ Γ A B
 
 mutual
 
-/-- Well-formedness of global environments -/
 inductive Global.WF : Global → Type
   | empty :
       (⊢ ∅)
@@ -44,51 +43,37 @@ inductive Global.WF : Global → Type
       (Δ; Tele.nil ⊢ info.ty type) →
       (⊢ Δ.insert name (.axiom info))
 
-/-- Well-formedness of contexts -/
 inductive Ctx.WF : Global → {n : Nat} → Ctx 0 n → Type
-  /-- HoTT book A.2.1, ctx-emp -/
   | empty {Δ} :
       (⊢ Δ) →
       (Δ; Tele.nil ⊢)
-  /-- HoTT book A.2.1, ctx-ext -/
   | extend {Δ Γ x A} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢)
 
-/-- Well-formedness of types -/
 inductive Ty.WF : Global → {n : Nat} → Ctx 0 n → Ty n → Type
-  /-- HoTT book A.2.3, 𝑢-intro -/
   | u_form {Δ Γ i} :
       (Δ; Γ ⊢) →
       (Δ; Γ ⊢ .u i type)
-  /-- Tarski universe: if t : 𝑢 i then El(t) type -/
   | el_form {Δ Γ i t} :
       (Δ; Γ ⊢ t : .u i) →
       (Δ; Γ ⊢ .el t type)
-  /-- HoTT book A.2.4, Π-form -/
   | pi_form {Δ Γ x A B} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢ B type) →
       (Δ; Γ ⊢ .pi x A B type)
 
-/-- Judgmental equality of types -/
 inductive Ty.Eq : Global → {n : Nat} → Ctx 0 n → Ty n → Ty n → Type
-  /-- HoTT book A.2.2, reflexivity -/
   | refl {Δ Γ A} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ ⊢ A ≡ A type)
-  /-- HoTT book A.2.2, symmetry -/
   | symm {Δ Γ A B} :
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ B ≡ A type)
-  /-- HoTT book A.2.2, transitivity -/
   | trans {Δ Γ A B C} :
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ B ≡ C type) →
       (Δ; Γ ⊢ A ≡ C type)
-  /-- HoTT book A.2.2, Π-form-eq.  Allows different binder names
-  for α-equivalence: the two Π-types share their domain/codomain
-  (up to `Ty.Eq`) but may bind under different names. -/
   | pi_form_eq {Δ Γ A₁ A₂ x x' B₁ B₂} :
       (Δ; Γ ⊢ A₁ type) →
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
@@ -98,28 +83,21 @@ inductive Ty.Eq : Global → {n : Nat} → Ctx 0 n → Ty n → Ty n → Type
       (Δ; Γ ⊢ t₁ ≡ t₂ : .u i) →
       (Δ; Γ ⊢ .el t₁ ≡ .el t₂ type)
 
-/-- Judgmental equality of terms -/
 inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n → Type
-  /-- HoTT book A.2.2, reflexivity -/
   | refl {Δ Γ a A} :
       (Δ; Γ ⊢ a : A) →
       (Δ; Γ ⊢ a ≡ a : A)
-  /-- HoTT book A.2.2, symmetry -/
   | symm {Δ Γ a b A} :
       (Δ; Γ ⊢ a ≡ b : A) →
       (Δ; Γ ⊢ b ≡ a : A)
-  /-- HoTT book A.2.2, transitivity -/
   | trans {Δ Γ a b c A} :
       (Δ; Γ ⊢ a ≡ b : A) →
       (Δ; Γ ⊢ b ≡ c : A) →
       (Δ; Γ ⊢ a ≡ c : A)
-  /-- HoTT book A.1.1, conversion -/
   | conv {Δ Γ A B a b} :
       (Δ; Γ ⊢ a ≡ b : A) →
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ a ≡ b : B)
-  /-- Definition unfolding (δ-reduction).  Same arity discipline as
-  `Tm.HasType.const`: `us.length = info.numUnivParams`. -/
   | delta {Δ Γ name us info} :
       (Δ; Γ ⊢) →
       Δ.findDefinition name = some info →
@@ -127,49 +105,33 @@ inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n �
       (Δ; Γ ⊢ .const name us
               ≡ (info.tm.substLevels us).wkClosed
               : (info.ty.substLevels us).wkClosed)
-  /-- HoTT book A.2.2, Π-intro-eq.  Allows different binder names
-  for α-equivalence in the surface lambdas. -/
   | pi_intro_eq {Δ Γ x x' b₁ b₂ A₁ A₂ B} :
       (Δ; Γ ⊢ A₁ type) →
       (Δ; Γ ⊢ A₁ ≡ A₂ type) →
       (Δ; Γ.snoc ⟨x, A₁⟩ ⊢ b₁ ≡ b₂ : B) →
       (Δ; Γ ⊢ .lam x A₁ b₁ ≡ .lam x' A₂ b₂ : .pi x A₁ B)
-  /-- Term-level Π congruence (for `.pi'` as a term living in `.u`).
-  Mirrors `pi_intro_eq` but at the term level. -/
   | pi'_eq {Δ Γ x x' A₁ A₂ B₁ B₂ i j} :
       (Δ; Γ ⊢ A₁ : .u i) →
       (Δ; Γ ⊢ A₁ ≡ A₂ : .u i) →
       (Δ; Γ.snoc ⟨x, .el A₁⟩ ⊢ B₁ ≡ B₂ : .u j) →
       (Δ; Γ ⊢ .pi' x A₁ B₁ ≡ .pi' x' A₂ B₂ : .u (i.mkMax j))
-  /-- HoTT book A.2.2, Π-elim-eq -/
   | pi_elim_eq {Δ Γ x f₁ f₂ a₁ a₂ A B} :
       (Δ; Γ ⊢ f₁ ≡ f₂ : .pi x A B) →
       (Δ; Γ ⊢ a₁ ≡ a₂ : A) →
       (Δ; Γ ⊢ .app f₁ a₁ ≡ .app f₂ a₂ : B[a₁])
-  /-- HoTT book A.2.4, Π-comp (β-reduction) -/
   | pi_comp {Δ Γ x a b A B} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢ b : B) →
       (Δ; Γ ⊢ a : A) →
       (Δ; Γ ⊢ .app (Tm.lam x A b) a ≡ b[a] : B[a])
-  /-- HoTT book A.2.4, Π-uniq (η-conversion) -/
   | pi_uniq {Δ Γ x A B f} :
       (Δ; Γ ⊢ f : .pi x A B) →
       (Δ; Γ ⊢ f ≡ .lam x A (.app (↑f) (.var 0)) : .pi x A B)
-  /-- Let reduction (ζ-reduction) -/
   | zeta {Δ Γ x A e body B} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ ⊢ e : A) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢ body : B) →
       (Δ; Γ ⊢ .letE x A e body ≡ body[e] : B[e])
-  /-- ι-reduction: a saturated recursor application whose scrutinee is
-  a constructor application reduces to the instantiated right-hand
-  side of the matching recursor rule.
-
-  The detailed recipe (shape of the rule, well-typedness of the RHS
-  under the specified substitution) is packaged in
-  `InductiveDecl.WF` and established in Step 10; this constructor
-  requires typing of both sides as a premise. -/
   | iota {Δ n} {Γ : Ctx 0 n}
          {recName : Name} {recUs : List Universe} {info : RecursorInfo}
          {rule : RecursorRule (info.numParams + info.numMotives + info.numMinors)}
@@ -199,8 +161,6 @@ inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n �
             ≡ (rule.rhs.substLevels (recUs)).subst
                  (Subst.fromArgs (params ++ motives ++ minors ++ fields) hArgs)
             : A)
-  /-- proj-reduction: projecting the `i`-th field from a constructor
-  application yields the corresponding argument. -/
   | proj {Δ n} {Γ : Ctx 0 n}
          {i : Nat} {ctorName : Name} {ctorUs : List Universe}
          {ctorInfo : ConstructorInfo} {indInfo : InductiveInfo}
@@ -214,54 +174,36 @@ inductive Tm.Eq : Global → {n : Nat} → Ctx 0 n → Tm n → Tm n → Ty n �
       (Δ; Γ ⊢ .proj i ((Tm.const ctorName ctorUs).apps (params ++ fields))
             ≡ fields[i] : A)
 
-/-- Typing judgment -/
 inductive Tm.HasType : Global → {n : Nat} → Ctx 0 n → Tm n → Ty n → Type
-  /-- HoTT book A.2.2, vble -/
   | var {Δ n Γ} :
       (Δ; Γ ⊢) →
       (i : Idx n) →
       (Δ; Γ ⊢ .var i : Γ.get i)
-  /-- Global constant.  Universe-polymorphic constants are stored at
-  their universe-binder form in `Δ`; using a constant at universe
-  arguments `us` instantiates those binders via `substLevels us`.
-  The arity hypothesis `us.length = info.numUnivParams` ensures
-  every `.level i` reference in `info.ty` is substituted by `us`,
-  which is what makes universe-substLevels-preservation of typing
-  provable (cf. `Universe.subst` composition). -/
   | const {Δ Γ name us info} :
       (Δ; Γ ⊢) →
       Δ.findConstantInfo name = some info →
       (us.length = info.numUnivParams) →
       (Δ; Γ ⊢ .const name us : (info.ty.substLevels us).wkClosed)
-  /-- HoTT book A.2.4, Π-intro -/
   | pi_intro {Δ Γ x A body B} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢ body : B) →
       (Δ; Γ ⊢ .lam x A body : .pi x A B)
-  /-- HoTT book A.2.4, Π-elim -/
   | pi_elim {Δ Γ f a x A B} :
       (Δ; Γ ⊢ f : .pi x A B) →
       (Δ; Γ ⊢ a : A) →
       (Δ; Γ ⊢ .app f a : B[a])
-  /-- Let introduction -/
   | let_intro {Δ Γ x A a b B} :
       (Δ; Γ ⊢ A type) →
       (Δ; Γ ⊢ a : A) →
       (Δ; Γ.snoc ⟨x, A⟩ ⊢ b : B) →
       (Δ; Γ ⊢ .letE x A a b : B[a])
-  /-- HoTT book A.2.2, conversion -/
   | conv {Δ Γ e A B} :
       (Δ; Γ ⊢ e : A) →
       (Δ; Γ ⊢ A ≡ B type) →
       (Δ; Γ ⊢ e : B)
-  /-- Universe-as-term (Russell-style): `.u' i` lives in `.u i.mkSucc`. -/
   | u' {Δ Γ i} :
       (Δ; Γ ⊢) →
       (Δ; Γ ⊢ .u' i : .u i.mkSucc)
-  /-- Π-as-term (Russell-style): `.pi' x A B` is the term-level
-  encoding of a Π type. Domain `A` lives in universe `i`, codomain
-  `B` (over the extended context with `.el A`) lives in universe `j`,
-  and the resulting Π lives in `.u (i ⊔ j)`. -/
   | pi' {Δ Γ x A B i j} :
       (Δ; Γ ⊢ A : .u i) →
       (Δ; Γ.snoc ⟨x, .el A⟩ ⊢ B : .u j) →
@@ -270,10 +212,6 @@ inductive Tm.HasType : Global → {n : Nat} → Ctx 0 n → Tm n → Ty n → Ty
 end
 
 end Definitions
-
-/-!
-## Unexpanders for pretty printing
--/
 
 @[app_unexpander Global.WF]
 meta def Global.WF.unexpand : Lean.PrettyPrinter.Unexpander
@@ -304,12 +242,6 @@ meta def Tm.Eq.unexpand : Lean.PrettyPrinter.Unexpander
 meta def Tm.HasType.unexpand : Lean.PrettyPrinter.Unexpander
   | `($_ $Δ $Γ $e $A) => `($Δ; $Γ ⊢ $e : $A)
   | _ => throw ()
-
-/-!
-## Presupposition Lemmas
-
-Every judgment presupposes context well-formedness, which presupposes global well-formedness.
--/
 
 noncomputable def Global.WF.presupGlobal {Δ : Global} :
     Global.WF Δ → Global.WF Δ := id

@@ -396,22 +396,16 @@ def Tm.shiftAfter {n : Nat} (k s : Nat) : Tm n → Tm (n + s) :=
 abbrev Ty.shift {n : Nat} : ∀ s, Ty n → Ty (n + s) := Ty.shiftAfter 0
 abbrev Tm.shift {n : Nat} : ∀ s, Tm n → Tm (n + s) := Tm.shiftAfter 0
 
-/-- The unique substitution from the empty context. -/
 def Subst.ofEmpty {n : Nat} : Subst 0 n := fun i => nomatch i
 
 @[simp]
 theorem Subst.ofEmpty_unique {n : Nat} (σ : Subst 0 n) : σ = Subst.ofEmpty := by
   funext i; exact nomatch i
 
-/-- Build a substitution from a list of arguments. Position `0` of the
-list corresponds to the highest de Bruijn index in the target context;
-position `args.length - 1` corresponds to index `0`. -/
 def Subst.fromArgs {n k : Nat} (args : List (Tm n)) (h : args.length = k) :
     Subst k n :=
   fun ⟨i, hi⟩ => args.reverse[i]'(by rw [List.length_reverse, h]; exact hi)
 
-/-- Pointwise, renaming the values of `Subst.fromArgs args` equals
-`Subst.fromArgs (args.map (·.ren ξ))`. -/
 theorem Subst.fromArgs_ren {n m k : Nat} (args : List (Tm n))
     (h : args.length = k) (ξ : Ren n m) (i : Idx k) :
     (Subst.fromArgs args h i).ren ξ
@@ -420,15 +414,12 @@ theorem Subst.fromArgs_ren {n m k : Nat} (args : List (Tm n))
   have ⟨i, _⟩ := i
   simp only [Subst.fromArgs, ← List.map_reverse, List.getElem_map]
 
-/-- Renaming distributes over `Tm.apps`:
-    `(t.apps args).ren ξ = (t.ren ξ).apps (args.map (Tm.ren ξ ·))`. -/
 theorem Tm.ren_apps {n m : Nat} (t : Tm n) (args : List (Tm n)) (ξ : Ren n m) :
     (t.apps args).ren ξ = (t.ren ξ).apps (args.map (Tm.ren ξ ·)) := by
   induction args generalizing t with
   | nil => rfl
   | cons a rest ih => exact ih (t.app a)
 
-/-- Embed a closed term into any context. -/
 unsafe def Tm.wkClosed_impl {n : Nat} : Tm 0 → Tm n := unsafeCast
 unsafe def Ty.wkClosed_impl {n : Nat} : Ty 0 → Ty n := unsafeCast
 
@@ -438,7 +429,6 @@ def Tm.wkClosed {n : Nat} (t : Tm 0) : Tm n := t.subst Subst.ofEmpty
 @[implemented_by Ty.wkClosed_impl]
 def Ty.wkClosed {n : Nat} (t : Ty 0) : Ty n := t.subst Subst.ofEmpty
 
-/-- `wkClosed` is stable under further substitution. -/
 theorem Tm.wkClosed_subst {n m : Nat} (t : Tm 0) (σ : Subst n m) :
     (Tm.wkClosed t : Tm n).subst σ = (Tm.wkClosed t : Tm m) := by
   rw [Tm.wkClosed, Tm.comp_subst]
@@ -451,7 +441,6 @@ theorem Ty.wkClosed_subst {n m : Nat} (t : Ty 0) (σ : Subst n m) :
   congr 1
   apply Subst.ofEmpty_unique
 
-/-- A closed term is preserved by any renaming of its ambient context. -/
 theorem Tm.wkClosed_ren {n m : Nat} (t : Tm 0) (ξ : Ren n m) :
     (Tm.wkClosed t : Tm n).ren ξ = (Tm.wkClosed t : Tm m) := by
   rw [Tm.ren_eq_subst_var]
@@ -462,8 +451,6 @@ theorem Ty.wkClosed_ren {n m : Nat} (t : Ty 0) (ξ : Ren n m) :
   rw [Ty.ren_eq_subst_var]
   exact Ty.wkClosed_subst t ξ.toSubst
 
-/-- β-substitution commutes with renaming:
-    `(B[a]).ren ξ = (B.ren ξ.up)[a.ren ξ]`. -/
 theorem Ty.beta_ren_up {n m : Nat} (B : Ty (n + 1)) (a : Tm n) (ξ : Ren n m) :
     (B.subst (Subst.beta a)).ren ξ = (B.ren ξ.up).subst (Subst.beta (a.ren ξ)) :=
   calc (B.subst (Subst.beta a)).ren ξ
@@ -490,7 +477,6 @@ theorem Tm.beta_ren_up {n m : Nat} (t : Tm (n + 1)) (a : Tm n) (ξ : Ren n m) :
     _ = (t.ren ξ.up).subst (Subst.beta (a.ren ξ)) := by
       rw [← Tm.ren_eq_subst_var ξ a]
 
-/-- Commutation of shift and an up-lifted renaming. -/
 theorem Tm.shift_ren_up {n m : Nat} (t : Tm n) (ξ : Ren n m) :
     (t.subst Subst.shift).ren ξ.up = (t.ren ξ).subst Subst.shift := by
   rw [Tm.ren_eq_subst_var ξ.up, Tm.comp_subst,
