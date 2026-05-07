@@ -63,6 +63,9 @@ theorem verifyInputs_iff (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) :
   | nil => simp [verifyInputs]
   | cons p rest ih => simp [verifyInputs, ih]
 
+abbrev RunState (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :=
+  Store hI hR tasks ι₀ × List (ℭ.I × H) × List (Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H)
+
 variable {tasks}
 
 def verifyDeps {ι : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
@@ -70,76 +73,108 @@ def verifyDeps {ι : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
       StateM (Store hI hR tasks ι) (Value tasks ι q')) :
     (l : List (Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H)) → StateM (Store hI hR tasks ι) Bool
   | [] => pure true
-  | ⟨q', hq, _⟩ :: rest => do
-      let _ ← fetch q' hq
-      verifyDeps fetch rest
+  | ⟨q', hq, h⟩ :: rest => do
+      let v ← fetch q' hq
+      if hR q' v.val = h then verifyDeps fetch rest else pure false
 
-def action (ι₀ : ∀ i, ℭ.V i) :
-    MonadAction (StateM (Store hI hR tasks ι₀)) Id where
-  rel P m b := ∀ s, P (m s).1 b
-  rel_pure := fun hab _ => hab
-  rel_bind := fun hma hk s => hk _ _ (hma s) _
+def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
+    MonadAction (StateM (RunState hI hR tasks ι₀ q₀)) (FM ℭ q₀) where
+  rel {α β} P m t :=
+    ∀ s,
+      P (m.run s).1 (FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) t) ∧
+      (m.run s).2.2.1 =
+        (FM.evalTrace_inputs ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) t).reverse.map
+          (fun p => (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H)) ++ s.2.1 ∧
+      (m.run s).2.2.2 =
+        (FM.evalTrace_deps ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) t).reverse.map
+          (fun p => (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H)) ++ s.2.2
+  rel_pure := fun hab s => ⟨hab, rfl, rfl⟩
+  rel_bind := fun {α₁ α₂ β₁ β₂ R S ma mt ka kt} hma hk s => by
+    obtain ⟨hv, hin, hdep⟩ := hma s
+    obtain ⟨hv', hin', hdep'⟩ := hk _ _ hv (ma s).2
+    refine ⟨?_, ?_, ?_⟩
+    · show S (ka (ma s).1 (ma s).2).1 _
+      rw [show FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) (mt >>= kt) =
+        FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q)
+          (kt (FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) mt)) from
+        FM.evalTree_bind ..]
+      exact hv'
+    · show (ka (ma s).1 (ma s).2).2.2.1 = _
+      rw [show (ka (ma s).1 (ma s).2) = (StateT.run (ka (StateT.run ma s).1) (ma s).2) from rfl]
+      rw [hin', show (ma s).2.2.1 = (StateT.run ma s).2.2.1 from rfl, hin]
+      show _ = List.map _ (FM.evalTrace_inputs _ _ (FM.bind mt kt)).reverse ++ _
+      rw [FM.evalTrace_inputs_bind]
+      simp [List.reverse_append, List.map_append, List.append_assoc]
+    · show (ka (ma s).1 (ma s).2).2.2.2 = _
+      rw [show (ka (ma s).1 (ma s).2) = (StateT.run (ka (StateT.run ma s).1) (ma s).2) from rfl]
+      rw [hdep', show (ma s).2.2.2 = (StateT.run ma s).2.2.2 from rfl, hdep]
+      show _ = List.map _ (FM.evalTrace_deps _ _ (FM.bind mt kt)).reverse ++ _
+      rw [FM.evalTrace_deps_bind]
+      simp [List.reverse_append, List.map_append, List.append_assoc]
 
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q')) :
-    StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q₀) := do
-  let ⟨r, hr⟩ ← MonadAttach.attach (tasks q₀ (StateM (Store hI hR tasks ι₀))
-    (fun i => StateT.pure (ι₀ i))
-    (fun q hq => Subtype.val <$> fetch q hq))
-  have : r = compute (inferInstanceAs (Monad Id)) tasks ι₀ q₀ := by
-    obtain ⟨s, s', heq⟩ := hr
-    have hft := Tasks.freeTheorem tasks q₀ (action hI hR ι₀)
-      ι₀
-      (fun i => StateT.pure (ι₀ i))
-      (fun q hq => Subtype.val <$> fetch q hq)
-      (fun i s => rfl)
-      (fun q hq s => fetch q hq |>.run' s |>.property) s
-    exact (congrArg Prod.fst heq).symm.trans hft
-  return ⟨r, this⟩
-
-def buildMemo (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-    (v : Value tasks ι₀ q₀)
-    (vcache : VCache tasks ι₀) :
-    Memo (H := H) hI hR tasks q₀ :=
-  let tree := Incremental.tasksTree ℭ tasks q₀
-  let rec_now : ∀ q, ℭ.rel q q₀ → ℭ.R q := fun q _hq =>
-    match vcache.get? q with
-    | some v => v.val
-    | none => compute (inferInstanceAs (Monad Id)) tasks ι₀ q
-  let trace_in := FM.evalTrace_inputs ι₀ rec_now tree
-  let trace_dep := FM.evalTrace_deps ι₀ rec_now tree
-  { value := v.val
-    inputDeps := trace_in.reverse.map (fun p => ⟨p.1, hI p.1 p.2⟩)
-    deps := trace_dep.reverse.map (fun p => ⟨p.1, p.2.1, hR p.1 p.2.2⟩)
-    invariant := by
+    StateM (Store hI hR tasks ι₀)
+      { m : Memo (H := H) hI hR tasks q₀ //
+        m.value = compute (inferInstanceAs (Monad Id)) tasks ι₀ q₀ } :=
+  fun store =>
+    let input' (i : ℭ.I) : StateM (RunState hI hR tasks ι₀ q₀) (ℭ.V i) :=
+      fun (st, ins, deps) => (ι₀ i, (st, ⟨i, hI i (ι₀ i)⟩ :: ins, deps))
+    let fetch' (q : ℭ.Q) (hq : ℭ.rel q q₀) : StateM (RunState hI hR tasks ι₀ q₀) (ℭ.R q) :=
+      fun (st, ins, deps) =>
+        let (v, st') := (fetch q hq) st
+        (v.val, (st', ins, ⟨q, hq, hR q v.val⟩ :: deps))
+    let m := tasks q₀ (StateM (RunState hI hR tasks ι₀ q₀)) input' fetch'
+    let result := m (store, [], [])
+    have hc := (Task.freeTheorem (tasks q₀) (traceAction hI hR ι₀ q₀)
+      input' FM.pureInput fetch' FM.pureFetch
+      (fun i s => ⟨rfl, rfl, rfl⟩)
+      (fun q hq s => ⟨((fetch q hq) s.1).1.property, rfl, by
+        show ⟨q, hq, hR q ((fetch q hq) s.1).1.val⟩ :: s.2.2 =
+             ⟨q, hq, hR q (compute (inferInstanceAs (Monad Id)) tasks ι₀ q)⟩ :: s.2.2
+        rw [((fetch q hq) s.1).1.property]⟩))
+      (store, ([] : List (ℭ.I × H)), ([] : List (Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H)))
+    have ⟨hval_tree, hinc, hdepc⟩ := hc
+    let hval : result.1 = compute (inferInstanceAs (Monad Id)) tasks ι₀ q₀ :=
+      hval_tree.trans (Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀)
+    (⟨⟨result.1, result.2.2.1, result.2.2.2, by
       intro ι hin hdep
-      have rec_eq : ∀ q (hq : ℭ.rel q q₀), rec_now q hq = compute (inferInstanceAs (Monad Id)) tasks ι₀ q := by
-        intro q hq; simp only [rec_now]; split
-        · next v hget => exact v.property
-        · rfl
-      have step1 : FM.evalTree ι₀ rec_now tree =
-          FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) tree := by
-        apply FM.evalTree_cross
-        · intro p hp; exact (FM.evalTrace_inputs_value ι₀ rec_now tree p hp).symm
-        · intro p hp; rw [FM.evalTrace_deps_value ι₀ rec_now tree p hp]; exact (rec_eq p.1 p.2.1).symm
-      have step2 : FM.evalTree ι₀ rec_now tree =
-          FM.evalTree ι (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι q) tree := by
+      have hinc_s : result.2.2.1 =
+          (FM.evalTrace_inputs ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q)
+            (Incremental.tasksTree ℭ tasks q₀)).reverse.map
+            (fun p => (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H)) := by simpa using hinc
+      have hdepc_s : result.2.2.2 =
+          (FM.evalTrace_deps ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q)
+            (Incremental.tasksTree ℭ tasks q₀)).reverse.map
+            (fun p => (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H)) := by
+        simpa using hdepc
+      have step : FM.evalTree ι₀
+            (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q)
+            (Incremental.tasksTree ℭ tasks q₀) =
+          FM.evalTree ι
+            (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι q)
+            (Incremental.tasksTree ℭ tasks q₀) := by
         apply FM.evalTree_cross
         · intro p hp
-          exact (hI p.1).injective (hin ⟨p.1, hI p.1 p.2⟩
-            (List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩))
+          have : (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H) ∈ result.2.2.1 := by
+            rw [hinc_s]; exact List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
+          exact (hI p.1).injective (hin _ this)
         · intro p hp
-          exact (hR p.1).injective (hdep ⟨p.1, p.2.1, hR p.1 p.2.2⟩
-            (List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩))
-      calc v.val
-          = compute (inferInstanceAs (Monad Id)) tasks ι₀ q₀ := v.property
-        _ = FM.evalTree ι₀ (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q) tree :=
+          have : (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : Σ' (q' : ℭ.Q) (_ : ℭ.rel q' q₀), H) ∈ result.2.2.2 := by
+            rw [hdepc_s]; exact List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
+          exact (hR p.1).injective (hdep _ this)
+      calc result.1
+          = compute (inferInstanceAs (Monad Id)) tasks ι₀ q₀ := hval
+        _ = FM.evalTree ι₀
+              (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι₀ q)
+              (Incremental.tasksTree ℭ tasks q₀) :=
             (Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀).symm
-        _ = FM.evalTree ι₀ rec_now tree := step1.symm
-        _ = FM.evalTree ι (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι q) tree := step2
+        _ = FM.evalTree ι
+              (fun q _ => compute (inferInstanceAs (Monad Id)) tasks ι q)
+              (Incremental.tasksTree ℭ tasks q₀) := step
         _ = compute (inferInstanceAs (Monad Id)) tasks ι q₀ :=
-            Incremental.tasksTree_eval_compute ℭ tasks q₀ ι }
+            Incremental.tasksTree_eval_compute ℭ tasks q₀ ι⟩, hval⟩, result.2.1)
 
 def insertPreserves {ι₀ : ∀ i, ℭ.V i} {cache : Cache (H := H) hI hR tasks}
     (hcache : CacheCorrect hI hR tasks ι₀ cache) (q₀ : ℭ.Q)
@@ -170,16 +205,28 @@ def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
         modify fun (vc, gc) => (vc.insert q₀ v, gc)
         pure v
       else do
-        let v ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-        modify fun (vc, gc) => (vc.insert q₀ v, gc)
+        let ⟨memo, hmemo⟩ ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
+        let v : Value tasks ι₀ q₀ := ⟨memo.value, hmemo⟩
+        let (vcache', ⟨cache', hcache'⟩) ← get
+        let gc' : GoodCache hI hR tasks ι₀ :=
+          ⟨cache'.insert q₀ memo, insertPreserves hI hR hcache' q₀ memo hmemo⟩
+        set (vcache'.insert q₀ v, gc')
         pure v
     else do
-      let v ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-      modify fun (vc, gc) => (vc.insert q₀ v, gc)
+      let ⟨memo, hmemo⟩ ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
+      let v : Value tasks ι₀ q₀ := ⟨memo.value, hmemo⟩
+      let (vcache', ⟨cache', hcache'⟩) ← get
+      let gc' : GoodCache hI hR tasks ι₀ :=
+        ⟨cache'.insert q₀ memo, insertPreserves hI hR hcache' q₀ memo hmemo⟩
+      set (vcache'.insert q₀ v, gc')
       pure v
   | none => do
-    let v ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
-    modify fun (vc, gc) => (vc.insert q₀ v, gc)
+    let ⟨memo, hmemo⟩ ← run hI hR ι₀ q₀ (fun q' _hq => fetch ι₀ q')
+    let v : Value tasks ι₀ q₀ := ⟨memo.value, hmemo⟩
+    let (vcache', ⟨cache', hcache'⟩) ← get
+    let gc' : GoodCache hI hR tasks ι₀ :=
+      ⟨cache'.insert q₀ memo, insertPreserves hI hR hcache' q₀ memo hmemo⟩
+    set (vcache'.insert q₀ v, gc')
     pure v
 termination_by ℭ.wf.wrap q₀
 decreasing_by all_goals exact _hq

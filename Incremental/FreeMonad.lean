@@ -59,12 +59,45 @@ def evalTrace_inputs {α : Type} (ι : ∀ i, ℭ.V i)
   | .input i k => ⟨i, ι i⟩ :: evalTrace_inputs ι rec (k (ι i))
   | .fetch q hq k => evalTrace_inputs ι rec (k (rec q hq))
 
+structure DepTrace (q₀ : ℭ.Q) where
+  q : ℭ.Q
+  hq : ℭ.rel q q₀
+  val : ℭ.R q
+
 def evalTrace_deps {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
-    FM ℭ q₀ α → List (Σ' (q : ℭ.Q) (_ : ℭ.rel q q₀), ℭ.R q)
+    FM ℭ q₀ α → List (DepTrace q₀)
   | .pure _ => []
   | .input i k => evalTrace_deps ι rec (k (ι i))
   | .fetch q hq k => ⟨q, hq, rec q hq⟩ :: evalTrace_deps ι rec (k (rec q hq))
+
+theorem evalTrace_inputs_bind {α β : Type} (ι : ∀ i, ℭ.V i)
+    (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q)
+    (ma : FM ℭ q₀ α) (ka : α → FM ℭ q₀ β) :
+    evalTrace_inputs ι rec (bind ma ka) =
+      evalTrace_inputs ι rec ma ++ evalTrace_inputs ι rec (ka (evalTree ι rec ma)) := by
+  induction ma with
+  | pure a => simp [bind, evalTrace_inputs, evalTree]
+  | input i kt ih =>
+    simp [bind, evalTrace_inputs, evalTree]
+    exact ih (ι i)
+  | fetch q hq kt ih =>
+    simp [bind, evalTrace_inputs, evalTree]
+    exact ih (rec q hq)
+
+theorem evalTrace_deps_bind {α β : Type} (ι : ∀ i, ℭ.V i)
+    (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q)
+    (ma : FM ℭ q₀ α) (ka : α → FM ℭ q₀ β) :
+    evalTrace_deps ι rec (bind ma ka) =
+      evalTrace_deps ι rec ma ++ evalTrace_deps ι rec (ka (evalTree ι rec ma)) := by
+  induction ma with
+  | pure a => simp [bind, evalTrace_deps, evalTree]
+  | input i kt ih =>
+    simp [bind, evalTrace_deps, evalTree]
+    exact ih (ι i)
+  | fetch q hq kt ih =>
+    simp [bind, evalTrace_deps, evalTree]
+    exact ih (rec q hq)
 
 theorem evalTrace_inputs_value {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) (t : FM ℭ q₀ α) :
