@@ -1,6 +1,6 @@
 module
 
-public import Incremental.Shake
+public import Incremental.ShakeStore
 
 namespace Incremental
 
@@ -13,14 +13,15 @@ variable
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
 structure ShakeEState.State where
-  memos : DHashMap ℭ.Q (Shake.Memo ℭ)
-  started : DHashMap ℭ.Q (Shake.Memo ℭ)
+  memos : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
+  started : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
   stack : Array ℭ.Q
   deps : HashMap ℭ.Q UInt64
   inputDeps : HashMap ℭ.I UInt64
 
 public def ShakeEState : Build Monad ℭ J where
-  σ := Shake.Store ℭ J
+  cId := inferInstance
+  σ := ShakeRT.Store ℭ J
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 1024
@@ -28,7 +29,7 @@ public def ShakeEState : Build Monad ℭ J where
   inputs store := Input.get store.inputs
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
-  build tasks q := fun store =>
+  build tasks q store :=
     let ι₀ := Input.get store.inputs
     let rec fetch (q : ℭ.Q) : StateM (ShakeEState.State ℭ) (ℭ.R q) := do
       if let some m := (← get).started.get? q then
@@ -64,8 +65,8 @@ public def ShakeEState : Build Monad ℭ J where
           if h != oldHash then return false
         return true
       let recompute : StateM (ShakeEState.State ℭ) (ℭ.R q) := do
-        let value ← tasks ι₀ q (StateM (ShakeEState.State ℭ)) input' (fun q₁ _hq => fetch' q₁)
-        let m : Shake.Memo ℭ q := { value, deps := (← get).deps, inputDeps := (← get).inputDeps }
+        let value ← tasks q (StateM (ShakeEState.State ℭ)) input' (fun q₁ _hq => fetch' q₁)
+        let m : ShakeRT.Memo ℭ q := { value, deps := (← get).deps, inputDeps := (← get).inputDeps }
         modify fun s => { s with
           started := s.started.insert q m
           memos := s.memos.insert q m
@@ -85,7 +86,7 @@ public def ShakeEState : Build Monad ℭ J where
         stack := s.stack.pop
       }
       return r
-    termination_by (ℭ.wf ι₀).wrap q
+    termination_by ℭ.wf.wrap q
     decreasing_by all_goals sorry
     let initState : ShakeEState.State ℭ := {
       memos := store.memos
@@ -95,6 +96,6 @@ public def ShakeEState : Build Monad ℭ J where
       inputDeps := HashMap.emptyWithCapacity 16
     }
     let (r, s) := (fetch q).run initState
-    (r, { store with memos := s.memos })
+    (⟨r, sorry⟩, { store with memos := s.memos })
 
 end Incremental

@@ -28,6 +28,7 @@ public structure Salsa.Store (J : Type) where
   inputRevisions : HashMap ℭ.I Nat
 
 public def Salsa : Build Monad ℭ J where
+  cId := inferInstance
   σ := Salsa.Store ℭ J
   init store := {
     inputs := store
@@ -41,7 +42,7 @@ public def Salsa : Build Monad ℭ J where
     let inputs := Input.set store.inputs i v
     let inputRevisions := store.inputRevisions.insert i revision
     { store with inputs, revision, inputRevisions }
-  build tasks q := fun store =>
+  build tasks q store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos
@@ -77,7 +78,7 @@ public def Salsa : Build Monad ℭ J where
           let v ← fetch q
           depsRef.modify (·.push q)
           return v
-        let value ← tasks ι₀ q (ST σ) input' (fun q' _hq => fetch' q')
+        let value ← tasks q (ST σ) input' (fun q' _hq => fetch' q')
         let h := Hashable.hash value
         let changedAt := match memo? with
           | some memo => if h == memo.hash then memo.changedAt else store.revision
@@ -92,8 +93,8 @@ public def Salsa : Build Monad ℭ J where
         }
         memos.modify (·.insert q newMemo)
         return value
-      termination_by (ℭ.wf ι₀).wrap q
+      termination_by ℭ.wf.wrap q
       decreasing_by all_goals sorry
-      return (← fetch q, { store with memos := ← memos.get })
+      return (⟨← fetch q, sorry⟩, { store with memos := ← memos.get })
 
 end Incremental

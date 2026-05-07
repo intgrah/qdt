@@ -59,12 +59,12 @@ def getCommandUnivParams (cmd : Ast) : List Name :=
   else if let some s := Structure.parse cmd then s.univParams
   else []
 
-def elabAction (ι₀ : ∀ i, InputV i) (q₀ : Key) (cmd : Ast) : ElabM ι₀ q₀ (Option Unit) :=
-  if let some d := Definition.parse cmd then d.elab ι₀ q₀
-  else if let some e := Example.parse cmd then e.elab ι₀ q₀
-  else if let some a := Axiom.parse cmd then a.elab ι₀ q₀
-  else if let some i := Inductive.parse cmd then i.elab ι₀ q₀
-  else if let some s := Structure.parse cmd then s.elab ι₀ q₀
+def elabAction (q₀ : Key) (cmd : Ast) : ElabM q₀ (Option Unit) :=
+  if let some d := Definition.parse cmd then d.elab q₀
+  else if let some e := Example.parse cmd then e.elab q₀
+  else if let some a := Axiom.parse cmd then a.elab q₀
+  else if let some i := Inductive.parse cmd then i.elab q₀
+  else if let some s := Structure.parse cmd then s.elab q₀
   else return
 
 def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option FilePath :=
@@ -89,55 +89,55 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
   sorted.reverse
 
 public def tasks : Tasks Monad config
-  | ι₀, .cst filepath => do
-    let some text ← (Task.input (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.cst filepath) (InputKey.text filepath) : Task Monad config ι₀ (Key.cst filepath) _) | return Frontend.Parser.parse ""
+  | .cst filepath => do
+    let some text ← (Task.input (c := Monad) (ℭ := config) (q₀ := Key.cst filepath) (InputKey.text filepath) : Task Monad config (Key.cst filepath) _) | return Frontend.Parser.parse ""
     return Frontend.Parser.parse text
-  | ι₀, .astSourceMap filepath => do
-    let (cst, parseErrors) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.astSourceMap filepath) (Key.cst filepath) sorry : Task Monad config ι₀ (Key.astSourceMap filepath) _)
+  | .astSourceMap filepath => do
+    let (cst, parseErrors) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.astSourceMap filepath) (Key.cst filepath) sorry : Task Monad config (Key.astSourceMap filepath) _)
     let (ast, sourceMap) := Frontend.desugarProgram cst
     let diagnostics : Array Diagnostic := parseErrors.map fun err =>
       ⟨cst.pathAtPosition err.pos, .syntaxError err⟩
     return (ast, sourceMap, diagnostics)
-  | ι₀, .ast filepath => do
-    let (ast, _, _) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.ast filepath) (Key.astSourceMap filepath) sorry : Task Monad config ι₀ (Key.ast filepath) _)
+  | .ast filepath => do
+    let (ast, _, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.ast filepath) (Key.astSourceMap filepath) sorry : Task Monad config (Key.ast filepath) _)
     return ast
-  | ι₀, .sourceMap filepath => do
-    let (_, sourceMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.sourceMap filepath) (Key.astSourceMap filepath) sorry : Task Monad config ι₀ (Key.sourceMap filepath) _)
+  | .sourceMap filepath => do
+    let (_, sourceMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.sourceMap filepath) (Key.astSourceMap filepath) sorry : Task Monad config (Key.sourceMap filepath) _)
     return sourceMap
-  | ι₀, .imports filepath => do
-    let prog ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.imports filepath) (Key.ast filepath) sorry : Task Monad config ι₀ (Key.imports filepath) _)
+  | .imports filepath => do
+    let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.imports filepath) (Key.ast filepath) sorry : Task Monad config (Key.imports filepath) _)
     let .node _ progCs := prog | return #[]
     let mut result : Array Name := #[]
     for cmd in progCs do
       if let some imp := Import.parse cmd then
         result := result.push imp.moduleName
     return result
-  | ι₀, .moduleFile modName => do
-    let some inputFiles ← (Task.input (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.moduleFile modName) InputKey.inputFiles : Task Monad config ι₀ (Key.moduleFile modName) _) | return none
+  | .moduleFile modName => do
+    let some inputFiles ← (Task.input (c := Monad) (ℭ := config) (q₀ := Key.moduleFile modName) InputKey.inputFiles : Task Monad config (Key.moduleFile modName) _) | return none
     return resolveModule modName inputFiles
-  | ι₀, .transitiveImports filepath => do
-    let imports ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.transitiveImports filepath) (Key.imports filepath) sorry : Task Monad config ι₀ (Key.transitiveImports filepath) _)
+  | .transitiveImports filepath => do
+    let imports ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.transitiveImports filepath) (Key.imports filepath) sorry : Task Monad config (Key.transitiveImports filepath) _)
     let mut result : HashSet FilePath := HashSet.emptyWithCapacity 0
     for modName in imports do
-      if let some path ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.transitiveImports filepath) (Key.moduleFile modName) sorry : Task Monad config ι₀ (Key.transitiveImports filepath) _) then
+      if let some path ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.transitiveImports filepath) (Key.moduleFile modName) sorry : Task Monad config (Key.transitiveImports filepath) _) then
         result := result.insert path
-        let subImports ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.transitiveImports filepath) (Key.transitiveImports path) sorry : Task Monad config ι₀ (Key.transitiveImports filepath) _)
+        let subImports ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.transitiveImports filepath) (Key.transitiveImports path) sorry : Task Monad config (Key.transitiveImports filepath) _)
         for p in subImports do
           result := result.insert p
     return result
-  | ι₀, .declarationIndex filepath => do
-    let prog ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.declarationIndex filepath) (Key.ast filepath) sorry : Task Monad config ι₀ (Key.declarationIndex filepath) _)
+  | .declarationIndex filepath => do
+    let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declarationIndex filepath) (Key.ast filepath) sorry : Task Monad config (Key.declarationIndex filepath) _)
     return buildOwnerIndex prog
-  | ι₀, .declAst filepath name => do
-    let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.declAst filepath name) (Key.declarationIndex filepath) sorry : Task Monad config ι₀ (Key.declAst filepath name) _)
+  | .declAst filepath name => do
+    let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declAst filepath name) (Key.declarationIndex filepath) sorry : Task Monad config (Key.declAst filepath name) _)
     match indexMap[name]? with
     | some idx =>
-        let prog ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.declAst filepath name) (Key.ast filepath) sorry : Task Monad config ι₀ (Key.declAst filepath name) _)
+        let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declAst filepath name) (Key.ast filepath) sorry : Task Monad config (Key.declAst filepath name) _)
         let .node _ progCs := prog | return none
         return some (progCs[idx]!, idx)
     | none => return none
-  | ι₀, .elabCmdAt filepath idx => do
-    let prog ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.elabCmdAt filepath idx) (Key.ast filepath) sorry : Task Monad config ι₀ (Key.elabCmdAt filepath idx) _)
+  | .elabCmdAt filepath idx => do
+    let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.elabCmdAt filepath idx) (Key.ast filepath) sorry : Task Monad config (Key.elabCmdAt filepath idx) _)
     let ast := match prog with | .node _ cs => cs[idx]! | _ => .missing
     let name := getDeclName ast idx
     let univParams := getCommandUnivParams ast
@@ -148,61 +148,61 @@ public def tasks : Tasks Monad config
       currentDecl := name
       path := [idx]
     }
-    let (_, globalEnv, info) ← (elabAction ι₀ (Key.elabCmdAt filepath idx) ast).run ι₀ (Key.elabCmdAt filepath idx) elabCtx
+    let (_, globalEnv, info) ← (elabAction (Key.elabCmdAt filepath idx) ast).run (Key.elabCmdAt filepath idx) elabCtx
     return (globalEnv, info)
-  | ι₀, .elabDecl filepath name => do
-    let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.elabDecl filepath name) (Key.declarationIndex filepath) sorry : Task Monad config ι₀ (Key.elabDecl filepath name) _)
+  | .elabDecl filepath name => do
+    let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.elabDecl filepath name) (Key.declarationIndex filepath) sorry : Task Monad config (Key.elabDecl filepath name) _)
     match indexMap[name]? with
     | some idx =>
-        let (env, info) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.elabDecl filepath name) (Key.elabCmdAt filepath idx) sorry : Task Monad config ι₀ (Key.elabDecl filepath name) _)
+        let (env, info) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.elabDecl filepath name) (Key.elabCmdAt filepath idx) sorry : Task Monad config (Key.elabDecl filepath name) _)
         let origin : Origin := { filepath, idx }
         match env[name]? with
         | some constant => return (some (constant, origin), info)
         | none => return (none, info)
     | none => return (none, 1)
-  | ι₀, .lookup filepath name => do
-    let (result, _) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.lookup filepath name) (Key.elabDecl filepath name) sorry : Task Monad config ι₀ (Key.lookup filepath name) _)
+  | .lookup filepath name => do
+    let (result, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.lookup filepath name) (Key.elabDecl filepath name) sorry : Task Monad config (Key.lookup filepath name) _)
     return result
-  | ι₀, .lookupInfo filepath name => do
-    let (_, info) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.lookupInfo filepath name) (Key.elabDecl filepath name) sorry : Task Monad config ι₀ (Key.lookupInfo filepath name) _)
+  | .lookupInfo filepath name => do
+    let (_, info) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.lookupInfo filepath name) (Key.elabDecl filepath name) sorry : Task Monad config (Key.lookupInfo filepath name) _)
     return info
-  | ι₀, .constant filepath name => do
-    match ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.constant filepath name) (Key.lookup filepath name) sorry : Task Monad config ι₀ (Key.constant filepath name) _) with
+  | .constant filepath name => do
+    match ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.constant filepath name) (Key.lookup filepath name) sorry : Task Monad config (Key.constant filepath name) _) with
     | some res => return some res
     | none =>
-        let transImports ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.constant filepath name) (Key.transitiveImports filepath) sorry : Task Monad config ι₀ (Key.constant filepath name) _)
+        let transImports ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.constant filepath name) (Key.transitiveImports filepath) sorry : Task Monad config (Key.constant filepath name) _)
         for path in transImports do
-           match ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.constant filepath name) (Key.lookup path name) sorry : Task Monad config ι₀ (Key.constant filepath name) _) with
+           match ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.constant filepath name) (Key.lookup path name) sorry : Task Monad config (Key.constant filepath name) _) with
            | some res => return some res
            | none => continue
         return none
-  | ι₀, .type filepath name => do
-    match ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.type filepath name) (Key.constant filepath name) sorry : Task Monad config ι₀ (Key.type filepath name) _) with
+  | .type filepath name => do
+    match ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.type filepath name) (Key.constant filepath name) sorry : Task Monad config (Key.type filepath name) _) with
     | some (constant, _) => return some constant.toConstantInfo
     | none => return none
-  | _ι₀, .eval _filepath _name _univs => do
+  | .eval _filepath _name _univs => do
     return none
-  | ι₀, .checkFile filepath => do
-    let (_, _, parseDiags) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkFile filepath) (Key.astSourceMap filepath) sorry : Task Monad config ι₀ (Key.checkFile filepath) _)
-    let (decls, dupDiags) ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkFile filepath) (Key.declarationIndex filepath) sorry : Task Monad config ι₀ (Key.checkFile filepath) _)
+  | .checkFile filepath => do
+    let (_, _, parseDiags) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkFile filepath) (Key.astSourceMap filepath) sorry : Task Monad config (Key.checkFile filepath) _)
+    let (decls, dupDiags) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkFile filepath) (Key.declarationIndex filepath) sorry : Task Monad config (Key.checkFile filepath) _)
     let mut allDiags := parseDiags ++ dupDiags
     let mut seenIdx : HashSet Nat := HashSet.emptyWithCapacity decls.size
     for (name, idx) in decls.toList do
       if seenIdx.contains idx then continue
       seenIdx := seenIdx.insert idx
-      let info ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkFile filepath) (Key.lookupInfo filepath name) sorry : Task Monad config ι₀ (Key.checkFile filepath) _)
+      let info ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkFile filepath) (Key.lookupInfo filepath name) sorry : Task Monad config (Key.checkFile filepath) _)
       allDiags := allDiags ++ info.diagnostics
     return allDiags
-  | ι₀, .checkProject => do
-      let some inputFiles ← (Task.input (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkProject) InputKey.inputFiles : Task Monad config ι₀ Key.checkProject _) | return #[]
+  | .checkProject => do
+      let some inputFiles ← (Task.input (c := Monad) (ℭ := config) (q₀ := Key.checkProject) InputKey.inputFiles : Task Monad config Key.checkProject _) | return #[]
       let files := inputFiles.toList
 
       let mut adj : HashMap FilePath (List FilePath) := HashMap.emptyWithCapacity 0
       for file in files do
-        let imports ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkProject) (Key.imports file) sorry : Task Monad config ι₀ Key.checkProject _)
+        let imports ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkProject) (Key.imports file) sorry : Task Monad config Key.checkProject _)
         let mut fileDeps := []
         for modName in imports do
-          if let some path ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkProject) (Key.moduleFile modName) sorry : Task Monad config ι₀ Key.checkProject _) then
+          if let some path ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkProject) (Key.moduleFile modName) sorry : Task Monad config Key.checkProject _) then
             fileDeps := path :: fileDeps
         adj := adj.insert file fileDeps
 
@@ -210,7 +210,7 @@ public def tasks : Tasks Monad config
 
       let mut allDiags : Array Diagnostic := #[]
       for file in sortedFiles do
-        let diags ← (Task.fetch (c := Monad) (ℭ := config) (ι₀ := ι₀) (q₀ := Key.checkProject) (Key.checkFile file) sorry : Task Monad config ι₀ Key.checkProject _)
+        let diags ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.checkProject) (Key.checkFile file) sorry : Task Monad config Key.checkProject _)
         allDiags := allDiags ++ diags
 
       return allDiags

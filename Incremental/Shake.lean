@@ -11,23 +11,6 @@ namespace Incremental
 
 open Std (DHashMap)
 
-/-! ## Shake — fingerprint-based incremental build
-
-Each `Memo` for query `q` carries a *universally quantified* invariant:
-for every input function `ι` whose recorded fingerprints match, the
-cached value equals `compute (inferInstance : Monad Id) tasks ι q`.
-
-The two ingredients:
-
-* `Function.Embedding.injective` (Mathlib) — applied to `hI i` /
-  `hR q`, the per-position embeddings into the hash type `H`.
-* `Tasks.freeTheorem` — parametricity for `Task`.
-
-The first lets us read off pointwise equality of inputs (and dep
-results) from hash equality.  The second lets us promote the recompute
-in `StateM` to an equality of values in `Id`.
--/
-
 namespace Shake
 
 variable
@@ -40,9 +23,6 @@ variable
   (hR : ∀ q, ℭ.R q ↪ H)
   (tasks : Tasks Monad ℭ)
 
-/
-quantifies over `ι`.  The `deps` list carries an `ℭ.rel q' q`
-witness alongside each query so the recursive `fetch` decreases. -/
 structure Memo (q : ℭ.Q) where
   value : ℭ.R q
   inputDeps : List ((i : ℭ.I) × H)
@@ -58,8 +38,6 @@ abbrev Cache := DHashMap ℭ.Q (Memo (H := H) hI hR tasks)
 abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
   { r : ℭ.R q // r = compute (inferInstance : Monad Id) tasks ι q }
 
-/
-input fingerprints. -/
 def verifyInputs (ι : ∀ i, ℭ.V i) :
     List ((i : ℭ.I) × H) → Bool
   | [] => true
@@ -77,11 +55,6 @@ theorem verifyInputs_iff (ι : ∀ i, ℭ.V i) (l : List ((i : ℭ.I) × H)) :
 
 variable {tasks}
 
-/
-`fetch`) and comparing its hash to the recorded fingerprint.  On
-success returns a proof that every recorded fingerprint really is
-`hashFn (compute (inferInstance : Monad Id) tasks ι q')`.  Each dep entry carries an
-`ℭ.rel ι q' q₀` witness, threaded into the recursive `fetch`. -/
 def verifyDeps {ι : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateM (Cache (H := H) hI hR tasks) (Value tasks ι q')) :
@@ -105,15 +78,6 @@ def verifyDeps {ι : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
               | tail _ ht => exact hrest _ ht⟩)
       else pure none
 
-/-! ### Recompute
-
-`runRecompute` lifts `tasks q₀` to its FM tree (via
-`Task.freeTheorem` at `f := FM ℭ q₀` versus `Id`), warms the cache
-by walking the FM dep-trace, and reads the value off `evalTree`. -/
-
-/
-its cache-update side effect.  The fetched value is discarded;
-the recompute reads its result from `evalTree`. -/
 def cacheUpdates {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q')) :
@@ -124,9 +88,6 @@ def cacheUpdates {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
       let _ ← fetch q' hq
       cacheUpdates fetch rest
 
-/
-FM tree, then returns the value paired with its proof of equality
-to `compute (inferInstance : Monad Id) tasks ι₀ q₀`. -/
 def runRecompute (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateM (Cache (H := H) hI hR tasks) (Value tasks ι₀ q')) :
@@ -140,11 +101,6 @@ def runRecompute (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀
   pure ⟨value, h⟩
 
-/
-and `deps` are the hashed FM trace at `(ι_now, compute (inferInstance : Monad Id) tasks ι_now)`.
-The invariant proof goes by `FM.evalTree_cross`, using injectivity
-of `hI`, `hR` to lift hash agreement at each recorded position into
-value agreement. -/
 def buildMemoFM (ι_now : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (v : Value tasks ι_now q₀) :
     Memo (H := H) hI hR tasks q₀ :=
@@ -184,13 +140,6 @@ def buildMemoFM (ι_now : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         have hash_eq := hdep _ hmem
         exact (hR p.1).injective hash_eq }
 
-/-! ### The recursive fetch
-
-Look up the cache at `q`.  On hit, verify both input fingerprints
-and dep fingerprints (the latter recursively); if both check out,
-the memo's invariant gives the cached value its correctness proof.
-On miss or verification failure, recompute. -/
-
 variable (tasks)
 
 set_option linter.unusedVariables false in
@@ -229,12 +178,6 @@ variable
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
   {H : Type} [DecidableEq H]
 
-/
-per-position embeddings into the hash type.  Pass
-`Hashable.toEmbedding` for the `UInt64`-hash instantiation.
-
-Each `build` call starts with an empty cache: the cache type
-depends on `tasks`, supplied per-build. -/
 public def Shake (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) :
     Build Monad ℭ J where
   cId := inferInstance

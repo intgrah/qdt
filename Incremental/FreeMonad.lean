@@ -5,20 +5,8 @@ public import Incremental.FreeTheorem
 
 @[expose] public section
 
-/-!
-# Free-monad deep embedding for `Task`
-
-`FM ℭ q₀` reifies the operations a `Task Monad ℭ q₀` performs as a
-syntax tree: every `input i` and every `fetch q hq` becomes a
-constructor.  Instantiating `tasks q₀ : Task Monad ℭ q₀ (R q₀)` at
-`f := FM ℭ q₀` yields a concrete tree amenable to structural
-induction.
--/
-
 namespace Incremental
 
-/
-at position `i`, `fetch q hq` queries dep `q`, and `pure` returns. -/
 inductive FM (ℭ : BuildConfig) (q₀ : ℭ.Q) : Type → Type
   | pure {α} (a : α) : FM ℭ q₀ α
   | input {α} (i : ℭ.I) (k : ℭ.V i → FM ℭ q₀ α) : FM ℭ q₀ α
@@ -28,7 +16,6 @@ namespace FM
 
 variable {ℭ : BuildConfig} {q₀ : ℭ.Q}
 
-/
 def bind {α β : Type} : FM ℭ q₀ α → (α → FM ℭ q₀ β) → FM ℭ q₀ β
   | .pure a, k => k a
   | .input i kt, k => .input i (fun v => bind (kt v) k)
@@ -38,7 +25,6 @@ instance : Monad (FM ℭ q₀) where
   pure := .pure
   bind := bind
 
-/
 def evalTree {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
     FM ℭ q₀ α → α
@@ -46,9 +32,6 @@ def evalTree {α : Type} (ι : ∀ i, ℭ.V i)
   | .input i k => evalTree ι rec (k (ι i))
   | .fetch q hq k => evalTree ι rec (k (rec q hq))
 
-/
-equals evaluating the prefix and then the continuation at the
-result. -/
 theorem evalTree_bind {α β : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q)
     (ma : FM ℭ q₀ α) (ka : α → FM ℭ q₀ β) :
@@ -64,18 +47,10 @@ theorem evalTree_bind {α β : Type} (ι : ∀ i, ℭ.V i)
          evalTree ι rec (ka (evalTree ι rec (kt (rec q hq))))
     exact ih (rec q hq)
 
-/
 def pureInput (i : ℭ.I) : FM ℭ q₀ (ℭ.V i) := .input i .pure
 
-/
 def pureFetch (q : ℭ.Q) (hq : ℭ.rel q q₀) : FM ℭ q₀ (ℭ.R q) :=
   .fetch q hq .pure
-
-/-! ### Trace functions
-
-`evalTrace_inputs` records the `(i, ι i)` pairs read along the path
-the tree takes at `(ι, rec)`; `evalTrace_deps` records the analogous
-`(q, hq, rec q hq)` triples for fetches. -/
 
 def evalTrace_inputs {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
@@ -91,8 +66,6 @@ def evalTrace_deps {α : Type} (ι : ∀ i, ℭ.V i)
   | .input i k => evalTrace_deps ι rec (k (ι i))
   | .fetch q hq k => ⟨q, hq, rec q hq⟩ :: evalTrace_deps ι rec (k (rec q hq))
 
-/
-position. -/
 theorem evalTrace_inputs_value {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) (t : FM ℭ q₀ α) :
     ∀ p ∈ evalTrace_inputs ι rec t, p.2 = ι p.1 := by
@@ -107,8 +80,6 @@ theorem evalTrace_inputs_value {α : Type} (ι : ∀ i, ℭ.V i)
     intro p hp
     exact ih (rec q hq) p hp
 
-/
-query/witness. -/
 theorem evalTrace_deps_value {α : Type} (ι : ∀ i, ℭ.V i)
     (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) (t : FM ℭ q₀ α) :
     ∀ p ∈ evalTrace_deps ι rec t, p.2.2 = rec p.1 p.2.1 := by
@@ -122,12 +93,6 @@ theorem evalTrace_deps_value {α : Type} (ι : ∀ i, ℭ.V i)
     cases hp with
     | head => rfl
     | tail _ ht => exact ih (rec q hq) p ht
-
-/-! ### Cross-`ι` lemma
-
-If two input/dep oracles agree on the positions actually read along
-the path taken at `(ι, rec)`, then evaluating at either oracle gives
-the same result. -/
 
 theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
     (rec rec' : ∀ q, ℭ.rel q q₀ → ℭ.R q) (t : FM ℭ q₀ α)
@@ -167,10 +132,6 @@ theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
       simp [evalTrace_deps, List.mem_cons]
       exact Or.inr hp
 
-/-! ### Bridge to `Task` -/
-
-/
-`FM ℭ q₀` and `Id`. -/
 def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
     MonadAction (FM ℭ q₀) Id where
   rel R t a := R (evalTree ι rec t) a
@@ -184,13 +145,9 @@ end FM
 
 variable (ℭ : BuildConfig)
 
-/
-`f := FM ℭ q₀`. -/
 def tasksTree (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
   tasks q₀ (FM ℭ q₀) FM.pureInput FM.pureFetch
 
-/
-task instantiated at `Id` under the same `(ι, rec)`. -/
 theorem tasksTree_eval (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.rel q q₀ → ℭ.R q) :
     FM.evalTree ι rec (tasksTree ℭ tasks q₀) = tasks q₀ Id ι rec := by
@@ -200,7 +157,6 @@ theorem tasksTree_eval (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
     (fun q hq => show rec q hq = rec q hq from rfl)
   exact h
 
-/
 theorem tasksTree_eval_compute (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) :
     FM.evalTree ι (fun q _ => compute (inferInstance : Monad Id) tasks ι q) (tasksTree ℭ tasks q₀) =

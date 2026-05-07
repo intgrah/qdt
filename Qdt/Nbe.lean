@@ -8,16 +8,16 @@ namespace Qdt
 
 open Lean (Name)
 
-variable (ι₀ : ∀ i, InputV i) (q₀ : Key)
+variable (q₀ : Key)
 
 mutual
 
-partial def Ty.eval {n c} : Ty c → SemM ι₀ q₀ n c (VTy n)
+partial def Ty.eval {n c} : Ty c → SemM q₀ n c (VTy n)
   | .u i => return .u i
   | .pi x a b => return .pi x (← a.eval) ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
-partial def doEl {n} : VTm n → ElabM ι₀ q₀ (VTy n)
+partial def doEl {n} : VTm n → ElabM q₀ (VTy n)
   | .u' i => return .u i
   | .pi' x a ⟨env, b⟩ => return .pi x (← doEl a) ⟨env, .el b⟩
   | .neutral ne => do
@@ -27,14 +27,14 @@ partial def doEl {n} : VTm n → ElabM ι₀ q₀ (VTy n)
   | .glued ne name us => do doEl (← (VTm.glued ne name us).whnf)
   | .lam .. => panic! "doEl: expected type code or neutral"
 
-partial def Tm.eval {n c} : Tm c → SemM ι₀ q₀ n c (VTm n)
+partial def Tm.eval {n c} : Tm c → SemM q₀ n c (VTm n)
   | .u' i => return .u' i
   | .var i => do
     modify fun st => { st with evalCount := st.evalCount + 1 }
     return (← read).get i
   | .const name us => do
     modify fun st => { st with evalCount := st.evalCount + 1 }
-    match ← fetchConstant ι₀ q₀ name with
+    match ← fetchConstant q₀ name with
     | some (.definition _) => return .glued ⟨.const name us, .nil⟩ name us
     | some _ => return .neutral ⟨.const name us, .nil⟩
     | none => return .neutral ⟨.const name us, .nil⟩
@@ -44,7 +44,7 @@ partial def Tm.eval {n c} : Tm c → SemM ι₀ q₀ n c (VTm n)
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
 
-partial def VTm.app {n} (fn arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=
+partial def VTm.app {n} (fn arg : VTm n) : ElabM q₀ (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _ _ clos => betaReduction clos arg
@@ -52,7 +52,7 @@ partial def VTm.app {n} (fn arg : VTm n) : ElabM ι₀ q₀ (VTm n) :=
   | .glued ne name us => return .glued (ne.app arg) name us
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
-partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
+partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
   | .u' .. => panic! "VTm.proj: expected neutral"
   | .lam .. => panic! "VTm.proj: expected neutral"
   | .neutral ne => do
@@ -65,18 +65,18 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM ι₀ q₀ (VTm n)
   | .glued ne name us => do (← (VTm.glued ne name us).whnf).proj i
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
-partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM ι₀ q₀ (Option (VTm n)) := do
-  let some (.definition info) ← fetchConstant ι₀ q₀ name | return none
+partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (Option (VTm n)) := do
+  let some (.definition info) ← fetchConstant q₀ name | return none
   let subst := info.univParams.zip us
   let v := info.vtm.substLevels subst
   return some (VTm.weaken (Nat.zero_le n) v)
 
-partial def applySpine {n} : Spine n → VTm n → ElabM ι₀ q₀ (VTm n)
+partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
   | .nil, v => return v
   | .app sp arg, v => do (← applySpine sp v).app arg
   | .proj sp i, v => do (← applySpine sp v).proj i
 
-partial def VTm.whnf {n} : VTm n → ElabM ι₀ q₀ (VTm n)
+partial def VTm.whnf {n} : VTm n → ElabM q₀ (VTm n)
   | .neutral ⟨.const name us, sp⟩ => do
     modify fun st => { st with whnfCount := st.whnfCount + 1 }
     match ← deltaReduction name us with
@@ -95,17 +95,17 @@ partial def VTm.whnf {n} : VTm n → ElabM ι₀ q₀ (VTm n)
       | none => return .neutral ⟨.const name us, sp⟩
   | v => return v
 
-partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM ι₀ q₀ (VTm n) := do
+partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM q₀ (VTm n) := do
   modify fun st => { st with betaCount := st.betaCount + 1 }
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 
 partial def iotaReduction {n}
     (ne : Neutral n) :
-    ElabM ι₀ q₀ (Option (VTm n)) := do
+    ElabM q₀ (Option (VTm n)) := do
   let ⟨.const recName recUs, sp⟩ := ne
     | return none
-  let some info ← fetchRecursor ι₀ q₀ recName
+  let some info ← fetchRecursor q₀ recName
     | return none
   let some spList := sp.toAppList
     | return none
@@ -139,12 +139,12 @@ partial def iotaReduction {n}
 
 partial def projReduction {n}
     (ne : Neutral n) :
-    ElabM ι₀ q₀ (Option (VTm n)) := do
+    ElabM q₀ (Option (VTm n)) := do
   let ⟨.const ctor _us, sp⟩ := ne
     | return none
-  let some ctorInfo ← fetchConstructor ι₀ q₀ ctor
+  let some ctorInfo ← fetchConstructor q₀ ctor
     | return none
-  let some indInfo ← fetchInductive ι₀ q₀ ctorInfo.indName
+  let some indInfo ← fetchInductive q₀ ctorInfo.indName
     | return none
   match sp with
   | .proj sp' i =>
@@ -157,7 +157,7 @@ partial def projReduction {n}
 
 end
 
-def VTm.apps {n} : VTm n → List (VTm n) → ElabM ι₀ q₀ (VTm n) :=
-  List.foldlM (VTm.app ι₀ q₀)
+def VTm.apps {n} : VTm n → List (VTm n) → ElabM q₀ (VTm n) :=
+  List.foldlM (VTm.app q₀)
 
 end Qdt

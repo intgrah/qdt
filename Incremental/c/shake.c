@@ -478,8 +478,7 @@ recompute:;
   {
     lean_inc(key);
     lean_inc_ref(tasks);
-    lean_inc_ref(input_fn);
-    lean_object *task = lean_apply_2(tasks, input_fn, key);
+    lean_object *task = lean_apply_1(tasks, key);
 
     lean_object *deps, *input_deps;
     value = run_task(beqI, hashI, hashV, beqQ, hashQ, hashR, input_fn, tasks,

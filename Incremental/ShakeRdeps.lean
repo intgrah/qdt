@@ -1,6 +1,6 @@
 module
 
-public import Incremental.Shake
+public import Incremental.ShakeStore
 
 namespace Incremental
 
@@ -14,7 +14,7 @@ variable
 
 structure ShakeRdeps.Store (J : Type) where
   inputs : J
-  memos : DHashMap ℭ.Q (Shake.Memo ℭ)
+  memos : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
   rdeps : HashMap ℭ.Q (HashSet ℭ.Q)
 
 partial def ShakeRdeps.getTransitiveDependents
@@ -36,6 +36,7 @@ def ShakeRdeps.invalidate
   { store with memos := toInvalidate.fold .erase store.memos }
 
 public def ShakeRdeps : Build Monad ℭ J where
+  cId := inferInstance
   σ := ShakeRdeps.Store ℭ J
   init inputs := {
     inputs
@@ -45,7 +46,7 @@ public def ShakeRdeps : Build Monad ℭ J where
   inputs store := Input.get store.inputs
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
-  build tasks q := fun store =>
+  build tasks q store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos
@@ -86,8 +87,8 @@ public def ShakeRdeps : Build Monad ℭ J where
             if h != oldHash then return false
           return true
         let recompute : ST σ (ℭ.R q) := do
-          let value ← tasks ι₀ q (ST σ) input' (fun q₁ _hq => fetch' q₁)
-          let m : Shake.Memo ℭ q := { value, deps := ← deps.get, inputDeps := ← inputDeps.get }
+          let value ← tasks q (ST σ) input' (fun q₁ _hq => fetch' q₁)
+          let m : ShakeRT.Memo ℭ q := { value, deps := ← deps.get, inputDeps := ← inputDeps.get }
           started.modify (·.insert q m)
           memos.modify (·.insert q m)
           return value
@@ -100,8 +101,8 @@ public def ShakeRdeps : Build Monad ℭ J where
           | none => recompute
         stack.modify Array.pop
         return r
-      termination_by (ℭ.wf ι₀).wrap q
+      termination_by ℭ.wf.wrap q
       decreasing_by all_goals sorry
-      return (← fetch q, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
+      (⟨← fetch q, sorry⟩, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
 
 end Incremental

@@ -2,19 +2,6 @@ module
 
 public import Incremental.Basic
 
-/-!
-# Free theorem for `Task`
-
-Free theorem of relational parametricity for `Task` type
-
-## References
-
-- Reynolds, J. C. (1983). Types, abstraction and parametric polymorphism.
-- Wadler, P. (1989). Theorems for free!
-- Voigtländer, J. (2009). Free theorems involving type constructor classes. ICFP 2009.
-- Atkey, R. (2012). Relational parametricity for higher kinds.
--/
-
 @[expose] public section
 
 namespace Incremental
@@ -34,9 +21,6 @@ structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] 
     (∀ a b, R a b → rel S (ka a) (kb b)) →
     rel S (ma >>= ka) (mb >>= kb)
 
-/
-The Applicative analogue of `MonadAction`: preserves `pure` and
-`<*>` (Seq) instead of `pure` and `>>=`. -/
 structure ApplicativeAction (κ₁ κ₂ : Type → Type)
     [Applicative κ₁] [Applicative κ₂] where
   rel {α β : Type} :
@@ -68,11 +52,6 @@ axiom Task.freeTheorem
     (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (fetch₂ q hq)) :
     F.rel Eq (t κ₁ ι₁ fetch₁) (t κ₂ ι₂ fetch₂)
 
-/
-`Task Applicative ℭ q₀ α` between two `Applicative`s linked by an
-`ApplicativeAction`.  Strictly weaker hypothesis than the Monad
-case (no `rel_bind`), strictly broader scope (any Applicative, not
-just any Monad). -/
 axiom Task.freeTheorem_Applicative
     {κ₁ κ₂ : Type → Type} [Applicative κ₁] [Applicative κ₂]
     (t : Task Applicative ℭ q₀ α)

@@ -37,14 +37,14 @@ variable {b : Build Monad config (DHashMap InputKey InputVal)}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateM b.σ (Array String × Nat × Nat × Nat) := do
-  let transImports ← b.build tasks (Key.transitiveImports filepath)
+  let transImports ← b.run tasks (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
   for file in transImports.toList ++ [filepath] do
-    let diags ← b.build tasks (Key.checkFile file)
+    let diags ← b.run tasks (Key.checkFile file)
     if diags.isEmpty then continue
     let text := (inputs.get? (.text file)).getD ""
-    let (_, sm, _) ← b.build tasks (Key.astSourceMap file)
-    let (cst, _) ← b.build tasks (Key.cst file)
+    let (_, sm, _) ← b.run tasks (Key.astSourceMap file)
+    let (cst, _) ← b.run tasks (Key.cst file)
     for d in diags do
       msgs := msgs.push (d.format file text sm cst)
   return (msgs, 0, 0, 0)
@@ -79,12 +79,12 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
 
 def dumpGraph (outPath : FilePath) (inputs : DHashMap InputKey InputVal)
     (files : Array FilePath) : IO Unit := do
-  let b : Build Monad config Input := Shake config Input
-  let mut store : b.σ := b.init inputs
+  let b := ShakeCPS config Input
+  let mut store := b.init inputs
   for file in files do
     let (_, store') := runOnce (b := b) inputs store file
     store := store'
-  let shakeStore : Shake.Store config Input := store
+  let shakeStore : ShakeRT.Store config Input := store
   let handle ← IO.FS.Handle.mk outPath .write
   let mut edgeCount : Nat := 0
   for ⟨q, memo⟩ in shakeStore.memos do
@@ -119,7 +119,7 @@ def run (parsed : Parsed) : IO UInt32 := do
       let tFileStart ← IO.monoMsNow
       -- Phase A: transitive imports + cst + ast
       let (_transImports, s1) :=
-        StateT.run (s := store) (b.build tasks (Key.transitiveImports file))
+        StateT.run (s := store) (b.run tasks (Key.transitiveImports file))
       let tImports ← IO.monoMsNow
       -- Phase B: full check
       let ((msgs, betaCount, evalCount, whnfCount), store') := runOnce inputs s1 file

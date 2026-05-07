@@ -6,6 +6,7 @@ public import Incremental.LessBusy
 public import Incremental.Salsa
 public import Incremental.SalsaC
 public import Incremental.Shake
+public import Incremental.ShakeStore
 public import Incremental.ShakeCPS
 public import Incremental.ShakeEState
 public import Incremental.ShakeC
@@ -26,24 +27,25 @@ instance : Incremental.Input config Input where
   set m i v := m.alter i (fun _ => v)
 
 unsafe def selectBuild' : BuildSystem → Build Monad config Input
-  | .busy => Busy config Input
+  | .busy => Busy config Input inferInstance
   | .lessBusy => LessBusy config Input
   | .salsa => Salsa config Input
   | .salsaC => SalsaC config Input
-  | .shake => Shake config Input
+  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
   | .shakeC => ShakeC config Input
   | .shakeCPS => ShakeCPS config Input
   | .shakeEState => ShakeEState config Input
 
 @[implemented_by selectBuild']
 def selectBuild : BuildSystem → Build Monad config Input
-  | .busy => Busy config Input
+  | .busy => Busy config Input inferInstance
   | .lessBusy => LessBusy config Input
   | .salsa => Salsa config Input
-  | .shake => Shake config Input
+  | .salsaC => Salsa config Input
+  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
+  | .shakeC => ShakeEState config Input
   | .shakeCPS => ShakeCPS config Input
   | .shakeEState => ShakeEState config Input
-  | _ => Shake config Input
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []

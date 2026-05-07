@@ -379,8 +379,7 @@ static lean_object *salsa_fetch(lean_object *beqI, lean_object *hashI,
 
     lean_inc(key);
     lean_inc_ref(tasks);
-    lean_inc_ref(input_fn);
-    lean_object *task = lean_apply_2(tasks, input_fn, key);
+    lean_object *task = lean_apply_1(tasks, key);
     lean_inc(task);
     lean_inc(g_monad_inst);
     lean_object *result = lean_apply_4(

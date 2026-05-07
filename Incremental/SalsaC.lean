@@ -12,8 +12,15 @@ variable
   [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
+instance {ℭ : BuildConfig} {J : Type}
+    [BEq ℭ.I] [Hashable ℭ.I]
+    [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
+    [Input ℭ J] :
+    Nonempty (Tasks Monad ℭ → ∀ q, Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J) :=
+  ⟨sorry⟩
+
 @[extern "lean_salsa_build"]
-public unsafe opaque salsaCBuild
+public opaque salsaCBuild
     {ℭ : BuildConfig} {J : Type}
     [BEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
@@ -21,7 +28,8 @@ public unsafe opaque salsaCBuild
     Tasks Monad ℭ → ∀ q,
     Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J
 
-@[expose] public unsafe def SalsaC : Build Monad ℭ J where
+@[expose] public def SalsaC : Build Monad ℭ J where
+  cId := inferInstance
   σ := Salsa.Store ℭ J
   init inputs := {
     inputs
@@ -35,6 +43,8 @@ public unsafe opaque salsaCBuild
     let inputs := Input.set store.inputs i v
     let inputRevisions := store.inputRevisions.insert i revision
     { store with inputs, revision, inputRevisions }
-  build := salsaCBuild
+  build tasks q store :=
+    let (r, s) := salsaCBuild tasks q store
+    (⟨r, sorry⟩, s)
 
 end Incremental

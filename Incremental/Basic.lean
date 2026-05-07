@@ -4,7 +4,6 @@ public import Mathlib.Logic.Function.Basic
 public import Std.Data.DHashMap
 public import Std.Data.HashMap
 public import Std.Data.HashSet
-public import Incremental.Selective
 
 @[expose] public section
 
@@ -19,14 +18,6 @@ abbrev Const (α : Type u) (_ : Type v) : Type u := α
 instance {α : Type u} : Applicative (Const (List α)) where
   pure _ := []
   seq f x := f ++ x ()
-
-/-!
-[Build systems à la carte]
-The choice of the constraint `c` has concrete meanings:
-- `c := Functor` - sequential only
-- `c := Applicative` - static dependencies
-- `c := Monad` - dynamic dependencies
--/
 
 structure BuildConfig : Type 1 where
   I : Type
@@ -80,19 +71,8 @@ instance [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
 def Tasks : Type 1 :=
   ∀ q₀, Task c ℭ q₀ (ℭ.R q₀)
 
-/-! ## The naive evaluator (the spec)
-
-`compute tasks ι q` runs `tasks` at the identity monad with `ι` for
-inputs and `compute` itself for fetches. This is what `Busy` does;
-every other build system must agree with it. -/
-
 set_option linter.unusedVariables false in
 set_option checkBinderAnnotations false in
-/
-with `ι` for inputs and the recursive `compute` for fetches.  The
-spec every `Build c` is verified against.  The `cId : c Id`
-witness is supplied explicitly because `c` is an ordinary
-`(Type → Type) → Type 1` rather than a Lean typeclass. -/
 def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
     (cId : c Id) (tasks : Tasks c ℭ)
     (ι : ∀ i, ℭ.V i) (q : ℭ.Q) : ℭ.R q :=
@@ -100,19 +80,6 @@ def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
 termination_by ℭ.wf.wrap q
 decreasing_by exact _hq
 
-/-! ## Verified build systems
-
-A `Build c` is a build implementation that produces values **paired
-with a proof they equal `compute`**.  The constraint `c` controls
-the level at which tasks are scheduled: `Applicative` for fully
-static parallel dispatch, `Selective` for speculative parallel
-prefetch with bounded over-approximation, `Monad` for the
-suspending strategy that discovers deps dynamically. -/
-
-/
-gives a witness that `Id` satisfies `c`, used by `compute` in the
-correctness statement.  For `c ∈ {Functor, Applicative, Selective,
-Monad}` an instance for `Id` already exists; pass `inferInstance`. -/
 structure Build (c : (Type → Type) → Type 1)
     (ℭ : BuildConfig) (J : Type) [Input ℭ J] : Type 1 where
   cId : c Id
@@ -120,34 +87,16 @@ structure Build (c : (Type → Type) → Type 1)
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
-  /
-  `r = compute tasks (inputs store) q`, plus an updated store. -/
-  build :
-    (tasks : Tasks c ℭ) → (q : ℭ.Q) → (store : σ) →
-      { r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ
+  build : (tasks : Tasks c ℭ) → (q : ℭ.Q) → (store : σ) →
+    { r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ
 
-/
-(`Salsa`, `ShakeC`, `ShakeCPS`, etc.). -/
-structure BuildLegacy (c : (Type → Type) → Type 1)
-    (ℭ : BuildConfig) (J : Type) [Input ℭ J] : Type 1 where
-  σ : Type
-  init : J → σ
-  inputs : σ → ∀ i, ℭ.V i
-  set : ∀ i, ℭ.V i → StateM σ Unit
-  build : Tasks c ℭ → ∀ q, StateM σ (ℭ.R q)
+namespace Build
 
-/
-`BuildLegacy`. -/
-def Build.toLegacy {c : (Type → Type) → Type 1}
-    {ℭ : BuildConfig} {J : Type} [Input ℭ J]
-    (b : Build c ℭ J) : BuildLegacy c ℭ J where
-  σ := b.σ
-  init := b.init
-  inputs := b.inputs
-  set := b.set
-  build tasks q :=
-    fun store =>
-      let (⟨r, _⟩, store') := b.build tasks q store
-      (r, store')
+variable {c : (Type → Type) → Type 1} {ℭ : BuildConfig} {J : Type} [Input ℭ J]
+
+def run (b : Build c ℭ J) (tasks : Tasks c ℭ) (q : ℭ.Q) : StateM b.σ (ℭ.R q) :=
+  fun store => let (⟨r, _⟩, s) := b.build tasks q store; (r, s)
+
+end Build
 
 end Incremental

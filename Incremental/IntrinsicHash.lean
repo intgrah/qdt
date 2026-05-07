@@ -5,13 +5,6 @@ public import Mathlib.Logic.Embedding.Basic
 
 @[expose] public section
 
-/-!
-# Hash injectivity
-
-We assume hash functions are ideal for the purpose of proving the
-correctness of build systems that rely on it.
--/
-
 class IdealHashable (α : Type) [Hashable α] : Prop where
   inj : Function.Injective (hash : α → UInt64)
 
