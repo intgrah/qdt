@@ -46,19 +46,19 @@ abbrev SemM (n c : Nat) := ReaderT (Env n c) (ElabM ι₀ q₀)
 instance {n} : MonadLiftT (SemM ι₀ q₀ n n) (TermM ι₀ q₀ n) where
   monadLift m n := m n.env
 
-def currentDecl : ElabM ι₀ q₀ Name := do
+@[inline] def currentDecl : ElabM ι₀ q₀ Name := do
   return (← read).currentDecl
 
-def currentPath : ElabM ι₀ q₀ Path := do
+@[inline] def currentPath : ElabM ι₀ q₀ Path := do
   return (← read).path
 
-def withChild {α : Type} (i : Nat) : ElabM ι₀ q₀ α → ElabM ι₀ q₀ α :=
+@[inline] def withChild {α : Type} (i : Nat) : ElabM ι₀ q₀ α → ElabM ι₀ q₀ α :=
   ReaderT.adapt fun ctx => { ctx with path := i :: ctx.path }
 
-def getUnivParams : ElabM ι₀ q₀ (List Name) := do
+@[inline] def getUnivParams : ElabM ι₀ q₀ (List Name) := do
   return (← read).univParams
 
-def emitDiagnostic (err : Error) : ElabM ι₀ q₀ Unit := do
+@[inline] def emitDiagnostic (err : Error) : ElabM ι₀ q₀ Unit := do
   let path ← currentPath ι₀ q₀
   modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
 
@@ -66,7 +66,7 @@ def raiseError {α : Type} (err : Error) : OptionT (ElabM ι₀ q₀) α := do
   emitDiagnostic ι₀ q₀ err
   failure
 
-def emitHover (hover : HoverContent) : ElabM ι₀ q₀ Unit := do
+@[inline] def emitHover (hover : HoverContent) : ElabM ι₀ q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
   let path ← currentPath ι₀ q₀
   modify fun st => { st with hovers := st.hovers.push { path, hover } }

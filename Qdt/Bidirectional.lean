@@ -12,7 +12,7 @@ open Frontend (Ast Path)
 
 variable (ι₀ : ∀ i, InputV i) (q₀ : Key)
 
-def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM ι₀ q₀ Unit := do
+@[inline] def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM ι₀ q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
   emitHover ι₀ q₀ (.typeOnly ctx.names (← ty.quote ι₀ q₀))
 

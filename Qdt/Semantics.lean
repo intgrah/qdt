@@ -102,14 +102,14 @@ def Env.substLevels {n m} (subst : List (Name × Universe)) : Env n m → Env n 
 
 end
 
-def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
-def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
-def VTm.const {n} (name : Name) (us : List Universe := []) : VTm n := .neutral ⟨.const name us, .nil⟩
+@[inline] def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
+@[inline] def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
+@[inline] def VTm.const {n} (name : Name) (us : List Universe := []) : VTm n := .neutral ⟨.const name us, .nil⟩
 
 def Neutral.head {n} : Neutral n → Head n | ⟨h, _⟩ => h
 def Neutral.spine {n} : Neutral n → Spine n | ⟨_, sp⟩ => sp
-def Neutral.app {n} : Neutral n → VTm n → Neutral n | ⟨h, sp⟩, a => ⟨h, sp.app a⟩
-def Neutral.proj {n} : Neutral n → Nat → Neutral n | ⟨h, sp⟩, i => ⟨h, sp.proj i⟩
+@[inline] def Neutral.app {n} : Neutral n → VTm n → Neutral n | ⟨h, sp⟩, a => ⟨h, sp.app a⟩
+@[inline] def Neutral.proj {n} : Neutral n → Nat → Neutral n | ⟨h, sp⟩, i => ⟨h, sp.proj i⟩
 
 @[match_pattern]
 def Head.apps {n} (h : Head n) (args : List (VTm n)) : Neutral n :=
