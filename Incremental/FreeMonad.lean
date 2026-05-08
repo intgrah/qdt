@@ -93,26 +93,6 @@ theorem evalTrace_deps_bind {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, �
     simp [bind, evalTrace_deps]
     exact ih (rec q)
 
-theorem evalTrace_inputs_value {α : Type} (ι : ∀ i, ℭ.V i)
-    (rec : ∀ q, ℭ.R q) (t : FM ℭ q₀ α) :
-    ∀ p ∈ evalTrace_inputs ι rec t, p.v = ι p.i := by
-  induction t with
-  | pure _ => nofun
-  | input i k ih => exact fun
-    | _, .head _ => rfl
-    | p, .tail _ ht => ih (ι i) p ht
-  | fetch q _ k ih => exact ih (rec q)
-
-theorem evalTrace_deps_value {α : Type} (ι : ∀ i, ℭ.V i)
-    (rec : ∀ q, ℭ.R q) (t : FM ℭ q₀ α) :
-    ∀ p ∈ evalTrace_deps ι rec t, p.r = rec p.q := by
-  induction t with
-  | pure _ => nofun
-  | input i k ih => exact ih (ι i)
-  | fetch q hq k ih => exact fun
-    | _, .head _ => rfl
-    | p, .tail _ ht => ih (rec q) p ht
-
 theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
     (rec rec' : ∀ q, ℭ.R q) (t : FM ℭ q₀ α)
     (hin : ∀ p ∈ evalTrace_inputs ι rec t, ι' p.i = p.v)

@@ -42,7 +42,7 @@ structure Memo (q : ℭ.Q) where
 abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
   { r : ℭ.R q // r = eval tasks ι q }
 
-private theorem inputDeps_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+theorem inputDeps_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (inputDeps : List (ℭ.I × H))
     (hin_trace : inputDeps =
       (FM.evalTrace_inputs ι₀ (eval tasks ι₀)
@@ -56,7 +56,7 @@ private theorem inputDeps_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     hin_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
   simpa using hin _ this
 
-private theorem depEntries_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+theorem depEntries_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (deps : List (DepEntry (H := H) q₀))
     (hdep_trace : deps =
       (FM.evalTrace_deps ι₀ (eval tasks ι₀)
@@ -117,13 +117,11 @@ def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
           · rfl
         match ← verifyDeps ι₀ fetch rest with
         | some ⟨hrest⟩ =>
-          pure (some ⟨fun p hp => by
-            cases hp with
-            | head =>
+          pure (some ⟨fun
+            | _, .head _ => by
               show hR q' (eval tasks ι₀ q') = h
-              rw [← v.property, ← hcache]
-              exact heq
-            | tail _ ht => exact hrest p ht⟩)
+              rw [← v.property, ← hcache]; exact heq
+            | p, .tail _ ht => hrest p ht⟩)
         | none => pure none
       else
         pure none
@@ -184,10 +182,12 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
       Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
         input' FM.pureInput fetch' FM.pureFetch
         (fun _ _ => ⟨rfl, rfl, rfl⟩)
-        (fun q hq s => ⟨(fetch q hq s.store).1.val.1.property, rfl, by
-          show (⟨q, hq, (fetch q hq s.store).1.val.2⟩ : DepEntry q₀) :: s.deps =
-               (⟨q, hq, hR q (eval tasks ι₀ q)⟩ : DepEntry q₀) :: s.deps
-          rw [(fetch q hq s.store).1.property, (fetch q hq s.store).1.val.1.property]⟩)
+        (fun q hq s =>
+          let r := (fetch q hq s.store).1
+          ⟨r.val.1.property, rfl, by
+            show (⟨q, hq, r.val.2⟩ : DepEntry q₀) :: s.deps =
+                 (⟨q, hq, hR q (eval tasks ι₀ q)⟩ : DepEntry q₀) :: s.deps
+            rw [r.property, r.val.1.property]⟩)
         initState
     have hval : result.1 = eval tasks ι₀ q₀ :=
       hval_tree.trans (Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀)
@@ -203,17 +203,16 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
       { value := result.1
         inputDeps := result.2.ins
         deps := result.2.deps
-        invariant ι hin hdep := by
-          rw [hval]
-          dsimp only [eval]
-          rw [
-            ← tasksTree_eval_compute ℭ tasks q₀ ι₀,
-            ← tasksTree_eval_compute ℭ tasks q₀ ι
-          ]
-          exact FM.evalTree_cross ι₀ ι (eval tasks ι₀) (eval tasks ι)
-            (tasksTree ℭ tasks q₀)
-            (inputDeps_invariant hI tasks ι₀ q₀ result.2.ins hin_trace' ι hin)
-            (depEntries_invariant hR tasks ι₀ q₀ result.2.deps hdep_trace' ι hdep) }
+        invariant ι hin hdep :=
+          calc result.1
+              = eval tasks ι₀ q₀ := hval
+            _ = FM.evalTree ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀) :=
+              (tasksTree_eval_compute ℭ tasks q₀ ι₀).symm
+            _ = FM.evalTree ι (eval tasks ι) (tasksTree ℭ tasks q₀) :=
+              FM.evalTree_cross ι₀ ι (eval tasks ι₀) (eval tasks ι) _
+                (inputDeps_invariant hI tasks ι₀ q₀ _ hin_trace' ι hin)
+                (depEntries_invariant hR tasks ι₀ q₀ _ hdep_trace' ι hdep)
+            _ = eval tasks ι q₀ := tasksTree_eval_compute ℭ tasks q₀ ι }
     (⟨(memo, ⟨result.1, hval⟩), rfl⟩, result.2.store)
 
 def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
