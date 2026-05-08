@@ -2,8 +2,6 @@ import Lean
 
 open Lean (Name)
 
-namespace Lean2Export
-
 inductive Level where
   | zero
   | succ (l : Nat)
@@ -244,7 +242,7 @@ def convertFile (inputPath outputPath : String) : IO Unit := do
       output := output ++ rendered ++ "\n\n"
       count := count + 1
   IO.FS.writeFile outputPath output
-  IO.println s!"  {inputPath} → {outputPath} ({count} decls)"
+  println!"  {inputPath} → {outputPath} ({count} decls)"
 
 def main (args : List String) : IO Unit := do
   let exportDir := args[0]!
@@ -256,7 +254,3 @@ def main (args : List String) : IO Unit := do
       let stem := path.fileStem.getD "unknown"
       let outPath := s!"{outDir}/{stem}.qdt"
       convertFile path.toString outPath
-
-end Lean2Export
-
-def main := Lean2Export.main
