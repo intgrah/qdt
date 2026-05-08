@@ -120,7 +120,7 @@ open Qdt
 
 #fail (
   def failUnbound : Type 0 := Type v
-) with .typeMismatch ..
+) with .unboundUniverseVariable ..
 
 #fail (
   def failTypeSelf.{u} : Type u := Type u
