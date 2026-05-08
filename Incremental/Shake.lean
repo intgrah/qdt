@@ -16,8 +16,7 @@ namespace Shake
 
 variable
   {ℭ : BuildConfig}
-  [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
-  {H : Type} [DecidableEq H]
+  {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
   (tasks : Tasks Monad ℭ)
@@ -40,10 +39,50 @@ structure Memo (q : ℭ.Q) where
       (∀ p ∈ deps, hR p.q (eval tasks ι p.q) = p.h) →
       value = eval tasks ι q
 
-abbrev Cache := DHashMap ℭ.Q (Memo hI hR tasks)
-
 abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
   { r : ℭ.R q // r = eval tasks ι q }
+
+private theorem inputDeps_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+    (inputDeps : List (ℭ.I × H))
+    (hin_trace : inputDeps =
+      (FM.evalTrace_inputs ι₀ (eval tasks ι₀)
+        (tasksTree ℭ tasks q₀)).reverse.map (fun p => (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H)))
+    (ι : ∀ i, ℭ.V i)
+    (hin : ∀ p ∈ inputDeps, hI p.1 (ι p.1) = p.2) :
+    ∀ p ∈ FM.evalTrace_inputs ι₀ (eval tasks ι₀)
+        (tasksTree ℭ tasks q₀),
+      ι p.1 = p.2 := fun p hp => by
+  have : (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H) ∈ inputDeps :=
+    hin_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
+  simpa using hin _ this
+
+private theorem depEntries_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+    (deps : List (DepEntry (H := H) q₀))
+    (hdep_trace : deps =
+      (FM.evalTrace_deps ι₀ (eval tasks ι₀)
+        (tasksTree ℭ tasks q₀)).reverse.map
+          (fun p => (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀)))
+    (ι : ∀ i, ℭ.V i)
+    (hdep : ∀ p ∈ deps, hR p.q (eval tasks ι p.q) = p.h) :
+    ∀ p ∈ FM.evalTrace_deps ι₀ (eval tasks ι₀)
+        (tasksTree ℭ tasks q₀),
+      eval tasks ι p.1 = p.2.2 := fun p hp => by
+  have : (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀) ∈ deps :=
+    hdep_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
+  simpa using hdep _ this
+
+variable [DecidableEq H]
+
+abbrev verifyInputs (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) : Bool :=
+  l.all fun ⟨i, h⟩ => hI i (ι i) = h
+
+theorem verifyInputs_spec (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) :
+    verifyInputs hI ι l = true ↔ ∀ p ∈ l, hI p.1 (ι p.1) = p.2 := by
+  simp
+
+variable [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
+
+abbrev Cache := DHashMap ℭ.Q (Memo hI hR tasks)
 
 abbrev VCache (ι : ∀ i, ℭ.V i) :=
   DHashMap ℭ.Q (fun q => { p : Value tasks ι q × H // p.2 = hR q p.1.val })
@@ -54,13 +93,6 @@ structure RunState (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) where
   store : Store hI hR tasks ι₀
   ins : List (ℭ.I × H)
   deps : List (DepEntry (H := H) q₀)
-
-abbrev verifyInputs (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) : Bool :=
-  l.all fun ⟨i, h⟩ => hI i (ι i) = h
-
-theorem verifyInputs_spec (ι : ∀ i, ℭ.V i) (l : List (ℭ.I × H)) :
-    verifyInputs hI ι l = true ↔ ∀ p ∈ l, hI p.1 (ι p.1) = p.2 := by
-  simp
 
 def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
@@ -130,35 +162,6 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
         FM.evalTrace_deps_bind
       ]
       simp
-
-private theorem inputDeps_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-    (inputDeps : List (ℭ.I × H))
-    (hin_trace : inputDeps =
-      (FM.evalTrace_inputs ι₀ (eval tasks ι₀)
-        (tasksTree ℭ tasks q₀)).reverse.map (fun p => (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H)))
-    (ι : ∀ i, ℭ.V i)
-    (hin : ∀ p ∈ inputDeps, hI p.1 (ι p.1) = p.2) :
-    ∀ p ∈ FM.evalTrace_inputs ι₀ (eval tasks ι₀)
-        (tasksTree ℭ tasks q₀),
-      ι p.1 = p.2 := fun p hp => by
-  have : (⟨p.1, hI p.1 p.2⟩ : ℭ.I × H) ∈ inputDeps :=
-    hin_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
-  simpa using hin _ this
-
-private theorem depEntries_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
-    (deps : List (DepEntry (H := H) q₀))
-    (hdep_trace : deps =
-      (FM.evalTrace_deps ι₀ (eval tasks ι₀)
-        (tasksTree ℭ tasks q₀)).reverse.map
-          (fun p => (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀)))
-    (ι : ∀ i, ℭ.V i)
-    (hdep : ∀ p ∈ deps, hR p.q (eval tasks ι p.q) = p.h) :
-    ∀ p ∈ FM.evalTrace_deps ι₀ (eval tasks ι₀)
-        (tasksTree ℭ tasks q₀),
-      eval tasks ι p.1 = p.2.2 := fun p hp => by
-  have : (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀) ∈ deps :=
-    hdep_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
-  simpa using hdep _ this
 
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),

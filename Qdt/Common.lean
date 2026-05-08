@@ -25,24 +25,14 @@ instance : Incremental.Input config Input where
   get := DHashMap.get?
   set m i v := m.alter i (fun _ => v)
 
-unsafe def selectBuild' : BuildSystem → Build Monad config Input
-  | .busy => Busy config Input inferInstance
-  | .lessBusy => LessBusy config Input
-  | .salsa => Salsa config Input
-  | .salsaC => SalsaC config Input
-  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
-  | .shakeC => ShakeC config Input
-  | .shakeCPS => ShakeCPS config Input
-
-@[implemented_by selectBuild']
-def selectBuild : BuildSystem → Build Monad config Input
-  | .busy => Busy config Input inferInstance
-  | .lessBusy => LessBusy config Input
-  | .salsa => Salsa config Input
-  | .salsaC => Salsa config Input
-  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding)
-  | .shakeC => ShakeCPS config Input
-  | .shakeCPS => ShakeCPS config Input
+def selectBuild (tasks : Tasks Monad config) : BuildSystem → Build Monad config Input tasks
+  | .busy => Busy config Input (inferInstance : Monad Id) tasks
+  | .lessBusy => LessBusy config Input tasks
+  | .salsa => Salsa config Input tasks
+  | .salsaC => SalsaC config Input tasks
+  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) tasks
+  | .shakeC => ShakeC config Input tasks
+  | .shakeCPS => ShakeCPS config Input tasks
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []
