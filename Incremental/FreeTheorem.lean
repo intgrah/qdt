@@ -12,7 +12,7 @@ namespace Task
 
 namespace Monad
 
-structure Action (κ₁ κ₂ : Type → Type) [_root_.Monad κ₁] [_root_.Monad κ₂] where
+structure Action (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] where
   rel {α β : Type} :
     (α → β → Prop) →
     (κ₁ α → κ₂ β → Prop)
@@ -28,8 +28,8 @@ structure Action (κ₁ κ₂ : Type → Type) [_root_.Monad κ₁] [_root_.Mona
     rel S (ma >>= ka) (mb >>= kb)
 
 axiom freeTheorem
-    {κ₁ κ₂ : Type → Type} [_root_.Monad κ₁] [_root_.Monad κ₂]
-    (t : Task _root_.Monad ℭ q₀ α)
+    {κ₁ κ₂ : Type → Type} [Monad κ₁] [Monad κ₂]
+    (t : Task Monad ℭ q₀ α)
     (F : Action κ₁ κ₂)
     (ι₁ : ∀ i, κ₁ (ℭ.V i))
     (ι₂ : ∀ i, κ₂ (ℭ.V i))
@@ -43,7 +43,7 @@ end Monad
 
 namespace Applicative
 
-structure Action (κ₁ κ₂ : Type → Type) [_root_.Applicative κ₁] [_root_.Applicative κ₂] where
+structure Action (κ₁ κ₂ : Type → Type) [Applicative κ₁] [Applicative κ₂] where
   rel {α β : Type} :
     (α → β → Prop) →
     (κ₁ α → κ₂ β → Prop)
@@ -59,8 +59,8 @@ structure Action (κ₁ κ₂ : Type → Type) [_root_.Applicative κ₁] [_root
     rel S (f <*> x) (g <*> y)
 
 axiom freeTheorem
-    {κ₁ κ₂ : Type → Type} [_root_.Applicative κ₁] [_root_.Applicative κ₂]
-    (t : Task _root_.Applicative ℭ q₀ α)
+    {κ₁ κ₂ : Type → Type} [Applicative κ₁] [Applicative κ₂]
+    (t : Task Applicative ℭ q₀ α)
     (F : Action κ₁ κ₂)
     (ι₁ : ∀ i, κ₁ (ℭ.V i))
     (ι₂ : ∀ i, κ₂ (ℭ.V i))
@@ -75,19 +75,19 @@ end Applicative
 end Task
 
 theorem Tasks.Monad.freeTheorem
-    {κ : Type → Type} [_root_.Monad κ]
-    (tasks : Tasks _root_.Monad ℭ) (q₀ : ℭ.Q)
+    {κ : Type → Type} [Monad κ]
+    (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
     (F : Task.Monad.Action κ Id)
     (ι₀ : ∀ i, ℭ.V i)
     (ι₁ : ∀ i, κ (ℭ.V i))
     (fetch₁ : ∀ q, ℭ.rel q q₀ → κ (ℭ.R q))
     (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
-    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : _root_.Monad Id) tasks ι₀ q)) :
-    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : _root_.Monad Id) tasks ι₀ q₀) := by
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : Monad Id) tasks ι₀ q)) :
+    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : Monad Id) tasks ι₀ q₀) := by
   have h := Task.Monad.freeTheorem (tasks q₀) F ι₁ ι₀ fetch₁
-    (fun q _ => compute (inferInstance : _root_.Monad Id) tasks ι₀ q) hι hfetch
-  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : _root_.Monad Id) tasks ι₀ q) =
-      compute (inferInstance : _root_.Monad Id) tasks ι₀ q₀ := by
+    (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) hι hfetch
+  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) =
+      compute (inferInstance : Monad Id) tasks ι₀ q₀ := by
     conv => rhs; unfold compute
   simpa only [heval] using h
 
