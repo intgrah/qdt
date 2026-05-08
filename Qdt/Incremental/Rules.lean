@@ -137,11 +137,12 @@ public def tasks : Tasks Monad config
     | some idx =>
         let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declAst filepath name) (Key.ast filepath) sorry : Task Monad config (Key.declAst filepath name) _)
         let .node _ progCs := prog | return none
-        return some (progCs[idx]!, idx)
+        let some child := progCs[idx]? | return none
+        return some (child, idx)
     | none => return none
   | .elabCmdAt filepath idx => do
     let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.elabCmdAt filepath idx) (Key.ast filepath) sorry : Task Monad config (Key.elabCmdAt filepath idx) _)
-    let ast := match prog with | .node _ cs => cs[idx]! | _ => .missing
+    let ast := match prog with | .node _ cs => cs[idx]?.getD .missing | _ => .missing
     let name := getDeclName ast idx
     let univParams := getCommandUnivParams ast
     let elabCtx : ElabContext := {
