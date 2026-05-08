@@ -6,7 +6,13 @@ public import Incremental.Basic
 
 namespace Incremental
 
-structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] where
+variable {ℭ : BuildConfig} {q₀ α}
+
+namespace Task
+
+namespace Monad
+
+structure Action (κ₁ κ₂ : Type → Type) [_root_.Monad κ₁] [_root_.Monad κ₂] where
   rel {α β : Type} :
     (α → β → Prop) →
     (κ₁ α → κ₂ β → Prop)
@@ -21,8 +27,23 @@ structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] 
     (∀ a b, R a b → rel S (ka a) (kb b)) →
     rel S (ma >>= ka) (mb >>= kb)
 
-structure ApplicativeAction (κ₁ κ₂ : Type → Type)
-    [Applicative κ₁] [Applicative κ₂] where
+axiom freeTheorem
+    {κ₁ κ₂ : Type → Type} [_root_.Monad κ₁] [_root_.Monad κ₂]
+    (t : Task _root_.Monad ℭ q₀ α)
+    (F : Action κ₁ κ₂)
+    (ι₁ : ∀ i, κ₁ (ℭ.V i))
+    (ι₂ : ∀ i, κ₂ (ℭ.V i))
+    (fetch₁ : ∀ q, ℭ.rel q q₀ → κ₁ (ℭ.R q))
+    (fetch₂ : ∀ q, ℭ.rel q q₀ → κ₂ (ℭ.R q))
+    (hι : ∀ i, F.rel Eq (ι₁ i) (ι₂ i))
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (fetch₂ q hq)) :
+    F.rel Eq (t κ₁ ι₁ fetch₁) (t κ₂ ι₂ fetch₂)
+
+end Monad
+
+namespace Applicative
+
+structure Action (κ₁ κ₂ : Type → Type) [_root_.Applicative κ₁] [_root_.Applicative κ₂] where
   rel {α β : Type} :
     (α → β → Prop) →
     (κ₁ α → κ₂ β → Prop)
@@ -37,13 +58,10 @@ structure ApplicativeAction (κ₁ κ₂ : Type → Type)
     rel R x y →
     rel S (f <*> x) (g <*> y)
 
-variable
-  {ℭ : BuildConfig} {q₀ α}
-  (t : Task Monad ℭ q₀ α)
-  {κ κ₁ κ₂ : Type → Type} [Monad κ] [Monad κ₁] [Monad κ₂]
-
-axiom Task.freeTheorem
-    (F : MonadAction κ₁ κ₂)
+axiom freeTheorem
+    {κ₁ κ₂ : Type → Type} [_root_.Applicative κ₁] [_root_.Applicative κ₂]
+    (t : Task _root_.Applicative ℭ q₀ α)
+    (F : Action κ₁ κ₂)
     (ι₁ : ∀ i, κ₁ (ℭ.V i))
     (ι₂ : ∀ i, κ₂ (ℭ.V i))
     (fetch₁ : ∀ q, ℭ.rel q q₀ → κ₁ (ℭ.R q))
@@ -52,31 +70,24 @@ axiom Task.freeTheorem
     (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (fetch₂ q hq)) :
     F.rel Eq (t κ₁ ι₁ fetch₁) (t κ₂ ι₂ fetch₂)
 
-axiom Task.freeTheorem_Applicative
-    {κ₁ κ₂ : Type → Type} [Applicative κ₁] [Applicative κ₂]
-    (t : Task Applicative ℭ q₀ α)
-    (F : ApplicativeAction κ₁ κ₂)
-    (ι₁ : ∀ i, κ₁ (ℭ.V i))
-    (ι₂ : ∀ i, κ₂ (ℭ.V i))
-    (fetch₁ : ∀ q, ℭ.rel q q₀ → κ₁ (ℭ.R q))
-    (fetch₂ : ∀ q, ℭ.rel q q₀ → κ₂ (ℭ.R q))
-    (hι : ∀ i, F.rel Eq (ι₁ i) (ι₂ i))
-    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (fetch₂ q hq)) :
-    F.rel Eq (t κ₁ ι₁ fetch₁) (t κ₂ ι₂ fetch₂)
+end Applicative
 
-theorem Tasks.freeTheorem
-    (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
-    (F : MonadAction κ Id)
+end Task
+
+theorem Tasks.Monad.freeTheorem
+    {κ : Type → Type} [_root_.Monad κ]
+    (tasks : Tasks _root_.Monad ℭ) (q₀ : ℭ.Q)
+    (F : Task.Monad.Action κ Id)
     (ι₀ : ∀ i, ℭ.V i)
     (ι₁ : ∀ i, κ (ℭ.V i))
     (fetch₁ : ∀ q, ℭ.rel q q₀ → κ (ℭ.R q))
     (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
-    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : Monad Id) tasks ι₀ q)) :
-    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : Monad Id) tasks ι₀ q₀) := by
-  have h := Task.freeTheorem (tasks q₀) F ι₁ ι₀ fetch₁
-    (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) hι hfetch
-  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) =
-      compute (inferInstance : Monad Id) tasks ι₀ q₀ := by
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : _root_.Monad Id) tasks ι₀ q)) :
+    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : _root_.Monad Id) tasks ι₀ q₀) := by
+  have h := Task.Monad.freeTheorem (tasks q₀) F ι₁ ι₀ fetch₁
+    (fun q _ => compute (inferInstance : _root_.Monad Id) tasks ι₀ q) hι hfetch
+  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : _root_.Monad Id) tasks ι₀ q) =
+      compute (inferInstance : _root_.Monad Id) tasks ι₀ q₀ := by
     conv => rhs; unfold compute
   simpa only [heval] using h
 

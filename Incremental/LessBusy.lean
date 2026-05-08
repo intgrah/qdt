@@ -16,7 +16,7 @@ variable
 abbrev Value (q : ℭ.Q) := { r : ℭ.R q // r = compute (inferInstance : Monad Id) tasks ι₀ q }
 abbrev VCache := DHashMap ℭ.Q (Value tasks ι₀)
 
-def action : MonadAction (StateM (VCache tasks ι₀)) Id where
+def action : Task.Monad.Action (StateM (VCache tasks ι₀)) Id where
   rel P m b := ∀ s, P (m s).1 b
   rel_pure := fun hab _ => hab
   rel_bind := fun hma hk s => hk _ _ (hma s) _
@@ -30,7 +30,7 @@ def run (q₀ : ℭ.Q)
     (fun q hq => Subtype.val <$> fetch q hq))
   have : r = compute (inferInstance : Monad Id) tasks ι₀ q₀ := by
     obtain ⟨s, s', heq⟩ := hr
-    have hft := Tasks.freeTheorem tasks q₀ (action tasks ι₀)
+    have hft := Tasks.Monad.freeTheorem tasks q₀ (action tasks ι₀)
       ι₀
       (fun i => StateT.pure (ι₀ i))
       (fun q hq => Subtype.val <$> fetch q hq)

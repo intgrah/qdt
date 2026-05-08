@@ -61,13 +61,13 @@ private theorem depEntries_invariant (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (hdep_trace : deps =
       (FM.evalTrace_deps ι₀ (eval tasks ι₀)
         (tasksTree ℭ tasks q₀)).reverse.map
-          (fun p => (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀)))
+          (fun p => (⟨p.q, p.hq, hR p.q p.r⟩ : DepEntry q₀)))
     (ι : ∀ i, ℭ.V i)
     (hdep : ∀ p ∈ deps, hR p.q (eval tasks ι p.q) = p.h) :
     ∀ p ∈ FM.evalTrace_deps ι₀ (eval tasks ι₀)
         (tasksTree ℭ tasks q₀),
-      eval tasks ι p.1 = p.2.2 := fun p hp => by
-  have : (⟨p.1, p.2.1, hR p.1 p.2.2⟩ : DepEntry q₀) ∈ deps :=
+      eval tasks ι p.q = p.r := fun p hp => by
+  have : (⟨p.q, p.hq, hR p.q p.r⟩ : DepEntry q₀) ∈ deps :=
     hdep_trace ▸ List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
   simpa using hdep _ this
 
@@ -129,7 +129,7 @@ def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
         pure none
 
 def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    MonadAction (StateM (RunState hI hR tasks ι₀ q₀)) (FM ℭ q₀) where
+    Task.Monad.Action (StateM (RunState hI hR tasks ι₀ q₀)) (FM ℭ q₀) where
   rel {α β} P m t :=
     ∀ s,
       P (m.run s).1 (FM.evalTree ι₀ (eval tasks ι₀) t) ∧
@@ -181,7 +181,7 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, [], []⟩
     let result := m initState
     have ⟨hval_tree, hin_trace, hdep_trace⟩ :=
-      Task.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
+      Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
         input' FM.pureInput fetch' FM.pureFetch
         (fun _ _ => ⟨rfl, rfl, rfl⟩)
         (fun q hq s => ⟨(fetch q hq s.store).1.val.1.property, rfl, by
