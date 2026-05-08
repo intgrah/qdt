@@ -10,7 +10,7 @@ set_option warn.sorry false
 open Lean (Name)
 open Std (DHashMap HashMap HashSet)
 open System (FilePath)
-open Frontend (Ast Cst Path SourceMap)
+open Frontend (Ast SourceMap)
 open Frontend.Parser (ParseError)
 open Incremental
 
@@ -89,14 +89,17 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
   sorted.reverse
 
 public def tasks : Tasks Monad config
-  | .cst filepath => do
-    let some text ← (Task.input (c := Monad) (ℭ := config) (q₀ := Key.cst filepath) (InputKey.text filepath) : Task Monad config (Key.cst filepath) _) | return Frontend.Parser.parse ""
-    return Frontend.Parser.parse text
   | .astSourceMap filepath => do
-    let (cst, parseErrors) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.astSourceMap filepath) (Key.cst filepath) sorry : Task Monad config (Key.astSourceMap filepath) _)
+    let some text ← (Task.input (c := Monad) (ℭ := config) (q₀ := Key.astSourceMap filepath) (InputKey.text filepath) : Task Monad config (Key.astSourceMap filepath) _) | do
+      let (ast, sourceMap) := Frontend.desugarProgram (Frontend.Parser.parse "").1
+      return (ast, sourceMap, #[])
+    let (cst, parseErrors) := Frontend.Parser.parse text
     let (ast, sourceMap) := Frontend.desugarProgram cst
     let diagnostics : Array Diagnostic := parseErrors.map fun err =>
-      ⟨cst.pathAtPosition err.pos, .syntaxError err⟩
+      let path := match sourceMap.astPathAtPosition err.pos with
+        | some p => p
+        | none => []
+      ⟨path, .syntaxError err⟩
     return (ast, sourceMap, diagnostics)
   | .ast filepath => do
     let (ast, _, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.ast filepath) (Key.astSourceMap filepath) sorry : Task Monad config (Key.ast filepath) _)

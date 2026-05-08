@@ -81,7 +81,8 @@ def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
   let ctx ← readThe ElabContext
   if let some result := st.entryCache[name]? then
     return result
-  let (declIndex, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : Task Monad config q₀ _)
+  let (declIndex, _) ←
+    Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry
   let currentDeclName := (← read).currentDecl
   if let some idx := declIndex[name]? then
     if let some currentIdx := declIndex[currentDeclName]? then
@@ -89,7 +90,7 @@ def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
         modify fun st => { st with entryCache := st.entryCache.insert name none }
         return none
   let result : Val (Key.constant ctx.filepath name) ←
-    (Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry : Task Monad config q₀ _)
+    Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry
   let result : Option Constant := result.map Prod.fst
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result

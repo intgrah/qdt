@@ -8,7 +8,6 @@ import Qdt.Incremental.Rules
 namespace Qdt
 
 open Cli
-open Qdt
 open Incremental
 open Std (DHashMap)
 open System (FilePath)
@@ -16,37 +15,28 @@ open System (FilePath)
 def posToLineCol (text : String) (pos : Nat) : Lean.Position :=
   (Lean.FileMap.ofString text).toPosition ⟨pos⟩
 
-def resolveSpan (sm : Frontend.SourceMap) (cst : Frontend.Cst) (path : Frontend.Path) :
-    Option Frontend.Span := Id.run do
-  let fwd := path.reverse
-  for len in (List.range fwd.length).reverse do
-    if let some cstPath := sm.astToCst[fwd.take (len + 1)]? then
-      return cst.spanAtPath cstPath
-  return none
-
 def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap)
-    (cst : Frontend.Cst) (d : Diagnostic) : String :=
-  match resolveSpan sm cst d.path with
+    (d : Diagnostic) : String :=
+  match sm.resolveSpan d.path with
   | some span =>
       let ⟨line, col⟩ := posToLineCol text span.startPos
       s!"{file}:{line}:{col}: error: {d.error}"
   | none =>
       s!"{file}: error: {d.error}"
 
-variable {b : Build Monad config (DHashMap InputKey InputVal)}
+variable {b : Build Monad config (DHashMap InputKey InputVal) tasks}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateM b.σ (Array String) := do
-  let transImports ← b.run tasks (Key.transitiveImports filepath)
+  let transImports ← b.run (Key.transitiveImports filepath)
   let mut msgs : Array String := #[]
   for file in transImports.toList ++ [filepath] do
-    let diags ← b.run tasks (Key.checkFile file)
+    let diags ← b.run (Key.checkFile file)
     if diags.isEmpty then continue
     let text := (inputs.get? (.text file)).getD ""
-    let (_, sm, _) ← b.run tasks (Key.astSourceMap file)
-    let (cst, _) ← b.run tasks (Key.cst file)
+    let (_, sm, _) ← b.run (Key.astSourceMap file)
     for d in diags do
-      msgs := msgs.push (d.format file text sm cst)
+      msgs := msgs.push (d.format file text sm)
   return msgs
 
 def runOnce (inputs : DHashMap InputKey InputVal) (store : b.σ) (filepath : FilePath) :
@@ -79,7 +69,7 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
 
 def dumpGraph (outPath : FilePath) (inputs : DHashMap InputKey InputVal)
     (files : Array FilePath) : IO Unit := do
-  let b := ShakeCPS config Input
+  let b := ShakeCPS config Input tasks
   let mut store := b.init inputs
   for file in files do
     let (_, store') := runOnce (b := b) inputs store file
@@ -100,7 +90,7 @@ def dumpGraph (outPath : FilePath) (inputs : DHashMap InputKey InputVal)
 
 def run (parsed : Parsed) : IO UInt32 := do
   let config ← parseConfig parsed
-  let b := selectBuild config.buildSystem
+  let b := selectBuild tasks config.buildSystem
 
   let inputs ← scanInputs config.root
   let store := b.init inputs
@@ -117,11 +107,9 @@ def run (parsed : Parsed) : IO UInt32 := do
     let mut store := store
     for file in config.files do
       let tFileStart ← IO.monoMsNow
-      -- Phase A: transitive imports + cst + ast
       let (_transImports, s1) :=
-        StateT.run (s := store) (b.run tasks (Key.transitiveImports file))
+        StateT.run (s := store) (b.run (Key.transitiveImports file))
       let tImports ← IO.monoMsNow
-      -- Phase B: full check
       let (msgs, store') := runOnce inputs s1 file
       let tCheck ← IO.monoMsNow
       let dImports := tImports - tFileStart

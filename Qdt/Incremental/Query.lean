@@ -12,7 +12,7 @@ namespace Qdt
 open Lean (Name)
 open Std (HashMap HashSet)
 open System (FilePath)
-open Frontend (Ast Cst SourceMap)
+open Frontend (Ast SourceMap)
 open Frontend.Parser (ParseError)
 
 structure Origin where
@@ -32,7 +32,6 @@ abbrev InputVal : InputKey → Type
 abbrev InputV := Option ∘ InputVal
 
 inductive Key : Type
-  | cst (filepath : FilePath)
   | astSourceMap (filepath : FilePath)
   | ast (filepath : FilePath)
   | sourceMap (filepath : FilePath)
@@ -53,7 +52,6 @@ inductive Key : Type
 deriving DecidableEq, Repr, Inhabited, Hashable
 
 def Key.tag : Key → String
-  | .cst _ => "cst"
   | .astSourceMap _ => "astSourceMap"
   | .ast _ => "ast"
   | .sourceMap _ => "sourceMap"
@@ -73,7 +71,6 @@ def Key.tag : Key → String
   | .checkProject => "checkProject"
 
 def Key.display : Key → String
-  | .cst p => s!"cst:{p}"
   | .astSourceMap p => s!"astSourceMap:{p}"
   | .ast p => s!"ast:{p}"
   | .sourceMap p => s!"sourceMap:{p}"
@@ -97,7 +94,6 @@ def InputKey.display : InputKey → String
   | .inputFiles => "inputFiles"
 
 abbrev Val : Key → Type
-  | .cst _ => Cst × Array ParseError
   | .astSourceMap _ => Ast × SourceMap × Array Diagnostic
   | .ast _ => Ast
   | .sourceMap _ => SourceMap
@@ -136,10 +132,9 @@ instance {i} : Hashable (InputV i) :=
 
 def Key.rank : Key → Nat
   | .moduleFile _ => 0
-  | .cst _ => 1
-  | .astSourceMap _ => 2
-  | .ast _ => 3
-  | .sourceMap _ => 3
+  | .astSourceMap _ => 1
+  | .ast _ => 2
+  | .sourceMap _ => 2
   | .imports _ => 4
   | .declarationIndex _ => 4
   | .transitiveImports _ => 5

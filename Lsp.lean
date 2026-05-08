@@ -11,10 +11,10 @@ open Std (DHashMap HashMap HashSet)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
-open Frontend (Cst Path SourceMap Span)
+open Frontend (Path SourceMap Span)
 
-def lspBuild : Build Monad config (DHashMap InputKey InputVal) :=
-  selectBuild .salsaC
+def lspBuild : Build Monad config (DHashMap InputKey InputVal) tasks :=
+  selectBuild tasks .salsaC
 
 def mkRange (text : String) (span : Span) : Range :=
   let fileMap := Lean.FileMap.ofString text
@@ -105,29 +105,16 @@ def ServerM.sendFileProgress (uri : DocumentUri) (ranges : Array Range) : Server
   | .ok s => sendNotification "$/lean/fileProgress" s
   | .error _ => pure ()
 
-def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) (cst : Cst) : Array Lsp.Diagnostic :=
+def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
-    let astPathFwd := d.path.reverse
-    let cstPath? := Id.run do
-      for len in (List.range astPathFwd.length).reverse do
-        let astPrefix := astPathFwd.take (len + 1)
-        if let some cstPath := sourceMap.astToCst[astPrefix]? then
-          return some cstPath
-      return none
-    let span? :=
-      match cstPath? with
-      | some cstPath => cst.spanAtPath cstPath
-      | none =>
-          if !d.path.isEmpty then cst.spanAtPath d.path
-          else none
-    match span? with
+    match sourceMap.resolveSpan d.path with
     | some span => mkDiagnostic text span d.error
     | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
-    (ElabInfo × SourceMap × Cst) × lspBuild.σ :=
+    (ElabInfo × SourceMap) × lspBuild.σ :=
   Id.run <| StateT.run (s := ps.store) do
-    let _ ← lspBuild.build tasks (Key.checkFile filepath)
+    let _ ← lspBuild.run (Key.checkFile filepath)
     elaborateFile lspBuild filepath
 
 def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := do
@@ -145,9 +132,9 @@ def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := d
 def ServerM.elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
   let text := (ps.inputs.get? (.text file)).getD ""
-  let ((info, sourceMap, cst), store') := runElabTask ps file
+  let ((info, sourceMap), store') := runElabTask ps file
   setProject { ps with store := store' }
-  let diagnostics := buildDiagnostics text info sourceMap cst
+  let diagnostics := buildDiagnostics text info sourceMap
   publishDiagnostics uri version? diagnostics
   sendFileProgress uri #[]
 
@@ -278,9 +265,9 @@ def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : Se
   let bytePos := fileMap.lspPosToUtf8Pos lspPos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
 
-  let ((info, sourceMap, cst), _) := Id.run <| StateT.run (s := ps.store) <| elaborateFile lspBuild file
+  let ((info, sourceMap), _) := Id.run <| StateT.run (s := ps.store) <| elaborateFile lspBuild file
 
-  let some (hoverContent, span) := lookupHoverAtPosition cst sourceMap info codepointPos
+  let some (hoverContent, span) := lookupHoverAtPosition sourceMap info codepointPos
     | sendResponse id Json.null
   let content := hoverContent.format
   let range := mkRange text span

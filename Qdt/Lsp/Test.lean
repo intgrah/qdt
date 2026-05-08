@@ -41,12 +41,12 @@ def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := 
   let inputs := inputs.insert .inputFiles inputFiles
   let (_, store) := (testBuild.set (.text filepath) (some text)).run st.store
   let (_, store) := (testBuild.set .inputFiles (some inputFiles)).run store
-  let (_, store) := StateT.run (s := store) <| testBuild.build tasks (Key.checkFile filepath)
+  let (_, store) := StateT.run (s := store) <| testBuild.run (Key.checkFile filepath)
   modify fun _ => { inputs, store }
 
 def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store := (← get).store
-  let (diags, _) := StateT.run (s := store) <| testBuild.build tasks (Key.checkFile filepath)
+  let (diags, _) := StateT.run (s := store) <| testBuild.run (Key.checkFile filepath)
   if !check diags then
     fail s!"diagnostics check failed: {diags.map (·.error)}"
 
@@ -59,10 +59,10 @@ def hover (pos : Lean.Position) (expected : String)
   let st ← get
   let text := (st.inputs.get? (.text filepath)).getD ""
   let fileMap := Lean.FileMap.ofString text
-  let ((info, sourceMap, cst), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
+  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
   let bytePos := fileMap.ofPosition pos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
-  match lookupHoverAtPosition cst sourceMap info codepointPos with
+  match lookupHoverAtPosition sourceMap info codepointPos with
   | none => fail s!"no hover at {repr pos}, expected '{expected}'"
   | some (content, span) =>
     let formatted := content.format
@@ -78,10 +78,10 @@ def hover (pos : Lean.Position) (expected : String)
 def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let st ← get
   let text := (st.inputs.get? (.text filepath)).getD ""
-  let ((info, sourceMap, cst), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
+  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
   let bytePos := (Lean.FileMap.ofString text).ofPosition pos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
-  match lookupHoverAtPosition cst sourceMap info codepointPos with
+  match lookupHoverAtPosition sourceMap info codepointPos with
   | none => return
   | some (content, _) =>
     fail s!"expected no hover at {repr pos}, got '{content.format}'"

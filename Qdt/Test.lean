@@ -12,8 +12,8 @@ open Incremental
 open System (FilePath)
 open Std (DHashMap)
 
-opaque testBuild : Build Monad config Input :=
-  selectBuild .shake
+opaque testBuild : Build Monad config Input Qdt.tasks :=
+  selectBuild Qdt.tasks .shake
 
 def check (src : String) : IO (Array Diagnostic) := do
   let dummyPath : FilePath := "test.qdt"
@@ -21,7 +21,8 @@ def check (src : String) : IO (Array Diagnostic) := do
   let inputs := inputs.insert (.text dummyPath) src
   let inputs := inputs.insert .inputFiles ({dummyPath} : Std.HashSet FilePath)
   let store := testBuild.init inputs
-  let (diags, _) := StateT.run (s := store) <| testBuild.build tasks (Key.checkFile dummyPath)
+  let (diags, _) := StateT.run (s := store) <| testBuild.run (Key.checkFile dummyPath)
+
   return diags
 
 def assertNoDiags (diags : Array Diagnostic) : IO Unit := do

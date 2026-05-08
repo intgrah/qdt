@@ -71,18 +71,41 @@ def ofLeanSyntax : Syntax → Cst
 end Cst
 
 structure SourceMap where
-  cstToAst : HashMap Path Path
-  astToCst : HashMap Path Path
+  astToSpan : HashMap Path Span
 deriving Inhabited
 
 instance : Hashable SourceMap where
-  hash sm := mixHash (hash sm.cstToAst.size) (hash sm.astToCst.size)
+  hash sm := hash sm.astToSpan.size
 
 namespace SourceMap
 
-def insert (m : SourceMap) (cstPath : Path) (astPath : Path) : SourceMap where
-  cstToAst := m.cstToAst.insert cstPath astPath
-  astToCst := m.astToCst.insert astPath cstPath
+def empty (cap : Nat := 16) : SourceMap where
+  astToSpan := HashMap.emptyWithCapacity cap
+
+def insert (m : SourceMap) (astPath : Path) (span : Span) : SourceMap where
+  astToSpan := m.astToSpan.insert astPath span
+
+def spanForAstPath (m : SourceMap) (path : Path) : Option Span :=
+  m.astToSpan[path]?
+
+def astPathAtPosition (m : SourceMap) (pos : Nat) : Option Path := Id.run do
+  let mut best : Option Path := none
+  for (path, span) in m.astToSpan do
+    if span.startPos ≤ pos ∧ pos < span.endPos then
+      match best with
+      | none => best := some path
+      | some prev =>
+          if path.length > prev.length then
+            best := some path
+  return best
+
+def resolveSpan (m : SourceMap) (path : Path) : Option Span := Id.run do
+  let fwd := path.reverse
+  for len in (List.range fwd.length).reverse do
+    let pre := fwd.take (len + 1)
+    if let some span := m.astToSpan[pre]? then
+      return some span
+  return none
 
 end SourceMap
 

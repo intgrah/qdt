@@ -10,7 +10,7 @@ namespace Qdt
 open Std (DHashMap)
 open System (FilePath)
 open Incremental
-open Frontend (Cst Path SourceMap Span)
+open Frontend (Path SourceMap Span)
 
 def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
   go 0 0
@@ -32,41 +32,39 @@ where
     else bp
 
 def elaborateFile
-    (b : Build Monad config (DHashMap InputKey InputVal))
-    (filepath : FilePath) : StateM b.σ (ElabInfo × SourceMap × Cst) := do
-  let (cst, _) ← b.build tasks (Key.cst filepath)
-  let (_, sourceMap, astDiags) ← b.build tasks (Key.astSourceMap filepath)
-  let (declIndex, dupDiags) ← b.build tasks (Key.declarationIndex filepath)
+    {tasks : Tasks Monad config} (b : Build Monad config (DHashMap InputKey InputVal) tasks)
+    (filepath : FilePath) : StateM b.σ (ElabInfo × SourceMap) := do
+  let (_, sourceMap, astDiags) ← b.run (Key.astSourceMap filepath)
+  let (declIndex, dupDiags) ← b.run (Key.declarationIndex filepath)
   let mut combinedInfo : ElabInfo := 1
   for (name, _) in declIndex.toList do
-    let info ← b.build tasks (Key.lookupInfo filepath name)
+    let info ← b.run (Key.lookupInfo filepath name)
     combinedInfo := combinedInfo * info
   let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
-  return (combinedInfo, sourceMap, cst)
+  return (combinedInfo, sourceMap)
 
-def lookupHoverAtPosition (cst : Cst) (sourceMap : SourceMap) (info : ElabInfo)
+def lookupHoverAtPosition (sourceMap : SourceMap) (info : ElabInfo)
     (codepointPos : Nat) : Option (HoverContent × Span) := Id.run do
-  let cstPath := cst.pathAtPosition codepointPos
   let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
 
-  let mut best : Option (Path × Path × HoverContent) := none
-  for len in (List.range cstPath.length).reverse do
-    let cstPrefix := cstPath.take (len + 1)
-    if let some astPath := sourceMap.cstToAst[cstPrefix]? then
-      for (tyPath, hover) in hoverInfos do
-        if tyPath == astPath then
+  let some posAstPath := sourceMap.astPathAtPosition codepointPos | return none
+
+  let mut best : Option (Path × HoverContent × Span) := none
+  for len in (List.range posAstPath.length).reverse do
+    let astPrefix := posAstPath.take (len + 1)
+    for (tyPath, hover) in hoverInfos do
+      if tyPath == astPrefix then
+        if let some span := sourceMap.spanForAstPath astPrefix then
           match best with
-          | none => best := some (cstPrefix, astPath, hover)
-          | some (_, prevAstPath, _) =>
-              if astPath.length > prevAstPath.length then
-                best := some (cstPrefix, astPath, hover)
-          break
+          | none => best := some (astPrefix, hover, span)
+          | some (prevPath, _, _) =>
+              if astPrefix.length > prevPath.length then
+                best := some (astPrefix, hover, span)
+        break
 
   match best with
   | none => none
-  | some (cstPrefix, _, hover) =>
-      let span := cst.spanAtPath cstPrefix |>.getD ⟨0, 0⟩
-      some (hover, span)
+  | some (_, hover, span) => some (hover, span)
 
 end Qdt

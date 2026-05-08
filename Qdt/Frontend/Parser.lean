@@ -449,18 +449,17 @@ def manyRecover (p : ParserM Cst) : ParserM (Array Cst) := do
   while ! (← isEof) do
     arr := arr ++ (← trivia)
     if ← isEof then break
+    let cmdStart := (← get).pos
     try
       arr := arr.push (← p)
     catch e =>
       modify fun s => { s with errors := s.errors.push e }
-      let st ← get
-      let startPos := st.pos
       skipUntilRecovery
-      if (← get).pos == startPos && !(← isEof) then
+      if (← get).pos == cmdStart && !(← isEof) then
         advanceChar
       let endPos := (← get).pos
-      if startPos < endPos then
-        let skipped := String.Pos.Raw.extract st.input ⟨startPos⟩ ⟨endPos⟩
+      if cmdStart < endPos then
+        let skipped := String.Pos.Raw.extract (← get).input ⟨cmdStart⟩ ⟨endPos⟩
         arr := arr.push (.token `skipped skipped)
   return arr
 
