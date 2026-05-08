@@ -35,8 +35,8 @@ def ShakeRdeps.invalidate
   let toInvalidate := getTransitiveDependents ℭ store.rdeps changedKeys
   { store with memos := toInvalidate.fold .erase store.memos }
 
-public def ShakeRdeps : Build Monad ℭ J where
-  cId := inferInstance
+public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+  cId := Id.instMonad
   σ := ShakeRdeps.Store ℭ J
   init inputs := {
     inputs
@@ -46,7 +46,7 @@ public def ShakeRdeps : Build Monad ℭ J where
   inputs store := Input.get store.inputs
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
-  build tasks q store :=
+  build q store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos

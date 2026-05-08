@@ -23,7 +23,7 @@ structure Make.Store (J : Type) where
   memos : DHashMap Q (Make.Memo Q R)
   inputModTimes : HashMap I Nat
 
-public partial def Make : Build Applicative I V Q R J where
+public partial def Make (tasks : Tasks Applicative I V Q R) : Build Applicative I V Q R J tasks where
   σ := Make.Store I Q R J
   init inputs := {
     inputs
@@ -36,7 +36,7 @@ public partial def Make : Build Applicative I V Q R J where
     let time := store.time + 1
     let inputModTimes := store.inputModTimes.insert i time
     { store with inputs, time, inputModTimes }
-  build tasks q := fun store => runEST fun σ => do
+  build q := fun store => runEST fun σ => do
     let memos ← ST.mkRef (σ := σ) store.memos
     let time ← ST.mkRef (σ := σ) store.time
     let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)

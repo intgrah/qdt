@@ -12,7 +12,7 @@ axiom Hashable.ideal {α : Type} [Hashable α] : IdealHashable α
 
 attribute [instance] Hashable.ideal
 
-def Hashable.toEmbedding {α : Type} [Hashable α] [IdealHashable α] :
+@[inline] def Hashable.toEmbedding {α : Type} [Hashable α] [IdealHashable α] :
     α ↪ UInt64 :=
   ⟨hash, IdealHashable.inj⟩
 

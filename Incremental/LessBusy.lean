@@ -39,15 +39,13 @@ def run (q₀ : ℭ.Q)
     exact (congrArg Prod.fst heq).symm.trans hft
   return ⟨r, this⟩
 
-set_option linter.unusedVariables false in
 def fetch (q₀ : ℭ.Q) :
     StateM (VCache tasks ι₀) (Value tasks ι₀ q₀) := do
   if let some v := (← get).get? q₀ then return v
-  let v ← run tasks ι₀ q₀ (fun q hq => fetch q)
+  let v ← run tasks ι₀ q₀ (fun q _ => fetch q)
   modify (·.insert q₀ v)
   return v
 termination_by ℭ.wf.wrap q₀
-decreasing_by exact hq
 
 end LessBusy
 
@@ -56,13 +54,13 @@ variable
   (J : Type) [Input ℭ J]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
 
-public def LessBusy : Build Monad ℭ J where
-  cId := inferInstance
+public def LessBusy (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+  cId := Id.instMonad
   σ := J
   init := id
   inputs := Input.get
   set i v := modify fun store => Input.set store i v
-  build tasks q store :=
+  build q store :=
     let ι₀ := Input.get store
     let cache₀ : LessBusy.VCache tasks ι₀ := DHashMap.emptyWithCapacity 1024
     let (v, _) := LessBusy.fetch tasks ι₀ q cache₀

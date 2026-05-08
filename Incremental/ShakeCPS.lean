@@ -13,8 +13,8 @@ variable
   [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
-@[expose] public def ShakeCPS : Build Monad ℭ J where
-  cId := inferInstance
+@[expose] public def ShakeCPS (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+  cId := Id.instMonad
   σ := ShakeRT.Store ℭ J
   init inputs := {
     inputs
@@ -23,7 +23,7 @@ variable
   inputs store := Input.get store.inputs
   set i v := modify fun store =>
     { store with inputs := Input.set store.inputs i v }
-  build tasks q₀ store :=
+  build q₀ store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos

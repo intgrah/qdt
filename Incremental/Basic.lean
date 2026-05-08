@@ -71,32 +71,31 @@ instance [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
 def Tasks : Type 1 :=
   ∀ q₀, Task c ℭ q₀ (ℭ.R q₀)
 
-set_option linter.unusedVariables false in
-set_option checkBinderAnnotations false in
 def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
     (cId : c Id) (tasks : Tasks c ℭ)
     (ι : ∀ i, ℭ.V i) (q : ℭ.Q) : ℭ.R q :=
-  @tasks q Id cId ι (fun q' _hq => compute cId tasks ι q')
+  @tasks q Id cId ι (fun q' _ => compute cId tasks ι q')
 termination_by ℭ.wf.wrap q
-decreasing_by exact _hq
 
 structure Build (c : (Type → Type) → Type 1)
-    (ℭ : BuildConfig) (J : Type) [Input ℭ J] : Type 1 where
+    (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ) : Type 1 where
   cId : c Id
   σ : Type
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
-  build : (tasks : Tasks c ℭ) → (q : ℭ.Q) → (store : σ) →
+  build : (q : ℭ.Q) → (store : σ) →
     { r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ
 
-namespace Build
-
-variable {c : (Type → Type) → Type 1} {ℭ : BuildConfig} {J : Type} [Input ℭ J]
-
-def run (b : Build c ℭ J) (tasks : Tasks c ℭ) (q : ℭ.Q) : StateM b.σ (ℭ.R q) :=
-  fun store => let (⟨r, _⟩, s) := b.build tasks q store; (r, s)
-
-end Build
+def Build.run
+    {c : (Type → Type) → Type 1}
+    {ℭ : BuildConfig}
+    {J : Type} [Input ℭ J]
+    {tasks : Tasks c ℭ}
+    (b : Build c ℭ J tasks) (q : ℭ.Q) : StateM b.σ (ℭ.R q) := do
+  let store ← get
+  let (⟨r, _⟩, store) := b.build q store
+  StateT.set store
+  return r
 
 end Incremental

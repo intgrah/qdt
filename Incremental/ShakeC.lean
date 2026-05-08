@@ -12,24 +12,25 @@ variable
   [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
-instance {ℭ : BuildConfig} {J : Type}
+instance
+    {ℭ : BuildConfig}
     [BEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
     [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
-    [Input ℭ J] :
-    Nonempty (Tasks Monad ℭ → ∀ q, ShakeRT.Store ℭ J → ℭ.R q × ShakeRT.Store ℭ J) :=
+    {J : Type} [Input ℭ J] :
+    Inhabited (Tasks Monad ℭ → ∀ q, ShakeRT.Store ℭ J → ℭ.R q × ShakeRT.Store ℭ J) :=
   ⟨sorry⟩
 
 @[extern "lean_shake_build"]
 public opaque shakeCBuild
-    {ℭ : BuildConfig} {J : Type}
+    {ℭ : BuildConfig}
     [BEq ℭ.I] [Hashable ℭ.I] [∀ i, Hashable (ℭ.V i)]
     [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
-    [Input ℭ J] :
+    {J : Type} [Input ℭ J] :
     Tasks Monad ℭ → ∀ q,
     ShakeRT.Store ℭ J → ℭ.R q × ShakeRT.Store ℭ J
 
-public def ShakeC : Build Monad ℭ J where
-  cId := inferInstance
+public def ShakeC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+  cId := Id.instMonad
   σ := ShakeRT.Store ℭ J
   init inputs := {
     inputs
@@ -37,7 +38,7 @@ public def ShakeC : Build Monad ℭ J where
   }
   inputs store := Input.get store.inputs
   set i v := modify fun store => { store with inputs := Input.set store.inputs i v }
-  build tasks q store :=
+  build q store :=
     let (r, s) := shakeCBuild tasks q store
     (⟨r, sorry⟩, s)
 

@@ -27,8 +27,8 @@ public structure Salsa.Store (J : Type) where
   memos : DHashMap ℭ.Q (Salsa.Memo ℭ)
   inputRevisions : HashMap ℭ.I Nat
 
-public def Salsa : Build Monad ℭ J where
-  cId := inferInstance
+public def Salsa (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+  cId := Id.instMonad
   σ := Salsa.Store ℭ J
   init store := {
     inputs := store
@@ -42,16 +42,15 @@ public def Salsa : Build Monad ℭ J where
     let inputs := Input.set store.inputs i v
     let inputRevisions := store.inputRevisions.insert i revision
     { store with inputs, revision, inputRevisions }
-  build tasks q store :=
+  build q store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos
       let rec fetch (q : ℭ.Q) : ST σ (ℭ.R q) := do
         let memo? := (← memos.get).get? q
-        if let some memo := memo? then
+        if let some memo := memo? then do
           if memo.verifiedAt == store.revision then
             return memo.value
-        if let some memo := memo? then do
           let mut clean :=
             memo.inputDeps.all fun i =>
               store.inputRevisions.getD i 0 ≤ memo.verifiedAt
