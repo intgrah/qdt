@@ -13,6 +13,9 @@ require "leanprover-community" / mathlib @ git "v4.28.0"
 
 lean_lib FSWatch
 lean_lib Incremental
+@[default_target]
+lean_lib IncrementalAxiomCheck where
+  roots := #[`Incremental.AxiomCheck]
 lean_lib IncrementalWF
 lean_lib IncrementalWF2 where
   precompileModules := true
