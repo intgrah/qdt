@@ -1,0 +1,3 @@
+[submodule "examples/lean2-hott/lean2"]
+	path = examples/lean2-hott/lean2
+	url = https://github.com/leanprover/lean2.git
