@@ -27,9 +27,9 @@ with
     | _, .u u =>
       0 |> mixHash (hash u)
     | _, .pi name dom cod =>
-      0 |> mixHash (hash name) |> mixHash dom.hash' |> mixHash cod.hash'
+      1 |> mixHash (hash name) |> mixHash dom.hash' |> mixHash cod.hash'
     | _, .el t =>
-      1 |> mixHash t.hash'
+      2 |> mixHash t.hash'
 deriving Repr
 
 inductive Tm : Nat → Type
