@@ -76,10 +76,8 @@ theorem evalTrace_inputs_bind {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q,
     evalTrace_inputs ι rec (bind ma ka) =
       evalTrace_inputs ι rec ma ++ evalTrace_inputs ι rec (ka (evalTree ι rec ma)) := by
   induction ma with
-  | pure a => simp [bind, evalTrace_inputs, evalTree]
-  | input i kt ih =>
-    simp only [bind, evalTrace_inputs, List.cons_append, List.cons.injEq, true_and]
-    exact ih (ι i)
+  | pure a => rfl
+  | input i kt ih => exact congrArg _ (ih (ι i))
   | fetch q _ kt ih => exact ih (rec q)
 
 theorem evalTrace_deps_bind {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q)
@@ -87,11 +85,19 @@ theorem evalTrace_deps_bind {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, �
     evalTrace_deps ι rec (bind ma ka) =
       evalTrace_deps ι rec ma ++ evalTrace_deps ι rec (ka (evalTree ι rec ma)) := by
   induction ma with
-  | pure a => simp [bind, evalTrace_deps, evalTree]
+  | pure a => rfl
   | input i kt ih => exact ih (ι i)
-  | fetch q hq kt ih =>
-    simp [bind, evalTrace_deps]
-    exact ih (rec q)
+  | fetch q hq kt ih => exact congrArg _ (ih (rec q))
+
+theorem evalTrace_deps_value {α : Type} (ι : ∀ i, ℭ.V i)
+    (rec : ∀ q, ℭ.R q) (t : FM ℭ q₀ α) :
+    ∀ p ∈ evalTrace_deps ι rec t, p.r = rec p.q := by
+  induction t with
+  | pure _ => nofun
+  | input i k ih => exact ih (ι i)
+  | fetch q hq k ih => exact fun
+    | _, .head _ => rfl
+    | p, .tail _ ht => ih (rec q) p ht
 
 theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
     (rec rec' : ∀ q, ℭ.R q) (t : FM ℭ q₀ α)
@@ -102,34 +108,14 @@ theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
   | pure a => rfl
   | input i k ih =>
     show evalTree ι rec (k (ι i)) = evalTree ι' rec' (k (ι' i))
-    have hi_eq : ι' i = ι i := by
-      apply hin ⟨i, ι i⟩
-      simp [evalTrace_inputs]
+    have hi_eq : ι' i = ι i := hin ⟨i, ι i⟩ (.head _)
     rw [hi_eq]
-    apply ih (ι i)
-    · intro p hp
-      apply hin
-      simp [evalTrace_inputs, List.mem_cons]
-      exact Or.inr hp
-    · intro p hp
-      apply hdep
-      simp [evalTrace_deps]
-      exact hp
+    exact ih (ι i) (fun p hp => hin p (.tail _ hp)) hdep
   | fetch q hq k ih =>
     show evalTree ι rec (k (rec q)) = evalTree ι' rec' (k (rec' q))
-    have hd_eq : rec' q = rec q := by
-      apply hdep ⟨q, hq, rec q⟩
-      simp [evalTrace_deps]
+    have hd_eq : rec' q = rec q := hdep ⟨q, hq, rec q⟩ (.head _)
     rw [hd_eq]
-    apply ih (rec q)
-    · intro p hp
-      apply hin
-      simp [evalTrace_inputs]
-      exact hp
-    · intro p hp
-      apply hdep
-      simp [evalTrace_deps, List.mem_cons]
-      exact Or.inr hp
+    exact ih (rec q) hin (fun p hp => hdep p (.tail _ hp))
 
 def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     Task.Monad.Action (FM ℭ q₀) Id where
