@@ -85,7 +85,7 @@ def watchLoop (root : FilePath) (inputsâ‚€ : DHashMap InputKey InputVal) (storeâ
 
 def dumpGraph (outPath : FilePath) (inputs : DHashMap InputKey InputVal)
     (files : Array FilePath) : IO Unit := do
-  let b := ShakeCPS config Input tasks
+  let b := ShakeC config Input tasks
   let mut store := b.init inputs
   for file in files do
     let (_, store') := runOnce (b := b) inputs store file

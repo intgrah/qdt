@@ -29,7 +29,7 @@ public opaque shakeCBuild
     Tasks Monad ℭ → ∀ q,
     ShakeRT.Store ℭ J → ℭ.R q × ShakeRT.Store ℭ J
 
-public def ShakeC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+@[expose] public def ShakeC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
   cId := Id.instMonad
   σ := ShakeRT.Store ℭ J
   init inputs := {
