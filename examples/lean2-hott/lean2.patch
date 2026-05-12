@@ -1,0 +1,48 @@
+diff --git a/src/util/lp/permutation_matrix.h b/src/util/lp/permutation_matrix.h
+index 27d9714..401f558 100644
+--- a/src/util/lp/permutation_matrix.h
++++ b/src/util/lp/permutation_matrix.h
+@@ -123,7 +123,7 @@ namespace lean {
+ 
+         unsigned size() const { return static_cast<unsigned>(m_rev.size()); }
+ 
+-        unsigned * values() const { return m_permutation; }
++        const unsigned * values() const { return m_permutation.data(); }
+     }; // end of the permutation class
+ 
+ #ifdef LEAN_DEBUG
+diff --git a/src/util/lp/static_matrix.cpp b/src/util/lp/static_matrix.cpp
+index ed64302..241f693 100644
+--- a/src/util/lp/static_matrix.cpp
++++ b/src/util/lp/static_matrix.cpp
+@@ -29,7 +29,7 @@ static_matrix<T, X>::static_matrix(static_matrix const &A, unsigned * /* basis *
+     init_row_columns(m, m);
+     while (m--) {
+         for (auto & col : A.m_columns[m]){
+-            set(col.m_i, m, A.get_value_of_column_cell(col));
++            set(col.m_i, m, col.m_value);
+         }
+     }
+ }
+@@ -265,7 +265,7 @@ template <typename T, typename X>    void static_matrix<T, X>::check_consistency
+         for (auto & t : m_columns[i]) {
+             std::pair<unsigned, unsigned> p(t.m_i, i);
+             lean_assert(by_cols.find(p) == by_cols.end());
+-            by_cols[p] = get_value_of_column_cell(t);
++            by_cols[p] = t.m_value;
+         }
+     }
+     lean_assert(by_rows.size() == by_cols.size());
+diff --git a/src/util/lp/static_matrix.h b/src/util/lp/static_matrix.h
+index 9d44c4e..a325cf2 100644
+--- a/src/util/lp/static_matrix.h
++++ b/src/util/lp/static_matrix.h
+@@ -63,7 +63,7 @@ public:
+         ref(static_matrix & m, unsigned row, unsigned col):m_matrix(m), m_row(row), m_col(col) {}
+         ref & operator=(T const & v) { m_matrix.set( m_row, m_col, v); return *this; }
+ 
+-        ref & operator=(ref const & v) { m_matrix.set(m_row, m_col, v.m_matrix.get(v.m_row, v.m_col)); return *this; }
++        ref & operator=(ref const & v) { m_matrix.set(m_row, m_col, v.m_matrix.get_elem(v.m_row, v.m_col)); return *this; }
+ 
+         operator T () const { return m_matrix.get_elem(m_row, m_col); }
+     };

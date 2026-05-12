@@ -1,3 +1,2 @@
 Derived from the Lean 2 HoTT library (https://github.com/leanprover/lean2),
-licensed under the Apache License 2.0. Converted to qdt syntax via Lean2Export.lean.
-Higher inductive types are omitted.
+licensed under the Apache License 2.0.
