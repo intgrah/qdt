@@ -82,6 +82,7 @@ end State
   let s := p s
   if s.hasError then s else q s
 
+/-- >> syntax -/
 instance : AndThen ParserFn where
   andThen p q := andthenFn p (q ())
 
@@ -91,6 +92,7 @@ instance : AndThen ParserFn where
   let s' := p s
   if s'.hasError && s'.pos == iniPos then q (s'.restore iniSz iniPos) else s'
 
+/-- <|> syntax -/
 instance : OrElse ParserFn where
   orElse p q := orelseFn p (q ())
 
