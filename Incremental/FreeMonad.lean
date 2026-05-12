@@ -7,10 +7,10 @@ public import Incremental.FreeTheorem
 
 namespace Incremental
 
-inductive FM (ℭ : BuildConfig) (q₀ : ℭ.Q) : Type → Type
-  | pure {α} (a : α) : FM ℭ q₀ α
-  | input {α} (i : ℭ.I) (k : ℭ.V i → FM ℭ q₀ α) : FM ℭ q₀ α
-  | fetch {α} (q : ℭ.Q) (hq : ℭ.rel q q₀) (k : ℭ.R q → FM ℭ q₀ α) : FM ℭ q₀ α
+inductive FM (ℭ : BuildConfig) (q₀ : ℭ.Q) (α : Type) : Type
+  | pure (a : α) : FM ℭ q₀ α
+  | input (i : ℭ.I) (k : ℭ.V i → FM ℭ q₀ α) : FM ℭ q₀ α
+  | fetch (q : ℭ.Q) (hq : ℭ.rel q q₀) (k : ℭ.R q → FM ℭ q₀ α) : FM ℭ q₀ α
 
 namespace FM
 

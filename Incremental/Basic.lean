@@ -78,23 +78,25 @@ def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
 termination_by ℭ.wf.wrap q
 
 structure Build (c : (Type → Type) → Type 1)
-    (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ) : Type 1 where
+    (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ)
+    (m : Type → Type) : Type 1 where
   cId : c Id
   σ : Type
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
   build : (q : ℭ.Q) → (store : σ) →
-    { r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ
+    m ({ r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ)
 
 def Build.run
     {c : (Type → Type) → Type 1}
     {ℭ : BuildConfig}
     {J : Type} [Input ℭ J]
     {tasks : Tasks c ℭ}
-    (b : Build c ℭ J tasks) (q : ℭ.Q) : StateM b.σ (ℭ.R q) := do
+    {m : Type → Type} [Monad m]
+    (b : Build c ℭ J tasks m) (q : ℭ.Q) : StateT b.σ m (ℭ.R q) := do
   let store ← get
-  let (⟨r, _⟩, store) := b.build q store
+  let (⟨r, _⟩, store) ← b.build q store
   StateT.set store
   return r
 

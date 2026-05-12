@@ -27,7 +27,7 @@ public structure Salsa.Store (J : Type) where
   memos : DHashMap ℭ.Q (Salsa.Memo ℭ)
   inputRevisions : HashMap ℭ.I Nat
 
-public def Salsa (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+public def Salsa (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id where
   cId := Id.instMonad
   σ := Salsa.Store ℭ J
   init store := {

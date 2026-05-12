@@ -12,7 +12,7 @@ open Incremental
 open System (FilePath)
 open Std (DHashMap)
 
-opaque testBuild : Build Monad config Input Qdt.tasks :=
+opaque testBuild : Build Monad config Input Qdt.tasks Id :=
   selectBuild Qdt.tasks .shake
 
 def check (src : String) : IO (Array Diagnostic) := do

@@ -35,7 +35,7 @@ def ShakeRdeps.invalidate
   let toInvalidate := getTransitiveDependents ℭ store.rdeps changedKeys
   { store with memos := toInvalidate.fold .erase store.memos }
 
-public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
+public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id where
   cId := Id.instMonad
   σ := ShakeRdeps.Store ℭ J
   init inputs := {
@@ -103,6 +103,6 @@ public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks where
         return r
       termination_by ℭ.wf.wrap q
       decreasing_by all_goals sorry
-      (⟨← fetch q, sorry⟩, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
+      return (⟨← fetch q, sorry⟩, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
 
 end Incremental

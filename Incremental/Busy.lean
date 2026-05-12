@@ -9,7 +9,7 @@ variable
   (J : Type) [Input ℭ J]
 
 public def Busy {c : (Type → Type) → Type 1} (cId : c Id) (tasks : Tasks c ℭ) :
-    Build c ℭ J tasks where
+    Build c ℭ J tasks Id where
   cId := cId
   σ := J
   init := id

@@ -17,7 +17,6 @@ inductive BuildSystem where
   | salsaC
   | shake
   | shakeC
-  | shakeCPS
 deriving Repr, Inhabited
 
 instance : Cli.ParseableType BuildSystem where
@@ -29,7 +28,6 @@ instance : Cli.ParseableType BuildSystem where
     | "salsa-c" => some .salsaC
     | "shake" => some .shake
     | "shake-c" => some .shakeC
-    | "shake-cps" => some .shakeCPS
     | _ => none
 
 structure Config where

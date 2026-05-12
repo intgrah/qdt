@@ -51,14 +51,11 @@ end verifyInputs
 section dedupPush
 variable [BEq ℭ.Q]
 
-/-- Append `e` to `acc` unless some entry with the same `q` already exists. -/
 def dedupPush {q₀ : ℭ.Q} (e : DepEntry (H := H) q₀)
     (acc : Array (DepEntry (H := H) q₀)) :
     Array (DepEntry (H := H) q₀) :=
   if acc.any (·.q == e.q) then acc else acc.push e
 
-/-- `dedupPush` preserves the invariant that every entry's key is represented by some
-    entry with hash matching `target`. -/
 private theorem dedupPush_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
     (e : DepEntry (H := H) q₀)
     {acc : Array (DepEntry (H := H) q₀)}
@@ -75,7 +72,6 @@ private theorem dedupPush_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
       exact ⟨y, Array.mem_push_of_mem _ hy_mem, hy_q, hy_hash⟩
     · exact ⟨x, Array.mem_push_self, rfl, he_target⟩
 
-/-- After `dedupPush`, the new entry's key has at least one representative. -/
 private theorem dedupPush_has_self {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
     (e : DepEntry (H := H) q₀)
     (acc : Array (DepEntry (H := H) q₀)) :
@@ -86,7 +82,6 @@ private theorem dedupPush_has_self {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
     exact ⟨y, hy_mem, LawfulBEq.eq_of_beq hyq⟩
   · exact ⟨e, Array.mem_push_self, rfl⟩
 
-/-- Every existing key remains represented after `dedupPush`. -/
 private theorem dedupPush_preserves_keys {q₀ : ℭ.Q}
     (e : DepEntry (H := H) q₀) (acc : Array (DepEntry (H := H) q₀)) :
     ∀ x ∈ acc, ∃ y ∈ dedupPush e acc, y.q = x.q := by
@@ -96,13 +91,11 @@ private theorem dedupPush_preserves_keys {q₀ : ℭ.Q}
   · exact ⟨x, hx, rfl⟩
   · exact ⟨x, Array.mem_push_of_mem _ hx, rfl⟩
 
-/-- Iterated `dedupPush` over a list of `DepEntry`s. -/
 abbrev pushAll {q₀ : ℭ.Q} (l : List (Incremental.DepEntry ℭ q₀))
     (acc : Array (DepEntry (H := H) q₀)) :
     Array (DepEntry (H := H) q₀) :=
   l.foldl (fun acc p => dedupPush ⟨p.q, p.hq, hR p.q p.r⟩ acc) acc
 
-/-- `pushAll` preserves the target-invariant if `target` agrees with each entry's hash. -/
 private theorem pushAll_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
     {l : List (Incremental.DepEntry ℭ q₀)}
     (h_uniform : ∀ p ∈ l, hR p.q p.r = target p.q)
@@ -116,7 +109,6 @@ private theorem pushAll_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
     exact dedupPush_preserves_target ⟨hd.q, hd.hq, hR hd.q hd.r⟩ hacc
       (h_uniform hd List.mem_cons_self)
 
-/-- `pushAll` preserves all existing keys. -/
 private theorem pushAll_preserves_keys {q₀ : ℭ.Q}
     {l : List (Incremental.DepEntry ℭ q₀)}
     {acc : Array (DepEntry (H := H) q₀)} :
@@ -130,7 +122,6 @@ private theorem pushAll_preserves_keys {q₀ : ℭ.Q}
     have ⟨z, hz_in, hz_q⟩ := ih y hy_in
     exact ⟨z, hz_in, hz_q.trans hy_q⟩
 
-/-- After `pushAll`, every key in the input list is represented. -/
 private theorem pushAll_has_keys {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
     {l : List (Incremental.DepEntry ℭ q₀)}
     {acc : Array (DepEntry (H := H) q₀)} :
@@ -144,9 +135,7 @@ private theorem pushAll_has_keys {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
       ⟨z, hz_in, hz_q.trans hy_q⟩
     | p, .tail _ hp_rest => ih p hp_rest
 
-/-- The completeness lemma: after `pushAll`, every input key has an entry with
-    matching hash. -/
-private theorem pushAll_complete {q₀ : ℭ.Q} {target : ℭ.Q → H} [LawfulBEq ℭ.Q]
+theorem pushAll_complete {q₀ : ℭ.Q} {target : ℭ.Q → H} [LawfulBEq ℭ.Q]
     {l : List (Incremental.DepEntry ℭ q₀)}
     (h_uniform : ∀ p ∈ l, hR p.q p.r = target p.q) :
     ∀ p ∈ l, ∃ y ∈ pushAll hR l (#[] : Array (DepEntry (H := H) q₀)),
@@ -161,6 +150,8 @@ end dedupPush
 
 section main
 variable [DecidableEq H] [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
+  {m : Type → Type} [Monad m] [LawfulMonad m]
+  [MonadAttach m] [LawfulMonadAttach m]
 
 structure Memo (q : ℭ.Q) where
   value : ℭ.R q
@@ -187,9 +178,9 @@ structure RunState (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) where
 
 def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q')) :
+      StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q')) :
     (l : List (DepEntry (H := H) q₀)) →
-    StateM (Store hI hR tasks ι₀)
+    StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ l, hR p.q (eval tasks ι₀ p.q) = p.hash)))
   | [] => pure (some ⟨nofun⟩)
   | e :: rest => do
@@ -216,68 +207,72 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
 
 def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q'))
+      StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q'))
     (arr : Array (DepEntry (H := H) q₀)) :
-    StateM (Store hI hR tasks ι₀)
+    StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ arr, hR p.q (eval tasks ι₀ p.q) = p.hash))) := do
   match ← verifyDepsList hI hR tasks ι₀ fetch arr.toList with
   | some ⟨hList⟩ => pure (some ⟨fun p hp => hList p hp.val⟩)
   | none => pure none
 
 def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    Task.Monad.Action (StateM (RunState hI hR tasks ι₀ q₀)) (FM ℭ q₀) where
-  rel {α β} P m t :=
-    ∀ s,
-      P (m.run s).fst (FM.evalTree ι₀ (eval tasks ι₀) t) ∧
-      (m.run s).snd.ins =
+    Task.Monad.Action (StateT (RunState hI hR tasks ι₀ q₀) m) (FM ℭ q₀) where
+  rel {α β} P ma t :=
+    ∀ s a s', MonadAttach.CanReturn (ma.run s) (a, s') →
+      P a (FM.evalTree ι₀ (eval tasks ι₀) t) ∧
+      s'.ins =
         (FM.evalTrace_inputs ι₀ (eval tasks ι₀) t).reverse.map
           (fun p => InputDep.mk p.i (hI p.i p.v)) ++ s.ins ∧
-      (m.run s).snd.deps = pushAll hR (FM.evalTrace_deps ι₀ (eval tasks ι₀) t) s.deps
-  rel_pure hab s := ⟨hab, rfl, rfl⟩
-  rel_bind {α₁ α₂ β₁ β₂ R S ma mt ka kt} hma hk s := by
-    have ⟨hv, hin, hdep⟩ := hma s
-    have ⟨hv', hin', hdep'⟩ := hk _ _ hv (StateT.run ma s).snd
-    have hbind : StateT.run (ma >>= ka) s =
-        StateT.run (ka (StateT.run ma s).fst) (StateT.run ma s).snd := rfl
-    refine ⟨?_, ?_, ?_⟩
-    · change S _ (FM.evalTree _ _ (FM.bind mt kt))
-      rw [FM.evalTree_bind]
-      exact hv'
+      s'.deps = pushAll hR (FM.evalTrace_deps ι₀ (eval tasks ι₀) t) s.deps
+  rel_pure {_ _ _ a _} hab s a' s' hcan := by
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure
+      (a := (a, s)) (b := (a', s')) hcan)
+    exact ⟨hab, rfl, rfl⟩
+  rel_bind {_ _ _ _ _ _ ma mt ka kt} hma hk s b s' hcan := by
+    obtain ⟨⟨a, s''⟩, hma_can, hk_can⟩ :=
+      LawfulMonadAttach.canReturn_bind_imp' (x := ma.run s) hcan
+    have ⟨hv_a, hin_a, hdep_a⟩ := hma s a s'' hma_can
+    have ⟨hv_b, hin_b, hdep_b⟩ := hk a _ hv_a s'' b s' hk_can
+    refine ⟨FM.evalTree_bind .. ▸ hv_b, ?_, ?_⟩
     · change _ = (FM.evalTrace_inputs _ _ (FM.bind mt kt)).reverse.map _ ++ _
-      rw [congrArg (·.snd.ins) hbind, hin', hin, FM.evalTrace_inputs_bind]
-      simp only [List.reverse_append, List.map_append, List.append_assoc]
+      rw [FM.evalTrace_inputs_bind, hin_b, hin_a]
+      simp [List.reverse_append, List.map_append, List.append_assoc]
     · change _ = pushAll _ (FM.evalTrace_deps _ _ (FM.bind mt kt)) _
-      rw [congrArg (·.snd.deps) hbind, hdep', hdep, FM.evalTrace_deps_bind]
-      simp only [pushAll, List.foldl_append]
+      rw [FM.evalTrace_deps_bind, hdep_b, hdep_a]
+      simp [pushAll, List.foldl_append]
 
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateM (Store hI hR tasks ι₀)
+      StateT (Store hI hR tasks ι₀) m
         { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
-    StateM (Store hI hR tasks ι₀)
+    StateT (Store hI hR tasks ι₀) m
       { mv : Memo hI hR tasks q₀ × Value tasks ι₀ q₀ //
-        mv.fst.value = mv.snd.val } :=
-  fun store =>
-    let input' (i : ℭ.I) : StateM (RunState hI hR tasks ι₀ q₀) (ℭ.V i) :=
-      fun s => (ι₀ i, { s with ins := ⟨i, hI i (ι₀ i)⟩ :: s.ins })
-    let fetch' (q : ℭ.Q) (hq : ℭ.rel q q₀) : StateM (RunState hI hR tasks ι₀ q₀) (ℭ.R q) :=
-      fun s =>
-        let (⟨(v, h), _⟩, st') := fetch q hq s.store
-        (v.val, { s with store := st', deps := dedupPush ⟨q, hq, h⟩ s.deps })
-    let m := tasks q₀ (StateM (RunState hI hR tasks ι₀ q₀)) input' fetch'
-    let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, [], #[]⟩
-    let result := m initState
-    have ⟨hval_tree, hin_trace, hdep_trace⟩ :=
-      Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
-        input' FM.pureInput fetch' FM.pureFetch
-        (fun _ _ => ⟨rfl, rfl, rfl⟩)
-        (fun q hq s =>
-          let r := (fetch q hq s.store).fst
-          ⟨r.val.fst.property, rfl, by
-            show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
-                 dedupPush ⟨q, hq, hR q (eval tasks ι₀ q)⟩ s.deps
-            rw [r.property, r.val.fst.property]⟩)
-        initState
+        mv.fst.value = mv.snd.val } := fun store => do
+  let input' (i : ℭ.I) : StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.V i) :=
+    fun s => pure (ι₀ i, { s with ins := ⟨i, hI i (ι₀ i)⟩ :: s.ins })
+  let fetch' (q : ℭ.Q) (hq : ℭ.rel q q₀) : StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.R q) :=
+    fun s => do
+      let (⟨(v, h), _⟩, st') ← fetch q hq s.store
+      pure (v.val, { s with store := st', deps := dedupPush ⟨q, hq, h⟩ s.deps })
+  let mTree := tasks q₀ (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
+  let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, [], #[]⟩
+  let hRel :=
+    Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
+      input' FM.pureInput fetch' FM.pureFetch
+      (fun i s a s' hcan => by
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
+        refine ⟨rfl, ?_, rfl⟩
+        simp [FM.pureInput, FM.evalTrace_inputs])
+      (fun q hq s _ _ hcan => by
+        obtain ⟨⟨r, _⟩, _, hpure_can⟩ :=
+          LawfulMonadAttach.canReturn_bind_imp' (x := fetch q hq s.store) hcan
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hpure_can)
+        refine ⟨r.val.fst.property, rfl, ?_⟩
+        show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
+             dedupPush ⟨q, hq, hR q (eval tasks ι₀ q)⟩ s.deps
+        rw [r.property, r.val.fst.property])
+  MonadAttach.pbind (mTree initState) fun result hcan => do
+    have ⟨hval_tree, hin_trace, hdep_trace⟩ := hRel initState result.fst result.snd hcan
     have hval : result.fst = eval tasks ι₀ q₀ :=
       hval_tree.trans (Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀)
     have hin_trace' : result.snd.ins =
@@ -315,14 +310,14 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
             _ = FM.evalTree ι (eval tasks ι) (tasksTree ℭ tasks q₀) :=
               FM.evalTree_cross ι₀ ι _ _ _ hin' hdep'
             _ = eval tasks ι q₀ := tasksTree_eval_compute ℭ tasks q₀ ι }
-    (⟨(memo, ⟨result.fst, hval⟩), rfl⟩, result.snd.store)
+    pure (⟨(memo, ⟨result.fst, hval⟩), rfl⟩, result.snd.store)
 
 def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q₀) := do
+    StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
   let (vcache, cache, inFlight) ← get
   if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
   let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
-      StateM (Store hI hR tasks ι₀)
+      StateT (Store hI hR tasks ι₀) m
         { vh : Value tasks ι₀ q' × H // vh.2 = (hR q') vh.1.val } := do
     let v ← fetch ι₀ q'
     let (vc, _, _) ← get
@@ -331,7 +326,7 @@ def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
         rw [e.property]
         exact congrArg (hR q') (e.val.fst.property.trans v.property.symm)⟩
     | none => pure ⟨(v, hR q' v.val), rfl⟩
-  let doRun : StateM (Store hI hR tasks ι₀) (Value tasks ι₀ q₀) := do
+  let doRun : StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
     let ⟨(memo, value), _⟩ ← run hI hR tasks ι₀ q₀ fetchWithHash
     modify fun (vc, c, ifl) =>
       (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo, ifl)
@@ -341,12 +336,12 @@ def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
     modify fun (vc, c, ifl) => (vc, c, ifl.insert q₀)
     let result ←
       match cache.get? q₀ with
-      | some m =>
-        if hvin : verifyInputs hI ι₀ m.inputDeps then do
-          match ← verifyDeps hI hR tasks ι₀ (fun q' hq => fetch ι₀ q') m.deps with
+      | some mm =>
+        if hvin : verifyInputs hI ι₀ mm.inputDeps then do
+          match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetch ι₀ q') mm.deps with
           | some ⟨hdep⟩ =>
-            let value : Value tasks ι₀ q₀ := ⟨m.value, m.invariant ι₀
-              ((verifyInputs_spec hI ι₀ m.inputDeps).mp hvin) hdep⟩
+            let value : Value tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
+              ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩
             modify fun (vc, c, ifl) =>
               (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c, ifl)
             pure value
@@ -367,19 +362,20 @@ public def Shake
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks Monad ℭ) :
-    Build Monad ℭ J tasks where
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks Monad ℭ)
+    {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m] :
+    Build Monad ℭ J tasks m where
   cId := Id.instMonad
   σ := J × Shake.Cache hI hR tasks
   init j := (j, DHashMap.emptyWithCapacity 1024)
   inputs s := Input.get s.fst
   set i v := modify fun (j, c) => (Input.set j i v, c)
-  build q store :=
+  build q store := do
     let (j, oldCache) := store
     let ι₀ := Input.get j
     let initStore : Shake.Store hI hR tasks ι₀ :=
       (DHashMap.emptyWithCapacity 1024, oldCache, ∅)
-    let (v, (_, newCache, _)) := Shake.fetch hI hR tasks ι₀ q initStore
-    (v, (j, newCache))
+    let (v, (_, newCache, _)) ← Shake.fetch hI hR tasks ι₀ q initStore
+    pure (v, (j, newCache))
 
 end Incremental

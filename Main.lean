@@ -24,7 +24,7 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | none =>
       s!"{file}: error: {d.error}"
 
-variable {b : Build Monad config (DHashMap InputKey InputVal) tasks}
+variable {b : Build Monad config (DHashMap InputKey InputVal) tasks Id}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateM b.σ (Array String) := do
