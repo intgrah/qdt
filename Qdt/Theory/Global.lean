@@ -34,8 +34,9 @@ deriving Repr, Hashable
 structure InductiveInfo extends ConstantInfo where
   numParams : Nat
   numIndices : Nat
-  numMinors : Nat
-  ctorNames : Vector Name numMinors
+  numCtors : Nat
+  ctorNames : Vector Name numCtors
+  pathCtorNames : Array Name := #[]
 deriving Repr, Hashable
 
 structure RecursorRule (numParamsMotivesMinors : Nat) where
@@ -50,7 +51,9 @@ structure RecursorInfo extends ConstantInfo where
   numMotives : Nat
   numMinors : Nat
   numIndices : Nat
-  recRules : Vector (RecursorRule (numParams + numMotives + numMinors)) numMinors
+  numPointCtors : Nat
+  recRules :
+    Vector (RecursorRule (numParams + numMotives + numMinors)) numPointCtors
 deriving Repr, Hashable
 
 inductive Constant : Type

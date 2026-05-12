@@ -541,7 +541,7 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
     ty := indTy
     numParams
     numIndices
-    numMinors
+    numCtors := numMinors
     ctorNames
   }
   let indEntry : Name × Constant := (ind.name, .inductive indInfo)
@@ -597,6 +597,7 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
     numMotives := 1
     numMinors
     numIndices
+    numPointCtors := numMinors
     recRules
   }
   let recEntry : Name × Constant := (recName, .recursor recInfo)

@@ -73,8 +73,16 @@ def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option File
     |> String.intercalate "/"
     |> FilePath.mk
     |>.addExtension "qdt"
+  -- Match either the full path (modName resolves to its own directory) or
+  -- a strict path suffix where the segment boundary aligns with '/'.
+  -- We must NOT match `datatypes.qdt` for module `types` just because the
+  -- string `types.qdt` happens to occur at the end of `datatypes.qdt`.
+  let expectedStr := expectedPath.toString
+  let isStrictSuffix (path : String) : Bool :=
+    path == expectedStr ||
+    path.endsWith ("/" ++ expectedStr)
   inputFiles.toList.find? fun file =>
-    file.toString.endsWith expectedPath.toString
+    isStrictSuffix file.toString
 
 partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FilePath)) : List FilePath :=
   let rec visit (f : FilePath) (visited : HashSet FilePath) (sorted : List FilePath) : (HashSet FilePath × List FilePath) :=

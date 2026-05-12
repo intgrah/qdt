@@ -1,6 +1,7 @@
 module
 
 public import Qdt.Structure
+public import Qdt.HitPrimitive
 
 public section
 
@@ -139,7 +140,10 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   let ty ← OptionT.lift (withChild q₀ 3 (checkTy q₀ paramCtx a.ty))
   withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant q₀ a.name (.axiom { numUnivParams := a.univParams.length, ty })
+  let numUnivParams := a.univParams.length
+  let entry := (Hit.recogniseAxiom a.name numUnivParams ty).getD
+    (.axiom { numUnivParams, ty })
+  let _ ← addConstant q₀ a.name entry
 
 def Inductive.elab (info : Inductive) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then

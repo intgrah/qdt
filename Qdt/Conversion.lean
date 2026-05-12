@@ -80,7 +80,7 @@ partial def etaConv {n} (ne : Neutral n) (other : VTm n) (cs : ConvState) : Elab
     | return false
   let some indInfo ← fetchInductive q₀ ctorInfo.indName
     | return false
-  if indInfo.numIndices ≠ 0 ∨ indInfo.numMinors ≠ 1 then
+  if indInfo.numIndices ≠ 0 ∨ indInfo.numCtors ≠ 1 then
     return false
   let some args := sp.toAppList
     | return false
