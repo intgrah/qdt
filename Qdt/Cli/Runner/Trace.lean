@@ -24,9 +24,9 @@ def relativize (root : FilePath) (s : String) : String :=
 partial def DepNode.lines : FilePath → Nat → Trace.DepNode Key →
     String → String → List String
   | root, 0, ⟨q, dt, _⟩, prefixHere, _ =>
-    [prefixHere ++ s!"{relativize root q.display} ({dt / 1000}µs) …"]
+    [prefixHere ++ s!"{relativize root q.display} ({dt / 1000000}ms) …"]
   | root, depth + 1, ⟨q, dt, children⟩, prefixHere, prefixRest =>
-    let head := prefixHere ++ s!"{relativize root q.display} ({dt / 1000}µs)"
+    let head := prefixHere ++ s!"{relativize root q.display} ({dt / 1000000}ms)"
     let n := children.size
     let childLines := children.toList.zipIdx.flatMap fun (c, i) =>
       let isLast := i + 1 == n
