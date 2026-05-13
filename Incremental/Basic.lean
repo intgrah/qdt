@@ -81,6 +81,10 @@ def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
   @tasks q Id cId ι (fun q' _ => compute cId tasks ι q')
 termination_by ℭ.wf.wrap q
 
+abbrev computeM {ℭ : BuildConfig} (tasks : Tasks Monad ℭ) :
+    (∀ i, ℭ.V i) → ∀ q : ℭ.Q, ℭ.R q :=
+  compute Id.instMonad tasks
+
 structure Build (c : (Type → Type) → Type 1)
     (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ)
     (m : Type → Type) : Type 1 where

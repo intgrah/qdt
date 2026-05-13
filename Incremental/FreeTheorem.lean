@@ -99,12 +99,12 @@ theorem Tasks.Monad.freeTheorem
     (ι₁ : ∀ i, κ (ℭ.V i))
     (fetch₁ : ∀ q, ℭ.rel q q₀ → κ (ℭ.R q))
     (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
-    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : Monad Id) tasks ι₀ q)) :
-    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : Monad Id) tasks ι₀ q₀) := by
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (computeM tasks ι₀ q)) :
+    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (computeM tasks ι₀ q₀) := by
   have h := Task.Monad.freeTheorem (tasks q₀) F ι₁ ι₀ fetch₁
-    (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) hι hfetch
-  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : Monad Id) tasks ι₀ q) =
-      compute (inferInstance : Monad Id) tasks ι₀ q₀ := by
+    (fun q _ => computeM tasks ι₀ q) hι hfetch
+  have heval : tasks q₀ Id ι₀ (fun q _ => computeM tasks ι₀ q) =
+      computeM tasks ι₀ q₀ := by
     conv => rhs; unfold compute
   simpa only [heval] using h
 

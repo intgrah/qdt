@@ -13,13 +13,13 @@ variable
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
   (tasks : Tasks Monad ℭ) (ι₀ : ∀ i, ℭ.V i)
 
-abbrev Value (q : ℭ.Q) := { r : ℭ.R q // r = compute (inferInstance : Monad Id) tasks ι₀ q }
+abbrev Value (q : ℭ.Q) := { r : ℭ.R q // r = computeM tasks ι₀ q }
 abbrev VCache := DHashMap ℭ.Q (Value tasks ι₀)
 
 def action : Task.Monad.Action (StateM (VCache tasks ι₀)) Id where
-  rel P m b := ∀ s, P (m s).1 b
-  rel_pure := fun hab _ => hab
-  rel_bind := fun hma hk s => hk _ _ (hma s) _
+  rel P m b := ∀ s, P (m.run' s) b
+  rel_pure hab _ := hab
+  rel_bind hma hk s := hk _ _ (hma s) _
 
 def run (q₀ : ℭ.Q)
     (fetch : ∀ q, ℭ.rel q q₀ →
@@ -28,8 +28,8 @@ def run (q₀ : ℭ.Q)
   let ⟨r, hr⟩ ← MonadAttach.attach (tasks q₀ (StateM (VCache tasks ι₀))
     (fun i => StateT.pure (ι₀ i))
     (fun q hq => Subtype.val <$> fetch q hq))
-  have : r = compute (inferInstance : Monad Id) tasks ι₀ q₀ := by
-    obtain ⟨s, s', heq⟩ := hr
+  have : r = computeM tasks ι₀ q₀ := by
+    have ⟨s, s', heq⟩ := hr
     have hft := Tasks.Monad.freeTheorem tasks q₀ (action tasks ι₀)
       ι₀
       (fun i => StateT.pure (ι₀ i))
