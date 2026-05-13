@@ -74,6 +74,23 @@ end Applicative
 
 end Task
 
+theorem Tasks.Applicative.freeTheorem
+    {κ : Type → Type} [Applicative κ]
+    (tasks : Tasks Applicative ℭ) (q₀ : ℭ.Q)
+    (F : Task.Applicative.Action κ Id)
+    (ι₀ : ∀ i, ℭ.V i)
+    (ι₁ : ∀ i, κ (ℭ.V i))
+    (fetch₁ : ∀ q, ℭ.rel q q₀ → κ (ℭ.R q))
+    (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute (inferInstance : Applicative Id) tasks ι₀ q)) :
+    F.rel Eq (tasks q₀ κ ι₁ fetch₁) (compute (inferInstance : Applicative Id) tasks ι₀ q₀) := by
+  have h := Task.Applicative.freeTheorem (tasks q₀) F ι₁ ι₀ fetch₁
+    (fun q _ => compute (inferInstance : Applicative Id) tasks ι₀ q) hι hfetch
+  have heval : tasks q₀ Id ι₀ (fun q _ => compute (inferInstance : Applicative Id) tasks ι₀ q) =
+      compute (inferInstance : Applicative Id) tasks ι₀ q₀ := by
+    conv => rhs; unfold compute
+  simpa only [heval] using h
+
 theorem Tasks.Monad.freeTheorem
     {κ : Type → Type} [Monad κ]
     (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
