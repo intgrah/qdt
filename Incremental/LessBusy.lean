@@ -13,8 +13,7 @@ variable
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
   (tasks : Tasks Monad ℭ) (ι₀ : ∀ i, ℭ.V i)
 
-abbrev Value (q : ℭ.Q) := { r : ℭ.R q // r = computeM tasks ι₀ q }
-abbrev VCache := DHashMap ℭ.Q (Value tasks ι₀)
+abbrev VCache := DHashMap ℭ.Q (Value Id.instMonad tasks ι₀)
 
 def action : Task.Monad.Action (StateM (VCache tasks ι₀)) Id where
   rel P m b := ∀ s, P (m.run' s) b
@@ -23,24 +22,24 @@ def action : Task.Monad.Action (StateM (VCache tasks ι₀)) Id where
 
 def run (q₀ : ℭ.Q)
     (fetch : ∀ q, ℭ.rel q q₀ →
-      StateM (VCache tasks ι₀) (Value tasks ι₀ q)) :
-    StateM (VCache tasks ι₀) (Value tasks ι₀ q₀) := do
+      StateM (VCache tasks ι₀) (Value Id.instMonad tasks ι₀ q)) :
+    StateM (VCache tasks ι₀) (Value Id.instMonad tasks ι₀ q₀) := do
   let ⟨r, hr⟩ ← MonadAttach.attach (tasks q₀ (StateM (VCache tasks ι₀))
     (fun i => StateT.pure (ι₀ i))
-    (fun q hq => Subtype.val <$> fetch q hq))
+    (fun q hq => Value.val <$> fetch q hq))
   have : r = computeM tasks ι₀ q₀ := by
     have ⟨s, s', heq⟩ := hr
     have hft := Tasks.Monad.freeTheorem tasks q₀ (action tasks ι₀)
       ι₀
       (fun i => StateT.pure (ι₀ i))
-      (fun q hq => Subtype.val <$> fetch q hq)
+      (fun q hq => Value.val <$> fetch q hq)
       (fun i s => rfl)
-      (fun q hq s => fetch q hq |>.run' s |>.property) s
+      (fun q hq s => fetch q hq |>.run' s |>.spec) s
     exact (congrArg Prod.fst heq).symm.trans hft
   return ⟨r, this⟩
 
 def fetch (q₀ : ℭ.Q) :
-    StateM (VCache tasks ι₀) (Value tasks ι₀ q₀) := do
+    StateM (VCache tasks ι₀) (Value Id.instMonad tasks ι₀ q₀) := do
   if let some v := (← get).get? q₀ then return v
   let v ← run tasks ι₀ q₀ (fun q _ => fetch q)
   modify (·.insert q₀ v)

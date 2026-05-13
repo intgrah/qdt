@@ -85,6 +85,12 @@ abbrev computeM {ℭ : BuildConfig} (tasks : Tasks Monad ℭ) :
     (∀ i, ℭ.V i) → ∀ q : ℭ.Q, ℭ.R q :=
   compute Id.instMonad tasks
 
+/-- Contractible type -/
+structure Value {ℭ : BuildConfig} {c : (Type → Type) → Type 1} (cId : c Id)
+    (tasks : Tasks c ℭ) (ι : ∀ i, ℭ.V i) (q : ℭ.Q) where
+  val : ℭ.R q
+  spec : val = compute cId tasks ι q
+
 structure Build (c : (Type → Type) → Type 1)
     (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ)
     (m : Type → Type) : Type 1 where
@@ -93,8 +99,7 @@ structure Build (c : (Type → Type) → Type 1)
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
-  build : (q : ℭ.Q) → (store : σ) →
-    m ({ r : ℭ.R q // r = compute cId tasks (inputs store) q } × σ)
+  build : ∀ q store, m (Value cId tasks (inputs store) q × σ)
 
 def Build.run
     {c : (Type → Type) → Type 1}

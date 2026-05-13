@@ -30,9 +30,6 @@ structure QueryDep (ℭ : BuildConfig) (q₀ : ℭ.Q) (H : Type) where
   rel : ℭ.rel q q₀
   hash : H
 
-abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
-  { r : ℭ.R q // r = computeM tasks ι q }
-
 section verifyInputs
 variable [DecidableEq H]
 
@@ -169,7 +166,7 @@ structure Memo (q : ℭ.Q) where
 abbrev Cache := DHashMap ℭ.Q (Memo hI hR tasks)
 
 abbrev VCache (ι : ∀ i, ℭ.V i) :=
-  DHashMap ℭ.Q (fun q => { p : Value tasks ι q × H // p.snd = hR q p.fst.val })
+  DHashMap ℭ.Q (fun q => { p : Value Id.instMonad tasks ι q × H // p.snd = hR q p.fst.val })
 
 abbrev Store (ι : ∀ i, ℭ.V i) :=
   VCache hR tasks ι × Cache hI hR tasks × HashSet ℭ.Q
@@ -211,7 +208,7 @@ def runInput' (m : Type → Type) [Monad m] (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ
 def runFetch' (m : Type → Type) [Monad m] (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val })
+        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val })
     (q : ℭ.Q) (hq : ℭ.rel q q₀) :
     StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.R q) :=
   fun s => do
@@ -234,24 +231,24 @@ theorem runFetch'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
+        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
     ∀ q hq, (traceAction hI hR tasks ι₀ q₀ (m := m)).rel Eq
       (runFetch' hI hR tasks m ι₀ q₀ fetch q hq) (FM.pureFetch q hq) := by
   intro q hq s _ _ hcan
   have ⟨⟨r, _⟩, _, hpure_can⟩ :=
     LawfulMonadAttach.canReturn_bind_imp' (x := fetch q hq s.store) hcan
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hpure_can)
-  refine ⟨r.val.fst.property, ?_, ?_⟩
+  refine ⟨r.val.fst.spec, ?_, ?_⟩
   · simp only [FM.pureFetch, FM.evalTrace_inputs, List.map_nil, Array.append_empty]
   · show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
         dedupPush ⟨q, hq, hR q (computeM tasks ι₀ q)⟩ s.deps
-    rw [r.property, r.val.fst.property]
+    rw [r.property, r.val.fst.spec]
 
 variable [DecidableEq H] [LawfulBEq ℭ.Q]
 
 def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q')) :
+      StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q')) :
     (l : List (QueryDep ℭ q₀ H)) →
     StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ l, hR p.q (computeM tasks ι₀ p.q) = p.hash)))
@@ -268,11 +265,13 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
           split
           · next ce _ =>
             rw [ce.property]
-            exact congrArg (hR e.q) (ce.val.fst.property.trans v.property.symm)
+            exact congrArg (hR e.q) (ce.val.fst.spec.trans v.spec.symm)
           · rfl
         match ← verifyDepsList ι₀ fetch rest with
         | some ⟨hrest⟩ => pure (some ⟨fun
-            | _, .head _ => by rw [← v.property, ← hcache]; exact heq
+            | _, .head _ => by
+                show hR e.q (compute Id.instMonad tasks ι₀ e.q) = e.hash
+                rw [← v.spec, ← hcache]; exact heq
             | p, .tail _ ht => hrest p ht⟩)
         | none => pure none
       else
@@ -280,7 +279,7 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
 
 def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
-      StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q'))
+      StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q'))
     (arr : Array (QueryDep ℭ q₀ H)) :
     StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ arr, hR p.q (computeM tasks ι₀ p.q) = p.hash))) := do
@@ -291,9 +290,9 @@ def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
+        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
     StateT (Store hI hR tasks ι₀) m
-      { mv : Memo hI hR tasks q₀ × Value tasks ι₀ q₀ //
+      { mv : Memo hI hR tasks q₀ × Value Id.instMonad tasks ι₀ q₀ //
         mv.fst.value = mv.snd.val } := fun store => do
   let input' := runInput' hI hR tasks m ι₀ q₀
   let fetch' := runFetch' hI hR tasks m ι₀ q₀ fetch
@@ -343,20 +342,20 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     pure (⟨(memo, ⟨result.fst, hval⟩), rfl⟩, result.snd.store)
 
 def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
+    StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
   let (vcache, cache, inFlight) ← get
   if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
   let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
+        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
     let v ← fetch ι₀ q'
     let (vc, _, _) ← get
     match vc.get? q' with
     | some e => pure ⟨(v, e.val.snd), by
         rw [e.property]
-        exact congrArg (hR q') (e.val.fst.property.trans v.property.symm)⟩
+        exact congrArg (hR q') (e.val.fst.spec.trans v.spec.symm)⟩
     | none => pure ⟨(v, hR q' v.val), rfl⟩
-  let doRun : StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
+  let doRun : StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
     let ⟨(memo, value), _⟩ ← run hI hR tasks ι₀ q₀ fetchWithHash
     modify fun (vc, c, ifl) =>
       (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo, ifl)
@@ -370,7 +369,7 @@ def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
         if hvin : verifyInputs hI ι₀ mm.inputDeps then do
           match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetch ι₀ q') mm.deps with
           | some ⟨hdep⟩ =>
-            let value : Value tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
+            let value : Value Id.instMonad tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
               ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩
             modify fun (vc, c, ifl) =>
               (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c, ifl)
