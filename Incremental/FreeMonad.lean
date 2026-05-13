@@ -164,6 +164,18 @@ theorem tasksTree_eval_compute (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
   rw [tasksTree_eval]
   conv => rhs; unfold compute
 
+theorem compute_cross (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
+    (ι ι' : ∀ i, ℭ.V i)
+    (hin : ∀ p ∈ FM.evalTrace_inputs ι (compute Id.instMonad tasks ι)
+        (tasksTree ℭ tasks q₀), ι' p.i = p.v)
+    (hdep : ∀ p ∈ FM.evalTrace_deps ι (compute Id.instMonad tasks ι)
+        (tasksTree ℭ tasks q₀),
+      compute Id.instMonad tasks ι' p.q = p.r) :
+    compute Id.instMonad tasks ι q₀ = compute Id.instMonad tasks ι' q₀ := by
+  rw [← tasksTree_eval_compute ℭ tasks q₀ ι,
+      FM.evalTree_cross ι ι' _ _ _ hin hdep,
+      tasksTree_eval_compute ℭ tasks q₀ ι']
+
 def tasksAppTree (tasks : Tasks Applicative ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
   tasks q₀ (FM ℭ q₀) FM.pureInput FM.pureFetch
 
