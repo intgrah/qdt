@@ -17,6 +17,7 @@ inductive BuildSystem where
   | salsaC
   | shake
   | shakeC
+  | shakeTrace
 deriving Repr, Inhabited
 
 instance : Cli.ParseableType BuildSystem where
@@ -28,6 +29,7 @@ instance : Cli.ParseableType BuildSystem where
     | "salsa-c" => some .salsaC
     | "shake" => some .shake
     | "shake-c" => some .shakeC
+    | "shake-trace" => some .shakeTrace
     | _ => none
 
 structure Config where
@@ -35,7 +37,6 @@ structure Config where
   watchMode : Bool
   buildSystem : BuildSystem
   files : Array FilePath
-  dumpGraph : Option FilePath
 
 def moduleToPath (modName : String) : FilePath :=
   let parts := modName.splitOn "."
@@ -49,11 +50,10 @@ def parseConfig (parsed : Parsed) : IO Config := do
   let root ← IO.FS.realPath (parsed.flag? "root" |>.map (·.as! String) |>.getD ".")
   let watchMode := parsed.hasFlag "watch"
   let buildSystem := parsed.flag? "build" |>.map (·.as! BuildSystem) |>.getD .shakeC
-  let dumpGraph : Option FilePath := parsed.flag? "dump-graph" |>.map fun f => ⟨f.as! String⟩
   let args := parsed.variableArgsAs! String
   if args.isEmpty then
     throw (IO.userError "No files specified. Usage: qdt <module>...")
   let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
-  return { root, watchMode, buildSystem, files, dumpGraph }
+  return { root, watchMode, buildSystem, files }
 
 end Qdt

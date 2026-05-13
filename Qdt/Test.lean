@@ -12,8 +12,8 @@ open Incremental
 open System (FilePath)
 open Std (DHashMap)
 
-opaque testBuild : Build Monad config Input Qdt.tasks Id :=
-  selectBuild Qdt.tasks .shake
+opaque testBuild : Build Monad config Input Qdt.tasks Id Id :=
+  Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) Qdt.tasks
 
 def check (src : String) : IO (Array Diagnostic) := do
   let dummyPath : FilePath := "test.qdt"

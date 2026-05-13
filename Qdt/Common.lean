@@ -5,9 +5,9 @@ public import Incremental.Busy
 public import Incremental.LessBusy
 public import Incremental.Salsa
 public import Incremental.SalsaC
-public import Incremental.Shake
-public import Incremental.ShakeStore
-public import Incremental.ShakeC
+public import Incremental.Shake.Standard
+public import Incremental.Shake.Store
+public import Incremental.Shake.C
 public import Qdt.Incremental.Query
 
 @[expose] public section
@@ -25,14 +25,6 @@ instance : Incremental.Input config Input where
   set m i v := m.alter i (fun _ => v)
   get_set_self _ _ _ := DHashMap.get?_alter_self
   get_set_other _ _ _ _ h := by grind
-
-def selectBuild (tasks : Tasks Monad config) : BuildSystem → Build Monad config Input tasks Id
-  | .busy => Busy config Input (inferInstance : Monad Id) tasks
-  | .lessBusy => LessBusy config Input tasks
-  | .salsa => Salsa config Input tasks
-  | .salsaC => SalsaC config Input tasks
-  | .shake => Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) tasks
-  | .shakeC => ShakeC config Input tasks
 
 partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
   let mut result : List FilePath := []

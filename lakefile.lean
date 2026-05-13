@@ -4,7 +4,7 @@ open System Lake DSL
 
 package qdt where
   version := v!"0.1.0"
-  testDriver := "Qdt.Test"
+  testDriver := "Test"
   description := "Query-based Dependent Type Elaborator"
   license := "Apache-2.0"
   leanOptions := #[⟨`autoImplicit, false⟩]
@@ -21,7 +21,13 @@ lean_lib IncrementalWF2 where
   precompileModules := true
 lean_lib Qdt
 lean_lib Qdt.Test where
-  globs := #[`Qdt.Test.*, `Qdt.Lsp.Test.*]
+  globs := #[`Qdt.Test.*]
+lean_lib Qdt.Lsp.Test where
+  globs := #[`Qdt.Lsp.Test.*]
+lean_lib Incremental.Test where
+  globs := #[`Incremental.Test.+]
+lean_lib Test where
+  globs := #[`Qdt.Test.*, `Qdt.Lsp.Test.*, `Incremental.Test.+]
 
 @[default_target]
 lean_exe qdt where root := `Main
