@@ -1,7 +1,6 @@
 inductive Eq.{u} (α : Type u) (a : α) : α → Type u where
   | refl : Eq α a a
 
-
 def Eq.ndrec.{v, u} (α : Type u) (a : α) (motive : α → Type v) (h : motive a) (b : α) (p : a = b) : motive b :=
   Eq.rec.{v, u} α a (fun x _ => motive x) h b p
 
