@@ -1,6 +1,6 @@
 module
 
-public import Incremental.ShakeStore
+public import Incremental.Shake.Store
 
 namespace Incremental
 
@@ -35,7 +35,7 @@ def ShakeRdeps.invalidate
   let toInvalidate := getTransitiveDependents ℭ store.rdeps changedKeys
   { store with memos := toInvalidate.fold .erase store.memos }
 
-public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id where
+public def ShakeRdeps (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id Id where
   cId := Id.instMonad
   σ := ShakeRdeps.Store ℭ J
   init inputs := {

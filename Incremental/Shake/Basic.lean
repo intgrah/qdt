@@ -4,7 +4,7 @@ public import Incremental.Basic
 public import Incremental.FreeTheorem
 public import Incremental.FreeMonad
 public import Incremental.IdealHash
-public import Incremental.ShakeStore
+public import Incremental.Shake.Store
 
 @[expose] public section
 
@@ -169,7 +169,7 @@ abbrev VCache (ι : ∀ i, ℭ.V i) :=
   DHashMap ℭ.Q (fun q => { p : Value Id.instMonad tasks ι q × H // p.snd = hR q p.fst.val })
 
 abbrev Store (ι : ∀ i, ℭ.V i) :=
-  VCache hR tasks ι × Cache hI hR tasks × HashSet ℭ.Q
+  VCache hR tasks ι × Cache hI hR tasks
 
 structure RunState (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) where
   store : Store hI hR tasks ι₀
@@ -205,14 +205,16 @@ def runInput' (m : Type → Type) [Monad m] (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ
     StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.V i) :=
   fun s => pure (ι₀ i, { s with ins := s.ins.push ⟨i, hI i (ι₀ i)⟩ })
 
+@[specialize bracket]
 def runFetch' (m : Type → Type) [Monad m] (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+    (bracket : ∀ {α}, ℭ.Q → m α → m α)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
         { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val })
     (q : ℭ.Q) (hq : ℭ.rel q q₀) :
     StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.R q) :=
   fun s => do
-    let (⟨(v, h), _⟩, st') ← fetch q hq s.store
+    let (⟨(v, h), _⟩, st') ← bracket q (fetch q hq s.store)
     pure (v.val, { s with store := st', deps := dedupPush ⟨q, hq, h⟩ s.deps })
 
 theorem runInput'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
@@ -229,15 +231,18 @@ theorem runInput'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
 theorem runFetch'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     [MonadAttach m] [LawfulMonadAttach m]
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+    (bracket : ∀ {α}, ℭ.Q → m α → m α)
+    (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
+      MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
         { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
     ∀ q hq, (traceAction hI hR tasks ι₀ q₀ (m := m)).rel Eq
-      (runFetch' hI hR tasks m ι₀ q₀ fetch q hq) (FM.pureFetch q hq) := by
+      (runFetch' hI hR tasks m ι₀ q₀ bracket fetch q hq) (FM.pureFetch q hq) := by
   intro q hq s _ _ hcan
-  have ⟨⟨r, _⟩, _, hpure_can⟩ :=
-    LawfulMonadAttach.canReturn_bind_imp' (x := fetch q hq s.store) hcan
-  obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hpure_can)
+  have ⟨⟨r, _⟩, hbr_can, hrest⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
+  have hfetch_can := bracket_canReturn q (fetch q hq s.store) _ hbr_can
+  obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hrest)
   refine ⟨r.val.fst.spec, ?_, ?_⟩
   · simp only [FM.pureFetch, FM.evalTrace_inputs, List.map_nil, Array.append_empty]
   · show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
@@ -255,7 +260,7 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
   | [] => pure (some ⟨nofun⟩)
   | e :: rest => do
       let v ← fetch e.q e.rel
-      let (vc, _, _) ← get
+      let (vc, _) ← get
       let cachedHash := match vc.get? e.q with
         | some ce => ce.val.snd
         | none => hR e.q v.val
@@ -287,7 +292,11 @@ def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
   | some ⟨hList⟩ => pure (some ⟨fun p hp => hList p hp.val⟩)
   | none => pure none
 
+@[specialize bracket]
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
+    (bracket : ∀ {α}, ℭ.Q → m α → m α)
+    (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
+      MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
         { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
@@ -295,14 +304,14 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
       { mv : Memo hI hR tasks q₀ × Value Id.instMonad tasks ι₀ q₀ //
         mv.fst.value = mv.snd.val } := fun store => do
   let input' := runInput' hI hR tasks m ι₀ q₀
-  let fetch' := runFetch' hI hR tasks m ι₀ q₀ fetch
+  let fetch' := runFetch' hI hR tasks m ι₀ q₀ bracket fetch
   let mTree := tasks q₀ (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
   let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, #[], #[]⟩
   let hRel :=
     Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
       input' FM.pureInput fetch' FM.pureFetch
       (runInput'_rel hI hR tasks m ι₀ q₀)
-      (runFetch'_rel hI hR tasks m ι₀ q₀ fetch)
+      (runFetch'_rel hI hR tasks m ι₀ q₀ bracket bracket_canReturn fetch)
   MonadAttach.pbind (mTree initState) fun result hcan => do
     have ⟨hval_tree, hin_trace, hdep_trace⟩ := hRel initState result.fst result.snd hcan
     have hval : result.fst = computeM tasks ι₀ q₀ :=
@@ -341,70 +350,8 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         invariant := hinvariant }
     pure (⟨(memo, ⟨result.fst, hval⟩), rfl⟩, result.snd.store)
 
-def fetch (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
-  let (vcache, cache, inFlight) ← get
-  if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
-  let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
-      StateT (Store hI hR tasks ι₀) m
-        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
-    let v ← fetch ι₀ q'
-    let (vc, _, _) ← get
-    match vc.get? q' with
-    | some e => pure ⟨(v, e.val.snd), by
-        rw [e.property]
-        exact congrArg (hR q') (e.val.fst.spec.trans v.spec.symm)⟩
-    | none => pure ⟨(v, hR q' v.val), rfl⟩
-  let doRun : StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
-    let ⟨(memo, value), _⟩ ← run hI hR tasks ι₀ q₀ fetchWithHash
-    modify fun (vc, c, ifl) =>
-      (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo, ifl)
-    pure value
-  if inFlight.contains q₀ then doRun
-  else do
-    modify fun (vc, c, ifl) => (vc, c, ifl.insert q₀)
-    let result ←
-      match cache.get? q₀ with
-      | some mm =>
-        if hvin : verifyInputs hI ι₀ mm.inputDeps then do
-          match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetch ι₀ q') mm.deps with
-          | some ⟨hdep⟩ =>
-            let value : Value Id.instMonad tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
-              ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩
-            modify fun (vc, c, ifl) =>
-              (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c, ifl)
-            pure value
-          | none => doRun
-        else doRun
-      | none => doRun
-    modify fun (vc, c, ifl) => (vc, c, ifl.erase q₀)
-    pure result
-termination_by ℭ.wf.wrap q₀
-
 end main
 
 end Shake
-
-public def Shake
-    (ℭ : BuildConfig)
-    (J : Type) [Input ℭ J]
-    [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
-    [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
-    {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks Monad ℭ)
-    {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m] :
-    Build Monad ℭ J tasks m where
-  cId := Id.instMonad
-  σ := J × Shake.Cache hI hR tasks
-  init j := (j, DHashMap.emptyWithCapacity 1024)
-  inputs s := Input.get s.fst
-  set i v := modify fun (j, c) => (Input.set j i v, c)
-  build q store := do
-    let (j, oldCache) := store
-    let ι₀ := Input.get j
-    let initStore : Shake.Store hI hR tasks ι₀ :=
-      (DHashMap.emptyWithCapacity 1024, oldCache, ∅)
-    let (v, (_, newCache, _)) ← Shake.fetch hI hR tasks ι₀ q initStore
-    pure (v, (j, newCache))
 
 end Incremental

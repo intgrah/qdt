@@ -1,6 +1,6 @@
 import Incremental.Busy
 import Incremental.LessBusy
-import Incremental.Shake
+import Incremental.Shake.Standard
 
 /-! Ensure `Classical.choice` does not sneak in -/
 

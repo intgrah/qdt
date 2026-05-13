@@ -28,7 +28,7 @@ public opaque salsaCBuild
     Tasks Monad ℭ → ∀ q,
     Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J
 
-@[expose] public def SalsaC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id where
+@[expose] public def SalsaC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id Id where
   cId := Id.instMonad
   σ := Salsa.Store ℭ J
   init inputs := {

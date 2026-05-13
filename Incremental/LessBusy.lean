@@ -53,7 +53,7 @@ variable
   (J : Type) [Input ℭ J]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
 
-public def LessBusy (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id where
+public def LessBusy (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id Id where
   cId := Id.instMonad
   σ := J
   init := id

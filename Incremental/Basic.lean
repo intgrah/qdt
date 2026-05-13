@@ -93,24 +93,21 @@ structure Value {ℭ : BuildConfig} {c : (Type → Type) → Type 1} (cId : c Id
 
 structure Build (c : (Type → Type) → Type 1)
     (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ)
-    (m : Type → Type) : Type 1 where
+    (n : Type → Type) (m : Type → Type) : Type 1 where
   cId : c Id
   σ : Type
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
-  build : ∀ q store, m (Value cId tasks (inputs store) q × σ)
+  build : ∀ q store, n (m (Value cId tasks (inputs store) q) × σ)
 
 def Build.run
     {c : (Type → Type) → Type 1}
     {ℭ : BuildConfig}
     {J : Type} [Input ℭ J]
     {tasks : Tasks c ℭ}
-    {m : Type → Type} [Monad m]
-    (b : Build c ℭ J tasks m) (q : ℭ.Q) : StateT b.σ m (ℭ.R q) := do
-  let store ← get
-  let (⟨r, _⟩, store) ← b.build q store
-  StateT.set store
-  return r
+    {n m : Type → Type} [Functor n] [Functor m]
+    (b : Build c ℭ J tasks n m) (q : ℭ.Q) : StateT b.σ n (m (ℭ.R q)) :=
+  fun store => Prod.map (Value.val <$> ·) id <$> b.build q store
 
 end Incremental
