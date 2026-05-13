@@ -23,6 +23,8 @@ abbrev Input := DHashMap InputKey InputVal
 instance : Incremental.Input config Input where
   get := DHashMap.get?
   set m i v := m.alter i (fun _ => v)
+  get_set_self _ _ _ := DHashMap.get?_alter_self
+  get_set_other _ _ _ _ h := by grind
 
 def selectBuild (tasks : Tasks Monad config) : BuildSystem → Build Monad config Input tasks Id
   | .busy => Busy config Input (inferInstance : Monad Id) tasks

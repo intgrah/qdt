@@ -63,10 +63,14 @@ export Task (input fetch)
 class Input (J : Type) where
   get : J → ∀ i, ℭ.V i
   set : J → ∀ i, ℭ.V i → J
+  get_set_self : ∀ j i v, get (set j i v) i = v
+  get_set_other : ∀ j i v i', i' ≠ i → get (set j i v) i' = get j i'
 
 instance [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
   get := id
   set := Function.update
+  get_set_self _ _ _ := Function.update_self ..
+  get_set_other _ _ _ _ h := Function.update_of_ne h ..
 
 def Tasks : Type 1 :=
   ∀ q₀, Task c ℭ q₀ (ℭ.R q₀)
