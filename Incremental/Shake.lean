@@ -28,7 +28,7 @@ structure InputDep (I H : Type) where
   key : I
   hash : H
 
-structure DepEntry (q₀ : ℭ.Q) where
+structure QueryDep (ℭ : BuildConfig) (q₀ : ℭ.Q) (H : Type) where
   q : ℭ.Q
   rel : ℭ.rel q q₀
   hash : H
@@ -39,26 +39,26 @@ abbrev Value (ι : ∀ i, ℭ.V i) (q : ℭ.Q) :=
 section verifyInputs
 variable [DecidableEq H]
 
-abbrev verifyInputs (ι : ∀ i, ℭ.V i) (l : List (InputDep ℭ.I H)) : Bool :=
+abbrev verifyInputs (ι : ∀ i, ℭ.V i) (l : Array (InputDep ℭ.I H)) : Bool :=
   l.all fun ⟨i, h⟩ => hI i (ι i) = h
 
-theorem verifyInputs_spec (ι : ∀ i, ℭ.V i) (l : List (InputDep ℭ.I H)) :
+theorem verifyInputs_spec (ι : ∀ i, ℭ.V i) (l : Array (InputDep ℭ.I H)) :
     verifyInputs hI ι l = true ↔ ∀ p ∈ l, hI p.key (ι p.key) = p.hash := by
-  simp only [verifyInputs, List.all_eq_true, decide_eq_true_iff]
+  simp only [verifyInputs, Array.all_eq_true_iff_forall_mem, decide_eq_true_iff]
 
 end verifyInputs
 
 section dedupPush
 variable [BEq ℭ.Q]
 
-def dedupPush {q₀ : ℭ.Q} (e : DepEntry (H := H) q₀)
-    (acc : Array (DepEntry (H := H) q₀)) :
-    Array (DepEntry (H := H) q₀) :=
+def dedupPush {q₀ : ℭ.Q} (e : QueryDep ℭ q₀ H)
+    (acc : Array (QueryDep ℭ q₀ H)) :
+    Array (QueryDep ℭ q₀ H) :=
   if acc.any (·.q == e.q) then acc else acc.push e
 
 private theorem dedupPush_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
-    (e : DepEntry (H := H) q₀)
-    {acc : Array (DepEntry (H := H) q₀)}
+    (e : QueryDep ℭ q₀ H)
+    {acc : Array (QueryDep ℭ q₀ H)}
     (hacc : ∀ x ∈ acc, ∃ y ∈ acc, y.q = x.q ∧ y.hash = target x.q)
     (he_target : e.hash = target e.q) :
     ∀ x ∈ dedupPush e acc, ∃ y ∈ dedupPush e acc, y.q = x.q ∧ y.hash = target x.q := by
@@ -73,8 +73,8 @@ private theorem dedupPush_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
     · exact ⟨x, Array.mem_push_self, rfl, he_target⟩
 
 private theorem dedupPush_has_self {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
-    (e : DepEntry (H := H) q₀)
-    (acc : Array (DepEntry (H := H) q₀)) :
+    (e : QueryDep ℭ q₀ H)
+    (acc : Array (QueryDep ℭ q₀ H)) :
     ∃ y ∈ dedupPush e acc, y.q = e.q := by
   unfold dedupPush
   split_ifs with h
@@ -83,7 +83,7 @@ private theorem dedupPush_has_self {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
   · exact ⟨e, Array.mem_push_self, rfl⟩
 
 private theorem dedupPush_preserves_keys {q₀ : ℭ.Q}
-    (e : DepEntry (H := H) q₀) (acc : Array (DepEntry (H := H) q₀)) :
+    (e : QueryDep ℭ q₀ H) (acc : Array (QueryDep ℭ q₀ H)) :
     ∀ x ∈ acc, ∃ y ∈ dedupPush e acc, y.q = x.q := by
   intro x hx
   unfold dedupPush
@@ -92,14 +92,14 @@ private theorem dedupPush_preserves_keys {q₀ : ℭ.Q}
   · exact ⟨x, Array.mem_push_of_mem _ hx, rfl⟩
 
 abbrev pushAll {q₀ : ℭ.Q} (l : List (Incremental.DepEntry ℭ q₀))
-    (acc : Array (DepEntry (H := H) q₀)) :
-    Array (DepEntry (H := H) q₀) :=
+    (acc : Array (QueryDep ℭ q₀ H)) :
+    Array (QueryDep ℭ q₀ H) :=
   l.foldl (fun acc p => dedupPush ⟨p.q, p.hq, hR p.q p.r⟩ acc) acc
 
 private theorem pushAll_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
     {l : List (Incremental.DepEntry ℭ q₀)}
     (h_uniform : ∀ p ∈ l, hR p.q p.r = target p.q)
-    {acc : Array (DepEntry (H := H) q₀)}
+    {acc : Array (QueryDep ℭ q₀ H)}
     (hacc : ∀ x ∈ acc, ∃ y ∈ acc, y.q = x.q ∧ y.hash = target x.q) :
     ∀ x ∈ pushAll hR l acc, ∃ y ∈ pushAll hR l acc, y.q = x.q ∧ y.hash = target x.q := by
   induction l generalizing acc with
@@ -111,7 +111,7 @@ private theorem pushAll_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
 
 private theorem pushAll_preserves_keys {q₀ : ℭ.Q}
     {l : List (Incremental.DepEntry ℭ q₀)}
-    {acc : Array (DepEntry (H := H) q₀)} :
+    {acc : Array (QueryDep ℭ q₀ H)} :
     ∀ x ∈ acc, ∃ y ∈ pushAll hR l acc, y.q = x.q := by
   induction l generalizing acc with
   | nil => exact fun x hx => ⟨x, hx, rfl⟩
@@ -124,7 +124,7 @@ private theorem pushAll_preserves_keys {q₀ : ℭ.Q}
 
 private theorem pushAll_has_keys {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
     {l : List (Incremental.DepEntry ℭ q₀)}
-    {acc : Array (DepEntry (H := H) q₀)} :
+    {acc : Array (QueryDep ℭ q₀ H)} :
     ∀ p ∈ l, ∃ y ∈ pushAll hR l acc, y.q = p.q := by
   induction l generalizing acc with
   | nil => nofun
@@ -135,10 +135,16 @@ private theorem pushAll_has_keys {q₀ : ℭ.Q} [LawfulBEq ℭ.Q]
       ⟨z, hz_in, hz_q.trans hy_q⟩
     | p, .tail _ hp_rest => ih p hp_rest
 
+theorem pushAll_append {q₀ : ℭ.Q}
+    (xs ys : List (Incremental.DepEntry ℭ q₀))
+    (acc : Array (QueryDep ℭ q₀ H)) :
+    pushAll hR (xs ++ ys) acc = pushAll hR ys (pushAll hR xs acc) :=
+  List.foldl_append
+
 theorem pushAll_complete {q₀ : ℭ.Q} {target : ℭ.Q → H} [LawfulBEq ℭ.Q]
     {l : List (Incremental.DepEntry ℭ q₀)}
     (h_uniform : ∀ p ∈ l, hR p.q p.r = target p.q) :
-    ∀ p ∈ l, ∃ y ∈ pushAll hR l (#[] : Array (DepEntry (H := H) q₀)),
+    ∀ p ∈ l, ∃ y ∈ pushAll hR l (#[] : Array (QueryDep ℭ q₀ H)),
       y.q = p.q ∧ y.hash = target p.q := by
   intro p hp
   have ⟨y, hy_in, hy_q⟩ := pushAll_has_keys hR (acc := #[]) p hp
@@ -155,8 +161,8 @@ variable [DecidableEq H] [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
 
 structure Memo (q : ℭ.Q) where
   value : ℭ.R q
-  inputDeps : List (InputDep ℭ.I H)
-  deps : Array (DepEntry (H := H) q)
+  inputDeps : Array (InputDep ℭ.I H)
+  deps : Array (QueryDep ℭ q H)
   invariant :
     ∀ (ι : ∀ i, ℭ.V i),
       (∀ p ∈ inputDeps, hI p.key (ι p.key) = p.hash) →
@@ -173,13 +179,13 @@ abbrev Store (ι : ∀ i, ℭ.V i) :=
 
 structure RunState (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) where
   store : Store hI hR tasks ι₀
-  ins : List (InputDep ℭ.I H)
-  deps : Array (DepEntry (H := H) q₀)
+  ins : Array (InputDep ℭ.I H)
+  deps : Array (QueryDep ℭ q₀ H)
 
 def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q')) :
-    (l : List (DepEntry (H := H) q₀)) →
+    (l : List (QueryDep ℭ q₀ H)) →
     StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ l, hR p.q (eval tasks ι₀ p.q) = p.hash)))
   | [] => pure (some ⟨nofun⟩)
@@ -208,7 +214,7 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
 def verifyDeps (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q'))
-    (arr : Array (DepEntry (H := H) q₀)) :
+    (arr : Array (QueryDep ℭ q₀ H)) :
     StateT (Store hI hR tasks ι₀) m
       (Option (PLift (∀ p ∈ arr, hR p.q (eval tasks ι₀ p.q) = p.hash))) := do
   match ← verifyDepsList hI hR tasks ι₀ fetch arr.toList with
@@ -220,26 +226,25 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
   rel {α β} P ma t :=
     ∀ s a s', MonadAttach.CanReturn (ma.run s) (a, s') →
       P a (FM.evalTree ι₀ (eval tasks ι₀) t) ∧
-      s'.ins =
-        (FM.evalTrace_inputs ι₀ (eval tasks ι₀) t).reverse.map
-          (fun p => InputDep.mk p.i (hI p.i p.v)) ++ s.ins ∧
+      s'.ins = s.ins ++ ((FM.evalTrace_inputs ι₀ (eval tasks ι₀) t).map
+          (fun p => InputDep.mk p.i (hI p.i p.v))).toArray ∧
       s'.deps = pushAll hR (FM.evalTrace_deps ι₀ (eval tasks ι₀) t) s.deps
   rel_pure {_ _ _ a _} hab s a' s' hcan := by
     obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure
       (a := (a, s)) (b := (a', s')) hcan)
-    exact ⟨hab, rfl, rfl⟩
+    refine ⟨hab, ?_, rfl⟩
+    simp [FM.evalTrace_inputs]
   rel_bind {_ _ _ _ _ _ ma mt ka kt} hma hk s b s' hcan := by
     obtain ⟨⟨a, s''⟩, hma_can, hk_can⟩ :=
       LawfulMonadAttach.canReturn_bind_imp' (x := ma.run s) hcan
     have ⟨hv_a, hin_a, hdep_a⟩ := hma s a s'' hma_can
     have ⟨hv_b, hin_b, hdep_b⟩ := hk a _ hv_a s'' b s' hk_can
     refine ⟨FM.evalTree_bind .. ▸ hv_b, ?_, ?_⟩
-    · change _ = (FM.evalTrace_inputs _ _ (FM.bind mt kt)).reverse.map _ ++ _
+    · change _ = _ ++ ((FM.evalTrace_inputs _ _ (FM.bind mt kt)).map _).toArray
       rw [FM.evalTrace_inputs_bind, hin_b, hin_a]
-      simp [List.reverse_append, List.map_append, List.append_assoc]
+      simp [List.map_append, List.append_toArray, Array.append_assoc]
     · change _ = pushAll _ (FM.evalTrace_deps _ _ (FM.bind mt kt)) _
-      rw [FM.evalTrace_deps_bind, hdep_b, hdep_a]
-      simp [pushAll, List.foldl_append]
+      rw [FM.evalTrace_deps_bind, hdep_b, hdep_a, pushAll_append]
 
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
@@ -249,13 +254,13 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
       { mv : Memo hI hR tasks q₀ × Value tasks ι₀ q₀ //
         mv.fst.value = mv.snd.val } := fun store => do
   let input' (i : ℭ.I) : StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.V i) :=
-    fun s => pure (ι₀ i, { s with ins := ⟨i, hI i (ι₀ i)⟩ :: s.ins })
+    fun s => pure (ι₀ i, { s with ins := s.ins.push ⟨i, hI i (ι₀ i)⟩ })
   let fetch' (q : ℭ.Q) (hq : ℭ.rel q q₀) : StateT (RunState hI hR tasks ι₀ q₀) m (ℭ.R q) :=
     fun s => do
       let (⟨(v, h), _⟩, st') ← fetch q hq s.store
       pure (v.val, { s with store := st', deps := dedupPush ⟨q, hq, h⟩ s.deps })
   let mTree := tasks q₀ (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
-  let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, [], #[]⟩
+  let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, #[], #[]⟩
   let hRel :=
     Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
       input' FM.pureInput fetch' FM.pureFetch
@@ -267,21 +272,22 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         obtain ⟨⟨r, _⟩, _, hpure_can⟩ :=
           LawfulMonadAttach.canReturn_bind_imp' (x := fetch q hq s.store) hcan
         obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hpure_can)
-        refine ⟨r.val.fst.property, rfl, ?_⟩
-        show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
-             dedupPush ⟨q, hq, hR q (eval tasks ι₀ q)⟩ s.deps
-        rw [r.property, r.val.fst.property])
+        refine ⟨r.val.fst.property, ?_, ?_⟩
+        · simp [FM.pureFetch, FM.evalTrace_inputs]
+        · show dedupPush ⟨q, hq, r.val.snd⟩ s.deps =
+              dedupPush ⟨q, hq, hR q (eval tasks ι₀ q)⟩ s.deps
+          rw [r.property, r.val.fst.property])
   MonadAttach.pbind (mTree initState) fun result hcan => do
     have ⟨hval_tree, hin_trace, hdep_trace⟩ := hRel initState result.fst result.snd hcan
     have hval : result.fst = eval tasks ι₀ q₀ :=
       hval_tree.trans (Incremental.tasksTree_eval_compute ℭ tasks q₀ ι₀)
     have hin_trace' : result.snd.ins =
-        (FM.evalTrace_inputs ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀)).reverse.map
-          fun p => ⟨p.i, hI p.i p.v⟩ := by
-      simpa only [initState, List.append_nil] using hin_trace
+        ((FM.evalTrace_inputs ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀)).map
+          fun p => ⟨p.i, hI p.i p.v⟩).toArray := by
+      simpa only [initState, Array.empty_append] using hin_trace
     have hdep_trace' : result.snd.deps =
         pushAll hR (FM.evalTrace_deps ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀))
-          (#[] : Array (DepEntry (H := H) q₀)) := by
+          (#[] : Array (QueryDep ℭ q₀ H)) := by
       simpa only [initState] using hdep_trace
     let memo : Memo hI hR tasks q₀ :=
       { value := result.fst
@@ -289,9 +295,13 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         deps := result.snd.deps
         invariant ι hin hdep := by
           have hin' : ∀ p ∈ FM.evalTrace_inputs ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀),
-              ι p.i = p.v := fun p hp => (hI p.i).injective <|
-            hin ⟨p.i, hI p.i p.v⟩ <| hin_trace' ▸
-              List.mem_map.mpr ⟨p, List.mem_reverse.mpr hp, rfl⟩
+              ι p.i = p.v := fun p hp => (hI p.i).injective <| by
+            have hmem : ⟨p.i, hI p.i p.v⟩ ∈
+                ((FM.evalTrace_inputs ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀)).map
+                  fun p => (⟨p.i, hI p.i p.v⟩ : InputDep ℭ.I H)).toArray := by
+              rw [List.mem_toArray]
+              exact List.mem_map_of_mem hp
+            exact hin _ (hin_trace' ▸ hmem)
           have hdep' : ∀ p ∈ FM.evalTrace_deps ι₀ (eval tasks ι₀) (tasksTree ℭ tasks q₀),
               eval tasks ι p.q = p.r := fun p hp => by
             have hpr := FM.evalTrace_deps_value _ _ _ _ hp
