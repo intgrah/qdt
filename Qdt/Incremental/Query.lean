@@ -32,6 +32,7 @@ inductive Key : Type
   | sourceMap (filepath : FilePath)
   | imports (filePath : FilePath)
   | declarationIndex (filePath : FilePath)
+  | declScope (filepath : FilePath) (name : Name) (currentDecl : Name)
   | declAst (filepath : FilePath) (name : Name)
   | elabDecl (filepath : FilePath) (name : Name)
   | lookup (filepath : FilePath) (name : Name)
@@ -51,6 +52,7 @@ def Key.tag : Key → String
   | .sourceMap _ => "sourceMap"
   | .imports _ => "imports"
   | .declarationIndex _ => "declarationIndex"
+  | .declScope _ _ _ => "declScope"
   | .declAst _ _ => "declAst"
   | .elabDecl _ _ => "elabDecl"
   | .lookup _ _ => "lookup"
@@ -69,6 +71,7 @@ def Key.display : Key → String
   | .sourceMap p => s!"sourceMap:{p}"
   | .imports p => s!"imports:{p}"
   | .declarationIndex p => s!"declarationIndex:{p}"
+  | .declScope p n cd => s!"declScope:{p}:{n}<{cd}"
   | .declAst p n => s!"declAst:{p}:{n}"
   | .elabDecl p n => s!"elabDecl:{p}:{n}"
   | .lookup p n => s!"lookup:{p}:{n}"
@@ -91,6 +94,7 @@ abbrev Val : Key → Type
   | .sourceMap _ => SourceMap
   | .imports _ => Array Name
   | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
+  | .declScope _ _ _ => Bool
   | .declAst _ _ => Option Ast
   | .elabDecl _ _ => Option Constant × ElabInfo
   | .lookup _ _ => Option Constant
@@ -130,6 +134,7 @@ def Key.rank : Key → Nat
   | .declarationIndex _ => 4
   | .transitiveImports _ => 5
   | .declAst _ _ => 5
+  | .declScope _ _ _ => 6
   | .elabDecl _ _ => 7
   | .lookup _ _ => 8
   | .lookupInfo _ _ => 8

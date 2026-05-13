@@ -81,14 +81,13 @@ def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
   let ctx ← readThe ElabContext
   if let some result := st.entryCache[name]? then
     return result
-  let (declIndex, _) ←
-    Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry
   let currentDeclName := (← read).currentDecl
-  if let some idx := declIndex[name]? then
-    if let some currentIdx := declIndex[currentDeclName]? then
-      if idx ≥ currentIdx then
-        modify fun st => { st with entryCache := st.entryCache.insert name none }
-        return none
+  let inScope ←
+    Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀)
+      (Key.declScope ctx.filepath name currentDeclName) sorry
+  if !inScope then
+    modify fun st => { st with entryCache := st.entryCache.insert name none }
+    return none
   let result : Val (Key.constant ctx.filepath name) ←
     Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry
   modify fun st => { st with entryCache := st.entryCache.insert name result }
@@ -123,21 +122,22 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
     return false
   let ctx ← readThe ElabContext
   let currentDeclName := (← read).currentDecl
-  let (declIndex, _) ← (fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : Task Monad config q₀ _)
-  match declIndex[name]? with
-  | some nameIdx =>
-      match declIndex[currentDeclName]? with
-      | some currentIdx =>
-          if nameIdx != currentIdx then
-            emitDiagnostic q₀ (.alreadyDefined name)
-            return false
-      | none => pure ()
-  | none =>
-      let existing : Val (Key.constant ctx.filepath name) ←
-        (fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry : Task Monad config q₀ _)
-      if existing.isSome then
-        emitDiagnostic q₀ (.alreadyDefined name)
-        return false
+  unless name == currentDeclName do
+    let (declIndex, _) ← (fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : Task Monad config q₀ _)
+    match declIndex[name]? with
+    | some nameIdx =>
+        match declIndex[currentDeclName]? with
+        | some currentIdx =>
+            if nameIdx != currentIdx then
+              emitDiagnostic q₀ (.alreadyDefined name)
+              return false
+        | none => pure ()
+    | none =>
+        let existing : Val (Key.constant ctx.filepath name) ←
+          (fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry : Task Monad config q₀ _)
+        if existing.isSome then
+          emitDiagnostic q₀ (.alreadyDefined name)
+          return false
   set { st with localEnv := st.localEnv.insert name constant }
   return true
 

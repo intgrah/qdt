@@ -139,6 +139,11 @@ public def tasks : Tasks Monad config
   | .declarationIndex filepath => do
     let prog ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declarationIndex filepath) (Key.ast filepath) sorry : Task Monad config (Key.declarationIndex filepath) _)
     return buildOwnerIndex prog
+  | .declScope filepath name currentDecl => do
+    let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declScope filepath name currentDecl) (Key.declarationIndex filepath) sorry : Task Monad config (Key.declScope filepath name currentDecl) _)
+    match indexMap[name]?, indexMap[currentDecl]? with
+    | some nameIdx, some currentIdx => return nameIdx < currentIdx
+    | _, _ => return true
   | .declAst filepath name => do
     let (indexMap, _) ← (Task.fetch (c := Monad) (ℭ := config) (q₀ := Key.declAst filepath name) (Key.declarationIndex filepath) sorry : Task Monad config (Key.declAst filepath name) _)
     match indexMap[name]? with
