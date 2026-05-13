@@ -91,7 +91,6 @@ def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
         return none
   let result : Val (Key.constant ctx.filepath name) ←
     Task.fetch (c := Monad) (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry
-  let result : Option Constant := result.map Prod.fst
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
 

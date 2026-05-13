@@ -15,11 +15,6 @@ open System (FilePath)
 open Frontend (Ast SourceMap)
 open Frontend.Parser (ParseError)
 
-structure Origin where
-  filepath : FilePath
-  idx : Nat
-deriving DecidableEq, Repr, Hashable, Inhabited
-
 inductive InputKey : Type
   | text (filepath : FilePath)
   | inputFiles
@@ -38,7 +33,6 @@ inductive Key : Type
   | imports (filePath : FilePath)
   | declarationIndex (filePath : FilePath)
   | declAst (filepath : FilePath) (name : Name)
-  | elabCmdAt (filepath : FilePath) (idx : Nat)
   | elabDecl (filepath : FilePath) (name : Name)
   | lookup (filepath : FilePath) (name : Name)
   | lookupInfo (filepath : FilePath) (name : Name)
@@ -58,7 +52,6 @@ def Key.tag : Key → String
   | .imports _ => "imports"
   | .declarationIndex _ => "declarationIndex"
   | .declAst _ _ => "declAst"
-  | .elabCmdAt _ _ => "elabCmdAt"
   | .elabDecl _ _ => "elabDecl"
   | .lookup _ _ => "lookup"
   | .lookupInfo _ _ => "lookupInfo"
@@ -77,7 +70,6 @@ def Key.display : Key → String
   | .imports p => s!"imports:{p}"
   | .declarationIndex p => s!"declarationIndex:{p}"
   | .declAst p n => s!"declAst:{p}:{n}"
-  | .elabCmdAt p i => s!"elabCmdAt:{p}:{i}"
   | .elabDecl p n => s!"elabDecl:{p}:{n}"
   | .lookup p n => s!"lookup:{p}:{n}"
   | .lookupInfo p n => s!"lookupInfo:{p}:{n}"
@@ -99,12 +91,11 @@ abbrev Val : Key → Type
   | .sourceMap _ => SourceMap
   | .imports _ => Array Name
   | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
-  | .declAst _ _ => Option (Ast × Nat)
-  | .elabCmdAt _ _ => Global × ElabInfo
-  | .elabDecl _ _ => Option (Constant × Origin) × ElabInfo
-  | .lookup _ _ => Option (Constant × Origin)
+  | .declAst _ _ => Option Ast
+  | .elabDecl _ _ => Option Constant × ElabInfo
+  | .lookup _ _ => Option Constant
   | .lookupInfo _ _ => ElabInfo
-  | .constant _ _ => Option (Constant × Origin)
+  | .constant _ _ => Option Constant
   | .transitiveImports _ => HashSet FilePath
   | .type _ _ => Option ConstantInfo
   | .eval _ _ _ => Option (VTm 0)
@@ -139,7 +130,6 @@ def Key.rank : Key → Nat
   | .declarationIndex _ => 4
   | .transitiveImports _ => 5
   | .declAst _ _ => 5
-  | .elabCmdAt _ _ => 6
   | .elabDecl _ _ => 7
   | .lookup _ _ => 8
   | .lookupInfo _ _ => 8

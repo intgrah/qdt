@@ -37,8 +37,12 @@ def elaborateFile
   let (_, sourceMap, astDiags) ← b.run (Key.astSourceMap filepath)
   let (declIndex, dupDiags) ← b.run (Key.declarationIndex filepath)
   let mut combinedInfo : ElabInfo := 1
-  for (name, _) in declIndex.toList do
+  for (name, idx) in declIndex.toList do
     let info : config.R _ ← b.run (Key.lookupInfo filepath name)
+    let info : ElabInfo :=
+      { info with
+        diagnostics := info.diagnostics.map fun d => { d with path := d.path ++ [idx] }
+        hovers := info.hovers.map fun h => { h with path := h.path ++ [idx] } }
     combinedInfo := combinedInfo * info
   let allDiags := astDiags ++ dupDiags ++ combinedInfo.diagnostics
   combinedInfo := { combinedInfo with diagnostics := allDiags }
