@@ -13,7 +13,7 @@ open System (FilePath)
 open Incremental
 open Frontend (Path SourceMap Span)
 
-def lspBuild : Build Monad config (DHashMap InputKey InputVal) tasks Id Id :=
+def lspBuild : Build config (DHashMap InputKey InputVal) tasks Id Id :=
   SalsaC config Input tasks
 
 def mkRange (text : String) (span : Span) : Range :=
