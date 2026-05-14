@@ -49,11 +49,10 @@ variable {ℭ : BuildConfig} {q₀ : ℭ.Q}
   fn := fun g [_] inp fe => m.fn g inp fe >>= fun a => (k a).fn g inp fe
   param A ι₁ ι₂ f₁ f₂ hι hfe :=
     A.rel_bind (m.param A ι₁ ι₂ f₁ f₂ hι hfe)
-      (fun a b hab => by subst hab; exact (k a).param A ι₁ ι₂ f₁ f₂ hι hfe)
+      (fun a _b hab => hab ▸ (k a).param A ι₁ ι₂ f₁ f₂ hι hfe)
 
 @[inline] def map {α β : Type} (f : α → β) (m : MTask ℭ q₀ α) :
-    MTask ℭ q₀ β :=
-  bind m (fun a => pure (f a))
+    MTask ℭ q₀ β := bind m (pure ∘ f)
 
 instance : Monad (MTask ℭ q₀) where
   pure := pure

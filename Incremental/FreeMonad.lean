@@ -1,7 +1,6 @@
 module
 
 public import Incremental.Basic
-public import Incremental.FreeTheorem
 public import Incremental.Parametric
 
 @[expose] public section
@@ -127,22 +126,6 @@ def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     rw [evalTree_bind]
     exact hk _ mb hma
 
-theorem evalTree_seq {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q)
-    (f : FM ℭ q₀ (α → β)) (x : FM ℭ q₀ α) :
-    evalTree ι rec (f <*> x) = (evalTree ι rec f) (evalTree ι rec x) := by
-  show evalTree ι rec (bind f (fun g => bind x (fun a => pure (g a)))) = _
-  rw [evalTree_bind, evalTree_bind]
-  rfl
-
-def evalAppAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
-    Task.Applicative.Action (FM ℭ q₀) Id where
-  rel R t a := R (evalTree ι rec t) a
-  rel_pure {α β R a b} hab := show R (evalTree ι rec (.pure a)) b from hab
-  rel_seq {α₁ α₂ β₁ β₂ R S f g x y} hf hx := by
-    show S (evalTree ι rec (f <*> x)) (g y)
-    rw [evalTree_seq]
-    exact hf _ y hx
-
 end FM
 
 variable (ℭ : BuildConfig)
@@ -178,23 +161,5 @@ theorem compute_cross (tasks : MTasks ℭ) (q₀ : ℭ.Q)
   rw [← tasksTree_eval_compute ℭ tasks q₀ ι,
       FM.evalTree_cross ι ι' _ _ _ hin hdep,
       tasksTree_eval_compute ℭ tasks q₀ ι']
-
-def tasksAppTree (tasks : Tasks Applicative ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
-  tasks q₀ (FM ℭ q₀) FM.pureInput FM.pureFetch
-
-theorem tasksAppTree_eval (tasks : Tasks Applicative ℭ) (q₀ : ℭ.Q)
-    (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
-    FM.evalTree ι rec (tasksAppTree ℭ tasks q₀) =
-      tasks q₀ Id ι (fun q _ => rec q) :=
-  Task.Applicative.freeTheorem (tasks q₀) (FM.evalAppAction ι rec)
-    FM.pureInput ι FM.pureFetch (fun q _ => rec q)
-    (fun _ => rfl) (fun _ _ => rfl)
-
-theorem tasksAppTree_eval_compute (tasks : Tasks Applicative ℭ) (q₀ : ℭ.Q)
-    (ι : ∀ i, ℭ.V i) :
-    FM.evalTree ι (compute (inferInstance : Applicative Id) tasks ι) (tasksAppTree ℭ tasks q₀) =
-      compute (inferInstance : Applicative Id) tasks ι q₀ := by
-  rw [tasksAppTree_eval]
-  conv => rhs; unfold compute
 
 end Incremental
