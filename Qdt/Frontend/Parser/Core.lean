@@ -34,7 +34,7 @@ abbrev ParserFn := State → State
 namespace State
 
 @[inline] def hasError (s : State) : Bool := s.errorMsg.isSome
-@[inline] def stackSize (s : State) : Nat := s.stack.size
+@[noinline] def stackSize (s : State) : Nat := s.stack.size
 @[inline] def isEof (s : State) : Bool := s.pos ≥ s.input.utf8ByteSize
 
 @[inline] def pushSyntax (s : State) (c : Cst) : State :=
