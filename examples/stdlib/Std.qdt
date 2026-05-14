@@ -5,10 +5,10 @@ import Std.Control
 import Std.Category
 import Std.Empty
 import Std.Eq
-import Std.False
 import Std.Fin
 import Std.HEq
 import Std.Init
+import Std.Interval
 import Std.Even
 import Std.Equiv
 import Std.Decidable
@@ -17,11 +17,13 @@ import Std.List
 import Std.Monad
 import Std.Nat
 import Std.Option
+import Std.Pathover
 import Std.Prod
+import Std.Quotient
 import Std.Relation
 import Std.Sigma
 import Std.Sum
-import Std.True
+import Std.Trunc
 import Std.Unit
 import Std.Vector
 import Std.WF
