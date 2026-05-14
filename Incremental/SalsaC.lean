@@ -12,12 +12,8 @@ variable
   [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
 
-instance {ℭ : BuildConfig} {J : Type}
-    [BEq ℭ.I] [Hashable ℭ.I]
-    [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
-    [Input ℭ J] :
-    Inhabited (Tasks ℭ → ∀ q, Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J) :=
-  ⟨sorry⟩
+instance : Inhabited (Tasks ℭ → ∀ q, Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J) where
+  default tasks q s := ⟨compute tasks (Input.get s.inputs) q, s⟩
 
 @[extern "lean_salsa_build"]
 public opaque salsaCBuild
@@ -29,7 +25,6 @@ public opaque salsaCBuild
     Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J
 
 @[expose] public def SalsaC (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
-
   σ := Salsa.Store ℭ J
   init inputs := {
     inputs
