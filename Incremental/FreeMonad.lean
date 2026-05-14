@@ -138,7 +138,7 @@ theorem tasksTree_eval (tasks : MTasks ℭ) (q₀ : ℭ.Q)
     FM.evalTree ι rec (tasksTree ℭ tasks q₀) =
       (tasks q₀).fn Id ι (fun q _ => rec q) :=
   (tasks q₀).param (FM.evalAction ι rec)
-    FM.pureInput ι FM.pureFetch (fun q _ => rec q)
+    FM.pureFetch (fun q _ => rec q)
     (fun _ => rfl) (fun _ _ => rfl)
 
 theorem tasksTree_eval_compute (tasks : MTasks ℭ) (q₀ : ℭ.Q)

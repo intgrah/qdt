@@ -309,7 +309,7 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
   let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, #[], #[]⟩
   let hRel :=
     (tasks q₀).param (traceAction hI hR tasks ι₀ q₀)
-      input' FM.pureInput fetch' FM.pureFetch
+      fetch' FM.pureFetch
       (runInput'_rel hI hR tasks m ι₀ q₀)
       (runFetch'_rel hI hR tasks m ι₀ q₀ bracket bracket_canReturn fetch)
   MonadAttach.pbind (mTree initState) fun result hcan => do

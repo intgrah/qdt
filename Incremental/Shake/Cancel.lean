@@ -17,7 +17,7 @@ variable
   {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
-  (tasks : Tasks Monad ℭ)
+  (tasks : MTasks ℭ)
 
 section main
 variable [BEq ℭ.Q] [Hashable ℭ.Q]
@@ -87,7 +87,7 @@ public def ShakeCancel
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks Monad ℭ)
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : MTasks ℭ)
     (cancelRef : IO.Ref Bool)
     (onPersist : ℭ.Q → BaseIO Unit := fun _ => pure ()) :
     Build Monad ℭ J tasks BaseIO (Except Cancelled) where
