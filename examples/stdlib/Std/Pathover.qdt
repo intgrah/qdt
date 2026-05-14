@@ -1,0 +1,9 @@
+import Std.Eq
+
+inductive Pathover.{u, v} (α : Type u) (P : α → Type v) (a : α) (b : P a) :
+    (a' : α) → Eq.{u} α a a' → P a' → Type v where
+  | idpo : Pathover α P a b a (Eq.refl.{u} α a) b
+
+def Pathover.rfl.{u, v} (α : Type u) (P : α → Type v) (a : α) (b : P a) :
+    Pathover.{u, v} α P a b a (Eq.refl.{u} α a) b :=
+  Pathover.idpo.{u, v} α P a b

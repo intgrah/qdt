@@ -1,0 +1,17 @@
+import Std.Bool
+import Std.Eq
+import Std.Quotient
+import Std.Unit
+
+def I.rel (a b : Bool) : Type := Unit.{0}
+
+def I : Type := quotient.{0, 0} Bool I.rel
+
+def I.zero : I :=
+  quotient.class_of.{0, 0} Bool I.rel Bool.true
+
+def I.one : I :=
+  quotient.class_of.{0, 0} Bool I.rel Bool.false
+
+def I.seg : Eq.{0} I I.zero I.one :=
+  quotient.eq_of_rel.{0, 0} Bool I.rel Bool.true Bool.false Unit.unit.{0}

@@ -1,0 +1,43 @@
+import Std.Eq
+import Std.Pathover
+
+axiom quotient.{u, v} (α : Type u) : (α → α → Type v) → Type (max u v)
+
+axiom quotient.class_of.{u, v} (α : Type u) (R : α → α → Type v) (a : α) :
+    quotient.{u, v} α R
+
+axiom quotient.eq_of_rel.{u, v} (α : Type u) (R : α → α → Type v)
+    (a a' : α) (h : R a a') :
+    Eq.{max u v} (quotient.{u, v} α R)
+      (quotient.class_of.{u, v} α R a) (quotient.class_of.{u, v} α R a')
+
+axiom quotient.rec.{u, v, w}
+    (α : Type u)
+    (R : α → α → Type v)
+    (P : quotient.{u, v} α R → Type w)
+    (Pc : (a : α) → P (quotient.class_of.{u, v} α R a))
+    (Pp : (a a' : α) → (h : R a a') →
+      Pathover.{max u v, w} (quotient.{u, v} α R) P
+        (quotient.class_of.{u, v} α R a) (Pc a)
+        (quotient.class_of.{u, v} α R a')
+        (quotient.eq_of_rel.{u, v} α R a a' h)
+        (Pc a'))
+    (x : quotient.{u, v} α R) :
+    P x
+
+def quotient.rec_class_of.{u, v, w}
+    (α : Type u)
+    (R : α → α → Type v)
+    (P : quotient.{u, v} α R → Type w)
+    (Pc : (a : α) → P (quotient.class_of.{u, v} α R a))
+    (Pp : (a a' : α) → (h : R a a') →
+      Pathover.{max u v, w} (quotient.{u, v} α R) P
+        (quotient.class_of.{u, v} α R a) (Pc a)
+        (quotient.class_of.{u, v} α R a')
+        (quotient.eq_of_rel.{u, v} α R a a' h)
+        (Pc a'))
+    (a : α) :
+    Eq.{w} (P (quotient.class_of.{u, v} α R a))
+      (quotient.rec.{u, v, w} α R P Pc Pp (quotient.class_of.{u, v} α R a))
+      (Pc a) :=
+  Eq.refl.{w} (P (quotient.class_of.{u, v} α R a)) (Pc a)

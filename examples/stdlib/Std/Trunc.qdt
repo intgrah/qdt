@@ -1,0 +1,44 @@
+import Std.Eq
+
+inductive trunc_index : Type where
+  | minus_two
+  | succ (n : trunc_index)
+
+axiom is_trunc.{u} (n : trunc_index) (α : Type u) : Type u
+
+axiom trunc.{u} (n : trunc_index) (α : Type u) : Type u
+
+axiom trunc.tr.{u} (n : trunc_index) (α : Type u) (a : α) : trunc.{u} n α
+
+axiom trunc.is_trunc_trunc.{u} (n : trunc_index) (α : Type u) :
+    is_trunc.{u} n (trunc.{u} n α)
+
+axiom trunc.rec.{u, v}
+    (n : trunc_index)
+    (α : Type u)
+    (P : trunc.{u} n α → Type v)
+    (Pt : (aa : trunc.{u} n α) → is_trunc.{v} n (P aa))
+    (H : (a : α) → P (trunc.tr.{u} n α a))
+    (t : trunc.{u} n α) :
+    P t
+
+def trunc.elim.{u, v}
+    (n : trunc_index)
+    (α : Type u)
+    (β : Type v)
+    (Bt : is_trunc.{v} n β)
+    (f : α → β)
+    (t : trunc.{u} n α) :
+    β :=
+  trunc.rec.{u, v} n α (fun (_ : trunc.{u} n α) => β)
+    (fun (_ : trunc.{u} n α) => Bt) f t
+
+def trunc.elim_tr.{u, v}
+    (n : trunc_index)
+    (α : Type u)
+    (β : Type v)
+    (Bt : is_trunc.{v} n β)
+    (f : α → β)
+    (a : α) :
+    Eq.{v} β (trunc.elim.{u, v} n α β Bt f (trunc.tr.{u} n α a)) (f a) :=
+  Eq.refl.{v} β (f a)
