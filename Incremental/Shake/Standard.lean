@@ -15,7 +15,7 @@ variable
   {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
-  (tasks : Tasks Monad ℭ)
+  (tasks : MTasks ℭ)
 
 section main
 variable [BEq ℭ.Q] [Hashable ℭ.Q]
@@ -73,7 +73,7 @@ public def Shake
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks Monad ℭ)
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : MTasks ℭ)
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
     (bracket : ∀ {α}, ℭ.Q → m α → m α := fun _ x => x)
     (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),

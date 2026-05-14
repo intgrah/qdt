@@ -81,16 +81,20 @@ def runId (cfg : Config) (b : Build Monad config Input tasks Id Id) : IO UInt32 
     watchLoop cfg.root inputs store cfg.files[0]!
     return 0
   else
+    let t₀ ← IO.monoMsNow
     let mut allMsgs : Array String := #[]
     let mut store := store
     for file in cfg.files do
       let (msgs, store') := runOnce inputs store file
       allMsgs := allMsgs ++ msgs
       store := store'
+    let t₁ ← IO.monoMsNow
     for msg in allMsgs do println! msg
     if allMsgs.isEmpty then
+      println! "OK ({t₁ - t₀}ms)"
       return 0
     else
+      println! "{allMsgs.size} error(s) ({t₁ - t₀}ms)"
       return 1
 
 end Qdt.Cli.Runner

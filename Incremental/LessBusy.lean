@@ -1,6 +1,6 @@
 module
 
-public import Incremental.FreeTheorem
+public import Incremental.Parametric
 
 namespace Incremental
 
@@ -11,7 +11,7 @@ namespace LessBusy
 variable
   {ℭ : BuildConfig}
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
-  (tasks : Tasks Monad ℭ) (ι₀ : ∀ i, ℭ.V i)
+  (tasks : MTasks ℭ) (ι₀ : ∀ i, ℭ.V i)
 
 abbrev VCache := DHashMap ℭ.Q (Value Id.instMonad tasks ι₀)
 
@@ -24,12 +24,12 @@ def run (q₀ : ℭ.Q)
     (fetch : ∀ q, ℭ.rel q q₀ →
       StateM (VCache tasks ι₀) (Value Id.instMonad tasks ι₀ q)) :
     StateM (VCache tasks ι₀) (Value Id.instMonad tasks ι₀ q₀) := do
-  let ⟨r, hr⟩ ← MonadAttach.attach (tasks q₀ (StateM (VCache tasks ι₀))
+  let ⟨r, hr⟩ ← MonadAttach.attach ((tasks q₀).fn (StateM (VCache tasks ι₀))
     (fun i => StateT.pure (ι₀ i))
     (fun q hq => Value.val <$> fetch q hq))
   have : r = computeM tasks ι₀ q₀ := by
     have ⟨s, s', heq⟩ := hr
-    have hft := Tasks.Monad.freeTheorem tasks q₀ (action tasks ι₀)
+    have hft := MTasks.freeTheorem tasks q₀ (action tasks ι₀)
       ι₀
       (fun i => StateT.pure (ι₀ i))
       (fun q hq => Value.val <$> fetch q hq)
@@ -53,7 +53,7 @@ variable
   (J : Type) [Input ℭ J]
   [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
 
-public def LessBusy (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id Id where
+public def LessBusy (tasks : MTasks ℭ) : Build Monad ℭ J tasks Id Id where
   cId := Id.instMonad
   σ := J
   init := id

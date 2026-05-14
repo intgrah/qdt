@@ -1,7 +1,7 @@
 module
 
 public import Incremental.Basic
-public import Incremental.FreeTheorem
+public import Incremental.Parametric
 public import Incremental.FreeMonad
 public import Incremental.IdealHash
 public import Incremental.Shake.Store
@@ -19,7 +19,7 @@ variable
   {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
-  (tasks : Tasks Monad ℭ)
+  (tasks : MTasks ℭ)
 
 structure InputDep (I H : Type) where
   key : I
@@ -305,10 +305,10 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         mv.fst.value = mv.snd.val } := fun store => do
   let input' := runInput' hI hR tasks m ι₀ q₀
   let fetch' := runFetch' hI hR tasks m ι₀ q₀ bracket fetch
-  let mTree := tasks q₀ (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
+  let mTree := (tasks q₀).fn (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
   let initState : RunState hI hR tasks ι₀ q₀ := ⟨store, #[], #[]⟩
   let hRel :=
-    Task.Monad.freeTheorem (tasks q₀) (traceAction hI hR tasks ι₀ q₀)
+    (tasks q₀).param (traceAction hI hR tasks ι₀ q₀)
       input' FM.pureInput fetch' FM.pureFetch
       (runInput'_rel hI hR tasks m ι₀ q₀)
       (runFetch'_rel hI hR tasks m ι₀ q₀ bracket bracket_canReturn fetch)

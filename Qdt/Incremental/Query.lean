@@ -4,6 +4,7 @@ public import Qdt.Error
 public import Qdt.Semantics
 public import Qdt.Theory.Global
 public import Incremental.Basic
+public import Incremental.Parametric
 
 @[expose] public section
 
@@ -34,6 +35,7 @@ inductive Key : Type
   | declarationIndex (filePath : FilePath)
   | declScope (filepath : FilePath) (name : Name) (currentDecl : Name)
   | declAst (filepath : FilePath) (name : Name)
+  | elabOwner (filepath : FilePath) (owner : Name)
   | elabDecl (filepath : FilePath) (name : Name)
   | lookup (filepath : FilePath) (name : Name)
   | lookupInfo (filepath : FilePath) (name : Name)
@@ -54,6 +56,7 @@ def Key.tag : Key → String
   | .declarationIndex _ => "declarationIndex"
   | .declScope _ _ _ => "declScope"
   | .declAst _ _ => "declAst"
+  | .elabOwner _ _ => "elabOwner"
   | .elabDecl _ _ => "elabDecl"
   | .lookup _ _ => "lookup"
   | .lookupInfo _ _ => "lookupInfo"
@@ -73,6 +76,7 @@ def Key.display : Key → String
   | .declarationIndex p => s!"declarationIndex:{p}"
   | .declScope p n cd => s!"declScope:{p}:{n}<{cd}"
   | .declAst p n => s!"declAst:{p}:{n}"
+  | .elabOwner p n => s!"elabOwner:{p}:{n}"
   | .elabDecl p n => s!"elabDecl:{p}:{n}"
   | .lookup p n => s!"lookup:{p}:{n}"
   | .lookupInfo p n => s!"lookupInfo:{p}:{n}"
@@ -96,6 +100,7 @@ abbrev Val : Key → Type
   | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
   | .declScope _ _ _ => Bool
   | .declAst _ _ => Option Ast
+  | .elabOwner _ _ => Global × ElabInfo
   | .elabDecl _ _ => Option Constant × ElabInfo
   | .lookup _ _ => Option Constant
   | .lookupInfo _ _ => ElabInfo
@@ -135,6 +140,7 @@ def Key.rank : Key → Nat
   | .transitiveImports _ => 5
   | .declAst _ _ => 5
   | .declScope _ _ _ => 6
+  | .elabOwner _ _ => 6
   | .elabDecl _ _ => 7
   | .lookup _ _ => 8
   | .lookupInfo _ _ => 8

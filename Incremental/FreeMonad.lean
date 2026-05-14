@@ -2,6 +2,7 @@ module
 
 public import Incremental.Basic
 public import Incremental.FreeTheorem
+public import Incremental.Parametric
 
 @[expose] public section
 
@@ -146,32 +147,34 @@ end FM
 
 variable (ℭ : BuildConfig)
 
-def tasksTree (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
-  tasks q₀ (FM ℭ q₀) FM.pureInput FM.pureFetch
+def tasksTree (tasks : MTasks ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
+  (tasks q₀).fn (FM ℭ q₀) FM.pureInput FM.pureFetch
 
-theorem tasksTree_eval (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
+theorem tasksTree_eval (tasks : MTasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     FM.evalTree ι rec (tasksTree ℭ tasks q₀) =
-      tasks q₀ Id ι (fun q _ => rec q) :=
-  Task.Monad.freeTheorem (tasks q₀) (FM.evalAction ι rec)
+      (tasks q₀).fn Id ι (fun q _ => rec q) :=
+  (tasks q₀).param (FM.evalAction ι rec)
     FM.pureInput ι FM.pureFetch (fun q _ => rec q)
     (fun _ => rfl) (fun _ _ => rfl)
 
-theorem tasksTree_eval_compute (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
+theorem tasksTree_eval_compute (tasks : MTasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) :
-    FM.evalTree ι (computeM tasks ι) (tasksTree ℭ tasks q₀) =
-      computeM tasks ι q₀ := by
+    FM.evalTree ι (tasks.computeM ι) (tasksTree ℭ tasks q₀) =
+      tasks.computeM ι q₀ := by
   rw [tasksTree_eval]
+  show _ = Incremental.compute Id.instMonad tasks.fn ι q₀
   conv => rhs; unfold compute
+  rfl
 
-theorem compute_cross (tasks : Tasks Monad ℭ) (q₀ : ℭ.Q)
+theorem compute_cross (tasks : MTasks ℭ) (q₀ : ℭ.Q)
     (ι ι' : ∀ i, ℭ.V i)
-    (hin : ∀ p ∈ FM.evalTrace_inputs ι (computeM tasks ι)
+    (hin : ∀ p ∈ FM.evalTrace_inputs ι (tasks.computeM ι)
         (tasksTree ℭ tasks q₀), ι' p.i = p.v)
-    (hdep : ∀ p ∈ FM.evalTrace_deps ι (computeM tasks ι)
+    (hdep : ∀ p ∈ FM.evalTrace_deps ι (tasks.computeM ι)
         (tasksTree ℭ tasks q₀),
-      computeM tasks ι' p.q = p.r) :
-    computeM tasks ι q₀ = computeM tasks ι' q₀ := by
+      tasks.computeM ι' p.q = p.r) :
+    tasks.computeM ι q₀ = tasks.computeM ι' q₀ := by
   rw [← tasksTree_eval_compute ℭ tasks q₀ ι,
       FM.evalTree_cross ι ι' _ _ _ hin hdep,
       tasksTree_eval_compute ℭ tasks q₀ ι']

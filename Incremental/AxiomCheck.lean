@@ -13,14 +13,14 @@ info:
 
 /--
 info:
-'Incremental.LessBusy' depends on axioms: [propext, Quot.sound, Incremental.Task.Monad.freeTheorem]
+'Incremental.LessBusy' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in
 #print axioms Incremental.LessBusy
 
 /--
 info:
-'Incremental.Shake' depends on axioms: [propext, Quot.sound, Incremental.Task.Monad.freeTheorem]
+'Incremental.Shake' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in
 #print axioms Incremental.Shake

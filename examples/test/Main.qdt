@@ -1,0 +1,15 @@
+inductive Eq.{u} (α : Type u) (a : α) : α → Type u where
+  | refl : Eq α a a
+
+inductive Nat where
+  | zero
+  | succ (n : Nat)
+
+def Nat.add (m : Nat) : Nat -> Nat :=
+  Nat.rec.{0} (fun _ => Nat) m (fun _ => Nat.succ)
+
+def foo : Nat := fo
+
+-- def bar : Type 1 := Type
+
+def baz : foo + foo = 200 := Eq.refl.{0} Nat 200
