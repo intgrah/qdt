@@ -1,3 +1,5 @@
+import Std.Eq
+import Std.Init
 import Std.Relation
 
 inductive W.{u, v} (α : Type u) (β : α → Type v) : Type (max u v) where
@@ -131,7 +133,7 @@ def WellFounded.empty.{u} (α : Type u) : WellFounded.{u, 0} α (Relation.empty.
   WellFounded.intro.{u, 0} α (Relation.empty.{u} α)
     (fun x =>
       Acc.intro.{u, 0} α (Relation.empty.{u} α) x
-        (fun y => False.elim.{max u 0} (Acc.{u, 0} α (Relation.empty.{u} α) y)))
+        (fun y => Empty.elim.{max u 0, 0} (Acc.{u, 0} α (Relation.empty.{u} α) y)))
 
 def Subrelation.accessible.{u, v}
     (α : Type u)

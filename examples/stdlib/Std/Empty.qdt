@@ -2,3 +2,8 @@ inductive Empty.{u} : Type u where
 
 def Empty.elim.{v, u} (α : Type v) : Empty.{u} → α :=
   Empty.rec.{v, u} (fun _ => α)
+
+def Not.{u} (α : Type u) := α → Empty.{u}
+
+def absurd.{u, v} (α : Type u) (β : Type v) (ha : α) (hna : Not.{u} α) : β :=
+  Empty.elim.{v, u} β (hna ha)

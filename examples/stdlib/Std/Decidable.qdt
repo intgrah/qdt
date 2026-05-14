@@ -1,6 +1,6 @@
+import Std.Empty
 import Std.Eq
-import Std.False
 
 inductive Decidable.{u} (α : Type u) : Type u where
   | isTrue (h : α)
-  | isFalse (h : α → False)
+  | isFalse (h : Not.{u} α)

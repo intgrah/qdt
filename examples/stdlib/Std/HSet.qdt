@@ -1,5 +1,5 @@
 import Std.Eq
-import Std.False
+import Std.Empty
 import Std.Decidable
 
 def isProp.{u} (α : Type u) := (x y : α) → x = y
@@ -16,7 +16,7 @@ def hedberg_f.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x
     (x y : α) (p : Eq.{u} α x y) : Eq.{u} α x y :=
   Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y)
     (fun h => h)
-    (fun nh => False.elim.{u} (Eq.{u} α x y) (nh p))
+    (fun nh => Empty.elim.{u, u} (Eq.{u} α x y) (nh p))
     (dec x y)
 
 def hedberg_f_const.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u} α x y))
@@ -24,12 +24,12 @@ def hedberg_f_const.{u} (α : Type u) (dec : (x y : α) → Decidable.{u} (Eq.{u
     hedberg_f.{u} α dec x y p = hedberg_f.{u} α dec x y q :=
   Decidable.rec.{u, u} (Eq.{u} α x y)
     (fun d =>
-      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => False.elim.{u} (Eq.{u} α x y) (nh p)) d
+      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => Empty.elim.{u, u} (Eq.{u} α x y) (nh p)) d
       =
-      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => False.elim.{u} (Eq.{u} α x y) (nh q)) d)
+      Decidable.rec.{u, u} (Eq.{u} α x y) (fun _ => Eq.{u} α x y) (fun h => h) (fun nh => Empty.elim.{u, u} (Eq.{u} α x y) (nh q)) d)
     (fun h => Eq.refl.{u} (Eq.{u} α x y) h)
-    (fun nh => False.elim.{u}
-      (False.elim.{u} (Eq.{u} α x y) (nh p) = False.elim.{u} (Eq.{u} α x y) (nh q))
+    (fun nh => Empty.elim.{u, u}
+      (Empty.elim.{u, u} (Eq.{u} α x y) (nh p) = Empty.elim.{u, u} (Eq.{u} α x y) (nh q))
       (nh p))
     (dec x y)
 

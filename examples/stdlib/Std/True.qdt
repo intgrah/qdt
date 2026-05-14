@@ -1,2 +1,0 @@
-inductive True where
-  | intro

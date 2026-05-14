@@ -1,4 +1,4 @@
-import Std.False
+import Std.Empty
 
 inductive Relation.ReflGen.{u, v} (α : Type u) (r : α → α → Type v) : α → α → Type (max u v) where
   | refl (a : α) : Relation.ReflGen α r a a
@@ -18,6 +18,6 @@ inductive Relation.EqvGen.{u, v} (α : Type u) (r : α → α → Type v) : α �
   | symm (x y : α) : Relation.EqvGen α r x y → Relation.EqvGen α r y x
   | trans (x y z : α) : Relation.EqvGen α r x y → Relation.EqvGen α r y z → Relation.EqvGen α r x z
 
-def Relation.empty.{u} (α : Type u) : α → α → Type := fun _ _ => False
+def Relation.empty.{u} (α : Type u) : α → α → Type := fun _ _ => Empty.{0}
 
 def Subrelation.{u, v} (α : Type u) (r q : α → α → Type v) := (x y : α) → q x y → r x y

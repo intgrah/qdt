@@ -1,6 +1,6 @@
 import Std.Eq
-import Std.True
-import Std.False
+import Std.Unit
+import Std.Empty
 import Std.WF
 import Std.Decidable
 import Std.HSet
@@ -78,17 +78,17 @@ def Nat.le_trans (a b c : Nat) (hab : Nat.le a b) (hbc : Nat.le b c) : Nat.le a 
     (fun m _ => Nat.le.step a m)
     c hbc
 
-def Nat.zero_ne_succ (n : Nat) : Not (Nat.zero = Nat.succ n) :=
+def Nat.zero_ne_succ (n : Nat) : Not.{0} (Nat.zero = Nat.succ n) :=
   fun h =>
     Eq.subst.{0, 0} Nat
-      (Nat.rec.{1} (fun _ => Type) True (fun _ _ => False))
-      Nat.zero (Nat.succ n) h True.intro
+      (Nat.rec.{1} (fun _ => Type) Unit.{0} (fun _ _ => Empty.{0}))
+      Nat.zero (Nat.succ n) h Unit.unit.{0}
 
-def Nat.not_succ_le_zero (n : Nat) (h : Nat.le (Nat.succ n) 0) : False :=
+def Nat.not_succ_le_zero (n : Nat) (h : Nat.le (Nat.succ n) 0) : Empty.{0} :=
   Nat.le.rec.{0} (Nat.succ n)
-    (fun m _ => Nat.rec.{1} (fun _ => Type) False (fun _ _ => True) m)
-    True.intro
-    (fun _ _ _ => True.intro)
+    (fun m _ => Nat.rec.{1} (fun _ => Type) Empty.{0} (fun _ _ => Unit.{0}) m)
+    Unit.unit.{0}
+    (fun _ _ _ => Unit.unit.{0})
     0 h
 
 def Nat.le_of_succ_le_succ (m n : Nat) (h : Nat.le (Nat.succ m) (Nat.succ n)) : Nat.le m n :=
@@ -112,7 +112,7 @@ def Nat.acc_of_le (y n : Nat) (hle : Nat.le y n) (hacc : Acc.{0, 0} Nat Nat.lt n
 def Nat.lt_acc (n : Nat) : Acc.{0, 0} Nat Nat.lt n :=
   Nat.rec.{0} (fun k => Acc.{0, 0} Nat Nat.lt k)
     (Acc.intro.{0, 0} Nat Nat.lt 0
-      (fun y hy => False.elim.{0} (Acc.{0, 0} Nat Nat.lt y) (Nat.not_succ_le_zero y hy)))
+      (fun y hy => Empty.elim.{0, 0} (Acc.{0, 0} Nat Nat.lt y) (Nat.not_succ_le_zero y hy)))
     (fun n ih =>
       Acc.intro.{0, 0} Nat Nat.lt (Nat.succ n)
         (fun y hy => Nat.acc_of_le y n (Nat.le_of_succ_le_succ y n hy) ih))
@@ -121,7 +121,7 @@ def Nat.lt_acc (n : Nat) : Acc.{0, 0} Nat Nat.lt n :=
 def Nat.lt_wf : WellFounded.{0, 0} Nat Nat.lt :=
   WellFounded.intro.{0, 0} Nat Nat.lt Nat.lt_acc
 
-def Nat.succ_ne_zero (n : Nat) : Not (Nat.succ n = Nat.zero) :=
+def Nat.succ_ne_zero (n : Nat) : Not.{0} (Nat.succ n = Nat.zero) :=
   fun h => Nat.zero_ne_succ n (Eq.symm.{0} Nat (Nat.succ n) Nat.zero h)
 
 def Nat.decEq : (m n : Nat) → Decidable.{0} (Eq.{0} Nat m n) :=
