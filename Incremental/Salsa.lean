@@ -16,7 +16,7 @@ public structure Salsa.Memo (q : ℭ.Q) where
   value : ℭ.R q
   changedAt : Nat
   verifiedAt : Nat
-  deps : Array ℭ.Q
+  deps : Array { q' : ℭ.Q // ℭ.rel q' q }
   inputDeps : Array ℭ.I
   hash : UInt64 := Hashable.hash value
   hash_value : Hashable.hash value = hash := by rfl
@@ -54,7 +54,7 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
             memo.inputDeps.all fun i =>
               store.inputRevisions.getD i 0 ≤ memo.verifiedAt
           if clean then
-            for dep in memo.deps do
+            for ⟨dep, hdep⟩ in memo.deps do
               let _ ← fetch dep
               match (← memos.get).get? dep with
               | some depMemo =>
@@ -67,16 +67,16 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
           if clean then
             memos.modify (·.insert q { memo with verifiedAt := store.revision })
             return memo.value
-        let depsRef ← ST.mkRef (σ := σ) (#[] : Array ℭ.Q)
+        let depsRef ← ST.mkRef (σ := σ) (#[] : Array { q' : ℭ.Q // ℭ.rel q' q })
         let inputDepsRef ← ST.mkRef (σ := σ) (#[] : Array ℭ.I)
         let input' (i : ℭ.I) : ST σ (ℭ.V i) := do
           inputDepsRef.modify (·.push i)
           return ι₀ i
-        let fetch' (q : ℭ.Q) : ST σ (ℭ.R q) := do
-          let v ← fetch q
-          depsRef.modify (·.push q)
+        let fetch' (q' : ℭ.Q) (hq : ℭ.rel q' q) : ST σ (ℭ.R q') := do
+          let v ← fetch q'
+          depsRef.modify (·.push ⟨q', hq⟩)
           return v
-        let value ← tasks q (ST σ) input' (fun q' _hq => fetch' q')
+        let value ← tasks q (ST σ) input' fetch'
         let h := Hashable.hash value
         let changedAt := match memo? with
           | some memo => if h == memo.hash then memo.changedAt else store.revision
@@ -92,7 +92,6 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
         memos.modify (·.insert q newMemo)
         return value
       termination_by ℭ.wf.wrap q
-      decreasing_by all_goals sorry
       return (⟨← fetch q, sorry⟩, { store with memos := ← memos.get })
 
 end Incremental
