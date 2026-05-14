@@ -11,7 +11,7 @@ open Incremental
 
 def runBuild (cfg : Config) : IO UInt32 :=
   match cfg.buildSystem with
-  | .busy => Runner.runId cfg (Busy config Input (inferInstance : Monad Id) tasks)
+  | .busy => Runner.runId cfg (Busy config Input tasks)
   | .lessBusy => Runner.runId cfg (LessBusy config Input tasks)
   | .salsa => Runner.runId cfg (Salsa config Input tasks)
   | .salsaC => Runner.runId cfg (SalsaC config Input tasks)

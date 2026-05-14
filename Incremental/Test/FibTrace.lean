@@ -6,7 +6,7 @@ namespace Incremental.Test.FibTrace
 
 open Incremental Incremental.Test.Fibonacci
 
-def build : Build Monad config Unit tasks (Trace.TraceT Nat BaseIO) Id :=
+def build : Build config Unit tasks (Trace.TraceT Nat BaseIO) Id :=
   ShakeTrace config Unit nofun (fun _ => Hashable.toEmbedding) tasks
 
 def runOnce (q : Nat) : StateT build.σ BaseIO (Nat × Trace.Forest Nat) := fun s => do

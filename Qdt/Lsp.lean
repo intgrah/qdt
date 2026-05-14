@@ -32,7 +32,7 @@ where
     else bp
 
 def elaborateFile
-    {tasks : Tasks Monad config} (b : Build Monad config (DHashMap InputKey InputVal) tasks Id Id)
+    {tasks : Tasks config} (b : Build config (DHashMap InputKey InputVal) tasks Id Id)
     (filepath : FilePath) : StateM b.σ (ElabInfo × SourceMap) := do
   let (_, sourceMap, astDiags) ← b.run (Key.astSourceMap filepath)
   let (declIndex, dupDiags) ← b.run (Key.declarationIndex filepath)

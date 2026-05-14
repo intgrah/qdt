@@ -17,7 +17,7 @@ variable
   {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
-  (tasks : MTasks ℭ)
+  (tasks : Tasks ℭ)
 
 section main
 variable [BEq ℭ.Q] [Hashable ℭ.Q]
@@ -29,13 +29,13 @@ variable [BEq ℭ.Q] [Hashable ℭ.Q]
 def fetchCancel
     (persist : ∀ q', Memo hI hR tasks q' → m PUnit)
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
+    StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
   monadLift (MonadCancel.checkpoint : m PUnit)
   let (vcache, cache) ← get
   if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
   let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
+        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
     let v ← fetchCancel persist ι₀ q'
     let (vc, _) ← get
     match vc.get? q' with
@@ -43,7 +43,7 @@ def fetchCancel
         rw [e.property]
         exact congrArg (hR q') (e.val.fst.spec.trans v.spec.symm)⟩
     | none => pure ⟨(v, hR q' v.val), rfl⟩
-  let doRun : StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
+  let doRun : StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
     let ⟨(memo, value), _⟩ ←
       run hI hR tasks ι₀ q₀ (bracket := fun _ x => x) (fun _ _ _ h => h) fetchWithHash
     modify fun (vc, c) =>
@@ -55,7 +55,7 @@ def fetchCancel
     if hvin : verifyInputs hI ι₀ mm.inputDeps then do
       match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetchCancel persist ι₀ q') mm.deps with
       | some ⟨hdep⟩ =>
-        let value : Value Id.instMonad tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
+        let value : Value tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
           ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩
         modify fun (vc, c) =>
           (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c)
@@ -87,11 +87,11 @@ public def ShakeCancel
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : MTasks ℭ)
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks ℭ)
     (cancelRef : IO.Ref Bool)
     (onPersist : ℭ.Q → BaseIO Unit := fun _ => pure ()) :
-    Build Monad ℭ J tasks BaseIO (Except Cancelled) where
-  cId := Id.instMonad
+    Build ℭ J tasks BaseIO (Except Cancelled) where
+
   σ := J × Shake.Cache hI hR tasks
   init j := (j, DHashMap.emptyWithCapacity 1024)
   inputs s := Input.get s.fst

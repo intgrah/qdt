@@ -27,87 +27,125 @@ structure BuildConfig : Type 1 where
   rel : Q → Q → Prop
   wf : WellFounded rel
 
-variable
-  (c : (Type → Type) → Type 1)
-  (ℭ : BuildConfig)
-  (q₀ : ℭ.Q)
+structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] where
+  rel {α β : Type} :
+    (α → β → Prop) →
+    (κ₁ α → κ₂ β → Prop)
+  rel_pure {α β : Type} {R : α → β → Prop} {a : α} {b : β} :
+    R a b → rel R (pure a) (pure b)
+  rel_bind {α₁ α₂ β₁ β₂ : Type}
+    {R : α₁ → α₂ → Prop} {S : β₁ → β₂ → Prop}
+    {ma : κ₁ α₁} {mb : κ₂ α₂}
+    {ka : α₁ → κ₁ β₁} {kb : α₂ → κ₂ β₂} :
+    rel R ma mb →
+    (∀ a b, R a b → rel S (ka a) (kb b)) →
+    rel S (ma >>= ka) (mb >>= kb)
 
-set_option checkBinderAnnotations false in
-def Task (α : Type) : Type 1 :=
-  ∀ (f : Type → Type) [c f], (∀ i, f (ℭ.V i)) → (∀ q, ℭ.rel q q₀ → f (ℭ.R q)) → f α
+structure Task (ℭ : BuildConfig) (q₀ : ℭ.Q) (α : Type) : Type 1 where
+  fn : ∀ (f : Type → Type) [Monad f],
+    (∀ i, f (ℭ.V i)) → (∀ q, ℭ.rel q q₀ → f (ℭ.R q)) → f α
+  param {κ₁ κ₂ : Type → Type} [Monad κ₁] [Monad κ₂]
+    (A : MonadAction κ₁ κ₂)
+    {ι₁ : ∀ i, κ₁ (ℭ.V i)} {ι₂ : ∀ i, κ₂ (ℭ.V i)}
+    (f₁ : ∀ q, ℭ.rel q q₀ → κ₁ (ℭ.R q))
+    (f₂ : ∀ q, ℭ.rel q q₀ → κ₂ (ℭ.R q)) :
+    (∀ i, A.rel Eq (ι₁ i) (ι₂ i)) →
+    (∀ q hq, A.rel Eq (f₁ q hq) (f₂ q hq)) →
+    A.rel Eq (fn κ₁ ι₁ f₁) (fn κ₂ ι₂ f₂)
 
 namespace Task
 
-variable
-  {c : (Type → Type) → Type 1}
-  {ℭ : BuildConfig}
-  {q₀ : ℭ.Q}
+variable {ℭ : BuildConfig} {q₀ : ℭ.Q}
 
-def input (i : ℭ.I) :
-    Task c ℭ q₀ (ℭ.V i) :=
-  fun _ [_] input _ => input i
+@[inline] def pure {α : Type} (a : α) : Task ℭ q₀ α where
+  fn _ [_] _ _ := Pure.pure a
+  param A _ _ _ _ _ _ := A.rel_pure rfl
 
-def fetch (q : ℭ.Q) (h : ℭ.rel q q₀) :
-    Task c ℭ q₀ (ℭ.R q) :=
-  fun _ [_] _ fetch => fetch q h
+@[inline] def bind {α β : Type} (m : Task ℭ q₀ α) (k : α → Task ℭ q₀ β) :
+    Task ℭ q₀ β where
+  fn := fun g [_] inp fe => m.fn g inp fe >>= fun a => (k a).fn g inp fe
+  param A _ _ f₁ f₂ hι hfe :=
+    A.rel_bind (m.param A f₁ f₂ hι hfe)
+      (fun a _b hab => hab ▸ (k a).param A f₁ f₂ hι hfe)
 
-instance : Monad (Task Monad ℭ q₀) where
-  pure a := fun _ [_] _ _ => pure a
-  bind t f := fun g [_] input fetch => t g input fetch >>= fun a => f a g input fetch
-  map f t := fun g [_] input fetch => f <$> t g input fetch
+instance : Monad (Task ℭ q₀) where
+  pure := pure
+  bind := bind
+
+@[inline] def input (i : ℭ.I) : Task ℭ q₀ (ℭ.V i) where
+  fn := fun _ [_] inp _ => inp i
+  param _ _ _ _ _ hι _ := hι i
+
+@[inline] def fetch (q : ℭ.Q) (h : ℭ.rel q q₀) : Task ℭ q₀ (ℭ.R q) where
+  fn := fun _ [_] _ fe => fe q h
+  param _ _ _ _ _ _ hfe := hfe q h
+
+instance instCoeFun {ℭ : BuildConfig} {q₀ : ℭ.Q} {α : Type} :
+    CoeFun (Task ℭ q₀ α)
+      (fun _ => ∀ (f : Type → Type) [Monad f],
+        (∀ i, f (ℭ.V i)) → (∀ q, ℭ.rel q q₀ → f (ℭ.R q)) → f α) :=
+  ⟨Task.fn⟩
 
 end Task
 
 export Task (input fetch)
 
-class Input (J : Type) where
+class Input (ℭ : BuildConfig) (J : Type) where
   get : J → ∀ i, ℭ.V i
   set : J → ∀ i, ℭ.V i → J
   get_set_self : ∀ j i v, get (set j i v) i = v
   get_set_other : ∀ j i v i', i' ≠ i → get (set j i v) i' = get j i'
 
-instance [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
+instance {ℭ : BuildConfig} [DecidableEq ℭ.I] : Input ℭ (∀ i, ℭ.V i) where
   get := id
   set := Function.update
   get_set_self _ _ _ := Function.update_self ..
   get_set_other _ _ _ _ h := Function.update_of_ne h ..
 
-def Tasks : Type 1 :=
-  ∀ q₀, Task c ℭ q₀ (ℭ.R q₀)
+def Tasks (ℭ : BuildConfig) : Type 1 :=
+  ∀ q₀, Task ℭ q₀ (ℭ.R q₀)
 
-def compute {ℭ : BuildConfig} {c : (Type → Type) → Type 1}
-    (cId : c Id) (tasks : Tasks c ℭ)
+def compute {ℭ : BuildConfig} (tasks : Tasks ℭ)
     (ι : ∀ i, ℭ.V i) (q : ℭ.Q) : ℭ.R q :=
-  @tasks q Id cId ι (fun q' _ => compute cId tasks ι q')
+  (tasks q).fn Id ι (fun q' _ => compute tasks ι q')
 termination_by ℭ.wf.wrap q
 
-abbrev computeM {ℭ : BuildConfig} (tasks : Tasks Monad ℭ) :
-    (∀ i, ℭ.V i) → ∀ q : ℭ.Q, ℭ.R q :=
-  compute Id.instMonad tasks
-
-/-- Contractible type -/
-structure Value {ℭ : BuildConfig} {c : (Type → Type) → Type 1} (cId : c Id)
-    (tasks : Tasks c ℭ) (ι : ∀ i, ℭ.V i) (q : ℭ.Q) where
+structure Value {ℭ : BuildConfig}
+    (tasks : Tasks ℭ) (ι : ∀ i, ℭ.V i) (q : ℭ.Q) where
   val : ℭ.R q
-  spec : val = compute cId tasks ι q
+  spec : val = compute tasks ι q
 
-structure Build (c : (Type → Type) → Type 1)
-    (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks c ℭ)
+structure Build (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks ℭ)
     (n : Type → Type) (m : Type → Type) : Type 1 where
-  cId : c Id
   σ : Type
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
   set : ∀ i, ℭ.V i → StateM σ Unit
-  build : ∀ q store, n (m (Value cId tasks (inputs store) q) × σ)
+  build : ∀ q store, n (m (Value tasks (inputs store) q) × σ)
 
 def Build.run
-    {c : (Type → Type) → Type 1}
     {ℭ : BuildConfig}
     {J : Type} [Input ℭ J]
-    {tasks : Tasks c ℭ}
+    {tasks : Tasks ℭ}
     {n m : Type → Type} [Functor n] [Functor m]
-    (b : Build c ℭ J tasks n m) (q : ℭ.Q) : StateT b.σ n (m (ℭ.R q)) :=
+    (b : Build ℭ J tasks n m) (q : ℭ.Q) : StateT b.σ n (m (ℭ.R q)) :=
   fun store => Prod.map (Value.val <$> ·) id <$> b.build q store
+
+theorem Tasks.freeTheorem {ℭ : BuildConfig}
+    {κ : Type → Type} [Monad κ]
+    (tasks : Tasks ℭ) (q₀ : ℭ.Q)
+    (F : MonadAction κ Id)
+    (ι₀ : ∀ i, ℭ.V i)
+    (ι₁ : ∀ i, κ (ℭ.V i))
+    (fetch₁ : ∀ q, ℭ.rel q q₀ → κ (ℭ.R q))
+    (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
+    (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute tasks ι₀ q)) :
+    F.rel Eq ((tasks q₀).fn κ ι₁ fetch₁) (compute tasks ι₀ q₀) := by
+  have h := (tasks q₀).param F fetch₁
+    (fun q _ => compute tasks ι₀ q) hι hfetch
+  have heval : (tasks q₀).fn Id ι₀ (fun q _ => compute tasks ι₀ q) =
+      compute tasks ι₀ q₀ := by
+    conv => rhs; unfold compute
+  simpa only [heval] using h
 
 end Incremental

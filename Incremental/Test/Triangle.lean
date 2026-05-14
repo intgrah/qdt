@@ -18,7 +18,7 @@ instance : Incremental.Input config Unit where
 
 instance : Hashable Empty := ⟨nofun⟩
 
-def tasks : Incremental.Tasks Monad config
+def tasks : Incremental.Tasks config
   | 0 => pure 0
   | n + 1 => do
     let prev ← Incremental.fetch n (by omega)

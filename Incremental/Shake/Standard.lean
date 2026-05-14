@@ -15,7 +15,7 @@ variable
   {H : Type}
   (hI : ∀ i, ℭ.V i ↪ H)
   (hR : ∀ q, ℭ.R q ↪ H)
-  (tasks : MTasks ℭ)
+  (tasks : Tasks ℭ)
 
 section main
 variable [BEq ℭ.Q] [Hashable ℭ.Q]
@@ -29,12 +29,12 @@ def fetch
     (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
       MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a)
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
-    StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
+    StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
   let (vcache, cache) ← get
   if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
   let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
       StateT (Store hI hR tasks ι₀) m
-        { vh : Value Id.instMonad tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
+        { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val } := do
     let v ← fetch bracket bracket_canReturn ι₀ q'
     let (vc, _) ← get
     match vc.get? q' with
@@ -42,7 +42,7 @@ def fetch
         rw [e.property]
         exact congrArg (hR q') (e.val.fst.spec.trans v.spec.symm)⟩
     | none => pure ⟨(v, hR q' v.val), rfl⟩
-  let doRun : StateT (Store hI hR tasks ι₀) m (Value Id.instMonad tasks ι₀ q₀) := do
+  let doRun : StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
     let ⟨(memo, value), _⟩ ← run hI hR tasks ι₀ q₀ bracket bracket_canReturn fetchWithHash
     modify fun (vc, c) =>
       (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo)
@@ -53,7 +53,7 @@ def fetch
       match ← verifyDeps hI hR tasks ι₀
           (fun q' _hq => fetch bracket bracket_canReturn ι₀ q') mm.deps with
       | some ⟨hdep⟩ =>
-        let value : Value Id.instMonad tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
+        let value : Value tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
           ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩
         modify fun (vc, c) =>
           (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c)
@@ -73,14 +73,14 @@ public def Shake
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : MTasks ℭ)
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks ℭ)
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
     (bracket : ∀ {α}, ℭ.Q → m α → m α := fun _ x => x)
     (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
       MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a :=
       by intros; assumption) :
-    Build Monad ℭ J tasks m Id where
-  cId := Id.instMonad
+    Build ℭ J tasks m Id where
+
   σ := J × Shake.Cache hI hR tasks
   init j := (j, DHashMap.emptyWithCapacity 1024)
   inputs s := Input.get s.fst

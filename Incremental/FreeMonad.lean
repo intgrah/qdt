@@ -1,7 +1,7 @@
 module
 
 public import Incremental.Basic
-public import Incremental.Parametric
+
 
 @[expose] public section
 
@@ -118,7 +118,7 @@ theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
     exact ih (rec q) hin (fun p hp => hdep p (.tail _ hp))
 
 def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
-    Task.Monad.Action (FM ℭ q₀) Id where
+    MonadAction (FM ℭ q₀) Id where
   rel R t a := R (evalTree ι rec t) a
   rel_pure {α β R a b} hab := show R (evalTree ι rec (.pure a)) b from hab
   rel_bind {α₁ α₂ β₁ β₂ R S ma mb ka kb} hma hk := by
@@ -130,10 +130,10 @@ end FM
 
 variable (ℭ : BuildConfig)
 
-def tasksTree (tasks : MTasks ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
+def tasksTree (tasks : Tasks ℭ) (q₀ : ℭ.Q) : FM ℭ q₀ (ℭ.R q₀) :=
   (tasks q₀).fn (FM ℭ q₀) FM.pureInput FM.pureFetch
 
-theorem tasksTree_eval (tasks : MTasks ℭ) (q₀ : ℭ.Q)
+theorem tasksTree_eval (tasks : Tasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     FM.evalTree ι rec (tasksTree ℭ tasks q₀) =
       (tasks q₀).fn Id ι (fun q _ => rec q) :=
@@ -141,23 +141,21 @@ theorem tasksTree_eval (tasks : MTasks ℭ) (q₀ : ℭ.Q)
     FM.pureFetch (fun q _ => rec q)
     (fun _ => rfl) (fun _ _ => rfl)
 
-theorem tasksTree_eval_compute (tasks : MTasks ℭ) (q₀ : ℭ.Q)
+theorem tasksTree_eval_compute (tasks : Tasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) :
-    FM.evalTree ι (tasks.computeM ι) (tasksTree ℭ tasks q₀) =
-      tasks.computeM ι q₀ := by
+    FM.evalTree ι (compute tasks ι) (tasksTree ℭ tasks q₀) =
+      compute tasks ι q₀ := by
   rw [tasksTree_eval]
-  show _ = Incremental.compute Id.instMonad tasks.fn ι q₀
   conv => rhs; unfold compute
-  rfl
 
-theorem compute_cross (tasks : MTasks ℭ) (q₀ : ℭ.Q)
+theorem compute_cross (tasks : Tasks ℭ) (q₀ : ℭ.Q)
     (ι ι' : ∀ i, ℭ.V i)
-    (hin : ∀ p ∈ FM.evalTrace_inputs ι (tasks.computeM ι)
+    (hin : ∀ p ∈ FM.evalTrace_inputs ι (compute tasks ι)
         (tasksTree ℭ tasks q₀), ι' p.i = p.v)
-    (hdep : ∀ p ∈ FM.evalTrace_deps ι (tasks.computeM ι)
+    (hdep : ∀ p ∈ FM.evalTrace_deps ι (compute tasks ι)
         (tasksTree ℭ tasks q₀),
-      tasks.computeM ι' p.q = p.r) :
-    tasks.computeM ι q₀ = tasks.computeM ι' q₀ := by
+      compute tasks ι' p.q = p.r) :
+    compute tasks ι q₀ = compute tasks ι' q₀ := by
   rw [← tasksTree_eval_compute ℭ tasks q₀ ι,
       FM.evalTree_cross ι ι' _ _ _ hin hdep,
       tasksTree_eval_compute ℭ tasks q₀ ι']

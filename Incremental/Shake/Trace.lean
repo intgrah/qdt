@@ -49,10 +49,10 @@ public def ShakeTrace
     [BEq ℭ.I] [LawfulBEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
-    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : MTasks ℭ)
+    (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks ℭ)
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
     [MonadLiftT BaseIO m] :
-    Build Monad ℭ J tasks (Trace.TraceT ℭ.Q m) Id :=
+    Build ℭ J tasks (Trace.TraceT ℭ.Q m) Id :=
   Shake ℭ J hI hR tasks (m := Trace.TraceT ℭ.Q m)
     Trace.bracket Trace.bracket_canReturn
 

@@ -36,7 +36,7 @@ structure ElabState where
 deriving Inhabited
 
 abbrev ElabM :=
-  MTask config q₀
+  Task config q₀
   |> StateT ElabState
   |> ReaderT ElabContext
 
@@ -83,13 +83,13 @@ def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
     return result
   let currentDeclName := (← read).currentDecl
   let inScope ←
-    MTask.fetch (ℭ := config) (q₀ := q₀)
+    Task.fetch (ℭ := config) (q₀ := q₀)
       (Key.declScope ctx.filepath name currentDeclName) sorry
   if !inScope then
     modify fun st => { st with entryCache := st.entryCache.insert name none }
     return none
   let result : Val (Key.constant ctx.filepath name) ←
-    MTask.fetch (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry
+    Task.fetch (ℭ := config) (q₀ := q₀) (Key.constant ctx.filepath name) sorry
   modify fun st => { st with entryCache := st.entryCache.insert name result }
   return result
 
@@ -123,7 +123,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
   let ctx ← readThe ElabContext
   let currentDeclName := (← read).currentDecl
   unless name == currentDeclName do
-    let (declIndex, _) ← (MTask.fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : MTask config q₀ _)
+    let (declIndex, _) ← (Task.fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : Task config q₀ _)
     match declIndex[name]? with
     | some nameIdx =>
         match declIndex[currentDeclName]? with
@@ -134,7 +134,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
         | none => pure ()
     | none =>
         let existing : Val (Key.constant ctx.filepath name) ←
-          (MTask.fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry : MTask config q₀ _)
+          (Task.fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry : Task config q₀ _)
         if existing.isSome then
           emitDiagnostic q₀ (.alreadyDefined name)
           return false
@@ -146,7 +146,7 @@ def replaceEntry (name : Name) (constant : Constant) : ElabM q₀ Unit := do
   set { st with localEnv := st.localEnv.insert name constant }
 
 def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM q₀ α) :
-    MTask config q₀ (α × Global × ElabInfo) := do
+    Task config q₀ (α × Global × ElabInfo) := do
   let state : ElabState := {
     localEnv := ∅
     sorryId := 0

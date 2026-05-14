@@ -16,7 +16,7 @@ instance {ℭ : BuildConfig} {J : Type}
     [BEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
     [Input ℭ J] :
-    Inhabited (Tasks Monad ℭ → ∀ q, Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J) :=
+    Inhabited (Tasks ℭ → ∀ q, Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J) :=
   ⟨sorry⟩
 
 @[extern "lean_salsa_build"]
@@ -25,11 +25,11 @@ public opaque salsaCBuild
     [BEq ℭ.I] [Hashable ℭ.I]
     [BEq ℭ.Q] [Hashable ℭ.Q] [∀ q, Hashable (ℭ.R q)]
     [Input ℭ J] :
-    Tasks Monad ℭ → ∀ q,
+    Tasks ℭ → ∀ q,
     Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J
 
-@[expose] public def SalsaC (tasks : Tasks Monad ℭ) : Build Monad ℭ J tasks Id Id where
-  cId := Id.instMonad
+@[expose] public def SalsaC (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
+
   σ := Salsa.Store ℭ J
   init inputs := {
     inputs

@@ -4,7 +4,7 @@ public import Qdt.Error
 public import Qdt.Semantics
 public import Qdt.Theory.Global
 public import Incremental.Basic
-public import Incremental.Parametric
+
 
 @[expose] public section
 

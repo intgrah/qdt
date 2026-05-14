@@ -38,7 +38,7 @@ partial def DepNode.lines : FilePath → Nat → Trace.DepNode Key →
 def renderForest (root : FilePath) (f : Trace.Forest Key) : String :=
   String.intercalate "\n" (f.toList.flatMap fun n => DepNode.lines root maxDepth n "" "")
 
-def traceBuild : Build Monad config Input tasks (Trace.TraceT Key BaseIO) Id :=
+def traceBuild : Build config Input tasks (Trace.TraceT Key BaseIO) Id :=
   ShakeTrace config Input (fun _ => Hashable.toEmbedding)
     (fun _ => Hashable.toEmbedding) tasks
 

@@ -5,10 +5,10 @@ import Incremental.Shake.Trace
 import Incremental.Shake.Cancel
 
 /--
-info: 'Incremental.MTasks.freeTheorem' does not depend on any axioms
+info: 'Incremental.Tasks.freeTheorem' does not depend on any axioms
 -/
 #guard_msgs in
-#print axioms Incremental.MTasks.freeTheorem
+#print axioms Incremental.Tasks.freeTheorem
 
 /--
 info: 'Incremental.Busy' does not depend on any axioms

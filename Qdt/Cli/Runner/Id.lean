@@ -14,7 +14,7 @@ open Incremental
 open Std (DHashMap)
 open System (FilePath)
 
-variable {b : Build Monad config (DHashMap InputKey InputVal) tasks Id Id}
+variable {b : Build config (DHashMap InputKey InputVal) tasks Id Id}
 
 def checkModule (inputs : DHashMap InputKey InputVal) (filepath : FilePath) :
     StateM b.σ (Array String) := do
@@ -73,7 +73,7 @@ def watchLoop (root : FilePath) (inputs₀ : DHashMap InputKey InputVal) (store�
         else
           println! "{msgs.size} error(s) ({t₁ - t₀}ms)"
 
-def runId (cfg : Config) (b : Build Monad config Input tasks Id Id) : IO UInt32 := do
+def runId (cfg : Config) (b : Build config Input tasks Id Id) : IO UInt32 := do
   let inputs ← scanInputs cfg.root
   let store := b.init inputs
 

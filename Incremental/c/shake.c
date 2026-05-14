@@ -27,7 +27,7 @@ static lean_object *mk_empty_dhashmap(size_t cap) {
   return m;
 }
 
-/* Memo: ctor(0, 3, 8) — value, deps, inputDeps, hash
+/* Memo: ctor(0, 3, 8) value, deps, inputDeps, hash
  *   structure Shake.Memo (q : Q) where
  *     value : R q
  *     deps : HashMap Q UInt64
@@ -340,7 +340,7 @@ static lean_object *run_task(lean_object *beqI, lean_object *hashI,
       task, lean_box(0), g_monad_inst, input_closure, fetch_closure);
 
   if (lean_obj_tag(result) == 0) {
-    /* Except.error — task failed */
+    /* Except.error - task failed */
     lean_dec_ref(result);
     lean_dec(deps_ref);
     lean_dec(input_deps_ref);
