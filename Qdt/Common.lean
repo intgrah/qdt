@@ -8,6 +8,7 @@ public import Incremental.SalsaC
 public import Incremental.Shake.Standard
 public import Incremental.Shake.Store
 public import Incremental.Shake.C
+public import Incremental.Shake.Rdeps
 public import Qdt.Incremental.Query
 
 @[expose] public section

@@ -17,6 +17,7 @@ inductive BuildSystem where
   | salsaC
   | shake
   | shakeC
+  | shakeRdeps
   | shakeTrace
 deriving Repr, Inhabited
 
@@ -29,6 +30,7 @@ instance : Cli.ParseableType BuildSystem where
     | "salsa-c" => some .salsaC
     | "shake" => some .shake
     | "shake-c" => some .shakeC
+    | "shake-rdeps" => some .shakeRdeps
     | "shake-trace" => some .shakeTrace
     | _ => none
 
