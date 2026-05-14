@@ -28,7 +28,6 @@ public structure Salsa.Store (J : Type) where
   inputRevisions : HashMap ℭ.I Nat
 
 public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
-
   σ := Salsa.Store ℭ J
   init store := {
     inputs := store

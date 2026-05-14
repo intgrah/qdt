@@ -91,7 +91,6 @@ public def ShakeCancel
     (cancelRef : IO.Ref Bool)
     (onPersist : ℭ.Q → BaseIO Unit := fun _ => pure ()) :
     Build ℭ J tasks BaseIO (Except Cancelled) where
-
   σ := J × Shake.Cache hI hR tasks
   init j := (j, DHashMap.emptyWithCapacity 1024)
   inputs s := Input.get s.fst

@@ -36,7 +36,6 @@ def ShakeRdeps.invalidate
   { store with memos := toInvalidate.fold .erase store.memos }
 
 public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
-
   σ := ShakeRdeps.Store ℭ J
   init inputs := {
     inputs

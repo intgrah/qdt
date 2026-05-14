@@ -80,7 +80,6 @@ public def Shake
       MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a :=
       by intros; assumption) :
     Build ℭ J tasks m Id where
-
   σ := J × Shake.Cache hI hR tasks
   init j := (j, DHashMap.emptyWithCapacity 1024)
   inputs s := Input.get s.fst
