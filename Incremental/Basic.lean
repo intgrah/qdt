@@ -116,7 +116,7 @@ structure Value {ℭ : BuildConfig}
   spec : val = compute tasks ι q
 
 structure Build (ℭ : BuildConfig) (J : Type) [Input ℭ J] (tasks : Tasks ℭ)
-    (n : Type → Type) (m : Type → Type) : Type 1 where
+    (n m : Type → Type) : Type 1 where
   σ : Type
   init : J → σ
   inputs : σ → ∀ i, ℭ.V i
