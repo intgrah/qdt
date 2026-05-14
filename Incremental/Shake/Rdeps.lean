@@ -16,9 +16,11 @@ structure ShakeRdeps.Store (J : Type) where
   inputs : J
   memos : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
   rdeps : HashMap ℭ.Q (HashSet ℭ.Q)
+  inputRdeps : HashMap ℭ.I (HashSet ℭ.Q)
+  dirty : HashSet ℭ.Q
 
 partial def ShakeRdeps.getTransitiveDependents
-    (rdeps : HashMap ℭ.Q (HashSet ℭ.Q)) (keys : HashSet ℭ.Q) : HashSet ℭ.Q :=
+    (rdeps : HashMap ℭ.Q (HashSet ℭ.Q)) (seed : HashSet ℭ.Q) : HashSet ℭ.Q :=
   let rec go (worklist : List ℭ.Q) (visited : HashSet ℭ.Q) : HashSet ℭ.Q :=
     match worklist with
     | [] => visited
@@ -28,12 +30,13 @@ partial def ShakeRdeps.getTransitiveDependents
           let visited := visited.insert k
           let newWork := (rdeps.getD k ∅).toList.filter (!visited.contains ·)
           go (newWork ++ rest) visited
-  go keys.toList (HashSet.emptyWithCapacity keys.size)
+  go seed.toList (HashSet.emptyWithCapacity seed.size)
 
 def ShakeRdeps.invalidate
-    (store : ShakeRdeps.Store ℭ J) (changedKeys : HashSet ℭ.Q) : ShakeRdeps.Store ℭ J :=
-  let toInvalidate := getTransitiveDependents ℭ store.rdeps changedKeys
-  { store with memos := toInvalidate.fold .erase store.memos }
+    (store : ShakeRdeps.Store ℭ J) (i : ℭ.I) : ShakeRdeps.Store ℭ J :=
+  let seed := store.inputRdeps.getD i ∅
+  let trans := getTransitiveDependents ℭ store.rdeps seed
+  { store with dirty := trans.fold (·.insert ·) store.dirty }
 
 public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   σ := ShakeRdeps.Store ℭ J
@@ -41,67 +44,65 @@ public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
     inputs
     memos := DHashMap.emptyWithCapacity 1024
     rdeps := HashMap.emptyWithCapacity 1024
+    inputRdeps := HashMap.emptyWithCapacity 64
+    dirty := HashSet.emptyWithCapacity 0
   }
   inputs store := Input.get store.inputs
   set i v := modify fun store =>
-    { store with inputs := Input.set store.inputs i v }
+    ShakeRdeps.invalidate ℭ J
+      { store with inputs := Input.set store.inputs i v } i
   build q store :=
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos
       let rdeps ← ST.mkRef (σ := σ) store.rdeps
+      let inputRdeps ← ST.mkRef (σ := σ) store.inputRdeps
+      let dirty ← ST.mkRef (σ := σ) store.dirty
       let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
       let stack ← ST.mkRef (σ := σ) #[]
       let rec fetch (q : ℭ.Q) : ST σ (ℭ.R q) := do
-        if let some dependent := (← stack.get).back? then
+        if let some parent := (← stack.get).back? then
           rdeps.modify fun rd =>
-            rd.alter q (·.getD ∅ |>.insert dependent)
+            rd.alter q (·.getD ∅ |>.insert parent)
         if let some m := (← started.get).get? q then
           return m.value
+        if !(← dirty.get).contains q then
+          if let some m := (← memos.get).get? q then
+            started.modify (·.insert q m)
+            return m.value
         let stk ← stack.get
         stack.set (stk.push q)
-        let deps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 16)
+        let queryDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 16)
         let inputDeps ← ST.mkRef (σ := σ) (HashMap.emptyWithCapacity 16)
         let input' (i : ℭ.I) : ST σ (ℭ.V i) := do
           let v := ι₀ i
           if !(← inputDeps.get).contains i then
             inputDeps.modify (·.insert i (hash v))
+          inputRdeps.modify fun r =>
+            r.alter i (·.getD ∅ |>.insert q)
           return v
-        let fetch' (q : ℭ.Q) : ST σ (ℭ.R q) := do
-          let r ← fetch q
-          if !(← deps.get).contains q then
-            let h := match (← started.get).get? q with
+        let fetch' (q' : ℭ.Q) (hq : ℭ.rel q' q) : ST σ (ℭ.R q') := do
+          let r ← fetch q'
+          if !(← queryDeps.get).contains q' then
+            let h := match (← started.get).get? q' with
               | some m => m.hash
               | none => hash r
-            deps.modify (·.insert q h)
+            queryDeps.modify (·.insert q' h)
           return r
-        let verifyInputDeps (inputDeps : HashMap ℭ.I UInt64) : Bool :=
-          inputDeps.all fun i oldHash => hash (ι₀ i) == oldHash
-        let verifyDeps (deps : HashMap ℭ.Q UInt64) : ST σ Bool := do
-          for (depKey, oldHash) in deps do
-            let _ ← fetch depKey
-            let h := match (← started.get).get? depKey with
-              | some m => m.hash
-              | none => 0
-            if h != oldHash then return false
-          return true
-        let recompute : ST σ (ℭ.R q) := do
-          let value ← tasks q (ST σ) input' (fun q₁ _hq => fetch' q₁)
-          let m : ShakeRT.Memo ℭ q := { value, deps := ← deps.get, inputDeps := ← inputDeps.get }
-          started.modify (·.insert q m)
-          memos.modify (·.insert q m)
-          return value
-        let r ← match (← memos.get).get? q with
-          | some m =>
-            if verifyInputDeps m.inputDeps && (← verifyDeps m.deps) then
-              started.modify (·.insert q m)
-              pure m.value
-            else recompute
-          | none => recompute
+        let value ← tasks q (ST σ) input' fetch'
+        let m : ShakeRT.Memo ℭ q := { value, queryDeps := ← queryDeps.get, inputDeps := ← inputDeps.get }
+        started.modify (·.insert q m)
+        memos.modify (·.insert q m)
+        dirty.modify (·.erase q)
         stack.modify Array.pop
-        return r
+        return value
       termination_by ℭ.wf.wrap q
-      decreasing_by all_goals sorry
-      return (⟨← fetch q, sorry⟩, ⟨store.inputs, ← memos.get, ← rdeps.get⟩)
+      let value ← fetch q
+      return (⟨value, sorry⟩,
+        { inputs := store.inputs,
+          memos := ← memos.get,
+          rdeps := ← rdeps.get,
+          inputRdeps := ← inputRdeps.get,
+          dirty := ← dirty.get })
 
 end Incremental

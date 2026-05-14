@@ -16,7 +16,7 @@ namespace ShakeRT
 
 structure Memo (q₀ : ℭ.Q) where
   value : ℭ.R q₀
-  deps : HashMap ℭ.Q UInt64
+  queryDeps : HashMap ℭ.Q UInt64
   inputDeps : HashMap ℭ.I UInt64
   hash : UInt64 := hash value
   hash_value : Hashable.hash value = hash := by rfl

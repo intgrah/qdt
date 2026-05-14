@@ -16,8 +16,8 @@ public structure Salsa.Memo (q : ℭ.Q) where
   value : ℭ.R q
   changedAt : Nat
   verifiedAt : Nat
-  deps : Array { q' : ℭ.Q // ℭ.rel q' q }
-  inputDeps : Array ℭ.I
+  queryDeps : Array (QueryDep ℭ q)
+  inputDeps : Array (InputDep ℭ.I)
   hash : UInt64 := Hashable.hash value
   hash_value : Hashable.hash value = hash := by rfl
 
@@ -51,10 +51,10 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
           if memo.verifiedAt == store.revision then
             return memo.value
           let mut clean :=
-            memo.inputDeps.all fun i =>
+            memo.inputDeps.all fun ⟨i⟩ =>
               store.inputRevisions.getD i 0 ≤ memo.verifiedAt
           if clean then
-            for ⟨dep, hdep⟩ in memo.deps do
+            for ⟨dep, hdep⟩ in memo.queryDeps do
               let _ ← fetch dep
               match (← memos.get).get? dep with
               | some depMemo =>
@@ -67,14 +67,14 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
           if clean then
             memos.modify (·.insert q { memo with verifiedAt := store.revision })
             return memo.value
-        let depsRef ← ST.mkRef (σ := σ) (#[] : Array { q' : ℭ.Q // ℭ.rel q' q })
-        let inputDepsRef ← ST.mkRef (σ := σ) (#[] : Array ℭ.I)
+        let queryDepsRef ← ST.mkRef (σ := σ) (#[] : Array (QueryDep ℭ q))
+        let inputDepsRef ← ST.mkRef (σ := σ) (#[] : Array (InputDep ℭ.I))
         let input' (i : ℭ.I) : ST σ (ℭ.V i) := do
-          inputDepsRef.modify (·.push i)
+          inputDepsRef.modify (·.push ⟨i⟩)
           return ι₀ i
         let fetch' (q' : ℭ.Q) (hq : ℭ.rel q' q) : ST σ (ℭ.R q') := do
           let v ← fetch q'
-          depsRef.modify (·.push ⟨q', hq⟩)
+          queryDepsRef.modify (·.push ⟨q', hq⟩)
           return v
         let value ← tasks q (ST σ) input' fetch'
         let h := Hashable.hash value
@@ -86,7 +86,7 @@ public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
           hash := h
           changedAt
           verifiedAt := store.revision,
-          deps := ← depsRef.get
+          queryDeps := ← queryDepsRef.get
           inputDeps := ← inputDepsRef.get
         }
         memos.modify (·.insert q newMemo)

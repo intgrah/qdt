@@ -53,7 +53,7 @@ def fetchCancel
   match cache.get? q₀ with
   | some mm =>
     if hvin : verifyInputs hI ι₀ mm.inputDeps then do
-      match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetchCancel persist ι₀ q') mm.deps with
+      match ← verifyDeps hI hR tasks ι₀ (fun q' _hq => fetchCancel persist ι₀ q') mm.queryDeps with
       | some ⟨hdep⟩ =>
         let value : Value tasks ι₀ q₀ := ⟨mm.value, mm.invariant ι₀
           ((verifyInputs_spec hI ι₀ mm.inputDeps).mp hvin) hdep⟩

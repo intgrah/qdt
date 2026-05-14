@@ -27,6 +27,20 @@ structure BuildConfig : Type 1 where
   rel : Q → Q → Prop
   wf : WellFounded rel
 
+structure QueryDep (ℭ : BuildConfig) (q₀ : ℭ.Q) where
+  q : ℭ.Q
+  rel : ℭ.rel q q₀
+
+structure QueryDepHash (ℭ : BuildConfig) (q₀ : ℭ.Q) (H : Type)
+    extends QueryDep ℭ q₀ where
+  hash : H
+
+structure InputDep (I : Type) where
+  key : I
+
+structure InputDepHash (I H : Type) extends InputDep I where
+  hash : H
+
 structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] where
   rel {α β : Type} :
     (α → β → Prop) →
