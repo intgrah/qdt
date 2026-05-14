@@ -15,7 +15,7 @@ variable
 structure ShakeRdeps.Store (J : Type) where
   inputs : J
   memos : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
-  rdeps : HashMap ℭ.Q (HashSet ℭ.Q)
+  queryRdeps : HashMap ℭ.Q (HashSet ℭ.Q)
   inputRdeps : HashMap ℭ.I (HashSet ℭ.Q)
   dirty : HashSet ℭ.Q
 
@@ -35,7 +35,7 @@ partial def ShakeRdeps.getTransitiveDependents
 def ShakeRdeps.invalidate
     (store : ShakeRdeps.Store ℭ J) (i : ℭ.I) : ShakeRdeps.Store ℭ J :=
   let seed := store.inputRdeps.getD i ∅
-  let trans := getTransitiveDependents ℭ store.rdeps seed
+  let trans := getTransitiveDependents ℭ store.queryRdeps seed
   { store with dirty := trans.fold (·.insert ·) store.dirty }
 
 public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
@@ -43,7 +43,7 @@ public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   init inputs := {
     inputs
     memos := DHashMap.emptyWithCapacity 1024
-    rdeps := HashMap.emptyWithCapacity 1024
+    queryRdeps := HashMap.emptyWithCapacity 1024
     inputRdeps := HashMap.emptyWithCapacity 64
     dirty := HashSet.emptyWithCapacity 0
   }
@@ -55,7 +55,7 @@ public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
     let ι₀ := Input.get store.inputs
     runST fun σ => do
       let memos ← ST.mkRef (σ := σ) store.memos
-      let rdeps ← ST.mkRef (σ := σ) store.rdeps
+      let rdeps ← ST.mkRef (σ := σ) store.queryRdeps
       let inputRdeps ← ST.mkRef (σ := σ) store.inputRdeps
       let dirty ← ST.mkRef (σ := σ) store.dirty
       let started ← ST.mkRef (σ := σ) (DHashMap.emptyWithCapacity 1024)
@@ -89,19 +89,39 @@ public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
               | none => hash r
             queryDeps.modify (·.insert q' h)
           return r
-        let value ← tasks q (ST σ) input' fetch'
-        let m : ShakeRT.Memo ℭ q := { value, queryDeps := ← queryDeps.get, inputDeps := ← inputDeps.get }
-        started.modify (·.insert q m)
-        memos.modify (·.insert q m)
+        let verifyInputDeps (inputDeps : HashMap ℭ.I UInt64) : Bool :=
+          inputDeps.all fun i oldHash => hash (ι₀ i) == oldHash
+        let verifyQueryDeps (queryDeps : HashMap ℭ.Q UInt64) : ST σ Bool := do
+          for (depKey, oldHash) in queryDeps do
+            let _ ← fetch depKey
+            let h := match (← started.get).get? depKey with
+              | some m => m.hash
+              | none => 0
+            if h != oldHash then return false
+          return true
+        let recompute : ST σ (ℭ.R q) := do
+          let value ← tasks q (ST σ) input' fetch'
+          let m : ShakeRT.Memo ℭ q := { value, queryDeps := ← queryDeps.get, inputDeps := ← inputDeps.get }
+          started.modify (·.insert q m)
+          memos.modify (·.insert q m)
+          return value
+        let r ← match (← memos.get).get? q with
+          | some m =>
+            if verifyInputDeps m.inputDeps && (← verifyQueryDeps m.queryDeps) then
+              started.modify (·.insert q m)
+              pure m.value
+            else recompute
+          | none => recompute
         dirty.modify (·.erase q)
         stack.modify Array.pop
-        return value
+        return r
       termination_by ℭ.wf.wrap q
+      decreasing_by all_goals sorry
       let value ← fetch q
       return (⟨value, sorry⟩,
         { inputs := store.inputs,
           memos := ← memos.get,
-          rdeps := ← rdeps.get,
+          queryRdeps := ← rdeps.get,
           inputRdeps := ← inputRdeps.get,
           dirty := ← dirty.get })
 
