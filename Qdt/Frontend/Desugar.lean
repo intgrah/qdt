@@ -31,6 +31,13 @@ def withCstChild {α : Type} (children : Array Cst) (idx : Nat) (m : DesugarM α
   modify fun s => { s with cstOffset := st.cstOffset }
   return result
 
+@[inline] def withCstOffset {α : Type} (relOffset : Nat) (m : DesugarM α) : DesugarM α := do
+  let st ← get
+  set { st with cstOffset := st.cstOffset + relOffset }
+  let result ← m
+  modify fun s => { s with cstOffset := st.cstOffset }
+  return result
+
 def setCstOffset (children : Array Cst) (idx : Nat) : DesugarM Unit := do
   let st ← get
   let mut offset := st.cstOffset
@@ -63,13 +70,16 @@ def childrenNoTrivia (cst : Cst) : Array Cst :=
 structure IndexedCst where
   idx : Nat
   cst : Cst
+  offset : Nat
 
 def nonTriviaIndices (args : Array Cst) : Array IndexedCst := Id.run do
   let mut result : Array IndexedCst := #[]
+  let mut offset := 0
   for h : i in [0:args.size] do
     let cst := args[i]
     if !isTrivia cst then
-      result := result.push ⟨i, cst⟩
+      result := result.push ⟨i, cst, offset⟩
+    offset := offset + cst.width
   return result
 
 def getIdentVal (cst : Cst) : Option String :=
@@ -116,7 +126,7 @@ partial def desugarLevel (cst : Cst) : DesugarM Ast := do
       | some ic =>
           match getIdentVal ic.cst with
           | some val =>
-              withCstChild args ic.idx do
+              withCstOffset ic.offset do
                 recordMapping ic.cst
                 return .node `Level.name #[.ident val.toName]
           | none => return .missing
@@ -130,10 +140,10 @@ partial def desugarLevel (cst : Cst) : DesugarM Ast := do
         | .token `ident "max" => false
         | _ => true
       if h : levelArgs.size ≥ 2 then
-        let first ← withCstChild args levelArgs[0].idx <| withAstChild 0 <| desugarLevel levelArgs[0].cst
-        let second ← withCstChild args levelArgs[1].idx <| withAstChild 1 <| desugarLevel levelArgs[1].cst
+        let first ← withCstOffset levelArgs[0].offset <| withAstChild 0 <| desugarLevel levelArgs[0].cst
+        let second ← withCstOffset levelArgs[1].offset <| withAstChild 1 <| desugarLevel levelArgs[1].cst
         let rest ← levelArgs.toList.drop 2 |>.mapIdxM fun i ic =>
-          withCstChild args ic.idx <| withAstChild (i + 2) <| desugarLevel ic.cst
+          withCstOffset ic.offset <| withAstChild (i + 2) <| desugarLevel ic.cst
         return rest.foldl (fun acc u => .node `Level.max #[acc, u]) (.node `Level.max #[first, second])
       else
         return .missing
@@ -141,7 +151,7 @@ partial def desugarLevel (cst : Cst) : DesugarM Ast := do
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[0]?, nonTrivia[2]? with
       | some baseIc, some numIc =>
-          let baseLevel ← withCstChild args baseIc.idx <| withAstChild 0 <| desugarLevel baseIc.cst
+          let baseLevel ← withCstOffset baseIc.offset <| withAstChild 0 <| desugarLevel baseIc.cst
           match getNumVal numIc.cst with
           | some val =>
               match val.toNat? with
@@ -152,7 +162,7 @@ partial def desugarLevel (cst : Cst) : DesugarM Ast := do
   | .node `Lean.Parser.Level.paren args =>
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[1]? with
-      | some ic => withCstChild args ic.idx <| desugarLevel ic.cst
+      | some ic => withCstOffset ic.offset <| desugarLevel ic.cst
       | none => return .missing
   | _ => return .missing
 where
@@ -183,8 +193,8 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
       | `Lean.Parser.Term.app =>
           match nonTrivia[0]?, nonTrivia[1]? with
           | some fnIc, some argIc =>
-              let fn ← withCstChild args fnIc.idx <| withAstChild 0 <| desugarTerm fnIc.cst
-              let arg ← withCstChild args argIc.idx <| withAstChild 1 <| desugarTerm argIc.cst
+              let fn ← withCstOffset fnIc.offset <| withAstChild 0 <| desugarTerm fnIc.cst
+              let arg ← withCstOffset argIc.offset <| withAstChild 1 <| desugarTerm argIc.cst
               return .node `Term.app #[fn, arg]
           | _, _ => return .missing
 
@@ -208,21 +218,21 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
             | _ => true
           match levelArgs[0]? with
           | some ic =>
-              let level ← withCstChild args ic.idx <| withAstChild 0 <| desugarLevel ic.cst
+              let level ← withCstOffset ic.offset <| withAstChild 0 <| desugarLevel ic.cst
               return .node `Term.u #[level]
           | none =>
               return .node `Term.u #[.node `Level.zero #[]]
 
       | `Lean.Parser.Term.paren =>
           match nonTrivia[1]? with
-          | some ic => withCstChild args ic.idx <| desugarTerm ic.cst
+          | some ic => withCstOffset ic.offset <| desugarTerm ic.cst
           | none => return .missing
 
       | `Lean.Parser.Term.typeAscription =>
           match nonTrivia[1]?, nonTrivia[3]? with
           | some eIc, some tyIc =>
-              let e ← withCstChild args eIc.idx <| withAstChild 0 <| desugarTerm eIc.cst
-              let ty ← withCstChild args tyIc.idx <| withAstChild 1 <| desugarTerm tyIc.cst
+              let e ← withCstOffset eIc.offset <| withAstChild 0 <| desugarTerm eIc.cst
+              let ty ← withCstOffset tyIc.offset <| withAstChild 1 <| desugarTerm tyIc.cst
               return .node `Term.ann #[e, ty]
           | _, _ => return .missing
 
@@ -237,7 +247,7 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
           | some identIc, some univIc =>
               match getIdentVal identIc.cst with
               | some val =>
-                  withCstChild args identIc.idx do
+                  withCstOffset identIc.offset do
                     recordMapping identIc.cst
                     let levels ← desugarUnivArgs univIc.cst
                     return .node `Term.ident #[.ident val.toName,
@@ -250,7 +260,7 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
           | some ic =>
               match getIdentVal ic.cst with
               | some val =>
-                  withCstChild args ic.idx do
+                  withCstOffset ic.offset do
                     recordMapping ic.cst
                     return .node `Term.ident #[.ident val.toName, .node `null #[]]
               | none => return .missing
@@ -276,16 +286,16 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
       | `«term_=_» =>
           match nonTrivia[0]?, nonTrivia[2]? with
           | some aIc, some bIc =>
-              let a ← withCstChild args aIc.idx <| withAstChild 0 <| desugarTerm aIc.cst
-              let b ← withCstChild args bIc.idx <| withAstChild 1 <| desugarTerm bIc.cst
+              let a ← withCstOffset aIc.offset <| withAstChild 0 <| desugarTerm aIc.cst
+              let b ← withCstOffset bIc.offset <| withAstChild 1 <| desugarTerm bIc.cst
               return .node `Term.eq #[a, b]
           | _, _ => return .missing
 
       | `«term_+_» =>
           match nonTrivia[0]?, nonTrivia[2]? with
           | some aIc, some bIc =>
-              let a ← withCstChild args aIc.idx <| desugarTerm aIc.cst
-              let b ← withCstChild args bIc.idx <| desugarTerm bIc.cst
+              let a ← withCstOffset aIc.offset <| desugarTerm aIc.cst
+              let b ← withCstOffset bIc.offset <| desugarTerm bIc.cst
               return .node `Term.app #[
                 .node `Term.app #[
                   .node `Term.ident #[.ident `Nat.add, .node `null #[]],
@@ -295,7 +305,7 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
 
       | _ =>
           match nonTrivia[0]? with
-          | some ic => withCstChild args ic.idx <| desugarTerm ic.cst
+          | some ic => withCstOffset ic.offset <| desugarTerm ic.cst
           | none => return .missing
 where
   buildNatLit (n : Nat) : Ast :=
@@ -312,9 +322,9 @@ where
         let nonTrivia := nonTriviaIndices args
         match nonTrivia[0]?, nonTrivia[2]? with
         | some lhsIc, some rhsIc =>
-            let dom ← withCstChild args lhsIc.idx <| withAstChild 0 <| withAstChild 1 <| desugarTerm lhsIc.cst
+            let dom ← withCstOffset lhsIc.offset <| withAstChild 0 <| withAstChild 1 <| desugarTerm lhsIc.cst
             let binder := .node `Binder.typed #[.ident Name.anonymous, dom]
-            let cod ← withCstChild args rhsIc.idx <| withAstChild 1 <| desugarArrowRight rhsIc.cst
+            let cod ← withCstOffset rhsIc.offset <| withAstChild 1 <| desugarArrowRight rhsIc.cst
             return .node `Term.pi #[binder, cod]
         | _, _ => desugarTerm cst
     | _ => desugarTerm cst
@@ -325,7 +335,7 @@ where
         let nonTrivia := nonTriviaIndices args
         let levelArgs := nonTrivia.filter fun ic => !isAtom "." ic.cst && !isAtom "{" ic.cst && !isAtom "}" ic.cst && !isAtom "," ic.cst
         levelArgs.toList.mapM fun ic =>
-          withCstChild args ic.idx do
+          withCstOffset ic.offset do
             desugarLevel ic.cst
     | _ => return []
 
@@ -347,10 +357,10 @@ where
     match binderParts with
     | [] =>
         modify fun s => { s with cstOffset := funCstOffset }
-        withCstChild parentArgs bodyIc.idx <| desugarTerm bodyIc.cst
+        withCstOffset bodyIc.offset <| desugarTerm bodyIc.cst
     | head :: tail =>
         modify fun s => { s with cstOffset := funCstOffset }
-        withCstChild parentArgs head.idx <| desugarFunBinderGo parentArgs head.cst tail bodyIc funCstOffset
+        withCstOffset head.offset <| desugarFunBinderGo parentArgs head.cst tail bodyIc funCstOffset
 
   desugarFunBinderGo (parentArgs : Array Cst) (cst : Cst) (tail : List IndexedCst) (bodyIc : IndexedCst) (funCstOffset : Nat) : DesugarM Ast := do
     match cst with
@@ -385,11 +395,11 @@ where
         let name := match getIdentVal single.cst with
           | some v => v.toName
           | none => Name.anonymous
-        withCstChild binderArgs single.idx <| withAstChild 0 <| withAstChild 0 (recordMapping single.cst)
+        withCstOffset single.offset <| withAstChild 0 <| withAstChild 0 (recordMapping single.cst)
         let ty ← match tyAst? with
           | some ty => pure ty
           | none => match typeIc? with
-              | some tyIc => withCstChild binderArgs tyIc.idx <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
+              | some tyIc => withCstOffset tyIc.offset <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
               | none => pure .missing
         let binder := .node `Binder.typed #[.ident name, ty]
         let rest ← withAstChild 1 <| desugarFunGo parentArgs tail bodyIc funCstOffset
@@ -398,11 +408,11 @@ where
         let name := match getIdentVal head.cst with
           | some v => v.toName
           | none => Name.anonymous
-        withCstChild binderArgs head.idx <| withAstChild 0 <| withAstChild 0 (recordMapping head.cst)
+        withCstOffset head.offset <| withAstChild 0 <| withAstChild 0 (recordMapping head.cst)
         let ty ← match tyAst? with
           | some ty => pure ty
           | none => match typeIc? with
-              | some tyIc => withCstChild binderArgs tyIc.idx <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
+              | some tyIc => withCstOffset tyIc.offset <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
               | none => pure .missing
         let binder := .node `Binder.typed #[.ident name, ty]
         let rest ← withAstChild 1 <| desugarFunTypedBinderGo parentArgs binderArgs remaining typeIc? tail bodyIc (some ty) funCstOffset
@@ -421,36 +431,36 @@ where
       | some colonPos => nonTrivia[colonPos + 1]?
       | none => none
     let arrowCstOffset := (← get).cstOffset
-    withCstChild parentArgs binderIc.idx <| desugarDepArrowGo parentArgs binderArgs nameIndices.toList typeIc? bodyIc none arrowCstOffset
+    withCstOffset binderIc.offset <| desugarDepArrowGo parentArgs binderArgs nameIndices.toList typeIc? bodyIc none arrowCstOffset
 
   desugarDepArrowGo (parentArgs binderArgs : Array Cst) (names : List IndexedCst) (typeIc? : Option IndexedCst) (bodyIc : IndexedCst) (tyAst? : Option Ast) (arrowCstOffset : Nat) : DesugarM Ast := do
     match names with
     | [] =>
         modify fun s => { s with cstOffset := arrowCstOffset }
-        withCstChild parentArgs bodyIc.idx <| desugarTerm bodyIc.cst
+        withCstOffset bodyIc.offset <| desugarTerm bodyIc.cst
     | [single] =>
         let name := match getIdentVal single.cst with
           | some v => v.toName
           | none => Name.anonymous
-        withCstChild binderArgs single.idx <| withAstChild 0 <| withAstChild 0 (recordMapping single.cst)
+        withCstOffset single.offset <| withAstChild 0 <| withAstChild 0 (recordMapping single.cst)
         let ty ← match tyAst? with
           | some ty => pure ty
           | none => match typeIc? with
-              | some tyIc => withCstChild binderArgs tyIc.idx <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
+              | some tyIc => withCstOffset tyIc.offset <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
               | none => pure .missing
         let binder := .node `Binder.typed #[.ident name, ty]
         modify fun s => { s with cstOffset := arrowCstOffset }
-        let body ← withCstChild parentArgs bodyIc.idx <| withAstChild 1 <| desugarTerm bodyIc.cst
+        let body ← withCstOffset bodyIc.offset <| withAstChild 1 <| desugarTerm bodyIc.cst
         return .node `Term.pi #[binder, body]
     | head :: tail =>
         let name := match getIdentVal head.cst with
           | some v => v.toName
           | none => Name.anonymous
-        withCstChild binderArgs head.idx <| withAstChild 0 <| withAstChild 0 (recordMapping head.cst)
+        withCstOffset head.offset <| withAstChild 0 <| withAstChild 0 (recordMapping head.cst)
         let ty ← match tyAst? with
           | some ty => pure ty
           | none => match typeIc? with
-              | some tyIc => withCstChild binderArgs tyIc.idx <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
+              | some tyIc => withCstOffset tyIc.offset <| withAstChild 0 <| withAstChild 1 <| desugarTerm tyIc.cst
               | none => pure .missing
         let binder := .node `Binder.typed #[.ident name, ty]
         let rest ← withAstChild 1 <| desugarDepArrowGo parentArgs binderArgs tail typeIc? bodyIc (some ty) arrowCstOffset
@@ -464,23 +474,23 @@ where
             let colonIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
             let assignIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":=" ic.cst
             let semiIdx := nonTrivia.toList.findIdx? fun ic => isAtom ";" ic.cst
-            withCstChild parentArgs nameIc.idx <| withAstChild 0 <| (recordMapping nameIc.cst)
+            withCstOffset nameIc.offset <| withAstChild 0 <| (recordMapping nameIc.cst)
             match assignIdx, semiIdx with
             | some aIdx, some sIdx =>
                 match colonIdx.filter (· < aIdx) with
                 | some colonPos =>
                     match nonTrivia[colonPos + 1]?, nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
                     | some tyIc, some rhsIc, some bodyIc =>
-                        let ty ← withCstChild parentArgs tyIc.idx <| withAstChild 1 <| desugarTerm tyIc.cst
-                        let rhs ← withCstChild parentArgs rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
-                        let body ← withCstChild parentArgs bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
+                        let ty ← withCstOffset tyIc.offset <| withAstChild 1 <| desugarTerm tyIc.cst
+                        let rhs ← withCstOffset rhsIc.offset <| withAstChild 2 <| desugarTerm rhsIc.cst
+                        let body ← withCstOffset bodyIc.offset <| withAstChild 3 <| desugarTerm bodyIc.cst
                         return .node `Term.letE #[.ident nameVal.toName, ty, rhs, body]
                     | _, _, _ => return .missing
                 | none =>
                     match nonTrivia[aIdx + 1]?, nonTrivia[sIdx + 1]? with
                     | some rhsIc, some bodyIc =>
-                        let rhs ← withCstChild parentArgs rhsIc.idx <| withAstChild 2 <| desugarTerm rhsIc.cst
-                        let body ← withCstChild parentArgs bodyIc.idx <| withAstChild 3 <| desugarTerm bodyIc.cst
+                        let rhs ← withCstOffset rhsIc.offset <| withAstChild 2 <| desugarTerm rhsIc.cst
+                        let body ← withCstOffset bodyIc.offset <| withAstChild 3 <| desugarTerm bodyIc.cst
                         return .node `Term.letE #[.ident nameVal.toName, .missing, rhs, body]
                     | _, _ => return .missing
             | _, _ => return .missing
@@ -518,13 +528,13 @@ partial def desugarTypedBinderGroupCmd (args : Array Cst) (binderStartIdx : Nat 
       | some v => v.toName
       | none => Name.anonymous
     let isFirst := i == 0
-    withCstChild args ic.idx <| withAstChild (binderStartIdx + i) <| withAstChild 0 do
+    withCstOffset ic.offset <| withAstChild (binderStartIdx + i) <| withAstChild 0 do
       recordMapping ic.cst
     let ty ←
       if isFirst then
         match typeIc? with
         | some tyIc => do
-          let r ← withCstChild args tyIc.idx <| withAstChild (binderStartIdx + i) <| withAstChild 1 <| desugarTerm tyIc.cst
+          let r ← withCstOffset tyIc.offset <| withAstChild (binderStartIdx + i) <| withAstChild 1 <| desugarTerm tyIc.cst
           pure r
         | none => pure Ast.missing
       else
@@ -544,7 +554,7 @@ def desugarDeclId (cst : Cst) : DesugarM (Name × List Name) := do
         | some ic => (getIdentVal ic.cst).map (·.toName) |>.getD Name.anonymous
         | none => Name.anonymous
       match nonTrivia[0]? with
-      | some ic => withCstChild args ic.idx (recordMapping ic.cst)
+      | some ic => withCstOffset ic.offset (recordMapping ic.cst)
       | none => pure ()
       let univParams := match nonTrivia[1]? with
         | some ic =>
@@ -567,7 +577,7 @@ def desugarOptDeclSig (cst : Cst) (paramsAstIdx : Nat) (retTypeAstIdx : Option N
       for ic in nonTrivia do
         match ic.cst with
         | .node `Lean.Parser.Term.explicitBinder innerArgs =>
-            let bs ← withCstChild args ic.idx <| withAstChild paramsAstIdx <| desugarTypedBinderGroupCmd innerArgs binderIdx
+            let bs ← withCstOffset ic.offset <| withAstChild paramsAstIdx <| desugarTypedBinderGroupCmd innerArgs binderIdx
             for (b, _) in bs do
               binders := binders ++ [b]
               binderIdx := binderIdx + 1
@@ -576,7 +586,7 @@ def desugarOptDeclSig (cst : Cst) (paramsAstIdx : Nat) (retTypeAstIdx : Option N
             match colonPos.bind (fun p => nonTrivia[p + 1]?) with
             | some tyIc =>
                 let desugar : DesugarM Ast := do
-                  withCstChild args tyIc.idx <| desugarTerm tyIc.cst
+                  withCstOffset tyIc.offset <| desugarTerm tyIc.cst
                 let r ← match retTypeAstIdx with
                   | some idx => withAstChild idx desugar
                   | none => desugar
@@ -596,7 +606,7 @@ def desugarDeclValSimple (cst : Cst) : DesugarM Ast := do
   | .node _ args =>
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[1]? with
-      | some ic => withCstChild args ic.idx <| desugarTerm ic.cst
+      | some ic => withCstOffset ic.offset <| desugarTerm ic.cst
       | none => return .missing
   | _ => return .missing
 
@@ -606,9 +616,9 @@ def desugarDefinition (cst : Cst) : DesugarM Ast := do
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[1]?, nonTrivia[2]?, nonTrivia[3]? with
       | some declIdIc, some optSigIc, some declValIc =>
-          let (name, univParams) ← withCstChild args declIdIc.idx <| withAstChild 0 <| desugarDeclId declIdIc.cst
-          let (params, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 2 (some 3)
-          let body ← withCstChild args declValIc.idx <| withAstChild 4 <| desugarDeclValSimple declValIc.cst
+          let (name, univParams) ← withCstOffset declIdIc.offset <| withAstChild 0 <| desugarDeclId declIdIc.cst
+          let (params, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 2 (some 3)
+          let body ← withCstOffset declValIc.offset <| withAstChild 4 <| desugarDeclValSimple declValIc.cst
           let univParamsAst := .node `null (univParams.map fun n => Ast.ident n).toArray
           let paramsAst := .node `null params.toArray
           let tyAst := match tyOpt with | some a => a | none => .missing
@@ -622,8 +632,8 @@ def desugarExample (cst : Cst) : DesugarM Ast := do
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[1]?, nonTrivia[2]? with
       | some optSigIc, some declValIc =>
-          let (params, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 0 (some 1)
-          let body ← withCstChild args declValIc.idx <| withAstChild 2 <| desugarDeclValSimple declValIc.cst
+          let (params, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 0 (some 1)
+          let body ← withCstOffset declValIc.offset <| withAstChild 2 <| desugarDeclValSimple declValIc.cst
           let paramsAst := .node `null params.toArray
           let tyAst := match tyOpt with | some a => a | none => .missing
           return .node `Command.example #[paramsAst, tyAst, body]
@@ -636,8 +646,8 @@ def desugarAxiom (cst : Cst) : DesugarM Ast := do
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[1]?, nonTrivia[2]? with
       | some declIdIc, some declSigIc =>
-          let (name, univParams) ← withCstChild args declIdIc.idx <| withAstChild 0 <| desugarDeclId declIdIc.cst
-          let (params, ty) ← withCstChild args declSigIc.idx <| desugarDeclSig declSigIc.cst 2 (some 3)
+          let (name, univParams) ← withCstOffset declIdIc.offset <| withAstChild 0 <| desugarDeclId declIdIc.cst
+          let (params, ty) ← withCstOffset declSigIc.offset <| desugarDeclSig declSigIc.cst 2 (some 3)
           let univParamsAst := .node `null (univParams.map fun n => Ast.ident n).toArray
           let paramsAst := .node `null params.toArray
           return .node `Command.axiom #[.ident name, univParamsAst, paramsAst, ty]
@@ -652,8 +662,8 @@ def desugarCtor (cst : Cst) : DesugarM Ast := do
   | some nameIc, some optSigIc =>
       match getIdentVal nameIc.cst with
       | some nameVal =>
-          withCstChild args nameIc.idx (recordMapping nameIc.cst)
-          let (fields, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 1 (some 2)
+          withCstOffset nameIc.offset (recordMapping nameIc.cst)
+          let (fields, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 1 (some 2)
           let fieldsAst := .node `null fields.toArray
           let tyAst := match tyOpt with | some a => a | none => .missing
           return .node `Constructor #[.ident nameVal.toName, fieldsAst, tyAst]
@@ -667,11 +677,11 @@ def desugarInductive (cst : Cst) : DesugarM Ast := do
   let nonTrivia := nonTrivia.filter fun ic => !isAtom "where" ic.cst
   match nonTrivia[1]?, nonTrivia[2]? with
   | some declIdIc, some optSigIc =>
-      let (name, univParams) ← withCstChild args declIdIc.idx <| withAstChild 0 <| desugarDeclId declIdIc.cst
-      let (params, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 2 (some 3)
+      let (name, univParams) ← withCstOffset declIdIc.offset <| withAstChild 0 <| desugarDeclId declIdIc.cst
+      let (params, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 2 (some 3)
       let ctorArgs := nonTrivia.toList.drop 3
       let ctors ← ctorArgs.mapIdxM fun i ic => do
-        withCstChild args ic.idx <| withAstChild (4 + i) <| desugarCtor ic.cst
+        withCstOffset ic.offset <| withAstChild (4 + i) <| desugarCtor ic.cst
       let univParamsAst := .node `null (univParams.map fun n => Ast.ident n).toArray
       let paramsAst := .node `null params.toArray
       let tyAst := match tyOpt with | some a => a | none => .missing
@@ -687,8 +697,8 @@ def desugarStructField (cst : Cst) : DesugarM Ast := do
       | some nameIc, some optSigIc =>
           match getIdentVal nameIc.cst with
           | some nameVal =>
-              withCstChild args nameIc.idx (recordMapping nameIc.cst)
-              let (params, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 1 (some 2)
+              withCstOffset nameIc.offset (recordMapping nameIc.cst)
+              let (params, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 1 (some 2)
               let ty := match tyOpt with | some a => a | none => .missing
               let paramsAst := .node `null params.toArray
               return .node `StructureField #[.ident nameVal.toName, paramsAst, ty]
@@ -703,11 +713,11 @@ def desugarStructure (cst : Cst) : DesugarM Ast := do
   let nonTrivia := nonTrivia.filter fun ic => !isAtom "where" ic.cst
   match nonTrivia[1]?, nonTrivia[2]? with
   | some declIdIc, some optSigIc =>
-      let (name, univParams) ← withCstChild args declIdIc.idx <| withAstChild 0 <| desugarDeclId declIdIc.cst
-      let (params, tyOpt) ← withCstChild args optSigIc.idx <| desugarOptDeclSig optSigIc.cst 2 (some 3)
+      let (name, univParams) ← withCstOffset declIdIc.offset <| withAstChild 0 <| desugarDeclId declIdIc.cst
+      let (params, tyOpt) ← withCstOffset optSigIc.offset <| desugarOptDeclSig optSigIc.cst 2 (some 3)
       let fieldArgs := nonTrivia.toList.drop 3
       let fields ← fieldArgs.mapIdxM fun i ic => do
-        withCstChild args ic.idx <| withAstChild (4 + i) <| desugarStructField ic.cst
+        withCstOffset ic.offset <| withAstChild (4 + i) <| desugarStructField ic.cst
       let univParamsAst := .node `null (univParams.map fun n => Ast.ident n).toArray
       let paramsAst := .node `null params.toArray
       let tyAst := match tyOpt with | some a => a | none => .missing
@@ -724,7 +734,7 @@ def desugarImport (_parentArgs : Array Cst) (cst : Cst) : DesugarM Ast := do
   | some ic =>
       match getIdentVal ic.cst with
       | some nameVal =>
-          withCstChild args ic.idx (recordMapping ic.cst)
+          withCstOffset ic.offset (recordMapping ic.cst)
           return .node `Command.import #[.ident nameVal.toName]
       | none => return .missing
   | none => return .missing
@@ -753,7 +763,7 @@ def desugarHeader (_parentArgs : Array Cst) (header : Cst) : DesugarM (Array Ast
       let nonTrivia := nonTriviaIndices args
       let mut result : Array Ast := #[]
       for ic in nonTrivia do
-        let ast ← withCstChild args ic.idx <| desugarImport args ic.cst
+        let ast ← withCstOffset ic.offset <| desugarImport args ic.cst
         result := result.push ast
       return result
   | _ => return #[]
@@ -768,13 +778,13 @@ def desugarProgram (module : Cst) : Ast × SourceMap :=
         for ic in nonTrivia do
           match ic.cst with
           | .node `Lean.Parser.Module.header _ =>
-              let imports ← withCstChild args ic.idx <| desugarHeader args ic.cst
+              let imports ← withCstOffset ic.offset <| desugarHeader args ic.cst
               for imp in imports do
                 withAstChild astIdx (pure ())
                 result := result.push imp
                 astIdx := astIdx + 1
           | _ =>
-              let ast ← withCstChild args ic.idx <| withAstChild astIdx <| desugarCommand args ic.cst
+              let ast ← withCstOffset ic.offset <| withAstChild astIdx <| desugarCommand args ic.cst
               result := result.push ast
               astIdx := astIdx + 1
         return .node `Module result
