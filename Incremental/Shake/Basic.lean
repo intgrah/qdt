@@ -176,10 +176,9 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
           (fun p => ⟨⟨p.i⟩, hI p.i p.v⟩)).toArray ∧
       s'.queryDeps = pushAll hR (FM.evalTrace_deps ι₀ (compute tasks ι₀) t) s.queryDeps
   rel_pure {_ _ _ a _} hab s a' s' hcan := by
-    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure
-      (a := (a, s)) (b := (a', s')) hcan)
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
     refine ⟨hab, ?_, rfl⟩
-    simp only [FM.evalTrace_inputs, List.map_nil, Array.append_empty]
+    simp [FM.evalTrace_inputs]
   rel_bind {_ _ _ _ _ _ ma mt ka kt} hma hk s b s' hcan := by
     have ⟨⟨a, s''⟩, hma_can, hk_can⟩ :=
       LawfulMonadAttach.canReturn_bind_imp' (x := ma.run s) hcan
@@ -187,8 +186,7 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
     have ⟨hv_b, hin_b, hdep_b⟩ := hk a _ hv_a s'' b s' hk_can
     refine ⟨FM.evalTree_bind .. ▸ hv_b, ?_, ?_⟩
     · change _ = _ ++ ((FM.evalTrace_inputs _ _ (FM.bind mt kt)).map _).toArray
-      rw [FM.evalTrace_inputs_bind, hin_b, hin_a]
-      simp only [Array.append_assoc, List.append_toArray, List.map_append]
+      simp [FM.evalTrace_inputs_bind, hin_b, hin_a]
     · change _ = pushAll _ (FM.evalTrace_deps _ _ (FM.bind mt kt)) _
       rw [FM.evalTrace_deps_bind, hdep_b, hdep_a, pushAll_append]
 
@@ -216,8 +214,7 @@ theorem runInput'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
   intro i s a s' hcan
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
   refine ⟨rfl, ?_, rfl⟩
-  simp only [FM.pureInput, FM.evalTrace_inputs, List.map_cons, List.map_nil,
-    Array.append_singleton]
+  simp [FM.evalTrace_inputs]
 
 theorem runFetch'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     [MonadAttach m] [LawfulMonadAttach m]
@@ -231,14 +228,14 @@ theorem runFetch'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     ∀ q hq, (traceAction hI hR tasks ι₀ q₀ (m := m)).rel Eq
       (runFetch' hI hR tasks m ι₀ q₀ bracket fetch q hq) (FM.pureFetch q hq) := by
   intro q hq s _ _ hcan
-  have ⟨⟨r, _⟩, hbr_can, hrest⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
+  have ⟨⟨⟨r, hr⟩, _⟩, hbr_can, hrest⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
   have hfetch_can := bracket_canReturn q (fetch q hq s.store) _ hbr_can
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hrest)
-  refine ⟨r.val.fst.spec, ?_, ?_⟩
-  · simp only [FM.pureFetch, FM.evalTrace_inputs, List.map_nil, Array.append_empty]
-  · show dedupPush ⟨⟨q, hq⟩, r.val.snd⟩ s.queryDeps =
+  refine ⟨r.fst.spec, ?_, ?_⟩
+  · simp [FM.evalTrace_inputs]
+  · change dedupPush ⟨⟨q, hq⟩, r.snd⟩ s.queryDeps =
         dedupPush ⟨⟨q, hq⟩, hR q (compute tasks ι₀ q)⟩ s.queryDeps
-    rw [r.property, r.val.fst.spec]
+    rw [hr, r.fst.spec]
 
 variable [DecidableEq H] [LawfulBEq ℭ.Q]
 

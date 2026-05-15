@@ -39,9 +39,9 @@ theorem evalTree_bind {α β : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q
   | input i kt ih => exact ih (ι i)
   | fetch q _ kt ih => exact ih (rec q)
 
-def pureInput (i : ℭ.I) : FM ℭ q₀ (ℭ.V i) := input i pure
+abbrev pureInput (i : ℭ.I) : FM ℭ q₀ (ℭ.V i) := input i pure
 
-def pureFetch (q : ℭ.Q) (hq : ℭ.rel q q₀) : FM ℭ q₀ (ℭ.R q) :=
+abbrev pureFetch (q : ℭ.Q) (hq : ℭ.rel q q₀) : FM ℭ q₀ (ℭ.R q) :=
   fetch q hq pure
 
 end FM
@@ -117,8 +117,7 @@ theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
     rw [hd_eq]
     exact ih (rec q) hin (fun p hp => hdep p (.tail _ hp))
 
-def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
-    MonadAction (FM ℭ q₀) Id where
+def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) : MonadAction (FM ℭ q₀) Id where
   rel R t a := R (evalTree ι rec t) a
   rel_pure {α β R a b} hab := show R (evalTree ι rec (.pure a)) b from hab
   rel_bind {α₁ α₂ β₁ β₂ R S ma mb ka kb} hma hk := by
