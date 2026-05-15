@@ -6,8 +6,6 @@ public import Init.System.IO
 
 @[expose] public section
 
-namespace Incremental
-
 variable {ε σ : Type}
 
 /-!
@@ -18,16 +16,14 @@ See LawfulEst_.lean
 
 axiom ST.instLawfulMonad : LawfulMonad (ST σ)
 attribute [instance] ST.instLawfulMonad
-axiom ST.lawfulMonadAttach : LawfulMonadAttach (ST σ)
-attribute [instance] ST.lawfulMonadAttach
+axiom ST.instLawfulMonadAttach : LawfulMonadAttach (ST σ)
+attribute [instance] ST.instLawfulMonadAttach
 axiom EST.instLawfulMonad : LawfulMonad (EST ε σ)
 attribute [instance] EST.instLawfulMonad
-axiom EST.lawfulMonadAttach : LawfulMonadAttach (EST ε σ)
-attribute [instance] EST.lawfulMonadAttach
+axiom EST.instLawfulMonadAttach : LawfulMonadAttach (EST ε σ)
+attribute [instance] EST.instLawfulMonadAttach
 
 instance : LawfulMonad BaseIO := inferInstanceAs (LawfulMonad (ST IO.RealWorld))
 instance : LawfulMonadAttach BaseIO := inferInstanceAs (LawfulMonadAttach (ST IO.RealWorld))
 instance : LawfulMonad (EIO ε) := inferInstanceAs (LawfulMonad (EST ε IO.RealWorld))
 instance : LawfulMonadAttach (EIO ε) := inferInstanceAs (LawfulMonadAttach (EST ε IO.RealWorld))
-
-end Incremental

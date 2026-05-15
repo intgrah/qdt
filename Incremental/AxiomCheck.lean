@@ -38,8 +38,8 @@ info: 'Incremental.ShakeTrace' depends on axioms: [propext, Quot.sound]
 info: 'Incremental.ShakeCancel' depends on axioms: [propext,
  Classical.choice,
  Quot.sound,
- Incremental.ST.instLawfulMonad,
- Incremental.ST.lawfulMonadAttach]
+ ST.instLawfulMonad,
+ ST.instLawfulMonadAttach]
 -/
 #guard_msgs in
 #print axioms Incremental.ShakeCancel
