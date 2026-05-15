@@ -100,7 +100,7 @@ abbrev Val : Key → Type
   | .declarationIndex _ => HashMap Name Nat × Array Diagnostic
   | .declScope _ _ _ => Bool
   | .declAst _ _ => Option Ast
-  | .elabOwner _ _ => Global × ElabInfo
+  | .elabOwner _ _ => Std.HashMap Name Constant × ElabInfo
   | .elabDecl _ _ => Option Constant × ElabInfo
   | .lookup _ _ => Option Constant
   | .lookupInfo _ _ => ElabInfo
@@ -150,18 +150,12 @@ def Key.rank : Key → Nat
   | .checkFile _ => 11
   | .checkProject => 12
 
-def Key.rel (q q₀ : Key) : Prop :=
-  q.rank < q₀.rank
-
-theorem Key.rel_wf : WellFounded Key.rel :=
-  InvImage.wf Key.rank Nat.lt_wfRel.wf
-
 abbrev config : Incremental.BuildConfig where
   I := InputKey
   V := InputV
   Q := Key
   R := Val
-  rel := Key.rel
-  wf := Key.rel_wf
+  rel q q₀ := q.rank < q₀.rank
+  wf := InvImage.wf Key.rank Nat.lt_wfRel.wf
 
 end Qdt
