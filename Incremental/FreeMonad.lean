@@ -16,14 +16,33 @@ namespace FM
 
 variable {ℭ : BuildConfig} {q₀ : ℭ.Q}
 
-def bind {α β : Type} : FM ℭ q₀ α → (α → FM ℭ q₀ β) → FM ℭ q₀ β
-  | pure a, k => k a
-  | input i kt, k => input i (fun v => bind (kt v) k)
-  | fetch q hq kt, k => fetch q hq (fun r => bind (kt r) k)
+def bind {α β : Type} (fa : FM ℭ q₀ α) (k : α → FM ℭ q₀ β) : FM ℭ q₀ β :=
+  match fa with
+  | pure a => k a
+  | input i kt => input i (fun v => bind (kt v) k)
+  | fetch q hq kt => fetch q hq (fun r => bind (kt r) k)
 
 instance : Monad (FM ℭ q₀) where
   pure := pure
   bind := bind
+
+instance : LawfulMonad (FM ℭ q₀) := LawfulMonad.mk'
+  (id_map := fun x => by
+    induction x with
+    | pure _ => rfl
+    | input i kt ih => exact congrArg (input i) (funext ih)
+    | fetch q hq kt ih => exact congrArg (fetch q hq) (funext ih))
+  (pure_bind := fun _ _ => rfl)
+  (bind_assoc := fun x _ _ => by
+    induction x with
+    | pure _ => rfl
+    | input i kt ih => exact congrArg (input i) (funext ih)
+    | fetch q hq kt ih => exact congrArg (fetch q hq) (funext ih))
+  (map_const := fun _ _ => rfl)
+  (seqLeft_eq := fun _ _ => rfl)
+  (seqRight_eq := fun _ _ => rfl)
+  (bind_pure_comp := fun _ _ => rfl)
+  (bind_map := fun _ _ => rfl)
 
 def evalTree {α : Type} (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     FM ℭ q₀ α → α
