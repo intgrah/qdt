@@ -51,8 +51,7 @@ private theorem dedupPush_preserves_target {q₀ : ℭ.Q} {target : ℭ.Q → H}
   split_ifs with h
   · exact hacc
   · intro x hx
-    simp only [Array.mem_push] at hx
-    rcases hx with hx | rfl
+    obtain hx | rfl := Array.mem_push.mp hx
     · have ⟨y, hy_mem, hy_q, hy_hash⟩ := hacc x hx
       exact ⟨y, Array.mem_push_of_mem _ hy_mem, hy_q, hy_hash⟩
     · exact ⟨x, Array.mem_push_self, rfl, he_target⟩
@@ -176,9 +175,8 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
           (fun p => ⟨⟨p.i⟩, hI p.i p.v⟩)).toArray ∧
       s'.queryDeps = pushAll hR (FM.evalTrace_deps ι₀ (compute tasks ι₀) t) s.queryDeps
   rel_pure {_ _ _ a _} hab s a' s' hcan := by
-    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
-    refine ⟨hab, ?_, rfl⟩
-    simp [FM.evalTrace_inputs]
+    have ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
+    exact ⟨hab, rfl, rfl⟩
   rel_bind {_ _ _ _ _ _ ma mt ka kt} hma hk s b s' hcan := by
     have ⟨⟨a, s''⟩, hma_can, hk_can⟩ :=
       LawfulMonadAttach.canReturn_bind_imp' (x := ma.run s) hcan
@@ -186,7 +184,8 @@ def traceAction (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
     have ⟨hv_b, hin_b, hdep_b⟩ := hk a _ hv_a s'' b s' hk_can
     refine ⟨FM.evalTree_bind .. ▸ hv_b, ?_, ?_⟩
     · change _ = _ ++ ((FM.evalTrace_inputs _ _ (FM.bind mt kt)).map _).toArray
-      simp [FM.evalTrace_inputs_bind, hin_b, hin_a]
+      simp only [FM.evalTrace_inputs_bind, hin_b, hin_a, List.map_append,
+        List.append_toArray, Array.append_assoc]
     · change _ = pushAll _ (FM.evalTrace_deps _ _ (FM.bind mt kt)) _
       rw [FM.evalTrace_deps_bind, hdep_b, hdep_a, pushAll_append]
 
@@ -212,30 +211,23 @@ theorem runInput'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     ∀ i, (traceAction hI hR tasks ι₀ q₀ (m := m)).rel Eq
       (runInput' hI hR tasks m ι₀ q₀ i) (FM.pureInput i) := by
   intro i s a s' hcan
-  obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
-  refine ⟨rfl, ?_, rfl⟩
-  simp [FM.evalTrace_inputs]
+  have ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hcan)
+  exact ⟨rfl, rfl, rfl⟩
 
 theorem runFetch'_rel (m : Type → Type) [Monad m] [LawfulMonad m]
     [MonadAttach m] [LawfulMonadAttach m]
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (bracket : ∀ {α}, ℭ.Q → m α → m α)
-    (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
-      MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
         { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
     ∀ q hq, (traceAction hI hR tasks ι₀ q₀ (m := m)).rel Eq
       (runFetch' hI hR tasks m ι₀ q₀ bracket fetch q hq) (FM.pureFetch q hq) := by
   intro q hq s _ _ hcan
-  have ⟨⟨⟨r, hr⟩, _⟩, hbr_can, hrest⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
-  have hfetch_can := bracket_canReturn q (fetch q hq s.store) _ hbr_can
-  obtain ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hrest)
-  refine ⟨r.fst.spec, ?_, ?_⟩
-  · simp [FM.evalTrace_inputs]
-  · change dedupPush ⟨⟨q, hq⟩, r.snd⟩ s.queryDeps =
-        dedupPush ⟨⟨q, hq⟩, hR q (compute tasks ι₀ q)⟩ s.queryDeps
-    rw [hr, r.fst.spec]
+  have ⟨⟨⟨r, hr⟩, _⟩, _, hrest⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
+  have ⟨rfl, rfl⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hrest)
+  refine ⟨r.fst.spec, rfl, ?_⟩
+  simp only [FM.evalTrace_deps, List.foldl, pushAll, hr, r.fst.spec]
 
 variable [DecidableEq H] [LawfulBEq ℭ.Q]
 
@@ -262,9 +254,7 @@ def verifyDepsList (ι₀ : ∀ i, ℭ.V i) {q₀ : ℭ.Q}
           · rfl
         match ← verifyDepsList ι₀ fetch rest with
         | some ⟨hrest⟩ => pure (some ⟨fun
-            | _, .head _ => by
-                show hR e.q (compute tasks ι₀ e.q) = e.hash
-                rw [← v.spec, ← hcache]; exact heq
+            | _, .head _ => v.spec ▸ hcache ▸ heq
             | p, .tail _ ht => hrest p ht⟩)
         | none => pure none
       else
@@ -314,8 +304,6 @@ theorem cacheMiss_invariant {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
 @[specialize bracket]
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (bracket : ∀ {α}, ℭ.Q → m α → m α)
-    (bracket_canReturn : ∀ {α} (q : ℭ.Q) (x : m α) (a : α),
-      MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a)
     (fetch : ∀ q' (_ : ℭ.rel q' q₀),
       StateT (Store hI hR tasks ι₀) m
         { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
@@ -330,7 +318,7 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (tasks q₀).param (traceAction hI hR tasks ι₀ q₀)
       fetch' FM.pureFetch
       (runInput'_rel hI hR tasks m ι₀ q₀)
-      (runFetch'_rel hI hR tasks m ι₀ q₀ bracket bracket_canReturn fetch)
+      (runFetch'_rel hI hR tasks m ι₀ q₀ bracket fetch)
   MonadAttach.pbind (mTree initState) fun result hcan => do
     have ⟨hval_tree, hin_trace, hdep_trace⟩ := hRel initState result.fst result.snd hcan
     have hval : result.fst = compute tasks ι₀ q₀ :=

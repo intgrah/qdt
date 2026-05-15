@@ -45,7 +45,7 @@ def fetchCancel
     | none => pure ⟨(v, hR q' v.val), rfl⟩
   let doRun : StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
     let ⟨(memo, value), _⟩ ←
-      run hI hR tasks ι₀ q₀ (bracket := fun _ x => x) (fun _ _ _ h => h) fetchWithHash
+      run hI hR tasks ι₀ q₀ (bracket := fun _ x => x) fetchWithHash
     modify fun (vc, c) =>
       (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo)
     monadLift (m := m) (n := StateT _ m) (persist q₀ memo)

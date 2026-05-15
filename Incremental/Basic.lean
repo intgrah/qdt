@@ -80,7 +80,7 @@ variable {ℭ : BuildConfig} {q₀ : ℭ.Q}
   fn := fun g [_] inp fe => m.fn g inp fe >>= fun a => (k a).fn g inp fe
   param A _ _ f₁ f₂ hι hfe :=
     A.rel_bind (m.param A f₁ f₂ hι hfe)
-      (fun a _b hab => hab ▸ (k a).param A f₁ f₂ hι hfe)
+      (fun a _ hab => hab ▸ (k a).param A f₁ f₂ hι hfe)
 
 instance : Monad (Task ℭ q₀) where
   pure := pure
@@ -155,11 +155,7 @@ theorem Tasks.freeTheorem {ℭ : BuildConfig}
     (hι : ∀ i, F.rel Eq (ι₁ i) (ι₀ i))
     (hfetch : ∀ q hq, F.rel Eq (fetch₁ q hq) (compute tasks ι₀ q)) :
     F.rel Eq ((tasks q₀).fn κ ι₁ fetch₁) (compute tasks ι₀ q₀) := by
-  have h := (tasks q₀).param F fetch₁
-    (fun q _ => compute tasks ι₀ q) hι hfetch
-  have heval : (tasks q₀).fn Id ι₀ (fun q _ => compute tasks ι₀ q) =
-      compute tasks ι₀ q₀ := by
-    conv => rhs; unfold compute
-  simpa only [heval] using h
+  conv => rhs; unfold compute
+  exact (tasks q₀).param F fetch₁ _ hι hfetch
 
 end Incremental

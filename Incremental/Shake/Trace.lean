@@ -29,18 +29,6 @@ def bracket [Monad m] [MonadLiftT BaseIO m] (q : Q) (body : TraceT Q m α) :
 def run [Monad m] (x : TraceT Q m α) : m (α × Forest Q) :=
   StateT.run x #[]
 
-theorem bracket_canReturn [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
-    [MonadLiftT BaseIO m]
-    (q : Q) (x : TraceT Q m α) (a : α) :
-    MonadAttach.CanReturn (bracket q x) a → MonadAttach.CanReturn x a := by
-  rintro ⟨s, s', hcan⟩
-  have ⟨_, _, hrest₁⟩ := LawfulMonadAttach.canReturn_bind_imp' hcan
-  have ⟨⟨a', inner⟩, hcan_inner, hrest₂⟩ :=
-    LawfulMonadAttach.canReturn_bind_imp' (x := x #[]) hrest₁
-  have ⟨_, _, hpure_can⟩ := LawfulMonadAttach.canReturn_bind_imp' hrest₂
-  obtain ⟨rfl, _⟩ := Prod.mk.inj (LawfulMonadAttach.eq_of_canReturn_pure hpure_can)
-  exact ⟨#[], inner, hcan_inner⟩
-
 end Trace
 
 public def ShakeTrace
@@ -53,7 +41,6 @@ public def ShakeTrace
     {m : Type → Type} [Monad m] [LawfulMonad m] [MonadAttach m] [LawfulMonadAttach m]
     [MonadLiftT BaseIO m] :
     Build ℭ J tasks (Trace.TraceT ℭ.Q m) Id :=
-  Shake ℭ J hI hR tasks (m := Trace.TraceT ℭ.Q m)
-    Trace.bracket Trace.bracket_canReturn
+  Shake ℭ J hI hR tasks (m := Trace.TraceT ℭ.Q m) Trace.bracket
 
 end Incremental
