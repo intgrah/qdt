@@ -108,22 +108,18 @@ theorem evalTree_cross {α : Type} (ι ι' : ∀ i, ℭ.V i)
   | pure a => rfl
   | input i k ih =>
     show evalTree ι rec (k (ι i)) = evalTree ι' rec' (k (ι' i))
-    have hi_eq : ι' i = ι i := hin ⟨i, ι i⟩ (.head _)
-    rw [hi_eq]
+    rw [hin ⟨i, ι i⟩ (.head _)]
     exact ih (ι i) (fun p hp => hin p (.tail _ hp)) hdep
   | fetch q hq k ih =>
     show evalTree ι rec (k (rec q)) = evalTree ι' rec' (k (rec' q))
-    have hd_eq : rec' q = rec q := hdep ⟨q, hq, rec q⟩ (.head _)
-    rw [hd_eq]
+    rw [hdep ⟨q, hq, rec q⟩ (.head _)]
     exact ih (rec q) hin (fun p hp => hdep p (.tail _ hp))
 
 def evalAction (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) : MonadAction (FM ℭ q₀) Id where
   rel R t a := R (evalTree ι rec t) a
-  rel_pure {α β R a b} hab := show R (evalTree ι rec (.pure a)) b from hab
-  rel_bind {α₁ α₂ β₁ β₂ R S ma mb ka kb} hma hk := by
-    show S (evalTree ι rec (bind ma ka)) (kb mb)
-    rw [evalTree_bind]
-    exact hk _ mb hma
+  rel_pure hab := hab
+  rel_bind {_ _ _ _ _ _ ma _ ka _} hma hk :=
+    evalTree_bind ι rec ma ka ▸ hk _ _ hma
 
 end FM
 
@@ -136,9 +132,7 @@ theorem tasksTree_eval (tasks : Tasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) :
     FM.evalTree ι rec (tasksTree ℭ tasks q₀) =
       (tasks q₀).fn Id ι (fun q _ => rec q) :=
-  (tasks q₀).param (FM.evalAction ι rec)
-    FM.pureFetch (fun q _ => rec q)
-    (fun _ => rfl) (fun _ _ => rfl)
+  (tasks q₀).param (FM.evalAction ι rec) FM.pureFetch _ (fun _ => rfl) (fun _ _ => rfl)
 
 theorem tasksTree_eval_compute (tasks : Tasks ℭ) (q₀ : ℭ.Q)
     (ι : ∀ i, ℭ.V i) :
