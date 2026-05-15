@@ -57,7 +57,9 @@ structure MonadAction (κ₁ κ₂ : Type → Type) [Monad κ₁] [Monad κ₂] 
 
 structure Task (ℭ : BuildConfig) (q₀ : ℭ.Q) (α : Type) : Type 1 where
   fn : ∀ (f : Type → Type) [Monad f],
-    (∀ i, f (ℭ.V i)) → (∀ q, ℭ.rel q q₀ → f (ℭ.R q)) → f α
+    (∀ i, f (ℭ.V i)) →
+    (∀ q, ℭ.rel q q₀ → f (ℭ.R q)) →
+    f α
   param {κ₁ κ₂ : Type → Type} [Monad κ₁] [Monad κ₂]
     (A : MonadAction κ₁ κ₂)
     {ι₁ : ∀ i, κ₁ (ℭ.V i)} {ι₂ : ∀ i, κ₂ (ℭ.V i)}
