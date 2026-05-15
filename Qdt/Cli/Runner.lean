@@ -18,6 +18,7 @@ def runBuild (cfg : Config) : IO UInt32 :=
   | .shake => Runner.runId cfg
       (Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) tasks)
   | .shakeC => Runner.runId cfg (ShakeC config Input tasks)
+  | .shakeRdeps => Runner.runId cfg (ShakeRdeps config Input tasks)
   | .shakeTrace => Runner.runTrace cfg
 
 end Qdt.Cli
