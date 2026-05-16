@@ -4,9 +4,7 @@ public import Cli.Extensions
 public import Qdt.Cli
 public import Qdt.Cli.Runner
 
-@[expose] public section
-
-open Cli Qdt Qdt.Cli
+open Cli
 
 def Qdt.cmd : Cmd := `[Cli|
   qdt VIA run;

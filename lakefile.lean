@@ -16,9 +16,6 @@ lean_lib Incremental
 @[default_target]
 lean_lib IncrementalAxiomCheck where
   roots := #[`Incremental.AxiomCheck]
-lean_lib IncrementalWF
-lean_lib IncrementalWF2 where
-  precompileModules := true
 lean_lib Qdt
 lean_lib Qdt.Test where
   globs := #[`Qdt.Test.*]
