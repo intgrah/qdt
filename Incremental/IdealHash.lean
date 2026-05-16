@@ -8,6 +8,7 @@ public import Mathlib.Logic.Embedding.Basic
 class IdealHashable (α : Type) [Hashable α] : Prop where
   inj : Function.Injective (hash : α → UInt64)
 
+@[instance]
 axiom Hashable.ideal {α : Type} [Hashable α] : IdealHashable α
 
 attribute [instance] Hashable.ideal
