@@ -2,11 +2,9 @@ module
 
 public import Incremental.Shake.Basic
 public import Incremental.MonadCancel
-public import Incremental.LawfulEST
+public import Incremental.LawfulMonadAttach
 public import Batteries.Lean.LawfulMonad
 import Init.Control.Lawful.MonadAttach.Instances
-
-@[expose] public section
 
 namespace Incremental
 
@@ -71,7 +69,7 @@ end main
 
 end Shake
 
-structure Cancelled
+public structure Cancelled
 
 abbrev CancelM (Cache : Type) :=
   ReaderT (BaseIO Bool) (ExceptT Cancelled (StateT Cache BaseIO))

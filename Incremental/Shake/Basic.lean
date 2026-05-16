@@ -6,7 +6,7 @@ public import Incremental.FreeMonad
 public import Incremental.IdealHash
 public import Incremental.Shake.Store
 
-@[expose] public section
+public section
 
 namespace Incremental
 

@@ -1,7 +1,7 @@
 module
 
 import Incremental.Shake.Trace
-import Incremental.LawfulEST
+import Incremental.LawfulMonadAttach
 import Incremental.Test.Fibonacci
 import Batteries.Lean.LawfulMonad
 

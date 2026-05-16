@@ -2,8 +2,6 @@ module
 
 public import Incremental.Basic
 
-@[expose] public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap)
@@ -14,14 +12,14 @@ variable (ℭ : BuildConfig)
 
 namespace ShakeRT
 
-structure Memo (q₀ : ℭ.Q) where
+public structure Memo (q₀ : ℭ.Q) where
   value : ℭ.R q₀
   queryDeps : HashMap ℭ.Q UInt64
   inputDeps : HashMap ℭ.I UInt64
   hash : UInt64 := hash value
   hash_value : Hashable.hash value = hash := by rfl
 
-structure Store (J : Type) where
+public structure Store (J : Type) where
   inputs : J
   memos : DHashMap ℭ.Q (ShakeRT.Memo ℭ)
 

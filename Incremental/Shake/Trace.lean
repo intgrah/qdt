@@ -2,31 +2,29 @@ module
 
 public import Incremental.Shake.Standard
 
-@[expose] public section
-
 namespace Incremental
 
 namespace Trace
 
-inductive DepNode (Q : Type) where
+public inductive DepNode (Q : Type) where
   | mk (q : Q) (durationNs : Nat) (children : Array (DepNode Q))
 
-abbrev Forest (Q : Type) := Array (DepNode Q)
+public abbrev Forest (Q : Type) := Array (DepNode Q)
 
-abbrev TraceT (Q : Type) (m : Type → Type) := StateT (Forest Q) m
+public abbrev TraceT (Q : Type) (m : Type → Type) := StateT (Forest Q) m
 
 variable {Q : Type} {m : Type → Type} {α : Type}
 
 @[inline]
 def bracket [Monad m] [MonadLiftT BaseIO m] (q : Q) (body : TraceT Q m α) :
     TraceT Q m α := fun outer => do
-  let t0 ← liftM (m := m) (IO.monoNanosNow : BaseIO Nat)
+  let t₀ ← liftM (m := m) (IO.monoNanosNow : BaseIO Nat)
   let (a, inner) ← body #[]
-  let t1 ← liftM (m := m) (IO.monoNanosNow : BaseIO Nat)
-  pure (a, outer.push (.mk q (t1 - t0) inner))
+  let t₁ ← liftM (m := m) (IO.monoNanosNow : BaseIO Nat)
+  return (a, outer.push (.mk q (t₁ - t₀) inner))
 
 @[inline]
-def run [Monad m] (x : TraceT Q m α) : m (α × Forest Q) :=
+public def run [Monad m] (x : TraceT Q m α) : m (α × Forest Q) :=
   StateT.run x #[]
 
 end Trace

@@ -3,8 +3,9 @@ module
 public import Qdt.Cli.Format
 public import Qdt.Common
 public import Incremental.Shake.Trace
-public import Incremental.LawfulEST
+public import Incremental.LawfulMonadAttach
 public import FSWatch.Manager
+public import Batteries.Lean.LawfulMonad
 
 @[expose] public section
 

@@ -2,8 +2,6 @@ module
 
 public import Incremental.Shake.Basic
 
-@[expose] public section
-
 namespace Incremental
 
 open Std (DHashMap HashMap HashSet)
