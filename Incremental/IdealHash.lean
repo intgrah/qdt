@@ -19,4 +19,5 @@ attribute [instance] Hashable.ideal
 theorem Hashable.ideal_false : False := by
   have hcollide : hash 0 = hash (2 ^ 64) := rfl
   have : 0 = 2 ^ 64 := IdealHashable.inj hcollide
+  -- Famously, 0 is not 2 ^ 64
   omega
