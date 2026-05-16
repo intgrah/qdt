@@ -26,6 +26,7 @@ variable [BEq ℭ.Q] [Hashable ℭ.Q]
   [MonadCancel m] [MonadLiftT BaseIO m]
   [DecidableEq H] [LawfulBEq ℭ.Q]
 
+@[specialize]
 def fetchCancel
     (persist : ∀ q', Memo hI hR tasks q' → m PUnit)
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
@@ -83,6 +84,7 @@ instance {Cache} : MonadCancel (CancelM Cache) where
   CanCancel _ := True
   checkpoint := CancelM.checkpointImpl
 
+@[specialize]
 public def ShakeCancel
     (ℭ : BuildConfig)
     (J : Type) [Input ℭ J]
