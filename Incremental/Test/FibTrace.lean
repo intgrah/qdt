@@ -1,8 +1,8 @@
 module
 
-import Incremental.Shake.Trace
+import all Incremental.Shake.Trace
 import Incremental.LawfulMonadAttach
-import Incremental.Test.Fibonacci
+import all Incremental.Test.Fibonacci
 import Batteries.Lean.LawfulMonad
 
 namespace Incremental.Test.FibTrace

@@ -2,6 +2,7 @@ module
 
 public import Qdt.Common
 public import Qdt.Incremental.Rules
+import Incremental.Shake.Standard
 
 @[expose] public section
 

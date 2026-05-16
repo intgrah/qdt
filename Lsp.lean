@@ -4,6 +4,7 @@ import Lean.Data.Lsp.Communication
 import Lean.Data.Lsp.InitShutdown
 import Qdt.Common
 import Qdt.Lsp
+import Incremental.SalsaC
 
 namespace Qdt
 

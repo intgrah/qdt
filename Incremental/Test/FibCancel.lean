@@ -1,7 +1,7 @@
 module
 
-import Incremental.Shake.Cancel
-import Incremental.Test.Fibonacci
+import all Incremental.Shake.Cancel
+import all Incremental.Test.Fibonacci
 
 open Std (DHashMap)
 
