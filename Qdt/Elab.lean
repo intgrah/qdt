@@ -1,7 +1,9 @@
 module
 
 public import Qdt.Structure
-public import Qdt.HitPrimitive
+import Qdt.Bidirectional
+import Qdt.HitPrimitive
+import Qdt.Params
 
 public section
 

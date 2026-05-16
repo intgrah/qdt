@@ -1,6 +1,8 @@
 module
 
 public import Qdt.Inductive
+import Qdt.Bidirectional
+import Qdt.Params
 
 public section
 

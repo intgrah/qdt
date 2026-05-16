@@ -1,6 +1,6 @@
 module
 
-public import Qdt.Theory.Syntax
+import Qdt.Theory.Syntax
 
 namespace Qdt
 

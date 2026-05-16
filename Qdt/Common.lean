@@ -1,15 +1,7 @@
 module
 
-public import Qdt.Cli
-public import Incremental.Busy
-public import Incremental.LessBusy
-public import Incremental.Salsa
-public import Incremental.SalsaC
-public import Incremental.Shake.Standard
-public import Incremental.Shake.Store
-public import Incremental.Shake.C
-public import Incremental.Shake.Rdeps
 public import Qdt.Incremental.Query
+public import Aesop.BuiltinRules
 
 @[expose] public section
 

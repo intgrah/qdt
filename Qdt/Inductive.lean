@@ -1,7 +1,9 @@
 module
 
-public import Qdt.Theory.Substitution.Basic
-public import Qdt.Params
+public import Qdt.Nbe
+import Qdt.Bidirectional
+import Qdt.Params
+import Qdt.Theory.Substitution.Basic
 
 public section
 

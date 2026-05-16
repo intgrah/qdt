@@ -1,6 +1,7 @@
 module
 
-public import Qdt.Bidirectional
+public import Qdt.Control
+import Qdt.Bidirectional
 
 public section
 

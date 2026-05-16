@@ -2,6 +2,13 @@ module
 
 public import Qdt.Cli.Runner.Id
 public import Qdt.Cli.Runner.Trace
+public import Incremental.Busy
+public import Incremental.LessBusy
+public import Incremental.Salsa
+public import Incremental.SalsaC
+public import Incremental.Shake.Standard
+public import Incremental.Shake.C
+public import Incremental.Shake.Rdeps
 
 @[expose] public section
 

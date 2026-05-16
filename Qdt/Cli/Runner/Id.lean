@@ -1,5 +1,6 @@
 module
 
+public import Qdt.Cli
 public import Qdt.Cli.Format
 public import Qdt.Common
 public import FSWatch.Manager
