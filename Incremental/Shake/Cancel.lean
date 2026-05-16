@@ -3,6 +3,8 @@ module
 public import Incremental.Shake.Basic
 public import Incremental.MonadCancel
 public import Incremental.LawfulEST
+public import Batteries.Lean.LawfulMonad
+import Init.Control.Lawful.MonadAttach.Instances
 
 @[expose] public section
 
@@ -30,7 +32,7 @@ def fetchCancel
     (persist : ∀ q', Memo hI hR tasks q' → m PUnit)
     (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q) :
     StateT (Store hI hR tasks ι₀) m (Value tasks ι₀ q₀) := do
-  monadLift (MonadCancel.checkpoint : m PUnit)
+  (MonadCancel.checkpoint : m Unit)
   let (vcache, cache) ← get
   if let some ⟨(v, _), _⟩ := vcache.get? q₀ then return v
   let fetchWithHash (q' : ℭ.Q) (_ : ℭ.rel q' q₀) :
@@ -48,7 +50,7 @@ def fetchCancel
       run hI hR tasks ι₀ q₀ (bracket := fun _ x => x) fetchWithHash
     modify fun (vc, c) =>
       (vc.insert q₀ ⟨(value, hR q₀ value.val), rfl⟩, c.insert q₀ memo)
-    monadLift (m := m) (n := StateT _ m) (persist q₀ memo)
+    persist q₀ memo
     pure value
   match cache.get? q₀ with
   | some mm =>
@@ -72,14 +74,16 @@ end Shake
 structure Cancelled
 
 abbrev CancelM (Cache : Type) :=
-  ReaderT (IO.Ref Bool) (ExceptT Cancelled (StateT Cache BaseIO))
+  ReaderT (BaseIO Bool) (ExceptT Cancelled (StateT Cache BaseIO))
+
+@[inline] def CancelM.checkpointImpl {Cache} : CancelM Cache PUnit := do
+  let cb ← read
+  let flag ← cb
+  if flag then throw ⟨⟩ else pure ⟨⟩
 
 instance {Cache} : MonadCancel (CancelM Cache) where
   CanCancel _ := True
-  checkpoint := do
-    let ref ← read
-    let flag ← (ref.get : BaseIO Bool)
-    if flag then throw ⟨⟩ else pure ⟨⟩
+  checkpoint := CancelM.checkpointImpl
 
 public def ShakeCancel
     (ℭ : BuildConfig)
@@ -88,7 +92,7 @@ public def ShakeCancel
     [BEq ℭ.Q] [LawfulBEq ℭ.Q] [Hashable ℭ.Q]
     {H : Type} [DecidableEq H]
     (hI : ∀ i, ℭ.V i ↪ H) (hR : ∀ q, ℭ.R q ↪ H) (tasks : Tasks ℭ)
-    (cancelRef : IO.Ref Bool)
+    (cancelCheck : BaseIO Bool)
     (onPersist : ℭ.Q → BaseIO Unit := fun _ => pure ()) :
     Build ℭ J tasks BaseIO (Except Cancelled) where
   σ := J × Shake.Cache hI hR tasks
@@ -102,13 +106,12 @@ public def ShakeCancel
       (DHashMap.emptyWithCapacity 1024, oldCache)
     let persist : ∀ q', Shake.Memo hI hR tasks q' →
         CancelM (Shake.Cache hI hR tasks) PUnit :=
-      fun q' memo =>
-        fun _ref => ExceptT.lift do
-          onPersist q'
-          modifyThe (Shake.Cache hI hR tasks) (·.insert q' memo)
+      fun q' memo _cb => ExceptT.lift do
+        onPersist q'
+        modifyThe (Shake.Cache hI hR tasks) (·.insert q' memo)
     let action := Shake.fetchCancel (m := CancelM (Shake.Cache hI hR tasks))
       hI hR tasks persist ι₀ q initStore
-    let (excValueStore, finalCache) ← action cancelRef oldCache
+    let (excValueStore, finalCache) ← action cancelCheck oldCache
     match excValueStore with
     | .ok (v, _) => return (.ok v, (j, finalCache))
     | .error e => return (.error e, (j, finalCache))

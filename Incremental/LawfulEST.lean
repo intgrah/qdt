@@ -1,29 +1,43 @@
 module
 
-public import Init.Control.Lawful.MonadAttach.Lemmas
-public import Init.System.ST
-public import Init.System.IO
+import all Init.System.ST
 
 @[expose] public section
 
 variable {ε σ : Type}
 
-/-!
-Just assume `ST` and `EST` are well behaved...
+instance : LawfulMonadAttach (ST σ) where
+  map_attach := rfl
+  canReturn_map_imp := by
+    intro α P x a ⟨s, _, hxs⟩
+    let (eq := h) ⟨⟨a, hs⟩, _⟩ := x s
+    simp only [Functor.map, ST.bind, h] at hxs
+    cases hxs
+    exact hs
 
-See LawfulEst_.lean
--/
+instance : LawfulMonadAttach (EST ε σ) where
+  map_attach {_ x} := by
+    funext s
+    simp only [Functor.map, EST.bind, MonadAttach.attach]
+    split
+    next _ _ h_outer =>
+      split at h_outer
+      next h => cases h_outer; exact h.symm
+      next h => cases h_outer
+    next _ _ h_outer =>
+      split at h_outer
+      next h => cases h_outer
+      next h => cases h_outer; exact h.symm
+  canReturn_map_imp := by
+    intro _ _ x _ ⟨s, _, hxs⟩
+    cases h : x s with
+    | ok val _ =>
+      simp only [Functor.map, EST.bind, h] at hxs
+      cases hxs
+      exact val.property
+    | error _ _ =>
+      simp only [Functor.map, EST.bind, h] at hxs
+      cases hxs
 
-axiom ST.instLawfulMonad : LawfulMonad (ST σ)
-attribute [instance] ST.instLawfulMonad
-axiom ST.instLawfulMonadAttach : LawfulMonadAttach (ST σ)
-attribute [instance] ST.instLawfulMonadAttach
-axiom EST.instLawfulMonad : LawfulMonad (EST ε σ)
-attribute [instance] EST.instLawfulMonad
-axiom EST.instLawfulMonadAttach : LawfulMonadAttach (EST ε σ)
-attribute [instance] EST.instLawfulMonadAttach
-
-instance : LawfulMonad BaseIO := inferInstanceAs (LawfulMonad (ST IO.RealWorld))
 instance : LawfulMonadAttach BaseIO := inferInstanceAs (LawfulMonadAttach (ST IO.RealWorld))
-instance : LawfulMonad (EIO ε) := inferInstanceAs (LawfulMonad (EST ε IO.RealWorld))
 instance : LawfulMonadAttach (EIO ε) := inferInstanceAs (LawfulMonadAttach (EST ε IO.RealWorld))

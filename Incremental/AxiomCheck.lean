@@ -4,6 +4,10 @@ import Incremental.Shake.Standard
 import Incremental.Shake.Trace
 import Incremental.Shake.Cancel
 
+/-!
+This file serves as a sort of "lockfile" for axioms
+-/
+
 /--
 info: 'Incremental.Tasks.freeTheorem' does not depend on any axioms
 -/
@@ -35,11 +39,7 @@ info: 'Incremental.ShakeTrace' depends on axioms: [propext, Quot.sound]
 #print axioms Incremental.ShakeTrace
 
 /--
-info: 'Incremental.ShakeCancel' depends on axioms: [propext,
- Classical.choice,
- Quot.sound,
- ST.instLawfulMonad,
- ST.instLawfulMonadAttach]
+info: 'Incremental.ShakeCancel' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in
 #print axioms Incremental.ShakeCancel
