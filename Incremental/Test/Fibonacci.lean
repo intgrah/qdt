@@ -1,8 +1,12 @@
-import Incremental.Basic
+module
+
+public import Incremental.Basic
+
+@[expose] public section
 
 namespace Incremental.Test.Fibonacci
 
-abbrev config : Incremental.BuildConfig where
+abbrev config : BuildConfig where
   I := Empty
   V := nofun
   Q := Nat
@@ -10,7 +14,7 @@ abbrev config : Incremental.BuildConfig where
   rel := (· < ·)
   wf := Nat.lt_wfRel.wf
 
-instance : Incremental.Input config Unit where
+instance : Input config Unit where
   get := nofun
   set := nofun
   get_set_self := nofun
@@ -18,12 +22,12 @@ instance : Incremental.Input config Unit where
 
 instance : Hashable Empty := ⟨nofun⟩
 
-def tasks : Incremental.Tasks config
+def tasks : Tasks config
   | 0 => pure 0
   | 1 => pure 1
   | n + 2 => do
-    let a ← Incremental.fetch (n + 1) (by omega)
-    let b ← Incremental.fetch n (by omega)
+    let a ← fetch (n + 1) (by omega)
+    let b ← fetch n (by omega)
     return a + b
 
 end Incremental.Test.Fibonacci

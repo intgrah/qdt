@@ -1,8 +1,12 @@
-import Incremental.Basic
+module
+
+public import Incremental.Basic
+
+@[expose] public section
 
 namespace Incremental.Test.Triangle
 
-abbrev config : Incremental.BuildConfig where
+abbrev config : BuildConfig where
   I := Empty
   V := nofun
   Q := Nat
@@ -10,7 +14,7 @@ abbrev config : Incremental.BuildConfig where
   rel := (· < ·)
   wf := Nat.lt_wfRel.wf
 
-instance : Incremental.Input config Unit where
+instance : Input config Unit where
   get := nofun
   set := nofun
   get_set_self := nofun
@@ -18,10 +22,10 @@ instance : Incremental.Input config Unit where
 
 instance : Hashable Empty := ⟨nofun⟩
 
-def tasks : Incremental.Tasks config
+def tasks : Tasks config
   | 0 => pure 0
   | n + 1 => do
-    let prev ← Incremental.fetch n (by omega)
+    let prev ← fetch n (by omega)
     return prev + (n + 1)
 
 end Incremental.Test.Triangle

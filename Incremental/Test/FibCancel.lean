@@ -1,13 +1,14 @@
+module
+
 import Incremental.Shake.Cancel
 import Incremental.Test.Fibonacci
 
-open Incremental
-open Incremental.Test.Fibonacci
 open Std (DHashMap)
 
 namespace Incremental.Test.FibCancel
 
-abbrev hI : ∀ i, config.V i ↪ UInt64 := nofun
+open Fibonacci
+
 abbrev hR : ∀ q, config.R q ↪ UInt64 := fun _ => Hashable.toEmbedding
 
 def assert (cond : Bool) (msg : String) : IO Unit := do
@@ -15,7 +16,7 @@ def assert (cond : Bool) (msg : String) : IO Unit := do
 
 #eval show IO Unit from do
   let cancelRef ← IO.mkRef false
-  let b := ShakeCancel config Unit hI hR tasks cancelRef
+  let b := ShakeCancel config Unit nofun hR tasks cancelRef.get
   let (result, (_, cache)) ← b.build 30 (b.init ())
   match result with
   | .ok v =>
@@ -25,7 +26,7 @@ def assert (cond : Bool) (msg : String) : IO Unit := do
 
 #eval show IO Unit from do
   let cancelRef ← IO.mkRef true
-  let b := ShakeCancel config Unit hI hR tasks cancelRef
+  let b := ShakeCancel config Unit nofun hR tasks cancelRef.get
   let (result, (_, cache)) ← b.build 30 (b.init ())
   match result with
   | .ok _ => throw (IO.userError "pre-cancelled run unexpectedly succeeded")
@@ -38,7 +39,7 @@ def assert (cond : Bool) (msg : String) : IO Unit := do
   let onPersist (_q : config.Q) : BaseIO Unit := do
     let n ← counterRef.modifyGet (fun n => (n + 1, n + 1))
     if n == 10 then cancelRef.set true
-  let b := ShakeCancel config Unit hI hR tasks cancelRef onPersist
+  let b := ShakeCancel config Unit nofun hR tasks cancelRef.get onPersist
   let (result, (_, cache)) ← b.build 40 (b.init ())
   let count ← counterRef.get
   match result with

@@ -1,10 +1,13 @@
+module
+
 import Incremental.Shake.Trace
 import Incremental.LawfulEST
 import Incremental.Test.Fibonacci
+import Batteries.Lean.LawfulMonad
 
 namespace Incremental.Test.FibTrace
 
-open Incremental Incremental.Test.Fibonacci
+open Fibonacci
 
 def build : Build config Unit tasks (Trace.TraceT Nat BaseIO) Id :=
   ShakeTrace config Unit nofun (fun _ => Hashable.toEmbedding) tasks
