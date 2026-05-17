@@ -11,8 +11,6 @@ class IdealHashable (α : Type) [Hashable α] : Prop where
 @[instance]
 axiom Hashable.ideal {α : Type} [Hashable α] : IdealHashable α
 
-attribute [instance] Hashable.ideal
-
 @[inline] def Hashable.toEmbedding {α : Type} [Hashable α] [IdealHashable α] :
     α ↪ UInt64 :=
   ⟨hash, IdealHashable.inj⟩
