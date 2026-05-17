@@ -50,18 +50,6 @@ theorem maxOffset_le_denoteList : ∀ L, maxOffset L ≤ denoteList ρ L
   show Nat.max 0 (Nat.max (ρ n + 0) 0) = ρ n
   simp
 
-theorem canonicaliseConstant_denote (c : Nat) (L : List (Nat × Nat)) :
-    (canonicaliseConstant c L).denote ρ = Nat.max c (denoteList ρ L) := by
-  unfold canonicaliseConstant
-  split
-  · rfl
-  · split
-    · rename_i _ _ hle
-      have := Nat.le_trans hle (maxOffset_le_denoteList ρ L)
-      show Nat.max 0 (denoteList ρ L) = Nat.max c (denoteList ρ L)
-      grind
-    · rfl
-
 theorem map_succ_denoteList : ∀ L,
     denoteList ρ (L.map fun (i, k) => (i, k + 1)) =
       if L.isEmpty then 0 else denoteList ρ L + 1
@@ -74,7 +62,8 @@ theorem map_succ_denoteList : ∀ L,
 theorem succ_denote : ∀ nf, (succ nf).denote ρ = nf.denote ρ + 1
   | ⟨c, L⟩ => by
     unfold succ
-    rw [canonicaliseConstant_denote, map_succ_denoteList]
+    show Nat.max (c + 1) (denoteList ρ (L.map fun (i, k) => (i, k + 1))) = _
+    rw [map_succ_denoteList]
     cases L <;> simp [denote, denoteList] <;> grind
 
 theorem merge_denoteList : ∀ L L',
@@ -101,7 +90,8 @@ theorem maxOf_denote : ∀ nf₁ nf₂,
     (maxOf nf₁ nf₂).denote ρ = Nat.max (nf₁.denote ρ) (nf₂.denote ρ)
   | ⟨_, _⟩, ⟨_, _⟩ => by
     unfold maxOf
-    rw [canonicaliseConstant_denote, merge_denoteList]
+    show Nat.max _ (denoteList ρ (merge _ _)) = _
+    rw [merge_denoteList]
     simp [denote]
     grind
 

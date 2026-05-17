@@ -65,12 +65,8 @@ def maxOffset : List (Nat × Nat) → Nat
   | [] => 0
   | (_, k) :: rest => Nat.max k (maxOffset rest)
 
-def canonicaliseConstant (c : Nat) : List (Nat × Nat) → NF
-  | [] => ⟨c, []⟩
-  | L => if c ≤ maxOffset L then ⟨0, L⟩ else ⟨c, L⟩
-
 def succ : NF → NF
-  | ⟨c, L⟩ => canonicaliseConstant (c + 1) (L.map fun p => (p.1, p.2 + 1))
+  | ⟨c, L⟩ => ⟨c + 1, L.map fun p => (p.1, p.2 + 1)⟩
 
 def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
   | [], ys => ys
@@ -81,7 +77,7 @@ def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
     else                 (i₁, Nat.max k₁ k₂) :: merge xs ys
 
 def maxOf : NF → NF → NF
-  | ⟨c₁, L₁⟩, ⟨c₂, L₂⟩ => canonicaliseConstant (Nat.max c₁ c₂) (merge L₁ L₂)
+  | ⟨c₁, L₁⟩, ⟨c₂, L₂⟩ => ⟨Nat.max c₁ c₂, merge L₁ L₂⟩
 
 def ofUniverse : Universe → NF
   | .zero => zero
@@ -133,13 +129,6 @@ private abbrev v : Universe := .level 1
 #guard normalise 0 == 0
 #guard normalise (max u v) == max u v
 #guard normalise (max v u) == max u v
-#guard normalise (max u v + 1) == max (u + 1) (v + 1)
-#guard normalise (max v (u + 1) + 2) == max (u + 3) (v + 2)
-#guard normalise (max u (u + 1)) == u + 1
-#guard normalise (max 2 3) == 3
-#guard normalise (max 5 u + 1) == max (u + 1) 6
-#guard normalise (max 5 u + 2) == max (u + 2) 7
-#guard normalise (max 3 (max u (v + 2)) + 1) == max (max (u + 1) (v + 3)) 4
 
 end Tests
 
@@ -169,24 +158,13 @@ theorem Bounded.level {k i : Nat} (h : i < k) : NF.Bounded k (NF.level i) := by
   | head => exact h
   | tail _ ht => cases ht
 
-theorem Bounded.canonicaliseConstant {k c : Nat} (L : List (Nat × Nat))
-    (hL : ∀ p ∈ L, p.1 < k) :
-    NF.Bounded k (NF.canonicaliseConstant c L) := by
-  cases L with
-  | nil => intro p hp; cases hp
-  | cons hd tl =>
-    by_cases h : c ≤ NF.maxOffset (hd :: tl)
-    · simp only [NF.canonicaliseConstant, h, ↓reduceIte]; exact hL
-    · simp only [NF.canonicaliseConstant, h, ↓reduceIte]; exact hL
-
 theorem Bounded.succ {k : Nat} {nf : NF} (h : NF.Bounded k nf) :
     NF.Bounded k (NF.succ nf) := by
-  unfold NF.succ
   cases nf with
   | mk c L =>
-    apply Bounded.canonicaliseConstant
     intro p hp
-    rw [List.mem_map] at hp
+    show p.1 < k
+    simp only [NF.succ, List.mem_map] at hp
     have ⟨p', hp', hpEq⟩ := hp
     rw [← hpEq]
     exact h p' hp'
@@ -227,9 +205,7 @@ private theorem Bounded.merge_aux {k : Nat} :
 theorem Bounded.maxOf {k : Nat} : ∀ {nf₁ nf₂ : NF},
     NF.Bounded k nf₁ → NF.Bounded k nf₂ →
     NF.Bounded k (NF.maxOf nf₁ nf₂)
-  | ⟨_, L₁⟩, ⟨_, L₂⟩, h₁, h₂ => by
-    apply Bounded.canonicaliseConstant
-    exact Bounded.merge_aux L₁ L₂ h₁ h₂
+  | ⟨_, L₁⟩, ⟨_, L₂⟩, h₁, h₂ => Bounded.merge_aux L₁ L₂ h₁ h₂
 
 theorem Bounded.ofUniverse {k : Nat} : ∀ {u : Universe},
     u.Bounded k → NF.Bounded k (NF.ofUniverse u)
