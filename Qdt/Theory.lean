@@ -7,4 +7,5 @@ public import Qdt.Theory.Global
 public import Qdt.Theory.Plausible
 public import Qdt.Theory.Substitution.Basic
 public import Qdt.Theory.Syntax
-public import Qdt.Theory.Weakening
+public import Qdt.Theory.Universe.Denotation
+public import Qdt.Theory.Universe.LE

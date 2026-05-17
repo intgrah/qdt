@@ -43,24 +43,17 @@ instance : Repr Universe where
 instance : ToString Universe where
   toString u := (repr u).pretty
 
+-- TODO do not ToString with de Bruijn indices.
 #guard toString (Universe.level 0 |>.succ.succ.succ.succ) == "u#0 + 4"
 
 def addOffset (u : Universe) : Nat → Universe
   | 0 => u
   | n + 1 => addOffset u.succ n
 
-def getOffset : Universe → Nat
-  | .succ u => getOffset u + 1
-  | _ => 0
-
-def getLevelOffset : Universe → Universe
-  | .succ u => getLevelOffset u
-  | u => u
-
 structure NF where
   constant : Nat
   levels : List (Nat × Nat)
-  deriving Repr, DecidableEq
+deriving Repr, DecidableEq
 
 namespace NF
 
@@ -129,23 +122,6 @@ def shift (k : Nat) : Universe → Universe
   | .succ u => .succ (u.shift k)
   | .max u v => .max (u.shift k) (v.shift k)
 
-def le (u v : Universe) : Bool :=
-  go u v
-where
-  go (u v : Universe) : Bool :=
-    u == v ||
-    let k := fun () =>
-      let u' := getLevelOffset u
-      (getLevelOffset v == u' || .zero == u')
-      && getOffset u ≤ getOffset v
-    match u, v with
-    | .zero, _ => true
-    | .max u₁ u₂, v => go u₁ v && go u₂ v || k ()
-    | u, .max v₁ v₂ => go u v₁ || go u v₂
-    | .succ u, .succ v => go u v
-    | _, _ => k ()
-  termination_by (u, v)
-
 section Tests
 
 open Universe
@@ -164,25 +140,6 @@ private abbrev v : Universe := .level 1
 #guard normalise (max 5 u + 1) == max (u + 1) 6
 #guard normalise (max 5 u + 2) == max (u + 2) 7
 #guard normalise (max 3 (max u (v + 2)) + 1) == max (max (u + 1) (v + 3)) 4
-
-#guard le 0 0
-#guard le 0 u
-#guard le 0 1
-#guard le u u
-#guard le u (u + 1)
-#guard le 1 2
-#guard le 3 5
-#guard !le u v
-#guard !le (u + 1) v
-#guard le (max u v) (max u v)
-#guard le (max u v) (max v u)
-#guard le (max u v) (max (u + 1) v)
-#guard le (max u v) (max u (v + 1))
-#guard !le (max u.succ v) (max u v)
-#guard !le (max u (v + 1)) (max u v)
-#guard !le (max u (v + 1)) (max (u + 1) v)
-#guard le (max u (v + 1)) (max u (v + 1))
-#guard le (max u (v + 1)) (max (v + 1) u)
 
 end Tests
 

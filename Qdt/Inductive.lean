@@ -4,6 +4,7 @@ public import Qdt.Nbe
 import Qdt.Bidirectional
 import Qdt.Params
 import Qdt.Theory.Substitution.Basic
+import Qdt.Theory.Universe.LE
 
 public section
 
@@ -212,7 +213,7 @@ def InductiveConstructor.elab {numParams}
   let (fieldCtx, fieldTys, fieldUnivs) ← withChild q₀ 1 (Params.elabWithLevels q₀ indParamCtx ctor.fields)
   for (field, fieldUniv) in ctor.fields.zip fieldUnivs do
     let fieldName := getFieldName' field |>.getD .anonymous
-    if !Universe.le fieldUniv resultUniv then
+    if ¬ fieldUniv ≤ resultUniv then
       raiseError q₀ (.fieldUniverseTooLarge ctorName fieldName fieldUniv resultUniv)
   let numFields := ctor.fields.length
   let retTy ←
