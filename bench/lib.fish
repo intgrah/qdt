@@ -1,5 +1,6 @@
-set -g QDT_BIN ~/git/intgrah/ii/code/.lake/build/bin/qdt
-set -g QDT_STDLIB ~/git/intgrah/ii/code/examples/stdlib
+set -g REPO_ROOT (realpath (dirname (status filename))/..)
+set -g QDT_BIN $REPO_ROOT/.lake/build/bin/qdt
+set -g QDT_STDLIB $REPO_ROOT/examples/stdlib
 set -g WATCH_PID 0
 
 function start_watch

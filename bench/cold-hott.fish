@@ -1,7 +1,8 @@
 #!/usr/bin/env fish
 
-set QDT_BIN ~/git/intgrah/ii/code/.lake/build/bin/qdt
-set HOTT_ROOT ~/git/intgrah/ii/code/examples/lean2-hott/build/qdt
+set REPO_ROOT (realpath (dirname (status filename))/..)
+set QDT_BIN $REPO_ROOT/.lake/build/bin/qdt
+set HOTT_ROOT $REPO_ROOT/examples/lean2-hott/build/qdt
 
 set out (dirname (status filename))/data/cold-hott.csv
 mkdir -p (dirname $out)

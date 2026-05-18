@@ -9,7 +9,7 @@ echo "n,variant,kind,trial,time_ms" >$out
 set Ns 50 100 200 400
 set variants shake-c shake-rdeps
 
-set chain_gen ~/git/intgrah/ii/code/examples/long/chain.sh
+set chain_gen $REPO_ROOT/examples/long/chain.sh
 
 for n in $Ns
     set corpus (mktemp -d)
