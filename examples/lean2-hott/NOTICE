@@ -1,0 +1,56 @@
+# Lean 2 HoTT integration -- third-party attribution
+
+This directory integrates the Lean 2 theorem prover HoTT library
+as a source of pre-elaborated terms. Apache License, Version 2.0
+governs all of it; see the top-level LICENSE file for the full text. Because
+the qdt repository as a whole is also Apache-2.0 licensed, no second copy of
+the license is shipped here.
+
+1. Upstream Lean 2 sources
+
+---
+
+The `lean2/` subdirectory is a git submodule pointing at
+
+    https://github.com/leanprover/lean2
+
+Running `git submodule update --init` populates it from upstream. The
+submodule retains its own `LICENSE` file (Apache 2.0) and the per-file
+copyright headers of its authors, including but not limited to:
+
+    Copyright (c) 2014, 2015, 2016 Microsoft Corporation. All rights reserved.
+    Copyright (c) 2014-2016 Jeremy Avigad, Floris van Doorn, Robert Lewis,
+                            Ulrik Buchholtz, Jakob von Raumer, and others.
+
+Those headers are preserved unchanged.
+
+2. Local modifications (`lean2.patch`)
+
+---
+
+`lean2.patch` is a Derivative Work of the upstream Lean 2 sources, authored
+by IntGrah (2025-2026) and licensed under the Apache License, Version 2.0.
+It modifies the following files in `lean2/`:
+
+    src/library/export.cpp
+    src/util/lp/permutation_matrix.h
+    src/util/lp/static_matrix.cpp
+    src/util/lp/static_matrix.h
+
+The modifications introduce a common-subexpression-elimination pass over
+elaborated declaration bodies, extend the `#export` format with a `#EZ`
+entry to serialise the kernel `let`-expressions the pass produces, and fix
+unrelated C++ compatibility issues in the LP utilities that prevent the
+upstream tree from building on modern compilers. Per Apache 2.0 section
+4(b), this NOTICE constitutes the prominent notice that the files listed
+above are modified relative to upstream; the upstream copyright headers in
+those files are retained per section 4(c).
+
+3. Original code in this directory
+
+---
+
+`Lean2Export.lean`, `Lean2ExportHlean.lean`, `build-lean2.sh`, and `port.sh`
+are original works by IntGrah (2025-2026), Apache 2.0, covered by the
+top-level LICENSE. They are not derived from Lean 2; they read the textual
+export format that Lean 2 emits.

@@ -1,5 +1,268 @@
+Modifications to Lean 2 (https://github.com/leanprover/lean2) for the qdt
+project. Copyright (c) 2026 Jeremy Chen. Licensed under the Apache License,
+Version 2.0 (see the LICENSE file at the root of the qdt repository).
+
+This patch is a Derivative Work of files originally Copyright (c) 2014, 2015
+Microsoft Corporation, released under Apache 2.0. Upstream copyright headers
+are preserved in the patched files. Per Apache 2.0 section 4(b), this header
+serves as the prominent notice that the listed files are modified relative
+to upstream; the accompanying NOTICE file enumerates the changed files and
+summarises the modifications.
+
+---
+diff --git a/src/library/export.cpp b/src/library/export.cpp
+index 9fea774e6..fbe5388dd 100644
+--- a/src/library/export.cpp
++++ b/src/library/export.cpp
+@@ -5,14 +5,217 @@ Released under Apache 2.0 license as described in the file LICENSE.
+ Author: Leonardo de Moura
+ */
+ #include <unordered_map>
++#include <algorithm>
++#include "util/fresh_name.h"
+ #include "kernel/expr_maps.h"
+ #include "kernel/for_each_fn.h"
++#include "kernel/replace_fn.h"
++#include "kernel/abstract.h"
+ #include "kernel/instantiate.h"
++#include "kernel/free_vars.h"
++#include "kernel/type_checker.h"
+ #include "kernel/inductive/inductive.h"
+ #include "library/module.h"
+ #include "library/unfold_macros.h"
+ 
+ namespace lean {
++/** \brief Common-subexpression elimination: introduce kernel let-bindings for
++    repeated shareable subexpressions. Operates on closed declaration bodies. */
++class cse_pass {
++    type_checker                 m_tc;
++    expr_bi_struct_map<unsigned> m_count;
++    expr_bi_struct_map<unsigned> m_size;
++
++    unsigned size_of(expr const & e) {
++        auto it = m_size.find(e);
++        if (it != m_size.end()) return it->second;
++        unsigned s = 1;
++        switch (e.kind()) {
++        case expr_kind::Var: case expr_kind::Sort: case expr_kind::Constant:
++        case expr_kind::Meta: case expr_kind::Local:
++            s = 1; break;
++        case expr_kind::App:
++            s = 1 + size_of(app_fn(e)) + size_of(app_arg(e)); break;
++        case expr_kind::Lambda: case expr_kind::Pi:
++            s = 1 + size_of(binding_domain(e)) + size_of(binding_body(e)); break;
++        case expr_kind::Let:
++            s = 1 + size_of(let_type(e)) + size_of(let_value(e)) + size_of(let_body(e)); break;
++        case expr_kind::Macro:
++            s = 1;
++            for (unsigned i = 0; i < macro_num_args(e); i++) s += size_of(macro_arg(e, i));
++            break;
++        }
++        m_size.insert(mk_pair(e, s));
++        return s;
++    }
++
++    void count_visit(expr const & e) {
++        auto it = m_count.find(e);
++        if (it != m_count.end()) {
++            it->second++;
++            return;
++        }
++        m_count.insert(mk_pair(e, 1u));
++        switch (e.kind()) {
++        case expr_kind::Var: case expr_kind::Sort: case expr_kind::Constant:
++        case expr_kind::Meta: case expr_kind::Local:
++            break;
++        case expr_kind::App:
++            count_visit(app_fn(e));
++            count_visit(app_arg(e));
++            break;
++        case expr_kind::Lambda: case expr_kind::Pi:
++            count_visit(binding_domain(e));
++            // do NOT recurse into binding_body: different de Bruijn frame
++            break;
++        case expr_kind::Let:
++            count_visit(let_type(e));
++            count_visit(let_value(e));
++            // do NOT recurse into let_body: different de Bruijn frame
++            break;
++        case expr_kind::Macro:
++            for (unsigned i = 0; i < macro_num_args(e); i++)
++                count_visit(macro_arg(e, i));
++            break;
++        }
++    }
++
++    expr replace_all(expr const & e, expr const & target, expr const & with) {
++        return replace(e, [&](expr const & m, unsigned) -> optional<expr> {
++                if (m == target) return some_expr(with);
++                return none_expr();
++            });
++    }
++    /** \brief Do CSE on \c e treating it as living at binder-depth \c depth.
++        Shareable subterms with free_var_range <= depth are wrapped in let-bindings
++        at the top of \c e. */
++    expr do_cse_at(expr const & e, unsigned depth, buffer<expr> const & locals) {
++        static const unsigned MIN_COUNT = 4;
++        static const unsigned MIN_SIZE  = 8;
++        m_count.clear();
++        count_visit(e);
++        buffer<expr> shareable;
++        for (auto const & p : m_count) {
++            expr const & sub = p.first;
++            unsigned ct = p.second;
++            if (ct < MIN_COUNT) continue;
++            if (get_free_var_range(sub) > depth) continue;
++            if (size_of(sub) < MIN_SIZE) continue;
++            switch (sub.kind()) {
++            case expr_kind::Var: case expr_kind::Sort: case expr_kind::Constant:
++            case expr_kind::Meta: case expr_kind::Local:
++                continue;
++            default: break;
++            }
++            shareable.push_back(sub);
++        }
++        std::sort(shareable.begin(), shareable.end(), [&](expr const & a, expr const & b) {
++                return size_of(a) > size_of(b);
++            });
++        expr_bi_struct_map<expr> sub_to_local;
++        buffer<pair<expr, expr>> lets;
++        for (expr const & sub : shareable) {
++            expr open_sub = sub;
++            if (get_free_var_range(sub) > 0)
++                open_sub = instantiate_rev(sub, locals.size(), locals.data());
++            expr ty;
++            try {
++                ty = m_tc.infer(open_sub).first;
++            } catch (exception &) {
++                continue;
++            }
++            if (get_free_var_range(sub) > 0)
++                ty = abstract_locals(ty, locals.size(), locals.data());
++            if (get_free_var_range(ty) > depth) continue;
++            name share_name("_share");
++            expr l = mk_local(mk_fresh_name(), share_name, ty, binder_info());
++            sub_to_local.insert(mk_pair(sub, l));
++            lets.push_back(mk_pair(l, sub));
++        }
++        if (lets.empty()) return e;
++        // Only replace at offset 0 (current scope): hash-consed cells at deeper
++        // de Bruijn frames have different meaning and must not be substituted.
++        auto do_replace = [&](expr const & x) -> expr {
++            return replace(x, [&](expr const & m, unsigned offset) -> optional<expr> {
++                    if (offset != 0) return none_expr();
++                    auto it = sub_to_local.find(m);
++                    if (it != sub_to_local.end()) return some_expr(it->second);
++                    return none_expr();
++                });
++        };
++        expr result = do_replace(e);
++        for (auto & p : lets) {
++            p.second = replace(p.second, [&](expr const & m, unsigned offset) -> optional<expr> {
++                    if (offset != 0) return none_expr();
++                    auto it = sub_to_local.find(m);
++                    if (it != sub_to_local.end() && !is_eqp(it->second, p.first))
++                        return some_expr(it->second);
++                    return none_expr();
++                });
++        }
++        for (auto & p : lets) {
++            expr lifted = lift_free_vars(result, 1);
++            expr abs_body = abstract_local(lifted, p.first);
++            result = mk_let(local_pp_name(p.first), mlocal_type(p.first), p.second, abs_body);
++        }
++        return result;
++    }
++
++    /** \brief Walk the term recursively, applying CSE at each binder body. */
++    expr cse_recursive(expr const & e, unsigned depth, buffer<expr> & locals) {
++        switch (e.kind()) {
++        case expr_kind::Var: case expr_kind::Sort: case expr_kind::Constant:
++        case expr_kind::Meta: case expr_kind::Local:
++            return e;
++        case expr_kind::Macro: {
++            buffer<expr> args;
++            bool changed = false;
++            for (unsigned i = 0; i < macro_num_args(e); i++) {
++                expr a = cse_recursive(macro_arg(e, i), depth, locals);
++                if (!is_eqp(a, macro_arg(e, i))) changed = true;
++                args.push_back(a);
++            }
++            return changed ? update_macro(e, args.size(), args.data()) : e;
++        }
++        case expr_kind::App:
++            return mk_app(cse_recursive(app_fn(e), depth, locals),
++                          cse_recursive(app_arg(e), depth, locals));
++        case expr_kind::Lambda: case expr_kind::Pi: {
++            expr d = cse_recursive(binding_domain(e), depth, locals);
++            // Open d with the locals already in scope so the synthetic local's
++            // stored type contains no raw de Bruijn vars (only free locals).
++            expr d_open = locals.empty() ? d : instantiate_rev(d, locals.size(), locals.data());
++            expr l = mk_local(mk_fresh_name(), binding_name(e), d_open, binding_info(e));
++            locals.push_back(l);
++            expr b = cse_recursive(binding_body(e), depth + 1, locals);
++            b = do_cse_at(b, depth + 1, locals);
++            locals.pop_back();
++            return update_binding(e, d, b);
++        }
++        case expr_kind::Let: {
++            expr t = cse_recursive(let_type(e), depth, locals);
++            expr v = cse_recursive(let_value(e), depth, locals);
++            expr t_open = locals.empty() ? t : instantiate_rev(t, locals.size(), locals.data());
++            expr l = mk_local(mk_fresh_name(), let_name(e), t_open, binder_info());
++            locals.push_back(l);
++            expr b = cse_recursive(let_body(e), depth + 1, locals);
++            b = do_cse_at(b, depth + 1, locals);
++            locals.pop_back();
++            return update_let(e, t, v, b);
++        }
++        }
++        return e;
++    }
++public:
++    cse_pass(environment const & env) : m_tc(env) {}
++
++    expr apply(expr const & e) {
++        buffer<expr> locals;
++        expr result = cse_recursive(e, 0, locals);
++        return do_cse_at(result, 0, locals);
++    }
++};
++
+ template<typename T>
+ using level_map = typename std::unordered_map<level, T, level_hash, level_eq>;
+ 
+@@ -161,9 +364,15 @@ class exporter {
+             i  = m_expr2idx.size();
+             m_out << i << " #EA " << e1 << " " << e2 << "\n";
+             break;
+-        case expr_kind::Let:
+-            i = export_expr(instantiate(let_body(e), let_value(e)));
++        case expr_kind::Let: {
++            unsigned ln = export_name(let_name(e));
++            unsigned lt = export_expr(let_type(e));
++            unsigned lv = export_expr(let_value(e));
++            unsigned lb = export_expr(let_body(e));
++            i = m_expr2idx.size();
++            m_out << i << " #EZ " << ln << " " << lt << " " << lv << " " << lb << "\n";
+             break;
++        }
+         case expr_kind::Lambda:
+             i  = export_binding(e, "#EL");
+             break;
+@@ -182,7 +391,9 @@ class exporter {
+     }
+ 
+     unsigned export_root_expr(expr const & e) {
+-        return export_expr(unfold_all_macros(m_env, e));
++        expr unfolded = unfold_all_macros(m_env, e);
++        cse_pass cse(m_env);
++        return export_expr(cse.apply(unfolded));
+     }
+ 
+     void export_dependencies(expr const & e) {
 diff --git a/src/util/lp/permutation_matrix.h b/src/util/lp/permutation_matrix.h
-index 27d9714..401f558 100644
+index 27d971415..401f5583a 100644
 --- a/src/util/lp/permutation_matrix.h
 +++ b/src/util/lp/permutation_matrix.h
 @@ -123,7 +123,7 @@ namespace lean {
@@ -12,7 +275,7 @@ index 27d9714..401f558 100644
  
  #ifdef LEAN_DEBUG
 diff --git a/src/util/lp/static_matrix.cpp b/src/util/lp/static_matrix.cpp
-index ed64302..241f693 100644
+index ed64302df..241f69305 100644
 --- a/src/util/lp/static_matrix.cpp
 +++ b/src/util/lp/static_matrix.cpp
 @@ -29,7 +29,7 @@ static_matrix<T, X>::static_matrix(static_matrix const &A, unsigned * /* basis *
@@ -34,7 +297,7 @@ index ed64302..241f693 100644
      }
      lean_assert(by_rows.size() == by_cols.size());
 diff --git a/src/util/lp/static_matrix.h b/src/util/lp/static_matrix.h
-index 9d44c4e..a325cf2 100644
+index 9d44c4ebf..a325cf29b 100644
 --- a/src/util/lp/static_matrix.h
 +++ b/src/util/lp/static_matrix.h
 @@ -63,7 +63,7 @@ public:
