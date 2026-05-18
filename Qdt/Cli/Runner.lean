@@ -7,6 +7,7 @@ public import Incremental.LessBusy
 public import Incremental.Salsa
 public import Incremental.SalsaC
 public import Incremental.Shake.Standard
+public import Incremental.Shake.StandardRdeps
 public import Incremental.Shake.C
 public import Incremental.Shake.Rdeps
 
@@ -26,6 +27,9 @@ def runBuild (cfg : Config) : IO UInt32 :=
       (Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) tasks)
   | .shakeC => Runner.runId cfg (ShakeC config Input tasks)
   | .shakeRdeps => Runner.runId cfg (ShakeRdeps config Input tasks)
+  | .shakeStandardRdeps => Runner.runId cfg
+      (ShakeStandardRdeps config Input (fun _ => Hashable.toEmbedding)
+        (fun _ => Hashable.toEmbedding) tasks)
   | .shakeTrace => Runner.runTrace cfg
 
 end Qdt.Cli

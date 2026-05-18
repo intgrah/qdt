@@ -18,6 +18,7 @@ inductive BuildSystem where
   | shake
   | shakeC
   | shakeRdeps
+  | shakeStandardRdeps
   | shakeTrace
 deriving Repr, Inhabited
 
@@ -31,6 +32,7 @@ instance : Cli.ParseableType BuildSystem where
     | "shake" => some .shake
     | "shake-c" => some .shakeC
     | "shake-rdeps" => some .shakeRdeps
+    | "shake-standard-rdeps" => some .shakeStandardRdeps
     | "shake-trace" => some .shakeTrace
     | _ => none
 

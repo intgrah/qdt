@@ -301,6 +301,98 @@ theorem cacheMiss_invariant {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
     rw [hpr, ← hy_q, hdep y hy_in, hy_hash, hy_q]
   exact hval.trans (compute_cross ℭ tasks q₀ ι₀ ι hin' hdep')
 
+omit [BEq ℭ.Q] [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+private theorem evalTrace_inputs_value {α : Type} {q₀ : ℭ.Q}
+    (ι : ∀ i, ℭ.V i) (rec : ∀ q, ℭ.R q) (t : FM ℭ q₀ α) :
+    ∀ p ∈ FM.evalTrace_inputs ι rec t, p.v = ι p.i := by
+  induction t with
+  | pure _ => nofun
+  | input i k ih =>
+    intro p hp
+    rcases List.mem_cons.mp hp with rfl | hr
+    · rfl
+    · exact ih (ι i) p hr
+  | fetch q _ k ih => exact ih (rec q)
+
+omit [BEq ℭ.Q] [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+theorem cacheMiss_verify_ins {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
+    {ins : Array (InputDepHash ℭ.I H)}
+    (hin_trace : ins =
+      ((FM.evalTrace_inputs ι₀ (compute tasks ι₀) (tasksTree ℭ tasks q₀)).map
+        fun p => ⟨⟨p.i⟩, hI p.i p.v⟩).toArray) :
+    ∀ p ∈ ins, hI p.key (ι₀ p.key) = p.hash := by
+  intro p hp
+  rw [hin_trace] at hp
+  obtain ⟨e, he_mem, rfl⟩ := List.mem_map.mp (List.mem_toArray.mp hp)
+  have hev : e.v = ι₀ e.i := evalTrace_inputs_value ι₀ _ _ e he_mem
+  exact (congrArg (hI e.i) hev).symm
+
+omit [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+private theorem dedupPush_hash_correct {q₀ : ℭ.Q}
+    {target : ℭ.Q → H}
+    (e : QueryDepHash ℭ q₀ H)
+    (he : e.hash = target e.q)
+    {acc : Array (QueryDepHash ℭ q₀ H)}
+    (hacc : ∀ x ∈ acc, x.hash = target x.q) :
+    ∀ x ∈ dedupPush e acc, x.hash = target x.q := by
+  unfold dedupPush
+  split_ifs with h
+  · exact hacc
+  · intro x hx
+    obtain hx | rfl := Array.mem_push.mp hx
+    · exact hacc x hx
+    · exact he
+
+omit [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+private theorem pushAll_hash_correct {q₀ : ℭ.Q}
+    {l : List (Incremental.DepEntry ℭ q₀)}
+    {target : ℭ.Q → H}
+    (h_uniform : ∀ p ∈ l, hR p.q p.r = target p.q)
+    {acc : Array (QueryDepHash ℭ q₀ H)}
+    (hacc : ∀ x ∈ acc, x.hash = target x.q) :
+    ∀ x ∈ pushAll hR l acc, x.hash = target x.q := by
+  induction l generalizing acc with
+  | nil => exact hacc
+  | cons hd rest ih =>
+    apply ih (fun p hp => h_uniform p (List.mem_cons_of_mem _ hp))
+    exact dedupPush_hash_correct ⟨⟨hd.q, hd.hq⟩, hR hd.q hd.r⟩
+      (h_uniform hd List.mem_cons_self) hacc
+
+omit [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+theorem pushAll_origin {q₀ : ℭ.Q}
+    (l : List (Incremental.DepEntry ℭ q₀))
+    (acc : Array (QueryDepHash ℭ q₀ H)) :
+    ∀ d ∈ pushAll hR l acc, d ∈ acc ∨ ∃ e ∈ l, d.q = e.q := by
+  induction l generalizing acc with
+  | nil => intro d hd; exact Or.inl hd
+  | cons hd rest ih =>
+    intro d hdMem
+    have hRec : d ∈ pushAll hR rest (dedupPush ⟨⟨hd.q, hd.hq⟩, hR hd.q hd.r⟩ acc) := hdMem
+    rcases ih (dedupPush ⟨⟨hd.q, hd.hq⟩, hR hd.q hd.r⟩ acc) d hRec with hd_acc | ⟨e, he_rest, he_eq⟩
+    · unfold dedupPush at hd_acc
+      split_ifs at hd_acc with hcase
+      · exact Or.inl hd_acc
+      · rcases Array.mem_push.mp hd_acc with h | h
+        · exact Or.inl h
+        · refine Or.inr ⟨hd, List.mem_cons_self, ?_⟩
+          rw [h]
+    · exact Or.inr ⟨e, List.mem_cons_of_mem _ he_rest, he_eq⟩
+
+omit [Hashable ℭ.Q] [DecidableEq H] [LawfulBEq ℭ.Q] in
+theorem cacheMiss_verify_deps {ι₀ : ∀ i, ℭ.V i} {q₀ : ℭ.Q}
+    {deps : Array (QueryDepHash ℭ q₀ H)}
+    (hdep_trace : deps =
+      pushAll hR (FM.evalTrace_deps ι₀ (compute tasks ι₀) (tasksTree ℭ tasks q₀))
+        (#[] : Array (QueryDepHash ℭ q₀ H))) :
+    ∀ p ∈ deps, hR p.q (compute tasks ι₀ p.q) = p.hash := by
+  intro p hp
+  rw [hdep_trace] at hp
+  symm
+  exact pushAll_hash_correct hR
+    (target := fun q => hR q (compute tasks ι₀ q))
+    (fun hd hhd => congrArg (hR hd.q) (FM.evalTrace_deps_value _ _ _ _ hhd))
+    (fun _ hx => absurd hx (by simp)) p hp
+
 @[specialize bracket]
 def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
     (bracket : ∀ {α}, ℭ.Q → m α → m α)
@@ -309,7 +401,10 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         { vh : Value tasks ι₀ q' × H // vh.snd = (hR q') vh.fst.val }) :
     StateT (Store hI hR tasks ι₀) m
       { mv : Memo hI hR tasks q₀ × Value tasks ι₀ q₀ //
-        mv.fst.value = mv.snd.val } := fun store => do
+        mv.fst.value = mv.snd.val ∧
+        (∀ p ∈ mv.fst.inputDeps, hI p.key (ι₀ p.key) = p.hash) ∧
+        (∀ p ∈ mv.fst.queryDeps, hR p.q (compute tasks ι₀ p.q) = p.hash) } :=
+    fun store => do
   let input' := runInput' hI hR tasks m ι₀ q₀
   let fetch' := runFetch' hI hR tasks m ι₀ q₀ bracket fetch
   let mTree := (tasks q₀).fn (StateT (RunState hI hR tasks ι₀ q₀) m) input' fetch'
@@ -336,7 +431,10 @@ def run (ι₀ : ∀ i, ℭ.V i) (q₀ : ℭ.Q)
         inputDeps := result.snd.ins
         queryDeps := result.snd.queryDeps
         invariant := cacheMiss_invariant hI hR tasks hval hin_trace' hdep_trace' }
-    pure (⟨(memo, ⟨result.fst, hval⟩), rfl⟩, result.snd.store)
+    pure (⟨(memo, ⟨result.fst, hval⟩),
+      rfl,
+      cacheMiss_verify_ins (hI := hI) (tasks := tasks) hin_trace',
+      cacheMiss_verify_deps (hR := hR) (tasks := tasks) hdep_trace'⟩, result.snd.store)
 
 end main
 

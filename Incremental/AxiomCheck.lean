@@ -1,6 +1,7 @@
 import Incremental.Busy
 import Incremental.LessBusy
 import Incremental.Shake.Standard
+import Incremental.Shake.StandardRdeps
 import Incremental.Shake.Trace
 import Incremental.Shake.Cancel
 
@@ -43,3 +44,9 @@ info: 'Incremental.ShakeCancel' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in
 #print axioms Incremental.ShakeCancel
+
+/--
+info: 'Incremental.ShakeStandardRdeps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms Incremental.ShakeStandardRdeps
