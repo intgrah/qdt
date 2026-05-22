@@ -11,5 +11,6 @@ name = "QDT LSP"
 languages = ["QDT"]
 
 [grammars.qdt]
-repository = "file:///home/intgrah/git/intgrah/qdt/tree-sitter-qdt"
-commit = "e4f95b0b02ea0417e13e23e57f9d54605a38da7e"
+repository = "https://github.com/IntGrah/qdt"
+commit = "042ad1940ebebb4ad7acd280d39df83f04628c09"
+path = "tree-sitter-qdt"
