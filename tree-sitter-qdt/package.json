@@ -1,0 +1,16 @@
+{
+  "name": "tree-sitter-qdt",
+  "version": "0.0.1",
+  "description": "Tree-sitter grammar for QDT",
+  "type": "module",
+  "main": "bindings/node",
+  "tree-sitter": [
+    {
+      "scope": "source.qdt",
+      "file-types": ["qdt"]
+    }
+  ],
+  "devDependencies": {
+    "tree-sitter-cli": "^0.26.0"
+  }
+}
