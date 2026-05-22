@@ -4,14 +4,14 @@ inductive Option.{u} (α : Type u) : Type u where
   | none : Option α
   | some : α → Option α
 
-def Option.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : Option.{u} α → Option.{v} β :=
-  Option.rec.{v, u} α (fun _ => Option.{v} β) (Option.none.{v} β) (fun a => Option.some.{v} β (f a))
+def Option.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : Option α → Option β :=
+  Option.rec _ (fun _ => Option β) (Option.none _) (fun a => Option.some _ (f a))
 
 def Option.bind.{u, v} (α : Type u) (β : Type v)
-    (o : Option.{u} α) (f : α → Option.{v} β) : Option.{v} β :=
-  Option.rec.{v, u} α (fun _ => Option.{v} β) (Option.none.{v} β) f o
+    (o : Option α) (f : α → Option β) : Option β :=
+  Option.rec _ (fun _ => Option β) (Option.none _) f o
 
-def Option.getD.{u} (α : Type u) (o : Option.{u} α) (dflt : α) : α :=
-  Option.rec.{u, u} α (fun _ => α) dflt (id.{u} α) o
+def Option.getD.{u} (α : Type u) (o : Option α) (dflt : α) : α :=
+  Option.rec _ (fun _ => α) dflt (id _) o
 
-def Option.pure.{u} (α : Type u) (a : α) : Option.{u} α := Option.some.{u} α a
+def Option.pure.{u} (α : Type u) (a : α) : Option α := Option.some _ a

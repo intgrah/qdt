@@ -6,11 +6,14 @@ namespace Qdt
 
 open Lean (Name)
 
+abbrev UMVarId := Nat
+
 inductive Universe where
   | level (i : Nat)
   | zero
   | succ (u : Universe)
   | max (u v : Universe)
+  | mvar (id : UMVarId)
 deriving Inhabited, Hashable, DecidableEq
 
 namespace Universe
@@ -28,6 +31,7 @@ protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
   match u with
   | .zero => "0"
   | .level i => "u#" ++ repr i
+  | .mvar id => "?u#" ++ repr id
   | .succ u' =>
     let rec countSuccs (acc : Nat) : Universe → Nat × Std.Format
       | .succ u'' => countSuccs (acc + 1) u''
@@ -53,20 +57,23 @@ def addOffset (u : Universe) : Nat → Universe
 structure NF where
   constant : Nat
   levels : List (Nat × Nat)
+  mvars : List (UMVarId × Nat)
 deriving Repr, DecidableEq
 
 namespace NF
 
-def zero : NF := ⟨0, []⟩
+def zero : NF := ⟨0, [], []⟩
 
-def level (i : Nat) : NF := ⟨0, [(i, 0)]⟩
+def level (i : Nat) : NF := ⟨0, [(i, 0)], []⟩
+
+def mvar (id : UMVarId) : NF := ⟨0, [], [(id, 0)]⟩
 
 def maxOffset : List (Nat × Nat) → Nat
   | [] => 0
   | (_, k) :: rest => Nat.max k (maxOffset rest)
 
 def succ : NF → NF
-  | ⟨c, L⟩ => ⟨c + 1, L.map fun p => (p.1, p.2 + 1)⟩
+  | ⟨c, L, M⟩ => ⟨c + 1, L.map fun p => (p.1, p.2 + 1), M.map fun p => (p.1, p.2 + 1)⟩
 
 def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
   | [], ys => ys
@@ -77,24 +84,31 @@ def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
     else                 (i₁, Nat.max k₁ k₂) :: merge xs ys
 
 def maxOf : NF → NF → NF
-  | ⟨c₁, L₁⟩, ⟨c₂, L₂⟩ => ⟨Nat.max c₁ c₂, merge L₁ L₂⟩
+  | ⟨c₁, L₁, M₁⟩, ⟨c₂, L₂, M₂⟩ => ⟨Nat.max c₁ c₂, merge L₁ L₂, merge M₁ M₂⟩
 
 def ofUniverse : Universe → NF
   | .zero => zero
   | .level i => level i
+  | .mvar id => mvar id
   | .succ u => succ (ofUniverse u)
   | .max u v => maxOf (ofUniverse u) (ofUniverse v)
 
 def reifyLevels : Universe → List (Nat × Nat) → Universe :=
   List.foldl (fun acc (i, k) => Universe.max acc ((Universe.level i).addOffset k))
 
+def reifyMVars : Universe → List (UMVarId × Nat) → Universe :=
+  List.foldl (fun acc (id, k) => Universe.max acc ((Universe.mvar id).addOffset k))
+
 def toUniverse : NF → Universe
-  | ⟨c, []⟩ => Universe.zero.addOffset c
-  | ⟨0, (i, k) :: rest⟩ => reifyLevels ((Universe.level i).addOffset k) rest
-  | ⟨c + 1, (i, k) :: rest⟩ =>
-    Universe.max
-      (reifyLevels ((Universe.level i).addOffset k) rest)
-      ((Universe.zero).addOffset (c + 1))
+  | ⟨0, [], []⟩ => Universe.zero
+  | ⟨0, (i, k) :: rest, M⟩ =>
+      reifyMVars (reifyLevels ((Universe.level i).addOffset k) rest) M
+  | ⟨0, [], (id, k) :: rest⟩ =>
+      reifyMVars ((Universe.mvar id).addOffset k) rest
+  | ⟨c + 1, L, M⟩ =>
+      Universe.max
+        (reifyMVars (reifyLevels Universe.zero L) M)
+        (Universe.zero.addOffset (c + 1))
 
 end NF
 
@@ -109,12 +123,42 @@ def mkMax (u v : Universe) : Universe :=
 def checkLevels (numParams : Nat) : Universe → Except Nat Unit
   | .level i => do if i < numParams then return else throw i
   | .zero => do return
+  | .mvar _ => do return
   | .succ u => do u.checkLevels numParams
   | .max u v => do u.checkLevels numParams; v.checkLevels numParams
+
+def usedLevels : Universe → List Nat
+  | .level i => [i]
+  | .zero => []
+  | .mvar _ => []
+  | .succ u => u.usedLevels
+  | .max u v => u.usedLevels ++ v.usedLevels
+
+def hasMVar : Universe → Bool
+  | .level _ => false
+  | .zero => false
+  | .mvar _ => true
+  | .succ u => u.hasMVar
+  | .max u v => u.hasMVar || v.hasMVar
+
+def freeMVars : Universe → List UMVarId
+  | .level _ => []
+  | .zero => []
+  | .mvar id => [id]
+  | .succ u => u.freeMVars
+  | .max u v => u.freeMVars ++ v.freeMVars
+
+def substMVars (f : UMVarId → Option Universe) : Universe → Universe
+  | .level i => .level i
+  | .zero => .zero
+  | .mvar id => (f id).getD (.mvar id)
+  | .succ u => (u.substMVars f).mkSucc
+  | .max u v => (u.substMVars f).mkMax (v.substMVars f)
 
 def shift (k : Nat) : Universe → Universe
   | .level i => .level (i + k)
   | .zero => .zero
+  | .mvar id => .mvar id
   | .succ u => .succ (u.shift k)
   | .max u v => .max (u.shift k) (v.shift k)
 
@@ -135,6 +179,7 @@ end Tests
 def Bounded (k : Nat) : Universe → Prop
   | .level i => i < k
   | .zero => True
+  | .mvar _ => True
   | .succ u => u.Bounded k
   | .max u v => u.Bounded k ∧ v.Bounded k
 
@@ -205,12 +250,13 @@ private theorem Bounded.merge_aux {k : Nat} :
 theorem Bounded.maxOf {k : Nat} : ∀ {nf₁ nf₂ : NF},
     NF.Bounded k nf₁ → NF.Bounded k nf₂ →
     NF.Bounded k (NF.maxOf nf₁ nf₂)
-  | ⟨_, L₁⟩, ⟨_, L₂⟩, h₁, h₂ => Bounded.merge_aux L₁ L₂ h₁ h₂
+  | ⟨_, L₁, _⟩, ⟨_, L₂, _⟩, h₁, h₂ => Bounded.merge_aux L₁ L₂ h₁ h₂
 
 theorem Bounded.ofUniverse {k : Nat} : ∀ {u : Universe},
     u.Bounded k → NF.Bounded k (NF.ofUniverse u)
   | .zero, _ => Bounded.zero
   | .level _, h => Bounded.level h
+  | .mvar _, _ => by intro p hp; cases hp
   | .succ u, h => Bounded.succ (Bounded.ofUniverse (u := u) h)
   | .max _ _, ⟨hu, hv⟩ =>
     Bounded.maxOf (Bounded.ofUniverse hu) (Bounded.ofUniverse hv)
@@ -228,21 +274,36 @@ private theorem Bounded.reifyLevels_aux {k : Nat} {u : Universe}
         (hL (i, j) List.mem_cons_self : Universe.Bounded k (Universe.level i))⟩
     · exact fun p hp => hL p (List.mem_cons_of_mem _ hp)
 
+private theorem Bounded.reifyMVars_aux {k : Nat} {u : Universe}
+    (hu : u.Bounded k) :
+    ∀ (M : List (UMVarId × Nat)), (NF.reifyMVars u M).Bounded k
+  | [] => hu
+  | (_, j) :: rest => by
+    unfold NF.reifyMVars
+    simp only [List.foldl]
+    apply Bounded.reifyMVars_aux
+    exact ⟨hu, Universe.Bounded.addOffset j (show Universe.Bounded k (Universe.mvar _) from trivial)⟩
+
 theorem Bounded.toUniverse {k : Nat} :
     ∀ {nf : NF}, NF.Bounded k nf → nf.toUniverse.Bounded k
-  | ⟨c, []⟩, _ =>
-    Universe.Bounded.addOffset c (show Universe.Bounded k Universe.zero from trivial)
-  | ⟨0, (i, j) :: rest⟩, h => by
+  | ⟨0, [], []⟩, _ => trivial
+  | ⟨0, (i, j) :: rest, M⟩, h => by
     have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
     have hRest : ∀ p ∈ rest, p.1 < k :=
       fun p hp => h p (List.mem_cons_of_mem _ hp)
-    exact Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest
-  | ⟨c + 1, (i, j) :: rest⟩, h => by
-    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
-    have hRest : ∀ p ∈ rest, p.1 < k :=
-      fun p hp => h p (List.mem_cons_of_mem _ hp)
-    exact ⟨Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest,
-      Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
+    exact Bounded.reifyMVars_aux
+      (Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest) M
+  | ⟨0, [], (_, j) :: rest⟩, _ => by
+    exact Bounded.reifyMVars_aux
+      (Universe.Bounded.addOffset j (show Universe.Bounded k (Universe.mvar _) from trivial)) rest
+  | ⟨c + 1, L, M⟩, h => by
+    have hL : ∀ p ∈ L, p.1 < k := h
+    change Universe.Bounded k ((reifyMVars (reifyLevels Universe.zero L) M).max
+      (Universe.zero.addOffset (c + 1)))
+    refine ⟨?_, ?_⟩
+    · exact Bounded.reifyMVars_aux
+        (Bounded.reifyLevels_aux (show Universe.Bounded k Universe.zero from trivial) L hL) M
+    · exact Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)
 
 end NF
 

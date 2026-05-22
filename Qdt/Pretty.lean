@@ -88,6 +88,7 @@ def Tm.fmt {c : Nat} (ctx : List Name) (tm : Tm c) (prec : Nat) : Format :=
       let bodyFmt := body.fmt (xFresh :: ctx) Prec.min
       let letFmt := group (nest 2 f!"let {xFresh} : {tyFmt} :={line}{valFmt};") ++ line ++ bodyFmt
       parenIf (prec > Prec.arrow) letFmt
+  | .mvar id => f!"?m{id}"
 
 end
 

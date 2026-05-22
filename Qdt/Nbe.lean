@@ -24,18 +24,15 @@ partial def doEl {n} : VTm n → ElabM q₀ (VTy n)
     match ← (VTm.neutral ne).whnf with
     | .neutral ne' => return .el ne'
     | v => doEl v
-  | .glued ne name us => do doEl (← (VTm.glued ne name us).whnf)
+  | .glued ne key => do doEl (← (VTm.glued ne key).whnf)
   | .lam .. => panic! "doEl: expected type code or neutral"
 
 partial def Tm.eval {n c} : Tm c → SemM q₀ n c (VTm n)
   | .u' i => return .u' i
-  | .var i => do
-    modify fun st => { st with evalCount := st.evalCount + 1 }
-    return (← read).get i
+  | .var i => return (← read).get i
   | .const name us => do
-    modify fun st => { st with evalCount := st.evalCount + 1 }
     match ← fetchConstant q₀ name with
-    | some (.definition _) => return .glued ⟨.const name us, .nil⟩ name us
+    | some (.definition _) => return .glued ⟨.const name us, .nil⟩ (.const name us)
     | some _ => return .neutral ⟨.const name us, .nil⟩
     | none => return .neutral ⟨.const name us, .nil⟩
   | .lam x a body => return .lam x (← a.eval) ⟨← read, body⟩
@@ -43,13 +40,14 @@ partial def Tm.eval {n c} : Tm c → SemM q₀ n c (VTm n)
   | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
+  | .mvar id => return .glued ⟨.mvar id, .nil⟩ (.mvar id)
 
 partial def VTm.app {n} (fn arg : VTm n) : ElabM q₀ (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
   | .lam _ _ clos => betaReduction clos arg
   | .neutral ne => return .neutral (ne.app arg)
-  | .glued ne name us => return .glued (ne.app arg) name us
+  | .glued ne key => return .glued (ne.app arg) key
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
 
 partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
@@ -62,12 +60,17 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
       | some result => return result
       | none => return .neutral (ne'.proj i)
     | v => v.proj i
-  | .glued ne name us => do (← (VTm.glued ne name us).whnf).proj i
+  | .glued ne key => do (← (VTm.glued ne key).whnf).proj i
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (Option (VTm n)) := do
   let some (.definition info) ← fetchConstant q₀ name | return none
   let v ← (info.tm.substLevels us).eval Env.nil
+  return some (VTm.weaken (Nat.zero_le n) v)
+
+partial def metaReduction {n} (id : MVarId) : ElabM q₀ (Option (VTm n)) := do
+  let some soln ← metaSolution q₀ id | return none
+  let v ← soln.eval Env.nil
   return some (VTm.weaken (Nat.zero_le n) v)
 
 partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
@@ -77,25 +80,30 @@ partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
 
 partial def VTm.whnf {n} : VTm n → ElabM q₀ (VTm n)
   | .neutral ⟨.const name us, sp⟩ => do
-    modify fun st => { st with whnfCount := st.whnfCount + 1 }
     match ← deltaReduction name us with
     | some v => (← applySpine sp v).whnf
     | none =>
       match ← iotaReduction ⟨.const name us, sp⟩ with
       | some v => v.whnf
       | none => return .neutral ⟨.const name us, sp⟩
-  | .glued ⟨_, sp⟩ name us => do
-    modify fun st => { st with whnfCount := st.whnfCount + 1 }
+  | .neutral ⟨.mvar id, sp⟩ => do
+    match ← metaReduction id with
+    | some v => (← applySpine sp v).whnf
+    | none => return .neutral ⟨.mvar id, sp⟩
+  | .glued ⟨_, sp⟩ (.const name us) => do
     match ← deltaReduction name us with
     | some v => (← applySpine sp v).whnf
     | none =>
       match ← iotaReduction ⟨.const name us, sp⟩ with
       | some v => v.whnf
       | none => return .neutral ⟨.const name us, sp⟩
+  | .glued ⟨_, sp⟩ (.mvar id) => do
+    match ← metaReduction id with
+    | some v => (← applySpine sp v).whnf
+    | none => return .neutral ⟨.mvar id, sp⟩
   | v => return v
 
 partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM q₀ (VTm n) := do
-  modify fun st => { st with betaCount := st.betaCount + 1 }
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 

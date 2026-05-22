@@ -441,3 +441,7 @@ end main
 end Shake
 
 end Incremental
+
+example : ∀ x : Nat, x = x := by
+  intro x
+  rfl

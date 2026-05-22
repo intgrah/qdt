@@ -16,7 +16,7 @@ def Qdt.cmd : Cmd := `[Cli|
     "build" : BuildSystem;         "Build system to use (default: shake-c)"
 
   ARGS:
-    ...modules : String;           "Modules to check"
+    ...modules : String;           "Modules to check (dotted names; e.g. Std.Nat). Must not contain '/' or '.qdt'."
 
   EXTENSIONS:
     defaultValues! #[("build", "shake-c")]

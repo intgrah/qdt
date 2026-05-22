@@ -2,6 +2,7 @@ module
 
 public import Qdt.Conversion
 public import Qdt.Quote
+public import Qdt.Unify
 
 public section
 
@@ -11,6 +12,24 @@ open Lean (Name)
 open Frontend (Ast Path)
 
 variable (q₀ : Key)
+
+def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
+    ElabM q₀ (Tm n) := do
+  let decl ← currentDecl q₀
+  let localPis ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote q₀⟩
+  let expectedTy ← expected.quote q₀
+  let closedTy : Ty 0 := Ty.pis localPis expectedTy
+  let info : MetaInfo := {
+    arity := n
+    ctxNames := ctx.names
+    ty := closedTy
+    solution := none
+    path := anchor
+    decl := decl
+  }
+  let id ← freshMetaId q₀ info
+  let args : List (Tm n) := (List.finRange n).map (fun i => Tm.var i.rev)
+  return Tm.apps (.mvar id) args
 
 @[inline] def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
@@ -59,6 +78,14 @@ def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Unive
     | some info =>
         for univ in univs do
           checkUniverseLevel q₀ univ
+        let univs ←
+          if univs.length < info.numUnivParams then
+            let missing := info.numUnivParams - univs.length
+            let extras ← (List.range missing).mapM fun _ => do
+              let id ← Universe.freshUMVar q₀
+              pure (Universe.mvar id)
+            pure (univs ++ extras)
+          else pure univs
         let ty ←
           if univs.isEmpty then pure info.ty
           else instantiateLevels q₀ name info.numUnivParams info.ty univs
@@ -77,6 +104,7 @@ def emitSorryAxiom {n : Nat}
   let _ ← addConstant q₀ sorryName (.axiom {
     numUnivParams := univParams.length
     ty := Ty.pis locals retTy
+    synthetic := true
   })
   let args := List.finRange n |>.map (fun i => Tm.var i.rev)
   let sorryUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
@@ -95,6 +123,76 @@ def emitSorryTy {n : Nat}
     ElabM q₀ (Ty n × Universe) := do
   let tm ← emitSorryAxiom q₀ ctx (Ty.u .zero)
   return (.el tm, .zero)
+
+@[inline] def isSyntheticSorryName (name : Name) : ElabM q₀ Bool := do
+  match ← fetchConstant q₀ name with
+  | some (.axiom info) => return info.synthetic
+  | _ => return false
+
+mutual
+partial def Tm.hasSyntheticSorry {n} : Tm n → ElabM q₀ Bool
+  | .u' _ => return false
+  | .var _ => return false
+  | .const name _ => isSyntheticSorryName q₀ name
+  | .lam _ ty body => do return (← ty.hasSyntheticSorry) || (← body.hasSyntheticSorry)
+  | .app f a => do return (← f.hasSyntheticSorry) || (← a.hasSyntheticSorry)
+  | .pi' _ a b => do return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
+  | .proj _ t => t.hasSyntheticSorry
+  | .letE _ ty rhs body => do
+      return (← ty.hasSyntheticSorry) || (← rhs.hasSyntheticSorry) || (← body.hasSyntheticSorry)
+  | .mvar id => metaIsErrored q₀ id
+
+partial def Ty.hasSyntheticSorry {n} : Ty n → ElabM q₀ Bool
+  | .u _ => return false
+  | .pi _ a b => do return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
+  | .el t => t.hasSyntheticSorry
+end
+
+mutual
+partial def Tm.markMetasErrored {n} : Tm n → ElabM q₀ Unit
+  | .u' _ | .var _ | .const _ _ => return
+  | .lam _ ty body => do ty.markMetasErrored; body.markMetasErrored
+  | .app f a => do f.markMetasErrored; a.markMetasErrored
+  | .pi' _ a b => do a.markMetasErrored; b.markMetasErrored
+  | .proj _ t => t.markMetasErrored
+  | .letE _ ty rhs body => do
+      ty.markMetasErrored; rhs.markMetasErrored; body.markMetasErrored
+  | .mvar id => markMetaErrored q₀ id
+
+partial def Ty.markMetasErrored {n} : Ty n → ElabM q₀ Unit
+  | .u _ => return
+  | .pi _ a b => do a.markMetasErrored; b.markMetasErrored
+  | .el t => t.markMetasErrored
+end
+
+def raiseTypeMismatch {n} {α : Type}
+    (ctx : TermContext n) (expected actual : Ty n) :
+    OptionT (ElabM q₀) α := do
+  if (← expected.hasSyntheticSorry q₀) || (← actual.hasSyntheticSorry q₀) then
+    expected.markMetasErrored q₀
+    actual.markMetasErrored q₀
+    failure
+  expected.markMetasErrored q₀
+  actual.markMetasErrored q₀
+  raiseError q₀ (.typeMismatch ctx.names expected actual)
+
+def raiseExpectedFunctionType {n} {α : Type}
+    (ctx : TermContext n) (got : Ty n) :
+    OptionT (ElabM q₀) α := do
+  if (← got.hasSyntheticSorry q₀) then
+    got.markMetasErrored q₀
+    failure
+  got.markMetasErrored q₀
+  raiseError q₀ (.expectedFunctionType ctx.names got)
+
+def raiseExpectedType {n} {α : Type}
+    (ctx : TermContext n) (got : Ty n) :
+    OptionT (ElabM q₀) α := do
+  if (← got.hasSyntheticSorry q₀) then
+    got.markMetasErrored q₀
+    failure
+  got.markMetasErrored q₀
+  raiseError q₀ (.expectedType ctx.names got)
 
 mutual
 
@@ -142,17 +240,21 @@ partial def inferPi {n : Nat}
     OptionT (ElabM q₀) (Tm n × Universe) := do
   let (domTm, domTy) ← withChild q₀ 0 (withChild q₀ 1 (inferTm ctx dom))
   let .u domLevel := domTy
-    | raiseError q₀ (.expectedType ctx.names (← domTy.quote q₀))
+    | raiseExpectedType q₀ ctx (← domTy.quote q₀)
   let domVal ← (Ty.el domTm).eval q₀ ctx.env
   withChild q₀ 0 (withChild q₀ 0 (emitType q₀ ctx domVal))
   let ctx' := ctx.bind x domVal
   let (codTm, codTy) ← withChild q₀ 1 (inferTm ctx' cod)
   let .u codLevel := codTy
-    | raiseError q₀ (.expectedType ctx'.names (← codTy.quote q₀))
+    | raiseExpectedType q₀ ctx' (← codTy.quote q₀)
   return (.pi' x domTm codTm, domLevel.mkMax codLevel)
 
 partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → OptionT (ElabM q₀) (Ty n × Universe)
   | .missing => failure
+  | .node `Term.hole _ => OptionT.lift do
+      let anchor ← currentPath q₀
+      let tm ← freshMeta q₀ anchor ctx (.u .zero)
+      return (.el tm, .zero)
   | .node `Term.u cs => do
       let level ← checkAstUniverse q₀ cs[0]!
       checkUniverseLevel q₀ level
@@ -174,7 +276,7 @@ partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → Optio
       return (.el tm, level)
   | ast => do
       let (tm, ty) ← inferTm ctx ast
-      let .u level := ty | raiseError q₀ (.expectedType ctx.names (← ty.quote q₀))
+      let .u level := ty | raiseExpectedType q₀ ctx (← ty.quote q₀)
       return (.el tm, level)
 
 public partial def checkTyWithLevel {n : Nat} (ctx : TermContext n) (ast : Ast) : ElabM q₀ (Ty n × Universe) := do
@@ -195,7 +297,7 @@ public partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT (El
   | .node `Term.app cs => do
       let (fTm, fTy) ← withChild q₀ 0 (inferTm ctx cs[0]!)
       let .pi _ aTy ⟨env, bTy⟩ := fTy
-        | raiseError q₀ (.expectedFunctionType ctx.names (← fTy.quote q₀))
+        | raiseExpectedFunctionType q₀ ctx (← fTy.quote q₀)
       let aTm ← OptionT.lift (withChild q₀ 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval q₀ ctx.env
       let bTyVal ← bTy.eval q₀ (env.cons aVal)
@@ -242,6 +344,7 @@ public partial def inferTm {n : Nat} (ctx : TermContext n) : Ast → OptionT (El
       emitType q₀ ctx result.snd
       return result
   | .node `Term.sorry _ => raiseError q₀ .inferSorry
+  | .node `Term.hole _ => raiseError q₀ .inferHole
   | _ => failure
 
 partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast → OptionT (ElabM q₀) (Tm n)
@@ -249,14 +352,14 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses q₀ cs[1]!
       let (tm, ty) ← inferIdent q₀ ctx cs[0]!.getName univs
-      if !(← ty.conv q₀ expected) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (← ty.quote q₀))
+      if !(← VTy.conv q₀ ty expected) then
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← ty.quote q₀)
       emitIdentHover q₀ ctx cs[0]!.getName tm ty
       return tm
   | ast@(.node `Term.lam cs) => do
       let body := cs[1]!
       let .pi _ a ⟨env, b⟩ := expected
-        | raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (← (← inferTm ctx ast).snd.quote q₀))
+        | raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← (← inferTm ctx ast).snd.quote q₀)
       match cs[0]! with
       | .node `Binder.untyped bs =>
         let x := bs[0]!.getName
@@ -270,8 +373,8 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         let x := bs[0]!.getName
         let ann ← OptionT.lift (withChild q₀ 0 (withChild q₀ 1 (checkTy ctx bs[1]!)))
         let annVal : VTy n ← ann.eval q₀ ctx.env
-        if !(← annVal.conv q₀ a) then
-          raiseError q₀ (.typeMismatch ctx.names (← a.quote q₀) (← annVal.quote q₀))
+        if !(← VTy.conv q₀ annVal a) then
+          raiseTypeMismatch q₀ ctx (← a.quote q₀) (← annVal.quote q₀)
         withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
         let ctx' := ctx.bind x a
         let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
@@ -286,40 +389,45 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       emitType q₀ ctx expected
       return .letE name rhsTySyn rhsTm body
   | .node `Term.sorry _ => OptionT.lift (emitSorryTm q₀ ctx expected)
+  | .node `Term.hole _ => OptionT.lift do
+      let anchor ← currentPath q₀
+      let tm ← freshMeta q₀ anchor ctx expected
+      emitType q₀ ctx expected
+      return tm
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
       if !(← expected.conv q₀ (.u level)) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (.u level))
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level)
       emitType q₀ ctx expected
       return tm
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
       if !(← expected.conv q₀ (.u level)) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (.u level))
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level)
       emitType q₀ ctx expected
       return tm
   | .node `Term.ann cs => do
       let (tm, ty) ← inferAnn ctx cs[0]! cs[1]!
-      if !(← expected.conv q₀ ty) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (← ty.quote q₀))
+      if !(← VTy.conv q₀ ty expected) then
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← ty.quote q₀)
       emitType q₀ ctx expected
       return tm
   | .node `Term.u cs => do
       let level ← checkAstUniverse q₀ cs[0]!
       if !(← expected.conv q₀ (.u level.mkSucc)) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (.u level.mkSucc))
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level.mkSucc)
       emitType q₀ ctx expected
       return .u' level
   | .node `Term.app cs => do
       let (fTm, fTy) ← withChild q₀ 0 (inferTm ctx cs[0]!)
       let .pi _ aTy ⟨env, bTy⟩ := fTy
-        | raiseError q₀ (.expectedFunctionType ctx.names (← fTy.quote q₀))
+        | raiseExpectedFunctionType q₀ ctx (← fTy.quote q₀)
       let aTm ← OptionT.lift (withChild q₀ 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval q₀ ctx.env
       let tyVal ← bTy.eval q₀ (env.cons aVal)
-      if !(← tyVal.conv q₀ expected) then
-        raiseError q₀ (.typeMismatch ctx.names (← expected.quote q₀) (← tyVal.quote q₀))
+      if !(← VTy.conv q₀ tyVal expected) then
+        raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← tyVal.quote q₀)
       emitType q₀ ctx expected
       return .app fTm aTm
   | _ => failure
@@ -329,5 +437,46 @@ public partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (a
   | some tm => return tm
   | none => emitSorryTm q₀ ctx expected
 end
+
+mutual
+
+public partial def Tm.zonk {n} (q₀ : Key) : Tm n → ElabM q₀ (Tm n)
+  | .u' u => return .u' (← Universe.zonk q₀ u)
+  | .var i => return .var i
+  | .const c us => return .const c (← us.mapM (Universe.zonk q₀))
+  | .lam x ty body => return .lam x (← ty.zonk q₀) (← body.zonk q₀)
+  | .app f a => return .app (← f.zonk q₀) (← a.zonk q₀)
+  | .pi' x a b => return .pi' x (← a.zonk q₀) (← b.zonk q₀)
+  | .proj i t => return .proj i (← t.zonk q₀)
+  | .letE x ty rhs body =>
+      return .letE x (← ty.zonk q₀) (← rhs.zonk q₀) (← body.zonk q₀)
+  | .mvar id => do
+      match ← getMetaInfo q₀ id with
+      | some info =>
+          match info.solution with
+          | some closedBody =>
+              let v0 ← closedBody.eval q₀ (Env.nil : Env 0 0)
+              let vn : VTm n := v0.weaken (Nat.zero_le n)
+              vn.quote q₀
+          | none => return .mvar id
+      | none => return .mvar id
+
+public partial def Ty.zonk {n} (q₀ : Key) : Ty n → ElabM q₀ (Ty n)
+  | .u u => return .u (← Universe.zonk q₀ u)
+  | .pi x dom cod => return .pi x (← dom.zonk q₀) (← cod.zonk q₀)
+  | .el t => return .el (← t.zonk q₀)
+
+end
+
+public def reportUnsolvedMetas : ElabM q₀ Bool := do
+  let st ← get
+  let mut hadUnsolved := false
+  for h : i in [:st.metas.size] do
+    let info := st.metas[i]
+    if info.solution.isNone then
+      hadUnsolved := true
+      unless info.errored do
+        emitDiagnosticAt q₀ info.path (.unsolvedMetavariable info.decl i info.ty)
+  return hadUnsolved
 
 end Qdt

@@ -30,11 +30,12 @@ public partial def VTm.quote {n} : VTm n → ElabM q₀ (Tm n)
       let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
       let b ← b.quote
       return .pi' x a b
-  | .glued ne _ _ => ne.quote
+  | .glued ne _ => ne.quote
 
 partial def Head.quote {n} : Head n → ElabM q₀ (Tm n)
   | .var i => return .var i.rev
   | .const name us => return .const name us
+  | .mvar id => return .mvar id
 
 partial def Neutral.quote {n} (ne : Neutral n) : ElabM q₀ (Tm n) := do
   let ⟨h, sp⟩ := ne
@@ -71,6 +72,8 @@ public partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM q₀ Univ
       let .u u := ctx.lookup lvl.rev
         | panic! "inferLevel: could not determine universe"
       return u
+  | .el ⟨.mvar _id, _sp⟩ => do
+      panic! "inferLevel: encountered unsolved metavariable in type"
 
 end
 

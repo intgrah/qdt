@@ -46,9 +46,16 @@ def moduleToPath (modName : String) : FilePath :=
   let parts := modName.splitOn "."
   FilePath.mk (String.intercalate "/" parts) |>.addExtension "qdt"
 
-def resolveFile (root : FilePath) (arg : String) : FilePath :=
-  if arg.endsWith ".qdt" then ⟨arg⟩
-  else root / moduleToPath arg
+def validateModuleName (arg : String) : Except String Unit := do
+  if arg.isEmpty then
+    throw "module name is empty"
+  if arg.contains '/' then
+    throw s!"module name must not contain '/': {arg}"
+  if arg.endsWith ".qdt" then
+    throw s!"module name must not end in '.qdt': {arg}"
+  for part in arg.splitOn "." do
+    if part.isEmpty then
+      throw s!"module name has empty component: {arg}"
 
 def parseConfig (parsed : Parsed) : IO Config := do
   let root ← IO.FS.realPath (parsed.flag? "root" |>.map (·.as! String) |>.getD ".")
@@ -56,8 +63,12 @@ def parseConfig (parsed : Parsed) : IO Config := do
   let buildSystem := parsed.flag? "build" |>.map (·.as! BuildSystem) |>.getD .shakeC
   let args := parsed.variableArgsAs! String
   if args.isEmpty then
-    throw (IO.userError "No files specified. Usage: qdt <module>...")
-  let files ← args.mapM fun arg => IO.FS.realPath (resolveFile root arg)
+    throw (IO.userError "No modules specified. Usage: qdt [--root DIR] <module>...")
+  for arg in args do
+    match validateModuleName arg with
+    | .ok () => pure ()
+    | .error msg => throw (IO.userError msg)
+  let files ← args.mapM fun arg => IO.FS.realPath (root / moduleToPath arg)
   return { root, watchMode, buildSystem, files }
 
 end Qdt

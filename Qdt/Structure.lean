@@ -99,11 +99,12 @@ def checkFields {m} (ctx : TermContext m) : List StructureField → Nat → Opti
     let fullFieldTyVal ← fullFieldTy.eval q₀ ctx.env
     checkFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
 
-public structure StructureResult where
-  indResult : InductiveResult
+public structure StructureResult (numParams : Nat) : Type where
+  indResult : InductiveResult numParams
   projEntries : List (Name × Constant)
 
-public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureResult := do
+public def Structure.elab' (info : Structure) :
+    OptionT (ElabM q₀) (StructureResult info.params.length) := do
   let numParams := info.params.length
 
   let (paramCtx, paramTys) ← withChild q₀ 2 (Params.elab q₀ info.params)
@@ -135,7 +136,51 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
     ReaderT.adapt (fun ctx : ElabContext => { ctx with collectHovers := false })
   let indResult ← suppressHovers (Inductive.elab' q₀ indSynth)
 
-  let (_fieldCtx, fieldTele) ← suppressHovers (Params.elabFrom q₀ paramCtx ctorFieldBinders)
+  let some (_, ctorTy) := indResult.ctorTys.head?
+    | failure
+  let ⟨_fieldTeleEnd, fieldTele, _retTy⟩ := ctorTy.getTele
+
+  let userCount := info.univParams.length
+  let paramTys : Ctx 0 info.params.length ←
+    paramTys.mapM fun (n, t) => return (n, ← t.zonk q₀)
+  let paramFreeMVars : List UMVarId :=
+    let rec go {a b : Nat} : Ctx a b → List UMVarId
+      | .nil => []
+      | .snoc rest (_, t) => go rest ++ t.freeUMVars
+    go paramTys
+  let indFreeMVars :=
+    paramFreeMVars ++
+    indResult.indEntry.snd.freeUMVars ++
+    indResult.recEntry.snd.freeUMVars ++
+    indResult.ctorEntries.flatMap (fun (_, c) => c.freeUMVars)
+  let (promotedNames, subst) := promoteUniverseMVars userCount indFreeMVars
+  let promotedCount := promotedNames.length
+  let totalUnivParams := userCount + promotedCount
+  let extras : List Universe :=
+    List.finRange promotedCount |>.map fun i => Universe.level (userCount + i.val)
+  let indName := info.name
+  let recName := info.recName
+  let ctorName := info.name.str "mk"
+  let extendAll (c : Constant) : Constant :=
+    let c := c.extendConstUnivs extras indName
+    let c := c.extendConstUnivs extras recName
+    c.extendConstUnivs extras ctorName
+  let updateConst (c : Constant) : Constant :=
+    let c := c.substUMVars subst
+    let c := extendAll c
+    c.setNumUnivParams totalUnivParams
+  let indEntry := (indResult.indEntry.fst, updateConst indResult.indEntry.snd)
+  let recEntry := (indResult.recEntry.fst, updateConst indResult.recEntry.snd)
+  let ctorEntries := indResult.ctorEntries.map fun (n, c) => (n, updateConst c)
+  replaceEntry q₀ indEntry.fst indEntry.snd
+  replaceEntry q₀ recEntry.fst recEntry.snd
+  for (cname, cconst) in ctorEntries do
+    replaceEntry q₀ cname cconst
+  let indResult : InductiveResult numParams :=
+    { indEntry, ctorEntries, recEntry, ctorTys := indResult.ctorTys }
+  let fieldTele := fieldTele.map (fun (n, t) => (n, Ty.substUMVars subst t))
+  let paramTys : Ctx 0 info.params.length :=
+    paramTys.map fun (n, t) => (n, Ty.substUMVars subst t)
 
   checkFields q₀ paramCtx info.fields 0
 
@@ -148,8 +193,7 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
 
   let x : VTm np1 := VTm.varAt numParams
 
-  let univParams ← getUnivParams q₀
-  let structUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
+  let structUnivs := List.finRange totalUnivParams |>.map fun i => Universe.level i.val
   let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps q₀ paramsVal
   let majorTy ← majorTy.quote q₀
@@ -157,13 +201,12 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
 
   let rec goProj
       {b : Nat}
-      (hb : b ≤ numParamsFields)
       (acc : List (Name × Constant)) :
       Ctx numParams b →
       OptionT (ElabM q₀) (List (Name × Constant))
     | .nil => return acc
     | .snoc (b := idx) fs ⟨name, ty⟩ => do
-        let acc ← goProj (Nat.le_of_succ_le hb) acc fs
+        let acc ← goProj acc fs
 
         let fname ← getAtomicFieldString q₀ info.name name
         let projName := info.name.str fname
@@ -183,13 +226,16 @@ public def Structure.elab' (info : Structure) : OptionT (ElabM q₀) StructureRe
           Tm.lams paramTys <|
           Tm.lam `self majorTy projBody
 
-        let univParams' ← getUnivParams q₀
-        let entry : Name × Constant := (projName, .definition { numUnivParams := univParams'.length, ty := projTy, tm := projTm })
+        let projTy ← projTy.zonk q₀
+        let projTm ← projTm.zonk q₀
+        let projTy := projTy.substUMVars subst
+        let projTm := projTm.substUMVars subst
+        let entry : Name × Constant := (projName, .definition { numUnivParams := totalUnivParams, ty := projTy, tm := projTm })
         let _ ← addConstant q₀ projName entry.2
         withChild q₀ (4 + fieldIdx) (emitHover q₀ (.signature projName (paramTys.snoc ⟨`self, majorTy⟩) ftyTy))
         return acc ++ [entry]
 
-  let projEntries ← goProj (Nat.le_refl numParamsFields) [] fieldTele
+  let projEntries ← goProj [] fieldTele
   return { indResult, projEntries }
 
 end Qdt

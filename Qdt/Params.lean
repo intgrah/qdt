@@ -27,7 +27,15 @@ public def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List 
     | ast :: bs => do
         let some (name, tyAst) := getTypedBinder ast
           | failure
-        let (ty, level) ← OptionT.lift (withChild q₀ idx (withChild q₀ 1 (checkTyWithLevel q₀ ctx tyAst)))
+        let (ty, level) ←
+          match tyAst with
+          | .node `Term.hole _ =>
+              OptionT.lift do
+                let nameAnchor : Path := 0 :: idx :: (← currentPath q₀)
+                let tm ← freshMeta q₀ nameAnchor ctx (.u .zero)
+                pure (.el tm, .zero)
+          | _ =>
+              OptionT.lift (withChild q₀ idx (withChild q₀ 1 (checkTyWithLevel q₀ ctx tyAst)))
         let tyVal ← ty.eval q₀ ctx.env
         let tyQuoted ← tyVal.quote q₀
         withChild q₀ idx (withChild q₀ 0 (emitHover q₀ (.localVar name ctx.names tyQuoted)))

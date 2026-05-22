@@ -25,6 +25,7 @@ structure OpaqueInfo extends ConstantInfo where
 deriving Repr, Hashable
 
 structure AxiomInfo extends ConstantInfo where
+  synthetic : Bool := false
 deriving Repr, Hashable
 
 structure ConstructorInfo extends ConstantInfo where
@@ -73,6 +74,50 @@ def Constant.ty : Constant → Ty 0
   | .constructor info
   | .inductive info =>
       info.ty
+
+def Constant.freeUMVars : Constant → List UMVarId
+  | .definition info => info.ty.freeUMVars ++ info.tm.freeUMVars
+  | .opaque info | .axiom info | .constructor info | .inductive info =>
+      info.ty.freeUMVars
+  | .recursor info =>
+      info.ty.freeUMVars ++
+      info.recRules.toList.flatMap (fun r => r.rhs.freeUMVars)
+
+def Constant.substUMVars (f : UMVarId → Option Universe) : Constant → Constant
+  | .definition info =>
+      .definition { info with ty := info.ty.substUMVars f, tm := info.tm.substUMVars f }
+  | .opaque info => .opaque { info with ty := info.ty.substUMVars f }
+  | .axiom info => .axiom { info with ty := info.ty.substUMVars f }
+  | .constructor info => .constructor { info with ty := info.ty.substUMVars f }
+  | .inductive info => .inductive { info with ty := info.ty.substUMVars f }
+  | .recursor info =>
+      .recursor { info with
+        ty := info.ty.substUMVars f
+        recRules := info.recRules.map (fun r => { r with rhs := r.rhs.substUMVars f }) }
+
+def Constant.setNumUnivParams (n : Nat) : Constant → Constant
+  | .definition info => .definition { info with numUnivParams := n }
+  | .opaque info => .opaque { info with numUnivParams := n }
+  | .axiom info => .axiom { info with numUnivParams := n }
+  | .constructor info => .constructor { info with numUnivParams := n }
+  | .inductive info => .inductive { info with numUnivParams := n }
+  | .recursor info => .recursor { info with numUnivParams := n }
+
+def Constant.extendConstUnivs (extras : List Universe) (name : Name) :
+    Constant → Constant
+  | .definition info =>
+      .definition { info with
+        ty := info.ty.extendConstUnivs extras name
+        tm := info.tm.extendConstUnivs extras name }
+  | .opaque info => .opaque { info with ty := info.ty.extendConstUnivs extras name }
+  | .axiom info => .axiom { info with ty := info.ty.extendConstUnivs extras name }
+  | .constructor info => .constructor { info with ty := info.ty.extendConstUnivs extras name }
+  | .inductive info => .inductive { info with ty := info.ty.extendConstUnivs extras name }
+  | .recursor info =>
+      .recursor { info with
+        ty := info.ty.extendConstUnivs extras name
+        recRules := info.recRules.map (fun r =>
+          { r with rhs := r.rhs.extendConstUnivs extras name }) }
 
 def Constant.toConstantInfo : Constant → ConstantInfo
   | .definition info

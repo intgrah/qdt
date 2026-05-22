@@ -95,29 +95,46 @@ theorem foldr_max_le_of_all {x : Nat} : ∀ {L : List Nat},
      foldr_max_le_of_all fun _ hy => h _ (List.mem_cons_of_mem _ hy)⟩
 
 def atoms : NF → List Atom
-  | ⟨c, L⟩ => (none, c) :: L.map (fun (i, k) => (some i, k))
+  | ⟨c, L, M⟩ =>
+    (none, c) :: L.map (fun (i, k) => (some i, k)) ++ M.map (fun (_, k) => (none, k))
 
 theorem atoms_ne_nil : ∀ nf : NF, nf.atoms ≠ []
-  | ⟨_, _⟩ => List.cons_ne_nil _ _
+  | ⟨_, _, _⟩ => List.cons_ne_nil _ _
 
 theorem denoteList_eq_foldr (ρ : Nat → Nat) : ∀ L,
     denoteList ρ L = (L.map (fun (i, k) => ρ i + k)).foldr Nat.max 0
   | [] => rfl
   | (_, _) :: rest => congrArg (Nat.max _) (denoteList_eq_foldr ρ rest)
 
-theorem atoms_map_eval (ρ : Nat → Nat) : ∀ nf : NF,
-    nf.atoms.map (Atom.eval ρ) = nf.constant :: nf.levels.map (fun (i, k) => ρ i + k)
-  | ⟨c, L⟩ => by
-    show Atom.eval ρ (none, c) :: (L.map _).map (Atom.eval ρ) = _
-    simp only [Atom.eval, List.map_map]
-    rfl
+theorem denoteMVars_eq_foldr : ∀ M,
+    denoteMVars M = (M.map (fun (_, k) => k)).foldr Nat.max 0
+  | [] => rfl
+  | (_, _) :: rest => congrArg (Nat.max _) (denoteMVars_eq_foldr rest)
+
+theorem foldr_max_append : ∀ (xs ys : List Nat),
+    (xs ++ ys).foldr Nat.max 0 = Nat.max (xs.foldr Nat.max 0) (ys.foldr Nat.max 0)
+  | [], ys => by simp
+  | x :: xs, ys => by
+    simp only [List.cons_append, List.foldr_cons, foldr_max_append xs ys]
+    grind
 
 theorem denote_eq_foldr_atoms (ρ : Nat → Nat) : ∀ nf : NF,
     denote ρ nf = (nf.atoms.map (Atom.eval ρ)).foldr Nat.max 0
-  | ⟨c, L⟩ => by
-    show Nat.max c _ = _
-    rw [atoms_map_eval, denoteList_eq_foldr]
-    rfl
+  | ⟨c, L, M⟩ => by
+    show Nat.max c (Nat.max (denoteList ρ L) (denoteMVars M))
+       = List.foldr Nat.max 0 (List.map (Atom.eval ρ)
+           ((none, c) :: L.map (fun (i, k) => (some i, k)) ++ M.map (fun (_, k) => (none, k))))
+    rw [denoteList_eq_foldr, denoteMVars_eq_foldr]
+    simp only [List.map_cons, List.map_append, List.map_map, List.foldr_cons, foldr_max_append]
+    have hL : List.map (Atom.eval ρ ∘ fun (p : Nat × Nat) => ((some p.1, p.2) : Atom)) L
+            = List.map (fun p => ρ p.1 + p.2) L := by
+      apply List.map_congr_left; intro ⟨_, _⟩ _; rfl
+    have hM : List.map (Atom.eval ρ ∘ fun (p : UMVarId × Nat) => ((none, p.2) : Atom)) M
+            = List.map (fun p => p.2) M := by
+      apply List.map_congr_left; intro ⟨_, _⟩ _; rfl
+    rw [hL, hM]
+    show Nat.max c (Nat.max _ _) = Nat.max (Nat.max (Atom.eval ρ (none, c)) _) _
+    simp [Atom.eval, ← Nat.max_assoc]
 
 end NF
 

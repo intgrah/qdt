@@ -270,7 +270,7 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
           return .node `Term.ident #[.ident `Unit.unit, .node `null #[]]
 
       | `Lean.Parser.Term.hole =>
-          return .missing
+          return .node `Term.hole #[]
 
       | `Lean.Parser.Term.num =>
           match nonTrivia[0]? with
@@ -376,12 +376,16 @@ where
         return .node `Term.lam #[binder, rest]
     | .node `Lean.Parser.Term.explicitBinder binderArgs =>
         let nonTrivia := nonTriviaIndices binderArgs
-        let nameIndices := nonTrivia.filter fun ic =>
+        let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
+        let preColon : Array IndexedCst :=
+          match typeIdx with
+          | some colonPos => nonTrivia.extract 0 colonPos
+          | none => nonTrivia
+        let nameIndices := preColon.filter fun ic =>
           match ic.cst with
           | .token `ident _ => true
           | .node `Lean.Parser.Term.hole _ => true
           | _ => false
-        let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
         let typeIc? := match typeIdx with
           | some colonPos => nonTrivia[colonPos + 1]?
           | none => none
@@ -421,12 +425,16 @@ where
   desugarDepArrow (parentArgs : Array Cst) (binderIc : IndexedCst) (bodyIc : IndexedCst) : DesugarM Ast := do
     let binderArgs := getArgs binderIc.cst
     let nonTrivia := nonTriviaIndices binderArgs
-    let nameIndices := nonTrivia.filter fun ic =>
+    let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
+    let preColon : Array IndexedCst :=
+      match typeIdx with
+      | some colonPos => nonTrivia.extract 0 colonPos
+      | none => nonTrivia
+    let nameIndices := preColon.filter fun ic =>
       match ic.cst with
       | .token `ident _ => true
       | .node `Lean.Parser.Term.hole _ => true
       | _ => false
-    let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
     let typeIc? := match typeIdx with
       | some colonPos => nonTrivia[colonPos + 1]?
       | none => none
@@ -511,12 +519,16 @@ partial def desugarBinder (cst : Cst) : DesugarM (List Ast) := do
 
 partial def desugarTypedBinderGroupCmd (args : Array Cst) (binderStartIdx : Nat := 0) : DesugarM (List (Ast × Bool)) := do
   let nonTrivia := nonTriviaIndices args
-  let nameIndices := nonTrivia.filter fun ic =>
+  let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
+  let preColon : Array IndexedCst :=
+    match typeIdx with
+    | some colonPos => nonTrivia.extract 0 colonPos
+    | none => nonTrivia
+  let nameIndices := preColon.filter fun ic =>
     match ic.cst with
     | .token `ident _ => true
     | .node `Lean.Parser.Term.hole _ => true
     | _ => false
-  let typeIdx := nonTrivia.toList.findIdx? fun ic => isAtom ":" ic.cst
   let typeIc? := match typeIdx with
     | some colonPos => nonTrivia[colonPos + 1]?
     | none => none

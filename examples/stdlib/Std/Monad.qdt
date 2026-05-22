@@ -3,238 +3,226 @@ import Std.Init
 
 structure Functor.{u, v} (f : Type u → Type v) : Type (max (u + 1) v) where
   (map (α β : Type u) : (α → β) → f α → f β)
-  (map_id (α : Type u) (x : f α) : Eq.{v} (f α) (map α α (id.{u} α) x) x)
-  (map_comp (α β γ : Type u) (g : β → γ) (h : α → β) (x : f α) : Eq.{v} (f γ) (map α γ (comp.{u, u, u} α β γ g h) x) (map β γ g (map α β h x)))
+  (map_id (α : Type u) (x : f α) : Eq (f α) (map α α (id α) x) x)
+  (map_comp (α β γ : Type u) (g : β → γ) (h : α → β) (x : f α) : Eq (f γ) (map α γ (comp α β γ g h) x) (map β γ g (map α β h x)))
 
 structure Applicative.{u, v} (f : Type u → Type v) : Type (max (u + 1) v) where
   (pure (α : Type u) : α → f α)
   (ap (α β : Type u) : f (α → β) → f α → f β)
-  (ap_id (α : Type u) (x : f α) : Eq.{v} (f α) (ap α α (pure (α → α) (id.{u} α)) x) x)
-  (ap_homo (α β : Type u) (g : α → β) (x : α) : Eq.{v} (f β) (ap α β (pure (α → β) g) (pure α x)) (pure β (g x)))
-  (ap_interchange (α β : Type u) (g : f (α → β)) (y : α) : Eq.{v} (f β) (ap α β g (pure α y)) (ap (α → β) β (pure ((α → β) → β) (fun (h : α → β) => h y)) g))
-  (ap_comp (α β γ : Type u) (g : f (β → γ)) (h : f (α → β)) (x : f α) : Eq.{v} (f γ) (ap α γ (ap (α → β) (α → γ) (ap (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) g) h) x) (ap β γ g (ap α β h x)))
+  (ap_id (α : Type u) (x : f α) : Eq (f α) (ap α α (pure (α → α) (id α)) x) x)
+  (ap_homo (α β : Type u) (g : α → β) (x : α) : Eq (f β) (ap α β (pure (α → β) g) (pure α x)) (pure β (g x)))
+  (ap_interchange (α β : Type u) (g : f (α → β)) (y : α) : Eq (f β) (ap α β g (pure α y)) (ap (α → β) β (pure ((α → β) → β) (fun (h : α → β) => h y)) g))
+  (ap_comp (α β γ : Type u) (g : f (β → γ)) (h : f (α → β)) (x : f α) : Eq (f γ) (ap α γ (ap (α → β) (α → γ) (ap (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp α β γ)) g) h) x) (ap β γ g (ap α β h x)))
 
 structure Monad.{u, v} (m : Type u → Type v) : Type (max (u + 1) v) where
   (pure (α : Type u) : α → m α)
   (bind (α β : Type u) : m α → (α → m β) → m β)
-  (bind_pure_left (α β : Type u) (a : α) (f : α → m β) : Eq.{v} (m β) (bind α β (pure α a) f) (f a))
-  (bind_pure_right (α : Type u) (x : m α) : Eq.{v} (m α) (bind α α x (pure α)) x)
-  (bind_assoc (α β γ : Type u) (x : m α) (f : α → m β) (g : β → m γ) : Eq.{v} (m γ) (bind β γ (bind α β x f) g) (bind α γ x (fun (a : α) => bind β γ (f a) g)))
+  (bind_pure_left (α β : Type u) (a : α) (f : α → m β) : Eq (m β) (bind α β (pure α a) f) (f a))
+  (bind_pure_right (α : Type u) (x : m α) : Eq (m α) (bind α α x (pure α)) x)
+  (bind_assoc (α β γ : Type u) (x : m α) (f : α → m β) (g : β → m γ) : Eq (m γ) (bind β γ (bind α β x f) g) (bind α γ x (fun (a : α) => bind β γ (f a) g)))
 
-def Monad.map.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β : Type u) (f : α → β) (x : m α) : m β :=
-  Monad.bind.{u, v} m inst α β x (fun (a : α) => Monad.pure.{u, v} m inst β (f a))
+def Monad.map.{u, v} (m : Type u → Type v) (inst : Monad m) (α β : Type u) (f : α → β) (x : m α) : m β :=
+  Monad.bind m inst α β x (fun (a : α) => Monad.pure m inst β (f a))
 
-def Monad.ap.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β : Type u) (mf : m (α → β)) (ma : m α) : m β :=
-  Monad.bind.{u, v} m inst (α → β) β mf (fun (f : α → β) => Monad.bind.{u, v} m inst α β ma (fun (a : α) => Monad.pure.{u, v} m inst β (f a)))
+def Monad.ap.{u, v} (m : Type u → Type v) (inst : Monad m) (α β : Type u) (mf : m (α → β)) (ma : m α) : m β :=
+  Monad.bind m inst (α → β) β mf (fun (f : α → β) => Monad.bind m inst α β ma (fun (a : α) => Monad.pure m inst β (f a)))
 
-def Applicative.map.{u, v} (f : Type u → Type v) (inst : Applicative.{u, v} f) (α β : Type u) (g : α → β) (x : f α) : f β :=
-  Applicative.ap.{u, v} f inst α β (Applicative.pure.{u, v} f inst (α → β) g) x
+def Applicative.map.{u, v} (f : Type u → Type v) (inst : Applicative f) (α β : Type u) (g : α → β) (x : f α) : f β :=
+  Applicative.ap f inst α β (Applicative.pure f inst (α → β) g) x
 
-def Applicative.toFunctor.{u, v} (f : Type u → Type v) (inst : Applicative.{u, v} f) : Functor.{u, v} f :=
-  Functor.mk.{u, v} f
-    (Applicative.map.{u, v} f inst)
-    (fun (α : Type u) (x : f α) => Applicative.ap_id.{u, v} f inst α x)
+def Applicative.toFunctor.{u, v} (f : Type u → Type v) (inst : Applicative f) : Functor f :=
+  Functor.mk f
+    (Applicative.map f inst)
+    (fun (α : Type u) (x : f α) => Applicative.ap_id f inst α x)
     (fun (α β γ : Type u) (g : β → γ) (h : α → β) (x : f α) =>
-      Eq.symm.{v} (f γ)
-        (Applicative.ap.{u, v} f inst β γ (Applicative.pure.{u, v} f inst (β → γ) g) (Applicative.ap.{u, v} f inst α β (Applicative.pure.{u, v} f inst (α → β) h) x))
-        (Applicative.ap.{u, v} f inst α γ (Applicative.pure.{u, v} f inst (α → γ) (comp.{u, u, u} α β γ g h)) x)
-        (Eq.trans.{v} (f γ)
-          (Applicative.ap.{u, v} f inst β γ (Applicative.pure.{u, v} f inst (β → γ) g) (Applicative.ap.{u, v} f inst α β (Applicative.pure.{u, v} f inst (α → β) h) x))
-          (Applicative.ap.{u, v} f inst α γ (Applicative.ap.{u, v} f inst (α → β) (α → γ) (Applicative.ap.{u, v} f inst (β → γ) ((α → β) → α → γ) (Applicative.pure.{u, v} f inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) (Applicative.pure.{u, v} f inst (β → γ) g)) (Applicative.pure.{u, v} f inst (α → β) h)) x)
-          (Applicative.ap.{u, v} f inst α γ (Applicative.pure.{u, v} f inst (α → γ) (comp.{u, u, u} α β γ g h)) x)
-          (Eq.symm.{v} (f γ)
-            (Applicative.ap.{u, v} f inst α γ (Applicative.ap.{u, v} f inst (α → β) (α → γ) (Applicative.ap.{u, v} f inst (β → γ) ((α → β) → α → γ) (Applicative.pure.{u, v} f inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) (Applicative.pure.{u, v} f inst (β → γ) g)) (Applicative.pure.{u, v} f inst (α → β) h)) x)
-            (Applicative.ap.{u, v} f inst β γ (Applicative.pure.{u, v} f inst (β → γ) g) (Applicative.ap.{u, v} f inst α β (Applicative.pure.{u, v} f inst (α → β) h) x))
-            (Applicative.ap_comp.{u, v} f inst α β γ (Applicative.pure.{u, v} f inst (β → γ) g) (Applicative.pure.{u, v} f inst (α → β) h) x))
-          (congrArg.{v, v} (f (α → γ)) (f γ)
-            (fun (k : f (α → γ)) => Applicative.ap.{u, v} f inst α γ k x)
-            (Applicative.ap.{u, v} f inst (α → β) (α → γ) (Applicative.ap.{u, v} f inst (β → γ) ((α → β) → α → γ) (Applicative.pure.{u, v} f inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) (Applicative.pure.{u, v} f inst (β → γ) g)) (Applicative.pure.{u, v} f inst (α → β) h))
-            (Applicative.pure.{u, v} f inst (α → γ) (comp.{u, u, u} α β γ g h))
-            (Eq.trans.{v} (f (α → γ))
-              (Applicative.ap.{u, v} f inst (α → β) (α → γ) (Applicative.ap.{u, v} f inst (β → γ) ((α → β) → α → γ) (Applicative.pure.{u, v} f inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) (Applicative.pure.{u, v} f inst (β → γ) g)) (Applicative.pure.{u, v} f inst (α → β) h))
-              (Applicative.ap.{u, v} f inst (α → β) (α → γ) (Applicative.pure.{u, v} f inst ((α → β) → α → γ) (comp.{u, u, u} α β γ g)) (Applicative.pure.{u, v} f inst (α → β) h))
-              (Applicative.pure.{u, v} f inst (α → γ) (comp.{u, u, u} α β γ g h))
-              (congrArg.{v, v} (f ((α → β) → α → γ)) (f (α → γ))
-                (fun (k : f ((α → β) → α → γ)) => Applicative.ap.{u, v} f inst (α → β) (α → γ) k (Applicative.pure.{u, v} f inst (α → β) h))
-                (Applicative.ap.{u, v} f inst (β → γ) ((α → β) → α → γ) (Applicative.pure.{u, v} f inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) (Applicative.pure.{u, v} f inst (β → γ) g))
-                (Applicative.pure.{u, v} f inst ((α → β) → α → γ) (comp.{u, u, u} α β γ g))
-                (Applicative.ap_homo.{u, v} f inst (β → γ) ((α → β) → α → γ) (comp.{u, u, u} α β γ) g))
-              (Applicative.ap_homo.{u, v} f inst (α → β) (α → γ) (comp.{u, u, u} α β γ g) h)))))
+      Eq.symm _ _ _
+        (Eq.trans _ _ _ _
+          (Eq.symm _ _ _
+            (Applicative.ap_comp f inst α β γ (Applicative.pure f inst (β → γ) g) (Applicative.pure f inst (α → β) h) x))
+          (congrArg _ _
+            (fun (k : f (α → γ)) => Applicative.ap f inst α γ k x)
+            _ _
+            (Eq.trans _ _ _ _
+              (congrArg _ _
+                (fun (k : f ((α → β) → α → γ)) => Applicative.ap f inst (α → β) (α → γ) k (Applicative.pure f inst (α → β) h))
+                _ _
+                (Applicative.ap_homo f inst (β → γ) ((α → β) → α → γ) (comp α β γ) g))
+              (Applicative.ap_homo f inst (α → β) (α → γ) (comp α β γ g) h)))))
 
-def Monad.ap_comp_rhs_inner.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_rhs_inner.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (f : β → γ) (g' : α → β) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.bind.{u, v} m inst β γ (Monad.bind.{u, v} m inst α β x (fun (a : α) => Monad.pure.{u, v} m inst β (g' a))) (fun (b : β) => Monad.pure.{u, v} m inst γ (f b)))
-        (Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a)))) :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
-  let step1 := Monad.bind_assoc.{u, v} m inst α β γ x
+    : Eq (m γ)
+        (Monad.bind m inst β γ (Monad.bind m inst α β x (fun (a : α) => Monad.pure m inst β (g' a))) (fun (b : β) => Monad.pure m inst γ (f b)))
+        (Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a)))) :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
+  let step1 := Monad.bind_assoc m inst α β γ x
     (fun (a : α) => pure β (g' a))
     (fun (b : β) => pure γ (f b));
   let k1 := fun (a : α) => bind β γ (pure β (g' a)) (fun (b : β) => pure γ (f b));
   let k2 := fun (a : α) => pure γ (f (g' a));
-  let keq := funext.{u, v} α (fun (_ : α) => m γ) k1 k2
-    (fun (a : α) => Monad.bind_pure_left.{u, v} m inst β γ (g' a) (fun (b : β) => pure γ (f b)));
-  let step2 := congrArg.{max u v, v} (α → m γ) (m γ) (fun (k : α → m γ) => bind α γ x k) k1 k2 keq;
-  Eq.trans.{v} (m γ)
+  let keq := funext α (fun (_ : α) => m γ) k1 k2
+    (fun (a : α) => Monad.bind_pure_left m inst β γ (g' a) (fun (b : β) => pure γ (f b)));
+  let step2 := congrArg (α → m γ) (m γ) (fun (k : α → m γ) => bind α γ x k) k1 k2 keq;
+  Eq.trans (m γ)
     (bind β γ (bind α β x (fun (a : α) => pure β (g' a))) (fun (b : β) => pure γ (f b)))
     (bind α γ x k1)
     (bind α γ x k2)
     step1 step2
 
-def Monad.ap_comp_rhs_mid.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_rhs_mid.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (f : β → γ) (h : m (α → β)) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.bind.{u, v} m inst β γ (Monad.bind.{u, v} m inst (α → β) β h (fun (g' : α → β) => Monad.bind.{u, v} m inst α β x (fun (a : α) => Monad.pure.{u, v} m inst β (g' a)))) (fun (b : β) => Monad.pure.{u, v} m inst γ (f b)))
-        (Monad.bind.{u, v} m inst (α → β) γ h (fun (g' : α → β) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a))))) :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
-  let step1 := Monad.bind_assoc.{u, v} m inst (α → β) β γ h
+    : Eq (m γ)
+        (Monad.bind m inst β γ (Monad.bind m inst (α → β) β h (fun (g' : α → β) => Monad.bind m inst α β x (fun (a : α) => Monad.pure m inst β (g' a)))) (fun (b : β) => Monad.pure m inst γ (f b)))
+        (Monad.bind m inst (α → β) γ h (fun (g' : α → β) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a))))) :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
+  let step1 := Monad.bind_assoc m inst (α → β) β γ h
     (fun (g' : α → β) => bind α β x (fun (a : α) => pure β (g' a)))
     (fun (b : β) => pure γ (f b));
   let k1 := fun (g' : α → β) => bind β γ (bind α β x (fun (a : α) => pure β (g' a))) (fun (b : β) => pure γ (f b));
   let k2 := fun (g' : α → β) => bind α γ x (fun (a : α) => pure γ (f (g' a)));
-  let keq := funext.{u, v} (α → β) (fun (_ : α → β) => m γ) k1 k2
-    (fun (g' : α → β) => Monad.ap_comp_rhs_inner.{u, v} m inst α β γ f g' x);
-  let step2 := congrArg.{max u v, v} ((α → β) → m γ) (m γ) (fun (k : (α → β) → m γ) => bind (α → β) γ h k) k1 k2 keq;
-  Eq.trans.{v} (m γ)
+  let keq := funext (α → β) (fun (_ : α → β) => m γ) k1 k2
+    (fun (g' : α → β) => Monad.ap_comp_rhs_inner m inst α β γ f g' x);
+  let step2 := congrArg ((α → β) → m γ) (m γ) (fun (k : (α → β) → m γ) => bind (α → β) γ h k) k1 k2 keq;
+  Eq.trans (m γ)
     (bind β γ (bind (α → β) β h (fun (g' : α → β) => bind α β x (fun (a : α) => pure β (g' a)))) (fun (b : β) => pure γ (f b)))
     (bind (α → β) γ h k1)
     (bind (α → β) γ h k2)
     step1 step2
 
-def Monad.ap_comp_rhs.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_rhs.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (g : m (β → γ)) (h : m (α → β)) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.ap.{u, v} m inst β γ g (Monad.ap.{u, v} m inst α β h x))
-        (Monad.bind.{u, v} m inst (β → γ) γ g (fun (f : β → γ) => Monad.bind.{u, v} m inst (α → β) γ h (fun (g' : α → β) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a)))))) :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
-  let k1 := fun (f : β → γ) => bind β γ (Monad.ap.{u, v} m inst α β h x) (fun (b : β) => pure γ (f b));
+    : Eq (m γ)
+        (Monad.ap m inst β γ g (Monad.ap m inst α β h x))
+        (Monad.bind m inst (β → γ) γ g (fun (f : β → γ) => Monad.bind m inst (α → β) γ h (fun (g' : α → β) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a)))))) :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
+  let k1 := fun (f : β → γ) => bind β γ (Monad.ap m inst α β h x) (fun (b : β) => pure γ (f b));
   let k2 := fun (f : β → γ) => bind (α → β) γ h (fun (g' : α → β) => bind α γ x (fun (a : α) => pure γ (f (g' a))));
-  let keq := funext.{u, v} (β → γ) (fun (_ : β → γ) => m γ) k1 k2
-    (fun (f : β → γ) => Monad.ap_comp_rhs_mid.{u, v} m inst α β γ f h x);
-  congrArg.{max u v, v} ((β → γ) → m γ) (m γ) (fun (k : (β → γ) → m γ) => bind (β → γ) γ g k) k1 k2 keq
+  let keq := funext (β → γ) (fun (_ : β → γ) => m γ) k1 k2
+    (fun (f : β → γ) => Monad.ap_comp_rhs_mid m inst α β γ f h x);
+  congrArg ((β → γ) → m γ) (m γ) (fun (k : (β → γ) → m γ) => bind (β → γ) γ g k) k1 k2 keq
 
-def Monad.ap_comp_lhs_inner.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_lhs_inner.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (f : β → γ) (g' : α → β) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.bind.{u, v} m inst (α → γ) γ (Monad.pure.{u, v} m inst (α → γ) (comp.{u, u, u} α β γ f g')) (fun (k : α → γ) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (k a))))
-        (Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a)))) :=
-  Monad.bind_pure_left.{u, v} m inst (α → γ) γ (comp.{u, u, u} α β γ f g')
-    (fun (k : α → γ) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (k a)))
+    : Eq (m γ)
+        (Monad.bind m inst (α → γ) γ (Monad.pure m inst (α → γ) (comp α β γ f g')) (fun (k : α → γ) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (k a))))
+        (Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a)))) :=
+  Monad.bind_pure_left m inst (α → γ) γ (comp α β γ f g')
+    (fun (k : α → γ) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (k a)))
 
-def Monad.ap_comp_lhs_mid2.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_lhs_mid2.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (f : β → γ) (h : m (α → β)) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.bind.{u, v} m inst (α → γ) γ (Monad.bind.{u, v} m inst (α → β) (α → γ) h (fun (g' : α → β) => Monad.pure.{u, v} m inst (α → γ) (comp.{u, u, u} α β γ f g'))) (fun (k : α → γ) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (k a))))
-        (Monad.bind.{u, v} m inst (α → β) γ h (fun (g' : α → β) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a))))) :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
-  let step1 := Monad.bind_assoc.{u, v} m inst (α → β) (α → γ) γ h
-    (fun (g' : α → β) => pure (α → γ) (comp.{u, u, u} α β γ f g'))
+    : Eq (m γ)
+        (Monad.bind m inst (α → γ) γ (Monad.bind m inst (α → β) (α → γ) h (fun (g' : α → β) => Monad.pure m inst (α → γ) (comp α β γ f g'))) (fun (k : α → γ) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (k a))))
+        (Monad.bind m inst (α → β) γ h (fun (g' : α → β) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a))))) :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
+  let step1 := Monad.bind_assoc m inst (α → β) (α → γ) γ h
+    (fun (g' : α → β) => pure (α → γ) (comp α β γ f g'))
     (fun (k : α → γ) => bind α γ x (fun (a : α) => pure γ (k a)));
-  let k1 := fun (g' : α → β) => bind (α → γ) γ (pure (α → γ) (comp.{u, u, u} α β γ f g')) (fun (k : α → γ) => bind α γ x (fun (a : α) => pure γ (k a)));
+  let k1 := fun (g' : α → β) => bind (α → γ) γ (pure (α → γ) (comp α β γ f g')) (fun (k : α → γ) => bind α γ x (fun (a : α) => pure γ (k a)));
   let k2 := fun (g' : α → β) => bind α γ x (fun (a : α) => pure γ (f (g' a)));
-  let keq := funext.{u, v} (α → β) (fun (_ : α → β) => m γ) k1 k2
-    (fun (g' : α → β) => Monad.ap_comp_lhs_inner.{u, v} m inst α β γ f g' x);
-  let step2 := congrArg.{max u v, v} ((α → β) → m γ) (m γ) (fun (k : (α → β) → m γ) => bind (α → β) γ h k) k1 k2 keq;
-  Eq.trans.{v} (m γ)
-    (bind (α → γ) γ (bind (α → β) (α → γ) h (fun (g' : α → β) => pure (α → γ) (comp.{u, u, u} α β γ f g'))) (fun (k : α → γ) => bind α γ x (fun (a : α) => pure γ (k a))))
+  let keq := funext (α → β) (fun (_ : α → β) => m γ) k1 k2
+    (fun (g' : α → β) => Monad.ap_comp_lhs_inner m inst α β γ f g' x);
+  let step2 := congrArg ((α → β) → m γ) (m γ) (fun (k : (α → β) → m γ) => bind (α → β) γ h k) k1 k2 keq;
+  Eq.trans (m γ)
+    (bind (α → γ) γ (bind (α → β) (α → γ) h (fun (g' : α → β) => pure (α → γ) (comp α β γ f g'))) (fun (k : α → γ) => bind α γ x (fun (a : α) => pure γ (k a))))
     (bind (α → β) γ h k1)
     (bind (α → β) γ h k2)
     step1 step2
 
 
-def Monad.ap_comp_lhs.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) (α β γ : Type u)
+def Monad.ap_comp_lhs.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u)
     (g : m (β → γ)) (h : m (α → β)) (x : m α)
-    : Eq.{v} (m γ)
-        (Monad.ap.{u, v} m inst α γ (Monad.ap.{u, v} m inst (α → β) (α → γ) (Monad.ap.{u, v} m inst (β → γ) ((α → β) → α → γ) (Monad.pure.{u, v} m inst ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) g) h) x)
-        (Monad.bind.{u, v} m inst (β → γ) γ g (fun (f : β → γ) => Monad.bind.{u, v} m inst (α → β) γ h (fun (g' : α → β) => Monad.bind.{u, v} m inst α γ x (fun (a : α) => Monad.pure.{u, v} m inst γ (f (g' a)))))) :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
+    : Eq (m γ)
+        (Monad.ap m inst α γ (Monad.ap m inst (α → β) (α → γ) (Monad.ap m inst (β → γ) ((α → β) → α → γ) (Monad.pure m inst ((β → γ) → (α → β) → α → γ) (comp α β γ)) g) h) x)
+        (Monad.bind m inst (β → γ) γ g (fun (f : β → γ) => Monad.bind m inst (α → β) γ h (fun (g' : α → β) => Monad.bind m inst α γ x (fun (a : α) => Monad.pure m inst γ (f (g' a)))))) :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
   let AB := α → β;
   let AG := α → γ;
   let BG := β → γ;
   let ABtoAG := AB → AG;
   let BGtoABtoAG := BG → ABtoAG;
-  let ap_comp_g := Monad.ap.{u, v} m inst BG ABtoAG (pure BGtoABtoAG (comp.{u, u, u} α β γ)) g;
-  let ap1_expanded := bind BGtoABtoAG ABtoAG (pure BGtoABtoAG (comp.{u, u, u} α β γ)) (fun (f : BGtoABtoAG) => bind BG ABtoAG g (fun (a : BG) => pure ABtoAG (f a)));
-  let ap1_reduced := bind BG ABtoAG g (fun (a : BG) => pure ABtoAG (comp.{u, u, u} α β γ a));
-  let step1_ap1 : Eq.{v} (m ABtoAG) ap1_expanded ap1_reduced := Monad.bind_pure_left.{u, v} m inst BGtoABtoAG ABtoAG (comp.{u, u, u} α β γ)
+  let ap_comp_g := Monad.ap m inst BG ABtoAG (pure BGtoABtoAG (comp α β γ)) g;
+  let ap1_expanded := bind BGtoABtoAG ABtoAG (pure BGtoABtoAG (comp α β γ)) (fun (f : BGtoABtoAG) => bind BG ABtoAG g (fun (a : BG) => pure ABtoAG (f a)));
+  let ap1_reduced := bind BG ABtoAG g (fun (a : BG) => pure ABtoAG (comp α β γ a));
+  let step1_ap1 : Eq (m ABtoAG) ap1_expanded ap1_reduced := Monad.bind_pure_left m inst BGtoABtoAG ABtoAG (comp α β γ)
     (fun (f : BGtoABtoAG) => bind BG ABtoAG g (fun (a : BG) => pure ABtoAG (f a)));
   let ap2_k := fun (f : ABtoAG) => bind AB AG h (fun (b : AB) => pure AG (f b));
   let ap2_of_ap1 := bind ABtoAG AG ap1_expanded ap2_k;
-  let ap2_step1 : Eq.{v} (m AG) ap2_of_ap1 (bind ABtoAG AG ap1_reduced ap2_k) :=
-    congrArg.{v, v} (m ABtoAG) (m AG) (fun (y : m ABtoAG) => bind ABtoAG AG y ap2_k) ap1_expanded ap1_reduced step1_ap1;
-  let ap2_step2 := Monad.bind_assoc.{u, v} m inst BG ABtoAG AG g
-    (fun (a : BG) => pure ABtoAG (comp.{u, u, u} α β γ a))
+  let ap2_step1 : Eq (m AG) ap2_of_ap1 (bind ABtoAG AG ap1_reduced ap2_k) :=
+    congrArg (m ABtoAG) (m AG) (fun (y : m ABtoAG) => bind ABtoAG AG y ap2_k) ap1_expanded ap1_reduced step1_ap1;
+  let ap2_step2 := Monad.bind_assoc m inst BG ABtoAG AG g
+    (fun (a : BG) => pure ABtoAG (comp α β γ a))
     ap2_k;
-  let ap2_inner_k1 := fun (a : BG) => bind ABtoAG AG (pure ABtoAG (comp.{u, u, u} α β γ a)) ap2_k;
-  let ap2_inner_k2 := fun (a : BG) => bind AB AG h (fun (b : AB) => pure AG (comp.{u, u, u} α β γ a b));
-  let ap2_inner_eq := funext.{u, v} BG (fun (_ : BG) => m AG) ap2_inner_k1 ap2_inner_k2
-    (fun (a : BG) => Monad.bind_pure_left.{u, v} m inst ABtoAG AG (comp.{u, u, u} α β γ a) ap2_k);
-  let ap2_step3 := congrArg.{max u v, v} (BG → m AG) (m AG) (fun (k : BG → m AG) => bind BG AG g k) ap2_inner_k1 ap2_inner_k2 ap2_inner_eq;
+  let ap2_inner_k1 := fun (a : BG) => bind ABtoAG AG (pure ABtoAG (comp α β γ a)) ap2_k;
+  let ap2_inner_k2 := fun (a : BG) => bind AB AG h (fun (b : AB) => pure AG (comp α β γ a b));
+  let ap2_inner_eq := funext BG (fun (_ : BG) => m AG) ap2_inner_k1 ap2_inner_k2
+    (fun (a : BG) => Monad.bind_pure_left m inst ABtoAG AG (comp α β γ a) ap2_k);
+  let ap2_step3 := congrArg (BG → m AG) (m AG) (fun (k : BG → m AG) => bind BG AG g k) ap2_inner_k1 ap2_inner_k2 ap2_inner_eq;
   let ap2_reduced := bind BG AG g ap2_inner_k2;
-  let ap2_mid := Eq.trans.{v} (m AG) ap2_of_ap1 (bind ABtoAG AG ap1_reduced ap2_k) (bind BG AG g ap2_inner_k1)
+  let ap2_mid := Eq.trans (m AG) ap2_of_ap1 (bind ABtoAG AG ap1_reduced ap2_k) (bind BG AG g ap2_inner_k1)
       ap2_step1 ap2_step2;
-  let ap2_eq := Eq.trans.{v} (m AG) ap2_of_ap1 (bind BG AG g ap2_inner_k1) ap2_reduced ap2_mid ap2_step3;
+  let ap2_eq := Eq.trans (m AG) ap2_of_ap1 (bind BG AG g ap2_inner_k1) ap2_reduced ap2_mid ap2_step3;
   let ap3_k := fun (f : AG) => bind α γ x (fun (a : α) => pure γ (f a));
   let lhs := bind AG γ ap2_of_ap1 ap3_k;
-  let lhs_step1 : Eq.{v} (m γ) lhs (bind AG γ ap2_reduced ap3_k) :=
-    congrArg.{v, v} (m AG) (m γ) (fun (y : m AG) => bind AG γ y ap3_k) ap2_of_ap1 ap2_reduced ap2_eq;
-  let lhs_step2 := Monad.bind_assoc.{u, v} m inst BG AG γ g ap2_inner_k2 ap3_k;
+  let lhs_step1 : Eq (m γ) lhs (bind AG γ ap2_reduced ap3_k) :=
+    congrArg (m AG) (m γ) (fun (y : m AG) => bind AG γ y ap3_k) ap2_of_ap1 ap2_reduced ap2_eq;
+  let lhs_step2 := Monad.bind_assoc m inst BG AG γ g ap2_inner_k2 ap3_k;
   let lhs_inner_k1 := fun (f : BG) => bind AG γ (ap2_inner_k2 f) ap3_k;
   let lhs_inner_k2 := fun (f : BG) => bind AB γ h (fun (g' : AB) => bind α γ x (fun (a : α) => pure γ (f (g' a))));
-  let lhs_inner_eq := funext.{u, v} BG (fun (_ : BG) => m γ) lhs_inner_k1 lhs_inner_k2
-    (fun (f : BG) => Monad.ap_comp_lhs_mid2.{u, v} m inst α β γ f h x);
-  let lhs_step3 := congrArg.{max u v, v} (BG → m γ) (m γ) (fun (k : BG → m γ) => bind BG γ g k) lhs_inner_k1 lhs_inner_k2 lhs_inner_eq;
-  let lhs_mid := Eq.trans.{v} (m γ) lhs (bind AG γ ap2_reduced ap3_k) (bind BG γ g lhs_inner_k1)
+  let lhs_inner_eq := funext BG (fun (_ : BG) => m γ) lhs_inner_k1 lhs_inner_k2
+    (fun (f : BG) => Monad.ap_comp_lhs_mid2 m inst α β γ f h x);
+  let lhs_step3 := congrArg (BG → m γ) (m γ) (fun (k : BG → m γ) => bind BG γ g k) lhs_inner_k1 lhs_inner_k2 lhs_inner_eq;
+  let lhs_mid := Eq.trans (m γ) lhs (bind AG γ ap2_reduced ap3_k) (bind BG γ g lhs_inner_k1)
     lhs_step1 lhs_step2;
-  Eq.trans.{v} (m γ) lhs (bind BG γ g lhs_inner_k1) (bind BG γ g lhs_inner_k2) lhs_mid lhs_step3
+  Eq.trans (m γ) lhs (bind BG γ g lhs_inner_k1) (bind BG γ g lhs_inner_k2) lhs_mid lhs_step3
 
-def Monad.toApplicative.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) : Applicative.{u, v} m :=
-  let pure := Monad.pure.{u, v} m inst;
-  let bind := Monad.bind.{u, v} m inst;
-  Applicative.mk.{u, v} m
+def Monad.toApplicative.{u, v} (m : Type u → Type v) (inst : Monad m) : Applicative m :=
+  let pure := Monad.pure m inst;
+  let bind := Monad.bind m inst;
+  Applicative.mk m
     pure
-    (Monad.ap.{u, v} m inst)
+    (Monad.ap m inst)
     (fun α x =>
-      Eq.trans.{v} (m α)
-        (Monad.ap.{u, v} m inst α α (pure (α → α) (id.{u} α)) x)
+      Eq.trans (m α)
+        (Monad.ap m inst α α (pure (α → α) (id α)) x)
         (bind α α x (fun (a : α) => pure α a))
         x
-        (Monad.bind_pure_left.{u, v} m inst (α → α) α (id.{u} α) (fun (f : α → α) => bind α α x (fun (a : α) => pure α (f a))))
-        (Monad.bind_pure_right.{u, v} m inst α x))
+        (Monad.bind_pure_left m inst (α → α) α (id α) (fun (f : α → α) => bind α α x (fun (a : α) => pure α (f a))))
+        (Monad.bind_pure_right m inst α x))
     (fun α β f x =>
-      Eq.trans.{v} (m β)
-        (Monad.ap.{u, v} m inst α β (pure (α → β) f) (pure α x))
+      Eq.trans (m β)
+        (Monad.ap m inst α β (pure (α → β) f) (pure α x))
         (bind α β (pure α x) (fun (a : α) => pure β (f a)))
         (pure β (f x))
-        (Monad.bind_pure_left.{u, v} m inst (α → β) β f (fun (g : α → β) => bind α β (pure α x) (fun (a : α) => pure β (g a))))
-        (Monad.bind_pure_left.{u, v} m inst α β x (fun (a : α) => pure β (f a))))
+        (Monad.bind_pure_left m inst (α → β) β f (fun (g : α → β) => bind α β (pure α x) (fun (a : α) => pure β (g a))))
+        (Monad.bind_pure_left m inst α β x (fun (a : α) => pure β (f a))))
     (fun α β g y =>
       let k1 := fun (f : α → β) => bind α β (pure α y) (fun (a : α) => pure β (f a));
       let k2 := fun (f : α → β) => pure β (f y);
-      let keq := funext.{u, v} (α → β) (fun (_ : α → β) => m β) k1 k2
-        (fun (f : α → β) => Monad.bind_pure_left.{u, v} m inst α β y (fun (a : α) => pure β (f a)));
-      let step1 := congrArg.{max u v, v} ((α → β) → m β) (m β) (fun (k : (α → β) → m β) => bind (α → β) β g k) k1 k2 keq;
+      let keq := funext (α → β) (fun (_ : α → β) => m β) k1 k2
+        (fun (f : α → β) => Monad.bind_pure_left m inst α β y (fun (a : α) => pure β (f a)));
+      let step1 := congrArg ((α → β) → m β) (m β) (fun (k : (α → β) → m β) => bind (α → β) β g k) k1 k2 keq;
       let mid := bind (α → β) β g k2;
       let rhs_expanded := bind ((α → β) → β) β (pure ((α → β) → β) (fun (h : α → β) => h y)) (fun (f : (α → β) → β) => bind (α → β) β g (fun (a : α → β) => pure β (f a)));
-      let step2 := Eq.symm.{v} (m β) rhs_expanded mid
-        (Monad.bind_pure_left.{u, v} m inst ((α → β) → β) β (fun (h : α → β) => h y) (fun (f : (α → β) → β) => bind (α → β) β g (fun (a : α → β) => pure β (f a))));
-      Eq.trans.{v} (m β) (bind (α → β) β g k1) mid rhs_expanded step1 step2)
+      let step2 := Eq.symm (m β) rhs_expanded mid
+        (Monad.bind_pure_left m inst ((α → β) → β) β (fun (h : α → β) => h y) (fun (f : (α → β) → β) => bind (α → β) β g (fun (a : α → β) => pure β (f a))));
+      Eq.trans (m β) (bind (α → β) β g k1) mid rhs_expanded step1 step2)
     (fun α β γ g h x =>
       let common := bind (β → γ) γ g (fun (f : β → γ) => bind (α → β) γ h (fun (g' : α → β) => bind α γ x (fun (a : α) => pure γ (f (g' a)))));
-      Eq.trans.{v} (m γ)
-        (Monad.ap.{u, v} m inst α γ (Monad.ap.{u, v} m inst (α → β) (α → γ) (Monad.ap.{u, v} m inst (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp.{u, u, u} α β γ)) g) h) x)
+      Eq.trans (m γ)
+        (Monad.ap m inst α γ (Monad.ap m inst (α → β) (α → γ) (Monad.ap m inst (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp α β γ)) g) h) x)
         common
-        (Monad.ap.{u, v} m inst β γ g (Monad.ap.{u, v} m inst α β h x))
-        (Monad.ap_comp_lhs.{u, v} m inst α β γ g h x)
-        (Eq.symm.{v} (m γ)
-          (Monad.ap.{u, v} m inst β γ g (Monad.ap.{u, v} m inst α β h x))
+        (Monad.ap m inst β γ g (Monad.ap m inst α β h x))
+        (Monad.ap_comp_lhs m inst α β γ g h x)
+        (Eq.symm (m γ)
+          (Monad.ap m inst β γ g (Monad.ap m inst α β h x))
           common
-          (Monad.ap_comp_rhs.{u, v} m inst α β γ g h x)))
+          (Monad.ap_comp_rhs m inst α β γ g h x)))
 
-def Monad.toFunctor.{u, v} (m : Type u → Type v) (inst : Monad.{u, v} m) : Functor.{u, v} m :=
-  Applicative.toFunctor.{u, v} m (Monad.toApplicative.{u, v} m inst)
+def Monad.toFunctor.{u, v} (m : Type u → Type v) (inst : Monad m) : Functor m :=
+  Applicative.toFunctor m (Monad.toApplicative m inst)

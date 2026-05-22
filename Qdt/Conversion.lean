@@ -1,6 +1,8 @@
 module
 
 public import Qdt.Nbe
+public import Qdt.Unify
+public import Qdt.Theory.Universe.Solve
 
 public section
 
@@ -17,16 +19,16 @@ mutual
 
 public partial def VTm.conv {n} (a b : VTm n) (cs : ConvState := .rigid) : ElabM q₀ Bool :=
   match a, b with
-  | .u' i₁, .u' i₂ => return i₁ == i₂
-  | .glued ne₁ _ _, .glued ne₂ _ _ => do
+  | .u' i₁, .u' i₂ => Universe.solveUEq q₀ i₁ i₂
+  | .glued ne₁ _, .glued ne₂ _ => do
       match cs with
       | .flex => ne₁.conv ne₂ cs
       | .rigid =>
         if ← ne₁.conv ne₂ .flex then return true
         (← a.whnf q₀).conv (← b.whnf q₀) .full
       | .full => (← a.whnf q₀).conv (← b.whnf q₀) cs
-  | .glued _ _ _, other => do (← a.whnf q₀).conv other cs
-  | other, .glued _ _ _ => do other.conv (← b.whnf q₀) cs
+  | .glued _ _, other => do (← a.whnf q₀).conv other cs
+  | other, .glued _ _ => do other.conv (← b.whnf q₀) cs
   | .neutral n₁, .neutral n₂ => do
       match cs with
       | .flex => n₁.conv n₂ cs
@@ -65,13 +67,43 @@ public partial def VTm.conv {n} (a b : VTm n) (cs : ConvState := .rigid) : ElabM
       b₁Val.conv b₂Val cs
   | .neutral ne, other => do
       match ← (VTm.neutral ne).whnf q₀ with
+      | .neutral ⟨.mvar id, sp⟩ =>
+          match cs with
+          | .flex => return false
+          | _ =>
+            if ← Unify.solveMVar q₀ id sp other then return true
+            solveMVarFOApprox id sp other cs
       | .neutral _ => return false
       | v => v.conv other cs
   | other, .neutral ne => do
       match ← (VTm.neutral ne).whnf q₀ with
+      | .neutral ⟨.mvar id, sp⟩ =>
+          match cs with
+          | .flex => return false
+          | _ =>
+            if ← Unify.solveMVar q₀ id sp other then return true
+            solveMVarFOApprox id sp other cs
       | .neutral _ => return false
       | v => other.conv v cs
   | _, _ => return false
+
+partial def solveMVarFOApprox {n} (id : MVarId) (sp : Spine n) (rhs : VTm n)
+    (cs : ConvState) : ElabM q₀ Bool := do
+  let rhs ← rhs.whnf q₀
+  match rhs with
+  | .neutral ⟨rhsHead, .app sp' lastArg⟩ =>
+      match sp with
+      | .app spRest spLast =>
+          if !(← spLast.conv lastArg cs) then return false
+          VTm.conv (.neutral ⟨.mvar id, spRest⟩) (.neutral ⟨rhsHead, sp'⟩) cs
+      | _ => return false
+  | .glued ⟨rhsHead, .app sp' lastArg⟩ _ =>
+      match sp with
+      | .app spRest spLast =>
+          if !(← spLast.conv lastArg cs) then return false
+          VTm.conv (.neutral ⟨.mvar id, spRest⟩) (.neutral ⟨rhsHead, sp'⟩) cs
+      | _ => return false
+  | _ => return false
 
 partial def etaConv {n} (ne : Neutral n) (other : VTm n) (cs : ConvState) : ElabM q₀ Bool := do
   let ⟨.const ctorName _us, sp⟩ := ne
@@ -98,7 +130,7 @@ partial def Neutral.conv {n} : Neutral n → Neutral n → ConvState → ElabM q
       | .var v₁, .var v₂ =>
           if v₁ == v₂ then sp₁.conv sp₂ cs else return false
       | .const n₁ us₁, .const n₂ us₂ =>
-          if n₁ == n₂ && us₁ == us₂ then
+          if n₁ == n₂ && (← Universe.solveUEqList q₀ us₁ us₂) then
             match cs with
             | .rigid =>
                 if ← sp₁.conv sp₂ .flex then return true
@@ -133,6 +165,49 @@ partial def Neutral.conv {n} : Neutral n → Neutral n → ConvState → ElabM q
             match ← deltaReduction q₀ n₂ us₂ with
             | some v₂ => (VTm.neutral ne₁).conv (← applySpine q₀ sp₂ v₂) .full
             | none => etaConv ne₂ (.neutral ne₁) cs
+      | .mvar i₁, .mvar i₂ =>
+          if i₁ == i₂ then
+            match cs with
+            | .flex => sp₁.conv sp₂ cs
+            | _ =>
+              if ← sp₁.conv sp₂ .flex then return true
+              match ← metaReduction q₀ i₁ with
+              | some v => (← applySpine q₀ sp₁ v).conv (← applySpine q₀ sp₂ v) .full
+              | none => sp₁.conv sp₂ .full
+          else
+            match cs with
+            | .flex => return false
+            | _ =>
+              match ← metaReduction q₀ i₁, ← metaReduction q₀ i₂ with
+              | some v₁, some v₂ =>
+                  (← applySpine q₀ sp₁ v₁).conv (← applySpine q₀ sp₂ v₂) .full
+              | some v₁, none =>
+                  (← applySpine q₀ sp₁ v₁).conv (.neutral ne₂) .full
+              | none, some v₂ =>
+                  (VTm.neutral ne₁).conv (← applySpine q₀ sp₂ v₂) .full
+              | none, none =>
+                  if ← Unify.solveMVar q₀ i₁ sp₁ (.neutral ne₂) then return true
+                  if ← Unify.solveMVar q₀ i₂ sp₂ (.neutral ne₁) then return true
+                  if ← solveMVarFOApprox i₁ sp₁ (.neutral ne₂) cs then return true
+                  solveMVarFOApprox i₂ sp₂ (.neutral ne₁) cs
+      | .mvar i₁, _ =>
+          match cs with
+          | .flex => return false
+          | _ =>
+            match ← metaReduction q₀ i₁ with
+            | some v₁ => (← applySpine q₀ sp₁ v₁).conv (.neutral ne₂) .full
+            | none =>
+              if ← Unify.solveMVar q₀ i₁ sp₁ (.neutral ne₂) then return true
+              solveMVarFOApprox i₁ sp₁ (.neutral ne₂) cs
+      | _, .mvar i₂ =>
+          match cs with
+          | .flex => return false
+          | _ =>
+            match ← metaReduction q₀ i₂ with
+            | some v₂ => (VTm.neutral ne₁).conv (← applySpine q₀ sp₂ v₂) .full
+            | none =>
+              if ← Unify.solveMVar q₀ i₂ sp₂ (.neutral ne₁) then return true
+              solveMVarFOApprox i₂ sp₂ (.neutral ne₁) cs
 
 partial def Spine.conv {n} : Spine n → Spine n → ConvState → ElabM q₀ Bool
   | .nil, .nil, _ => return true
@@ -144,7 +219,7 @@ end
 
 public partial def VTy.conv {n} (a b : VTy n) (cs : ConvState := .rigid) : ElabM q₀ Bool :=
   match a, b with
-  | .u i₁, .u i₂ => return i₁ == i₂
+  | .u i₁, .u i₂ => Universe.solveUEq q₀ i₁ i₂
   | .pi _ a₁ ⟨env₁, b₁⟩, .pi _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.conv a₂ cs) then return false
       let var : VTm (n + 1) := VTm.varAt n

@@ -105,6 +105,7 @@ def Tm.hasIndOcc {n : Nat} (ind : Name) : Tm n → Bool
   | .pi' _ a b => a.hasIndOcc ind || b.hasIndOcc ind
   | .proj _ a => a.hasIndOcc ind
   | .letE _ a b c => a.hasIndOcc ind || b.hasIndOcc ind || c.hasIndOcc ind
+  | .mvar _ => false
 
 def Ty.hasIndOcc {n : Nat} (ind : Name) : Ty n → Bool
   | .u _ => false
@@ -213,6 +214,8 @@ def InductiveConstructor.elab {numParams}
   let (fieldCtx, fieldTys, fieldUnivs) ← withChild q₀ 1 (Params.elabWithLevels q₀ indParamCtx ctor.fields)
   for (field, fieldUniv) in ctor.fields.zip fieldUnivs do
     let fieldName := getFieldName' field |>.getD .anonymous
+    Universe.propagateLE q₀ fieldUniv resultUniv
+    let fieldUniv ← Universe.zonk q₀ fieldUniv
     if ¬ fieldUniv ≤ resultUniv then
       raiseError q₀ (.fieldUniverseTooLarge ctorName fieldName fieldUniv resultUniv)
   let numFields := ctor.fields.length
@@ -231,10 +234,11 @@ def InductiveConstructor.elab {numParams}
   let ctorTy : Ty numParams := ctorTyWithInd.subst (Subst.beta (.const indName indUnivs))
   return (ctorName, ctorTy)
 
-public structure InductiveResult where
+public structure InductiveResult (numParams : Nat) where
   indEntry : Name × Constant
   ctorEntries : List (Name × Constant)
   recEntry : Name × Constant
+  ctorTys : List (Name × Ty numParams)
 
 def shiftIndexTys {a k : Nat} (s : Nat) : Ctx a k → Ctx (a + s) (k + s)
   | .nil => Tele.nil
@@ -476,7 +480,8 @@ def goMinors
     have hk : numParams + 1 + ithMinor = numParams + 1 + numMinors := by omega
     return (hk ▸ acc, hEq ▸ seeds)
 
-public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveResult := do
+public def Inductive.elab' (ind : Inductive) :
+    OptionT (ElabM q₀) (InductiveResult ind.params.length) := do
   let numParams := ind.params.length
   let numMotives := 1
   let numParamsMotives := numParams + numMotives
@@ -486,6 +491,9 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
     match ind.tyOpt with
     | none => pure (Ty.u .zero)
     | some ty => OptionT.lift (withChild q₀ 3 (checkTy q₀ paramCtx ty))
+  let _ ← Universe.retryPostponed q₀
+  let resultTy ← resultTy.zonk q₀
+  let paramTys : Ctx 0 ind.params.length ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
   withChild q₀ 0 (emitHover q₀ (.signature ind.name paramTys resultTy))
   let indTy : Ty 0 := Ty.pis paramTys resultTy
   let univParams ← getUnivParams q₀
@@ -528,9 +536,10 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
       (ind.ctors.get ⟨i.val, i.isLt⟩).elab q₀
         numIndices ind.name indUnivs indTyVal resultUniv paramCtx
 
-  let ctorEntries : List (Name × Constant) := ctors.toList.map fun (name, ctorFieldsTy) =>
+  let ctorEntries ← ctors.toList.mapM fun (name, ctorFieldsTy) => do
     let ctorFieldsTy := Ty.pis paramTys ctorFieldsTy
-    (name, .constructor { numUnivParams, ty := ctorFieldsTy, indName := ind.name })
+    let ctorFieldsTy ← ctorFieldsTy.zonk q₀
+    return (name, Constant.constructor { numUnivParams, ty := ctorFieldsTy, indName := ind.name })
 
   for (name, entry) in ctorEntries do
     let _ ← addConstant q₀ name entry
@@ -539,9 +548,10 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
 
   let ctorNames := ctors.map Prod.fst
 
+  let indTyZ ← indTy.zonk q₀
   let indInfo : InductiveInfo := {
     numUnivParams
-    ty := indTy
+    ty := indTyZ
     numParams
     numIndices
     numCtors := numMinors
@@ -551,6 +561,9 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
 
   let recName := ind.recName
 
+  let ctors ← ctors.mapM fun (n, ty) => do
+    let ty ← ty.zonk q₀
+    return (n, ty)
   let ctorsRec := ctors.map fun (n, ty) => (n, ty.shiftLevels 1)
   let (minorTys, seeds) ←
     goMinors q₀ numParams numIndices numMinors ind.name recIndUnivs motiveVal params ctorsRec 0 (Nat.zero_le numMinors) .nil ⟨#[], rfl⟩
@@ -592,6 +605,7 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
     Ty.arrow (majorTy.shiftLevels 1) <|
     conclusionTy.shiftLevels 1
 
+  let recTy ← recTy.zonk q₀
   let recInfo : RecursorInfo := {
     numUnivParams := numUnivParams + 1
     ty := recTy
@@ -608,6 +622,6 @@ public def Inductive.elab' (ind : Inductive) : OptionT (ElabM q₀) InductiveRes
   let _ ← addConstant q₀ recName recEntry.2
   replaceEntry q₀ ind.name indEntry.2
 
-  return { indEntry, ctorEntries, recEntry }
+  return { indEntry, ctorEntries, recEntry, ctorTys := ctors.toList }
 
 end Qdt

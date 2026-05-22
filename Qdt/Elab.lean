@@ -106,6 +106,7 @@ def checkDuplicateUnivParams (params : List Name) : Option Error :=
 def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   if let some e := checkDuplicateUnivParams d.univParams then
     raiseError q₀ e
+  resetMetas q₀
   let (paramCtx, paramTys) ← withChild q₀ 2 (Params.elab q₀ d.params)
   let (tm, ty) ←
     match d.tyOpt with
@@ -118,14 +119,29 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
         let tyVal ← ty.eval q₀ paramCtx.env
         let tm ← OptionT.lift (withChild q₀ 4 (checkTm q₀ paramCtx tyVal d.body))
         pure (tm, ty)
+  let _ ← Universe.retryPostponed q₀
+  let tm ← tm.zonk q₀
+  let ty ← ty.zonk q₀
+  let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
   withChild q₀ 0 (emitHover q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
-  let _ ← addConstant q₀ d.name (.definition { numUnivParams := d.univParams.length, ty, tm })
+  let hadUnsolved ← reportUnsolvedMetas q₀
+  if hadUnsolved then
+    return
+  let userCount := d.univParams.length
+  let (promotedNames, subst) :=
+    promoteUniverseMVars userCount (ty.freeUMVars ++ tm.freeUMVars)
+  let ty := ty.substUMVars subst
+  let tm := tm.substUMVars subst
+  checkUnusedUniverseParams q₀ d.name d.univParams (ty.usedLevels ++ tm.usedLevels)
+  let _ ← addConstant q₀ d.name
+    (.definition { numUnivParams := userCount + promotedNames.length, ty, tm })
 
 def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
     raiseError q₀ err
+  resetMetas q₀
   let (paramCtx, _paramTys) ← withChild q₀ 0 (Params.elab q₀ e.params)
   match e.tyOpt with
   | some tyRaw =>
@@ -134,15 +150,28 @@ def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
       let _term ← OptionT.lift (withChild q₀ 2 (checkTm q₀ paramCtx expected e.body))
   | none =>
       let (_term, _tyVal) ← withChild q₀ 2 (inferTm q₀ paramCtx e.body)
+  let _ ← Universe.retryPostponed q₀
+  let _ ← reportUnsolvedMetas q₀
 
 def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams a.univParams then
     raiseError q₀ err
+  resetMetas q₀
   let (paramCtx, paramTys) ← withChild q₀ 2 (Params.elab q₀ a.params)
   let ty ← OptionT.lift (withChild q₀ 3 (checkTy q₀ paramCtx a.ty))
+  let _ ← Universe.retryPostponed q₀
+  let ty ← ty.zonk q₀
+  let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
   withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
-  let numUnivParams := a.univParams.length
+  let hadUnsolved ← reportUnsolvedMetas q₀
+  if hadUnsolved then
+    return
+  let userCount := a.univParams.length
+  let (promotedNames, subst) := promoteUniverseMVars userCount ty.freeUMVars
+  let ty := ty.substUMVars subst
+  checkUnusedUniverseParams q₀ a.name a.univParams ty.usedLevels
+  let numUnivParams := userCount + promotedNames.length
   let entry := (Hit.recogniseAxiom a.name numUnivParams ty).getD
     (.axiom { numUnivParams, ty })
   let _ ← addConstant q₀ a.name entry
@@ -151,13 +180,37 @@ def Inductive.elab (info : Inductive) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError q₀ err
   let result ← Inductive.elab' q₀ info
+  let userCount := info.univParams.length
+  let allConsts := result.indEntry.snd :: result.recEntry.snd ::
+    result.ctorEntries.map Prod.snd
+  let allMVars := allConsts.flatMap Constant.freeUMVars
+  let (promotedNames, subst) := promoteUniverseMVars userCount allMVars
+  let promotedCount := promotedNames.length
+  let updateConst (c : Constant) : Constant :=
+    let c := c.substUMVars subst
+    c.setNumUnivParams (c.toConstantInfo.numUnivParams + promotedCount)
+  replaceEntry q₀ result.indEntry.fst (updateConst result.indEntry.snd)
+  replaceEntry q₀ result.recEntry.fst (updateConst result.recEntry.snd)
+  for (cname, cconst) in result.ctorEntries do
+    replaceEntry q₀ cname (updateConst cconst)
+  let updatedInd := updateConst result.indEntry.snd
+  let updatedRec := updateConst result.recEntry.snd
+  let ctorUsed := result.ctorEntries.flatMap (fun (_, c) =>
+    (updateConst c).ty.usedLevels)
+  checkUnusedUniverseParams q₀ info.name info.univParams
+    (updatedInd.ty.usedLevels ++ updatedRec.ty.usedLevels ++ ctorUsed)
   let _ ← result.ctorEntries.foldlM (init := 0) fun i (ctorName, ctorConst) => do
-    withChild q₀ (4 + i) (emitHover q₀ (.signature ctorName .nil ctorConst.ty))
+    withChild q₀ (4 + i) (emitHover q₀ (.signature ctorName .nil (updateConst ctorConst).ty))
     return i + 1
 
 def Structure.elab (info : Structure) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError q₀ err
-  let _ ← Structure.elab' q₀ info
+  let result ← Structure.elab' q₀ info
+  let allConsts := result.indResult.indEntry.snd ::
+    result.indResult.recEntry.snd ::
+    result.indResult.ctorEntries.map Prod.snd ++ result.projEntries.map Prod.snd
+  let used := allConsts.flatMap (fun c => c.ty.usedLevels)
+  checkUnusedUniverseParams q₀ info.name info.univParams used
 
 end Qdt

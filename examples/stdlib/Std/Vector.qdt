@@ -6,16 +6,16 @@ inductive Vector.{u} (α : Type u) : Nat → Type u where
   | nil : Vector α Nat.zero
   | cons (n : Nat) (head : α) (tail : Vector α n) : Vector α (Nat.succ n)
 
-def Vector.toList.{u} (α : Type u) : (n : Nat) → Vector.{u} α n → List.{u} α :=
-  Vector.rec.{u, u} α (fun _ _ => List.{u} α) (List.nil.{u} α) (fun m h _ => List.cons.{u} α h)
+def Vector.toList.{u} (α : Type u) : (n : Nat) → Vector α n → List α :=
+  Vector.rec α (fun _ _ => List α) (List.nil α) (fun m h _ => List.cons α h)
 
-def Vector.ofList.{u} (α : Type u) (xs : List.{u} α) : Vector.{u} α (List.length.{u} α xs) :=
-  List.rec.{u, u} α (fun xs => Vector.{u} α (List.length.{u} α xs)) (Vector.nil.{u} α) (fun h t ih => Vector.cons.{u} α (List.length.{u} α t) h ih) xs
+def Vector.ofList.{u} (α : Type u) (xs : List α) : Vector α (List.length α xs) :=
+  List.rec α (fun xs => Vector α (List.length α xs)) (Vector.nil α) (fun h t ih => Vector.cons α (List.length α t) h ih) xs
 
-def Vector.map.{u, v} (α : Type u) (β : Type v) (n : Nat) (f : α → β) : Vector.{u} α n → Vector.{v} β n :=
-  Vector.rec.{v, u} α (fun k _ => Vector.{v} β k) (Vector.nil.{v} β) (fun m h _ => Vector.cons.{v} β m (f h)) n
+def Vector.map.{u, v} (α : Type u) (β : Type v) (n : Nat) (f : α → β) : Vector α n → Vector β n :=
+  Vector.rec α (fun k _ => Vector β k) (Vector.nil β) (fun m h _ => Vector.cons β m (f h)) n
 
-def Vector.append.{u} (α : Type u) (m n : Nat) (xs : Vector.{u} α m) (ys : Vector.{u} α n) : Vector.{u} α (m + n) :=
-  Eq.subst.{u, 0} Nat (Vector.{u} α) (n + m) (m + n) (Nat.add_comm n m)
-    (Vector.rec.{u, u} α (fun m _ => Vector.{u} α (n + m)) ys
-      (fun m h _ ih => Vector.cons.{u} α (n + m) h ih) m xs)
+def Vector.append.{u} (α : Type u) (m n : Nat) (xs : Vector α m) (ys : Vector α n) : Vector α (m + n) :=
+  Eq.subst _ (Vector α) _ _ (Nat.add_comm n m)
+    (Vector.rec α (fun m _ => Vector α (n + m)) ys
+      (fun m h _ ih => Vector.cons α (n + m) h ih) m xs)

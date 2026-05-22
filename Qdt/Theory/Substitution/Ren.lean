@@ -35,6 +35,7 @@ def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
   | .pi' x a b => .pi' x (a.ren ξ) (b.ren ξ.up)
   | .proj i t => .proj i (t.ren ξ)
   | .letE x ty t body => .letE x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
+  | .mvar id => .mvar id
 
 end
 
@@ -76,6 +77,7 @@ theorem Tm.ren_id {n} : ∀ t : Tm n, t.ren (Ren.id n) = t
   | .pi' .. => by simp only [Tm.ren, Tm.ren_id, Ren.up_id]
   | .proj .. => by simp only [Tm.ren, Tm.ren_id]
   | .letE .. => by simp only [Tm.ren, Ty.ren_id, Tm.ren_id, Ren.up_id]
+  | .mvar _ => rfl
 
 end
 
@@ -102,6 +104,7 @@ theorem Tm.comp_ren {l m n} (ξ : Ren l m) (ζ : Ren m n) :
   | .pi' .. => by simp only [Tm.ren, Tm.comp_ren, Ren.up_comp]
   | .proj .. => by simp only [Tm.ren, Tm.comp_ren]
   | .letE .. => by simp only [Tm.ren, Ty.comp_ren, Tm.comp_ren, Ren.up_comp]
+  | .mvar _ => rfl
 
 end
 

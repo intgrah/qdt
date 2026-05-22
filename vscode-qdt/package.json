@@ -22,7 +22,7 @@
         "qdt.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to qdt-lsp executable (defaults to workspace .lake/build/bin/qdt-lsp or PATH)"
+          "description": "Absolute path to the qdt-lsp executable"
         }
       }
     },

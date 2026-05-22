@@ -3,4 +3,4 @@ import Std.Eq
 
 inductive Decidable.{u} (α : Type u) : Type u where
   | isTrue (h : α)
-  | isFalse (h : Not.{u} α)
+  | isFalse (h : Not α)

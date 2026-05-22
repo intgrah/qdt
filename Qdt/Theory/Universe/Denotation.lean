@@ -13,6 +13,7 @@ variable (ρ : Nat → Nat)
 def denote (ρ : Nat → Nat) : Universe → Nat
   | .zero => 0
   | .level n => ρ n
+  | .mvar _ => 0
   | .succ u => denote ρ u + 1
   | .max u v => Nat.max (denote ρ u) (denote ρ v)
 
@@ -30,8 +31,12 @@ def denoteList (ρ : Nat → Nat) : List (Nat × Nat) → Nat
   | [] => 0
   | (n, k) :: rest => Nat.max (ρ n + k) (denoteList ρ rest)
 
+def denoteMVars : List (UMVarId × Nat) → Nat
+  | [] => 0
+  | (_, k) :: rest => Nat.max k (denoteMVars rest)
+
 def denote (ρ : Nat → Nat) : NF → Nat
-  | ⟨c, L⟩ => Nat.max c (denoteList ρ L)
+  | ⟨c, L, M⟩ => Nat.max c (Nat.max (denoteList ρ L) (denoteMVars M))
 
 theorem denoteList_bound {n k : Nat} :
     ∀ {L : List (Nat × Nat)}, (n, k) ∈ L → ρ n + k ≤ denoteList ρ L
@@ -47,7 +52,11 @@ theorem maxOffset_le_denoteList : ∀ L, maxOffset L ≤ denoteList ρ L
 @[simp] theorem zero_denote : NF.zero.denote ρ = 0 := rfl
 
 @[simp] theorem level_denote (n) : (NF.level n).denote ρ = ρ n := by
-  show Nat.max 0 (Nat.max (ρ n + 0) 0) = ρ n
+  show Nat.max 0 (Nat.max (Nat.max (ρ n + 0) 0) 0) = ρ n
+  simp
+
+@[simp] theorem mvar_denote (id) : (NF.mvar id).denote ρ = 0 := by
+  show Nat.max 0 (Nat.max 0 (Nat.max (0 + 0) 0)) = 0
   simp
 
 theorem map_succ_denoteList : ∀ L,
@@ -59,12 +68,23 @@ theorem map_succ_denoteList : ∀ L,
     rw [map_succ_denoteList rest]
     cases rest <;> grind [denoteList]
 
+theorem map_succ_denoteMVars : ∀ M,
+    denoteMVars (M.map fun (id, k) => (id, k + 1)) =
+      if M.isEmpty then 0 else denoteMVars M + 1
+  | [] => rfl
+  | (_, k) :: rest => by
+    simp only [List.map_cons, denoteMVars, List.isEmpty_cons]
+    rw [map_succ_denoteMVars rest]
+    cases rest <;> grind [denoteMVars]
+
 theorem succ_denote : ∀ nf, (succ nf).denote ρ = nf.denote ρ + 1
-  | ⟨c, L⟩ => by
+  | ⟨c, L, M⟩ => by
     unfold succ
-    show Nat.max (c + 1) (denoteList ρ (L.map fun (i, k) => (i, k + 1))) = _
-    rw [map_succ_denoteList]
-    cases L <;> simp [denote, denoteList] <;> grind
+    show Nat.max (c + 1) (Nat.max
+      (denoteList ρ (L.map fun (i, k) => (i, k + 1)))
+      (denoteMVars (M.map fun (id, k) => (id, k + 1)))) = _
+    rw [map_succ_denoteList, map_succ_denoteMVars]
+    cases L <;> cases M <;> simp [denote, denoteList, denoteMVars] <;> grind
 
 theorem merge_denoteList : ∀ L L',
     denoteList ρ (merge L L') = Nat.max (denoteList ρ L) (denoteList ρ L')
@@ -86,18 +106,35 @@ theorem merge_denoteList : ∀ L L',
         simp only [denoteList, merge_denoteList xs ys]
         grind
 
+theorem merge_denoteMVars : ∀ M M',
+    denoteMVars (merge M M') = Nat.max (denoteMVars M) (denoteMVars M')
+  | [], _ => by unfold merge; simp [denoteMVars]
+  | (_, _) :: _, [] => by unfold merge; simp [denoteMVars]
+  | (n₁, k₁) :: xs, (n₂, k₂) :: ys => by
+    unfold merge
+    split
+    · simp only [denoteMVars, merge_denoteMVars xs ((n₂, k₂) :: ys)]
+      grind
+    · split
+      · simp only [denoteMVars, merge_denoteMVars ((n₁, k₁) :: xs) ys]
+        grind
+      · obtain rfl : n₁ = n₂ := by omega
+        simp only [denoteMVars, merge_denoteMVars xs ys]
+        grind
+
 theorem maxOf_denote : ∀ nf₁ nf₂,
     (maxOf nf₁ nf₂).denote ρ = Nat.max (nf₁.denote ρ) (nf₂.denote ρ)
-  | ⟨_, _⟩, ⟨_, _⟩ => by
+  | ⟨_, _, _⟩, ⟨_, _, _⟩ => by
     unfold maxOf
-    show Nat.max _ (denoteList ρ (merge _ _)) = _
-    rw [merge_denoteList]
+    show Nat.max _ (Nat.max (denoteList ρ (merge _ _)) (denoteMVars (merge _ _))) = _
+    rw [merge_denoteList, merge_denoteMVars]
     simp [denote]
     grind
 
 theorem ofUniverse_denote : ∀ u, (NF.ofUniverse u).denote ρ = Universe.denote ρ u
   | .zero => rfl
   | .level n => level_denote ρ n
+  | .mvar id => mvar_denote ρ id
   | .succ u => by
     show (NF.succ (ofUniverse u)).denote ρ = _
     rw [succ_denote, ofUniverse_denote u]
@@ -123,22 +160,42 @@ theorem reifyLevels_denote : ∀ (seed : Universe) L,
        = Nat.max (Universe.denote ρ seed) (Nat.max (ρ i + j) (denoteList ρ rest))
     grind
 
-theorem toUniverse_denote : ∀ (nf : NF), Universe.denote ρ nf.toUniverse = NF.denote ρ nf
-  | ⟨c, []⟩ => by
-    show Universe.denote ρ (Universe.zero.addOffset c) = Nat.max c 0
-    rw [denote_addOffset]
-    show 0 + c = Nat.max c 0
+theorem reifyMVars_denote : ∀ (seed : Universe) M,
+    Universe.denote ρ (reifyMVars seed M)
+      = Nat.max (Universe.denote ρ seed) (denoteMVars M)
+  | seed, [] => by
+    show Universe.denote ρ seed = Nat.max (Universe.denote ρ seed) 0
     grind
-  | ⟨0, (_, _) :: _⟩ => by
+  | seed, (id, j) :: rest => by
+    change Universe.denote ρ
+            (reifyMVars (Universe.max seed ((Universe.mvar id).addOffset j)) rest)
+        = Nat.max (Universe.denote ρ seed) (denoteMVars ((id, j) :: rest))
+    rw [reifyMVars_denote]
+    simp only [Universe.denote, denote_addOffset, denoteMVars]
+    show Nat.max (Nat.max (Universe.denote ρ seed) (0 + j)) (denoteMVars rest)
+       = Nat.max (Universe.denote ρ seed) (Nat.max j (denoteMVars rest))
+    grind
+
+theorem toUniverse_denote : ∀ (nf : NF), Universe.denote ρ nf.toUniverse = NF.denote ρ nf
+  | ⟨0, [], []⟩ => by simp [toUniverse, Universe.denote, denote, denoteList, denoteMVars]
+  | ⟨0, (i, j) :: rest, M⟩ => by
     unfold toUniverse
-    rw [reifyLevels_denote]
+    rw [reifyMVars_denote, reifyLevels_denote]
     simp only [denote, denoteList, denote_addOffset, Universe.denote, Nat.zero_max]
-  | ⟨c + 1, (i, j) :: rest⟩ => by
-    show Nat.max (Universe.denote ρ (reifyLevels _ rest))
-            (Universe.denote ρ (Universe.zero.addOffset _)) = _
-    rw [reifyLevels_denote, denote_addOffset, denote_addOffset]
-    show Nat.max (Nat.max (ρ i + j) (denoteList ρ rest)) (0 + (c + 1))
-       = Nat.max (c + 1) (Nat.max (ρ i + j) (denoteList ρ rest))
+  | ⟨0, [], (id, j) :: rest⟩ => by
+    unfold toUniverse
+    rw [reifyMVars_denote]
+    simp only [denote, denoteList, denoteMVars, denote_addOffset, Universe.denote,
+      Nat.zero_max, Nat.zero_add]
+  | ⟨c + 1, L, M⟩ => by
+    show Nat.max (Universe.denote ρ (reifyMVars (reifyLevels Universe.zero L) M))
+            (Universe.denote ρ (Universe.zero.addOffset (c + 1))) = _
+    rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
+    show Nat.max (Nat.max (Nat.max (Universe.denote ρ Universe.zero) (denoteList ρ L))
+                         (denoteMVars M))
+                 (0 + (c + 1))
+       = Nat.max (c + 1) (Nat.max (denoteList ρ L) (denoteMVars M))
+    simp only [Universe.denote, Nat.zero_max]
     grind
 
 end NF

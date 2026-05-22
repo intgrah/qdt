@@ -36,6 +36,10 @@ inductive Error
   | fieldUniverseTooLarge (ctorName : Name) (fieldName : Name) (fieldUniv : Universe) (indUniv : Universe)
   | ctorNameNotAtomic (ctorName : Name)
   | fieldNameNotAtomic (structName : Name)
+  | unsolvedMetavariable (decl : Name) (id : Nat) (ty : Ty 0)
+  | inferHole
+  | unusedUniverseParam (declName : Name) (paramName : Name)
+  | unsolvedUniverseMetavariable (declName : Name)
 deriving Inhabited, Hashable
 
 instance : ToString Error where toString
@@ -85,6 +89,14 @@ instance : ToString Error where toString
     s!"{ctorName}: constructor name must be atomic"
   | .fieldNameNotAtomic structName =>
     s!"{structName}: field name must be atomic"
+  | .unsolvedMetavariable decl id ty =>
+    s!"unsolved metavariable ?m{id} : {ty.fmt [] Prec.min} in {decl}"
+  | .inferHole =>
+    "cannot infer the value of a hole here; provide a type annotation"
+  | .unusedUniverseParam declName paramName =>
+    s!"{declName}: unused universe parameter '{paramName}'"
+  | .unsolvedUniverseMetavariable declName =>
+    s!"{declName}: unsolved universe metavariable"
 
 @[pp_using_anonymous_constructor]
 structure Diagnostic where
@@ -141,16 +153,13 @@ instance {α} : Monoid (Array α) where
 structure ElabInfo where
   diagnostics : Array Diagnostic
   hovers : Array HoverInfo
-  betaCount : Nat := 0
-  evalCount : Nat := 0
-  whnfCount : Nat := 0
 deriving Hashable, Inhabited
 
 instance : Monoid ElabInfo where
-  one := ⟨#[], #[], 0, 0, 0⟩
-  mul | ⟨d₁, h₁, b₁, e₁, w₁⟩, ⟨d₂, h₂, b₂, e₂, w₂⟩ => ⟨d₁ ++ d₂, h₁ ++ h₂, b₁ + b₂, e₁ + e₂, w₁ + w₂⟩
+  one := ⟨#[], #[]⟩
+  mul | ⟨d₁, h₁⟩, ⟨d₂, h₂⟩ => ⟨d₁ ++ d₂, h₁ ++ h₂⟩
   one_mul := by simp [HMul.hMul]
   mul_one := by simp [HMul.hMul]
-  mul_assoc := by intros; simp [HMul.hMul]; refine ⟨?_, ?_, ?_⟩ <;> ac_rfl
+  mul_assoc := by intros; simp [HMul.hMul, Array.append_assoc]
 
 end Qdt

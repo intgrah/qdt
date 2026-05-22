@@ -12,6 +12,11 @@ open Lean (Name)
 def Lvl n := Fin n
 deriving Repr, DecidableEq, Hashable
 
+inductive GluedKey
+  | const (name : Name) (us : List Universe)
+  | mvar (id : MVarId)
+deriving Repr, Hashable, DecidableEq
+
 mutual
 
 inductive VTy : Nat → Type
@@ -25,7 +30,7 @@ inductive VTm : Nat → Type
   | neutral {n} : Neutral n → VTm n
   | lam {n} : Name → VTy n → ClosTm n → VTm n
   | pi' {n} : Name → VTm n → ClosTm n → VTm n
-  | glued {n} : Neutral n → Name → List Universe → VTm n
+  | glued {n} : Neutral n → GluedKey → VTm n
 deriving Repr, Hashable
 
 inductive Neutral : Nat → Type
@@ -35,6 +40,7 @@ deriving Repr, Hashable
 inductive Head : Nat → Type
   | var {n} : Lvl n → Head n
   | const {n} : Name → List Universe → Head n
+  | mvar {n} : MVarId → Head n
 deriving Repr, Hashable
 
 inductive Spine : Nat → Type
@@ -71,12 +77,16 @@ def VTy.substLevels {n} (subst : List Universe) : VTy n → VTy n
   | .pi x dom codom => .pi x (dom.substLevels subst) (codom.substLevels subst)
   | .el ne => .el (ne.substLevels subst)
 
+def GluedKey.substLevels (subst : List Universe) : GluedKey → GluedKey
+  | .const name us => .const name (us.map (·.subst subst))
+  | .mvar id => .mvar id
+
 def VTm.substLevels {n} (subst : List Universe) : VTm n → VTm n
   | .u' i => .u' (i.subst subst)
   | .neutral ne => .neutral (ne.substLevels subst)
   | .lam x ty body => .lam x (ty.substLevels subst) (body.substLevels subst)
   | .pi' x dom codom => .pi' x (dom.substLevels subst) (codom.substLevels subst)
-  | .glued ne name us => .glued (ne.substLevels subst) name (us.map (·.subst subst))
+  | .glued ne key => .glued (ne.substLevels subst) (key.substLevels subst)
 
 def Neutral.substLevels {n} (subst : List Universe) : Neutral n → Neutral n
   | ⟨head, spine⟩ => ⟨head.substLevels subst, spine.substLevels subst⟩
@@ -84,6 +94,7 @@ def Neutral.substLevels {n} (subst : List Universe) : Neutral n → Neutral n
 def Head.substLevels {n} (subst : List Universe) : Head n → Head n
   | .var lvl => .var lvl
   | .const name us => .const name (us.map (·.subst subst))
+  | .mvar id => .mvar id
 
 def Spine.substLevels {n} (subst : List Universe) : Spine n → Spine n
   | .nil => .nil
@@ -171,12 +182,13 @@ def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
   | .neutral ne => .neutral (ne.weaken' h)
   | .lam x ty body => .lam x (ty.weaken' h) (body.weaken' h)
   | .pi' name dom codom => .pi' name (dom.weaken' h) (codom.weaken' h)
-  | .glued ne name us => .glued (ne.weaken' h) name us
+  | .glued ne key => .glued (ne.weaken' h) key
 
 @[implemented_by Head.weaken_impl]
 def Head.weaken' (h : n ≤ m) : Head n → Head m
   | .var lvl => .var (lvl.castLE h)
   | .const name us => .const name us
+  | .mvar id => .mvar id
 
 @[implemented_by Neutral.weaken_impl]
 def Neutral.weaken' (h : n ≤ m) : Neutral n → Neutral m
@@ -210,6 +222,10 @@ Attempt to synthesise the proof automatically by the omega tactic.
 def VTy.weaken (h : n ≤ m := by omega) : VTy n → VTy m := VTy.weaken' h
 def VTm.weaken (h : n ≤ m := by omega) : VTm n → VTm m := VTm.weaken' h
 def Env.weaken {c} (h : n ≤ m := by omega) : Env n c → Env m c := Env.weaken' h
+
+def Env.identity : (n : Nat) → Env n n
+  | 0 => .nil
+  | n + 1 => (Env.identity n).weaken (by omega) |>.cons (VTm.varAt n)
 
 end Weakening
 

@@ -1,6 +1,7 @@
 module
 
 public import Qdt.TermContext
+public import Qdt.Theory.Universe.Subst
 public import Qdt.Incremental.Query
 
 @[expose] public section
@@ -24,15 +25,27 @@ structure ElabContext where
   path : Path := []
 deriving Repr, Inhabited
 
+structure MetaInfo where
+  arity    : Nat
+  numScopeArgs : Nat := 0
+  ctxNames : List Name
+  ty       : Ty 0
+  solution : Option (Tm 0) := none
+  path     : Path
+  decl     : Name
+  errored  : Bool := false
+deriving Inhabited
+
 structure ElabState where
   localEnv : Global
   sorryId : Nat
   entryCache : Std.HashMap Name (Option Constant)
   diagnostics : Array Diagnostic := #[]
   hovers : Array HoverInfo := #[]
-  betaCount : Nat := 0
-  evalCount : Nat := 0
-  whnfCount : Nat := 0
+  metas : Array MetaInfo := #[]
+  usubst : Universe.Subst := .empty
+  nextUMVar : UMVarId := 0
+  postponedUEqs : Array (Universe × Universe) := #[]
 deriving Inhabited
 
 abbrev ElabM :=
@@ -62,9 +75,61 @@ instance {n} : MonadLiftT (SemM q₀ n n) (TermM q₀ n) where
   let path ← currentPath q₀
   modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
 
+@[inline] def emitDiagnosticAt (path : Path) (err : Error) : ElabM q₀ Unit := do
+  modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
+
 def raiseError {α : Type} (err : Error) : OptionT (ElabM q₀) α := do
   emitDiagnostic q₀ err
   failure
+
+def promoteUniverseMVars (userCount : Nat) (mvarIds : List UMVarId) :
+    List Name × (UMVarId → Option Universe) :=
+  let dedup := mvarIds.eraseDups
+  let names := dedup.zipIdx.map fun (_, i) => (`_uvar).num i
+  let table : Std.HashMap UMVarId Universe :=
+    dedup.zipIdx.foldl (init := ∅) fun acc (id, i) =>
+      acc.insert id (.level (userCount + i))
+  (names, fun id => table[id]?)
+
+def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
+    (used : List Nat) : OptionT (ElabM q₀) Unit := do
+  for (name, i) in univParams.zipIdx do
+    if !used.contains i then
+      raiseError q₀ (.unusedUniverseParam declName name)
+
+@[inline] def getMetaInfo (id : MVarId) : ElabM q₀ (Option MetaInfo) := do
+  return (← get).metas[id]?
+
+@[inline] def metaSolution (id : MVarId) : ElabM q₀ (Option (Tm 0)) := do
+  match (← get).metas[id]? with
+  | some info => return info.solution
+  | none => return none
+
+@[inline] def assignMeta (id : MVarId) (soln : Tm 0) : ElabM q₀ Unit :=
+  modify fun st =>
+    match st.metas[id]? with
+    | some info => { st with metas := st.metas.set! id { info with solution := some soln } }
+    | none => st
+
+@[inline] def markMetaErrored (id : MVarId) : ElabM q₀ Unit :=
+  modify fun st =>
+    match st.metas[id]? with
+    | some info => { st with metas := st.metas.set! id { info with errored := true } }
+    | none => st
+
+@[inline] def metaIsErrored (id : MVarId) : ElabM q₀ Bool := do
+  match (← get).metas[id]? with
+  | some info => return info.errored
+  | none => return false
+
+@[inline] def freshMetaId (info : MetaInfo) : ElabM q₀ MVarId := do
+  let st ← get
+  let id := st.metas.size
+  set { st with metas := st.metas.push info }
+  return id
+
+@[inline] def resetMetas : ElabM q₀ Unit :=
+  modify fun st => { st with metas := #[] }
 
 @[inline] def emitHover (hover : HoverContent) : ElabM q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
@@ -151,10 +216,10 @@ def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM q₀ α) :
     localEnv := ∅
     sorryId := 0
     entryCache := ∅
+    metas := #[]
   }
   let (result, st) ← StateT.run (action ctx) state
   return (result, st.localEnv,
-    { diagnostics := st.diagnostics, hovers := st.hovers
-    , betaCount := st.betaCount, evalCount := st.evalCount, whnfCount := st.whnfCount })
+    { diagnostics := st.diagnostics, hovers := st.hovers })
 
 end Qdt

@@ -491,6 +491,15 @@ partial def prattLoopFn (minPrec : Nat) (s : State) : State :=
 partial def leadingFn (_minPrec : Nat) : ParserFn := fun s =>
   if s.pos ≥ s.input.utf8ByteSize then s.setError "expected expression"
   else
+    let isHole : Bool :=
+      match s.peekChar? with
+      | some '_' =>
+        let nextPos := s.pos + 1
+        if nextPos ≥ s.input.utf8ByteSize then true
+        else !Lean.isIdRest (String.Pos.Raw.get s.input ⟨nextPos⟩)
+      | _ => false
+    if isHole then holeFn s
+    else
     let (id?, s) := peekIdentStr s
     match id? with
     | some "fun" => parseLamFn s
@@ -552,6 +561,17 @@ partial def tryAppArgFn (minPrec : Nat) (iniSz iniPos : Nat) (s : State) : State
     else sArg.mkNode `Lean.Parser.Term.app (iniSz - 1)
 
 partial def atomArgFn : ParserFn := fun s =>
+  let isHole : Bool :=
+    if s.pos ≥ s.input.utf8ByteSize then false
+    else
+      match String.Pos.Raw.get s.input ⟨s.pos⟩ with
+      | '_' =>
+        let nextPos := s.pos + 1
+        if nextPos ≥ s.input.utf8ByteSize then true
+        else !Lean.isIdRest (String.Pos.Raw.get s.input ⟨nextPos⟩)
+      | _ => false
+  if isHole then holeFn s
+  else
   let (id?, s) := peekIdentStr s
   match id? with
   | some "sorry" => parseSorryFn s
