@@ -1,4 +1,5 @@
 name = "QDT"
+grammar = "qdt"
 path_suffixes = ["qdt"]
 line_comments = ["-- "]
 block_comment = ["/-", "-/"]

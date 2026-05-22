@@ -9,3 +9,7 @@ repository = "https://github.com/IntGrah/qdt"
 [language_servers.qdt-lsp]
 name = "QDT LSP"
 languages = ["QDT"]
+
+[grammars.qdt]
+repository = "file:///home/intgrah/git/intgrah/qdt/tree-sitter-qdt"
+commit = "e4f95b0b02ea0417e13e23e57f9d54605a38da7e"
