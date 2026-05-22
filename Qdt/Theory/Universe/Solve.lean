@@ -113,18 +113,27 @@ partial def solveUEqWhnf (u v : Universe) : ElabM q₀ Bool := do
   | .succ u', .succ v' => solveUEq u' v'
   | .zero, .max a b => return (← solveUEq .zero a) && (← solveUEq .zero b)
   | .max a b, .zero => return (← solveUEq a .zero) && (← solveUEq b .zero)
+  | .succ _, .zero | .zero, .succ _ => return false
+  | .succ _, .level _ | .level _, .succ _ => return false
   | .succ u', v =>
     match decLevel? v with
     | some v' => solveUEq u' v'
-    | none => postponeUEq q₀ u v; return true
+    | none =>
+      if v.hasMVar then postponeUEq q₀ u v; return true
+      else return false
   | u, .succ v' =>
     match decLevel? u with
     | some u' => solveUEq u' v'
-    | none => postponeUEq q₀ u v; return true
+    | none =>
+      if u.hasMVar then postponeUEq q₀ u v; return true
+      else return false
   | .zero, .zero => return true
   | .zero, .level _ | .level _, .zero => return false
   | .level i, .level j => return i == j
-  | _, _ => postponeUEq q₀ u v; return true
+  | _, _ =>
+    if u.hasMVar || v.hasMVar then
+      postponeUEq q₀ u v; return true
+    else return false
 
 end
 

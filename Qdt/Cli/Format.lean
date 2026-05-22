@@ -16,8 +16,8 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   match sm.resolveSpan d.path with
   | some span =>
       let ⟨line, col⟩ := posToLineCol text span.startPos
-      s!"{file}:{line}:{col}: error: {d.error}"
+      s!"{file}:{line}:{col}: error: {d.error.format d.univParams}"
   | none =>
-      s!"{file}: error: {d.error}"
+      s!"{file}: error: {d.error.format d.univParams}"
 
 end Qdt.Cli

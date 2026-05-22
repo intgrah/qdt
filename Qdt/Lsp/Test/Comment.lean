@@ -18,7 +18,7 @@ setText qdt!(
 def bar := foo
 )
 
-diagnostics (· matches #[⟨_, .unboundVariable `foo⟩])
+diagnostics (· matches #[⟨_, .unboundVariable `foo, _⟩])
 
 setText qdt!(
 def foo := Type

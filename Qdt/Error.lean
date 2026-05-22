@@ -42,15 +42,16 @@ inductive Error
   | unsolvedUniverseMetavariable (declName : Name)
 deriving Inhabited, Hashable
 
-instance : ToString Error where toString
-  | .msg msg =>
-    msg
-  | .notImplemented msg =>
-    s!"Not implemented: {msg}"
+def Error.format (univs : List Name) (e : Error) : String :=
+  match e with
+  | .msg s =>
+    s
+  | .notImplemented s =>
+    s!"Not implemented: {s}"
   | .importCycle modules =>
     s!"Import cycle: {modules}"
   | .expectedType names got =>
-    s!"Expected type, got {got.fmt names Prec.min}"
+    s!"Expected type, got {got.fmt univs names Prec.min}"
   | .syntaxError err =>
     s!"Syntax error: {err.msg}"
   | .duplicateUniverseParam name =>
@@ -60,9 +61,9 @@ instance : ToString Error where toString
   | .inferSorry =>
     "Cannot infer type of sorry"
   | .expectedFunctionType names got =>
-    s!"Expected function type, got {got.fmt names Prec.min}"
+    s!"Expected function type, got {got.fmt univs names Prec.min}"
   | .typeMismatch names expected got =>
-    s!"Type mismatch: expected\n{expected.fmt names Prec.min},\ngot\n{got.fmt names Prec.min}"
+    s!"Type mismatch: expected\n{expected.fmt univs names Prec.min},\ngot\n{got.fmt univs names Prec.min}"
   | .unboundVariable name =>
     s!"Unbound variable {name}"
   | .unboundUniverseVariable name =>
@@ -84,13 +85,13 @@ instance : ToString Error where toString
   | .ctorParamMismatch ctorName =>
     s!"{ctorName}: inductive type parameters must be constant throughout the definition"
   | .fieldUniverseTooLarge ctorName fieldName fieldUniv indUniv =>
-    s!"{ctorName}: field '{fieldName}' has type in universe {fieldUniv}, but inductive lives in {indUniv}"
+    s!"{ctorName}: field '{fieldName}' has type in universe {(Universe.fmt univs fieldUniv 0).pretty}, but inductive lives in {(Universe.fmt univs indUniv 0).pretty}"
   | .ctorNameNotAtomic ctorName =>
     s!"{ctorName}: constructor name must be atomic"
   | .fieldNameNotAtomic structName =>
     s!"{structName}: field name must be atomic"
   | .unsolvedMetavariable decl id ty =>
-    s!"unsolved metavariable ?m{id} : {ty.fmt [] Prec.min} in {decl}"
+    s!"unsolved metavariable ?m{id} : {ty.fmt univs [] Prec.min} in {decl}"
   | .inferHole =>
     "cannot infer the value of a hole here; provide a type annotation"
   | .unusedUniverseParam declName paramName =>
@@ -98,40 +99,45 @@ instance : ToString Error where toString
   | .unsolvedUniverseMetavariable declName =>
     s!"{declName}: unsolved universe metavariable"
 
+instance : ToString Error where toString := Error.format []
+
 @[pp_using_anonymous_constructor]
 structure Diagnostic where
   path : Path
   error : Error
+  univParams : List Name := []
 deriving Inhabited, Hashable
 
 inductive HoverContent where
   | signature (name : Name) {n : Nat} (params : Ctx 0 n) (retTy : Ty n)
   | localVar (name : Name) (ctxNames : List Name) {n : Nat} (ty : Ty n)
   | typeOnly (ctxNames : List Name) {n : Nat} (ty : Ty n)
+  | hole (metaId : MVarId) (ctxNames : List Name) {n : Nat} (ty : Ty n)
 deriving Hashable
 
 structure HoverInfo where
   path : Path
   hover : HoverContent
+  univParams : List Name := []
 deriving Hashable
 
-def HoverContent.format : HoverContent → String
+def HoverContent.format (univs : List Name) : HoverContent → String
   | .signature name params retTy =>
       let rec collectParams {a b : Nat} (names : List Name) : Ctx a b → List String × List Name
         | .nil => ([], names)
         | .snoc bs ⟨pname, pty⟩ =>
             let (prev, prevNames) := collectParams names bs
             let x := freshName prevNames pname
-            (prev ++ [s!"({x} : {pty.fmt prevNames Prec.min})"], x :: prevNames)
+            (prev ++ [s!"({x} : {pty.fmt univs prevNames Prec.min})"], x :: prevNames)
       let rec peelPis {m : Nat} (names : List Name) : Ty m → List String × String
         | .pi pname dom cod =>
             if pname.isAnonymous then
-              ([], toString ((Ty.pi pname dom cod).fmt names Prec.min))
+              ([], toString ((Ty.pi pname dom cod).fmt univs names Prec.min))
             else
               let x := freshName names pname
               let (rest, retStr) := peelPis (x :: names) cod
-              (s!"({x} : {dom.fmt names Prec.min})" :: rest, retStr)
-        | ty => ([], toString (ty.fmt names Prec.min))
+              (s!"({x} : {dom.fmt univs names Prec.min})" :: rest, retStr)
+        | ty => ([], toString (ty.fmt univs names Prec.min))
       let (ctxParts, ctxNames) := collectParams [] params
       let (piParts, retStr) := peelPis ctxNames retTy
       let allParts := ctxParts ++ piParts
@@ -139,9 +145,11 @@ def HoverContent.format : HoverContent → String
       if paramsStr.isEmpty then s!"{name} : {retStr}"
       else s!"{name} {paramsStr} : {retStr}"
   | .localVar name ctxNames ty =>
-      s!"{name} : {ty.fmt ctxNames Prec.min}"
+      s!"{name} : {ty.fmt univs ctxNames Prec.min}"
   | .typeOnly ctxNames ty =>
-      s!"{ty.fmt ctxNames Prec.min}"
+      s!"{ty.fmt univs ctxNames Prec.min}"
+  | .hole _ ctxNames ty =>
+      s!"{ty.fmt univs ctxNames Prec.min}"
 
 instance {α} : Monoid (Array α) where
   one := #[]

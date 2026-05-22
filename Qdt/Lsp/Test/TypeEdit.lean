@@ -20,4 +20,4 @@ def foo : Type 2 := Type 1
 def bar : Type 1 := foo
 )
 
-diagnostics (· matches #[⟨_, .typeMismatch ..⟩])
+diagnostics (· matches #[⟨_, .typeMismatch .., _⟩])

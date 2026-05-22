@@ -43,6 +43,15 @@ theorem denoteList_bound {n k : Nat} :
   | _ :: _, .head _ => Nat.le_max_left _ _
   | _ :: _, .tail _ h => Nat.le_trans (denoteList_bound h) (Nat.le_max_right _ _)
 
+theorem denoteList_offset_bound {n k : Nat} :
+    ∀ {L : List (Nat × Nat)}, (n, k) ∈ L → k ≤ denoteList ρ L :=
+  fun h => Nat.le_trans (Nat.le_add_left _ _) (denoteList_bound (ρ := ρ) h)
+
+theorem denoteMVars_bound {id k : Nat} :
+    ∀ {M : List (UMVarId × Nat)}, (id, k) ∈ M → k ≤ denoteMVars M
+  | _ :: _, .head _ => Nat.le_max_left _ _
+  | _ :: _, .tail _ h => Nat.le_trans (denoteMVars_bound h) (Nat.le_max_right _ _)
+
 theorem maxOffset_le_denoteList : ∀ L, maxOffset L ≤ denoteList ρ L
   | [] => Nat.le_refl _
   | (n, k) :: rest => Nat.max_le.mpr ⟨
@@ -187,16 +196,56 @@ theorem toUniverse_denote : ∀ (nf : NF), Universe.denote ρ nf.toUniverse = NF
     rw [reifyMVars_denote]
     simp only [denote, denoteList, denoteMVars, denote_addOffset, Universe.denote,
       Nat.zero_max, Nat.zero_add]
-  | ⟨c + 1, L, M⟩ => by
-    show Nat.max (Universe.denote ρ (reifyMVars (reifyLevels Universe.zero L) M))
-            (Universe.denote ρ (Universe.zero.addOffset (c + 1))) = _
-    rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
-    show Nat.max (Nat.max (Nat.max (Universe.denote ρ Universe.zero) (denoteList ρ L))
-                         (denoteMVars M))
-                 (0 + (c + 1))
-       = Nat.max (c + 1) (Nat.max (denoteList ρ L) (denoteMVars M))
-    simp only [Universe.denote, Nat.zero_max]
-    grind
+  | ⟨c + 1, [], []⟩ => by
+    simp [toUniverse, denote, denoteList, denoteMVars, Universe.denote, denote_addOffset]
+  | ⟨c + 1, [], (id, j) :: rest⟩ => by
+    simp only [toUniverse]
+    split
+    next hCond =>
+      rw [reifyMVars_denote, denote_addOffset]
+      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars]
+      have : c + 1 ≤ Nat.max j (denoteMVars rest) := by
+        rcases hCond with h | h
+        · exact Nat.le_trans h (Nat.le_max_left _ _)
+        · simp only [List.any_eq_true, decide_eq_true_eq] at h
+          obtain ⟨⟨_, k'⟩, hMem, hk'⟩ := h
+          exact Nat.le_trans hk'
+            (Nat.le_trans (denoteMVars_bound hMem) (Nat.le_max_right _ _))
+      grind
+    next =>
+      show Nat.max (Universe.denote ρ (reifyMVars ((Universe.mvar id).addOffset j) rest))
+              (Universe.denote ρ (Universe.zero.addOffset (c + 1))) = _
+      rw [reifyMVars_denote, denote_addOffset]
+      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars, denote_addOffset]
+      grind
+  | ⟨c + 1, (i, j) :: rest, M⟩ => by
+    simp only [toUniverse]
+    split
+    next hCond =>
+      rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
+      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars]
+      have : c + 1 ≤ Nat.max (Nat.max (ρ i + j) (denoteList ρ rest)) (denoteMVars M) := by
+        rcases hCond with h | h | h
+        · exact Nat.le_trans
+            (Nat.le_trans h (Nat.le_add_left _ (ρ i)))
+            (Nat.le_trans (Nat.le_max_left _ _) (Nat.le_max_left _ _))
+        · simp only [List.any_eq_true, decide_eq_true_eq] at h
+          obtain ⟨⟨_, k'⟩, hMem, hk'⟩ := h
+          exact Nat.le_trans hk'
+            (Nat.le_trans (denoteList_offset_bound (ρ := ρ) hMem)
+              (Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_left _ _)))
+        · simp only [List.any_eq_true, decide_eq_true_eq] at h
+          obtain ⟨⟨_, k'⟩, hMem, hk'⟩ := h
+          exact Nat.le_trans hk'
+            (Nat.le_trans (denoteMVars_bound hMem) (Nat.le_max_right _ _))
+      grind
+    next =>
+      show Nat.max (Universe.denote ρ
+              (reifyMVars (reifyLevels ((Universe.level i).addOffset j) rest) M))
+              (Universe.denote ρ (Universe.zero.addOffset (c + 1))) = _
+      rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
+      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars, denote_addOffset]
+      grind
 
 end NF
 

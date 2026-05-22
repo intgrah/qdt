@@ -168,7 +168,7 @@ public def Structure.elab' (info : Structure) :
   let updateConst (c : Constant) : Constant :=
     let c := c.substUMVars subst
     let c := extendAll c
-    c.setNumUnivParams totalUnivParams
+    c.setNumUnivParams (c.toConstantInfo.numUnivParams + promotedCount)
   let indEntry := (indResult.indEntry.fst, updateConst indResult.indEntry.snd)
   let recEntry := (indResult.recEntry.fst, updateConst indResult.recEntry.snd)
   let ctorEntries := indResult.ctorEntries.map fun (n, c) => (n, updateConst c)

@@ -123,6 +123,7 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   let tm ← tm.zonk q₀
   let ty ← ty.zonk q₀
   let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
+  resolveHoleHovers q₀
   withChild q₀ 0 (emitHover q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
@@ -151,6 +152,7 @@ def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
   | none =>
       let (_term, _tyVal) ← withChild q₀ 2 (inferTm q₀ paramCtx e.body)
   let _ ← Universe.retryPostponed q₀
+  resolveHoleHovers q₀
   let _ ← reportUnsolvedMetas q₀
 
 def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
@@ -162,6 +164,7 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   let _ ← Universe.retryPostponed q₀
   let ty ← ty.zonk q₀
   let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
+  resolveHoleHovers q₀
   withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
   let hadUnsolved ← reportUnsolvedMetas q₀

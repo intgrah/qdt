@@ -24,22 +24,30 @@ instance {n} : OfNat Universe n where
 instance : HAdd Universe Nat Universe where
   hAdd i n := n.repeat .succ i
 
+open Lean (Name)
+
 def parenIf (p : Bool) : Std.Format → Std.Format :=
   if p then .paren else id
 
-protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
+protected def fmt (univs : List Name) (u : Universe) (prec : Nat) : Std.Format :=
   match u with
   | .zero => "0"
-  | .level i => "u#" ++ repr i
+  | .level i =>
+    match univs[i]? with
+    | some n => Std.Format.text n.toString
+    | none => "u#" ++ repr i
   | .mvar id => "?u#" ++ repr id
   | .succ u' =>
     let rec countSuccs (acc : Nat) : Universe → Nat × Std.Format
       | .succ u'' => countSuccs (acc + 1) u''
       | .zero => (acc + 1, repr (acc + 1))
-      | base => (acc + 1, parenIf (prec > 10) (base.reprPrec 66 ++ " + " ++ repr (acc + 1)))
+      | base => (acc + 1, parenIf (prec > 10) (base.fmt univs 66 ++ " + " ++ repr (acc + 1)))
     (countSuccs 0 u').snd
   | .max u' v' =>
-    parenIf (prec > 10) ("max " ++ u'.reprPrec 11 ++ " " ++ v'.reprPrec 11)
+    parenIf (prec > 10) ("max " ++ u'.fmt univs 11 ++ " " ++ v'.fmt univs 11)
+
+protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
+  Universe.fmt [] u prec
 
 instance : Repr Universe where
   reprPrec := Universe.reprPrec
@@ -47,8 +55,8 @@ instance : Repr Universe where
 instance : ToString Universe where
   toString u := (repr u).pretty
 
--- TODO do not ToString with de Bruijn indices.
 #guard toString (Universe.level 0 |>.succ.succ.succ.succ) == "u#0 + 4"
+#guard (Universe.fmt [`u] (Universe.level 0 |>.succ.succ) 0).pretty == "u + 2"
 
 def addOffset (u : Universe) : Nat → Universe
   | 0 => u
@@ -105,10 +113,17 @@ def toUniverse : NF → Universe
       reifyMVars (reifyLevels ((Universe.level i).addOffset k) rest) M
   | ⟨0, [], (id, k) :: rest⟩ =>
       reifyMVars ((Universe.mvar id).addOffset k) rest
-  | ⟨c + 1, L, M⟩ =>
-      Universe.max
-        (reifyMVars (reifyLevels Universe.zero L) M)
-        (Universe.zero.addOffset (c + 1))
+  | ⟨c + 1, [], []⟩ =>
+      Universe.zero.addOffset (c + 1)
+  | ⟨c + 1, [], (id, k) :: rest⟩ =>
+      let main := reifyMVars ((Universe.mvar id).addOffset k) rest
+      if k ≥ c + 1 ∨ rest.any (fun (_, k') => decide (k' ≥ c + 1)) then main
+      else main.max (Universe.zero.addOffset (c + 1))
+  | ⟨c + 1, (i, k) :: rest, M⟩ =>
+      let main := reifyMVars (reifyLevels ((Universe.level i).addOffset k) rest) M
+      if k ≥ c + 1 ∨ rest.any (fun (_, k') => decide (k' ≥ c + 1))
+          ∨ M.any (fun (_, k') => decide (k' ≥ c + 1)) then main
+      else main.max (Universe.zero.addOffset (c + 1))
 
 end NF
 
@@ -296,14 +311,33 @@ theorem Bounded.toUniverse {k : Nat} :
   | ⟨0, [], (_, j) :: rest⟩, _ => by
     exact Bounded.reifyMVars_aux
       (Universe.Bounded.addOffset j (show Universe.Bounded k (Universe.mvar _) from trivial)) rest
-  | ⟨c + 1, L, M⟩, h => by
-    have hL : ∀ p ∈ L, p.1 < k := h
-    change Universe.Bounded k ((reifyMVars (reifyLevels Universe.zero L) M).max
-      (Universe.zero.addOffset (c + 1)))
-    refine ⟨?_, ?_⟩
-    · exact Bounded.reifyMVars_aux
-        (Bounded.reifyLevels_aux (show Universe.Bounded k Universe.zero from trivial) L hL) M
-    · exact Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)
+  | ⟨c + 1, [], []⟩, _ => by
+    exact Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)
+  | ⟨c + 1, [], (id, k') :: rest⟩, h => by
+    have bMain : Universe.Bounded k
+        (NF.reifyMVars ((Universe.mvar id).addOffset k') rest) :=
+      Bounded.reifyMVars_aux
+        (Universe.Bounded.addOffset k' (show Universe.Bounded k (Universe.mvar id) from trivial)) rest
+    show Universe.Bounded k _
+    simp only [NF.toUniverse]
+    split
+    · exact bMain
+    · exact ⟨bMain,
+        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
+  | ⟨c + 1, (i, j) :: rest, M⟩, h => by
+    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
+    have hRest : ∀ p ∈ rest, p.1 < k :=
+      fun p hp => h p (List.mem_cons_of_mem _ hp)
+    have bMain : Universe.Bounded k
+        (NF.reifyMVars (NF.reifyLevels ((Universe.level i).addOffset j) rest) M) :=
+      Bounded.reifyMVars_aux
+        (Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest) M
+    show Universe.Bounded k _
+    simp only [NF.toUniverse]
+    split
+    · exact bMain
+    · exact ⟨bMain,
+        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
 
 end NF
 

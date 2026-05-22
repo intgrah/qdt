@@ -9,6 +9,7 @@ namespace Qdt
 
 open Std (DHashMap)
 open System (FilePath)
+open Lean (Name)
 open Incremental
 open Frontend (Path SourceMap Span)
 
@@ -49,26 +50,26 @@ def elaborateFile
   return (combinedInfo, sourceMap)
 
 def lookupHoverAtPosition (sourceMap : SourceMap) (info : ElabInfo)
-    (codepointPos : Nat) : Option (HoverContent × Span) := Id.run do
-  let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover)
+    (codepointPos : Nat) : Option (HoverContent × List Name × Span) := Id.run do
+  let hoverInfos := info.hovers.map fun h => (h.path.reverse, h.hover, h.univParams)
 
   let some posAstPath := sourceMap.astPathAtPosition codepointPos | return none
 
-  let mut best : Option (Path × HoverContent × Span) := none
+  let mut best : Option (Path × HoverContent × List Name × Span) := none
   for len in (List.range posAstPath.length).reverse do
     let astPrefix := posAstPath.take (len + 1)
-    for (tyPath, hover) in hoverInfos do
+    for (tyPath, hover, univs) in hoverInfos do
       if tyPath == astPrefix then
         if let some span := sourceMap.spanForAstPath astPrefix then
           match best with
-          | none => best := some (astPrefix, hover, span)
-          | some (prevPath, _, _) =>
+          | none => best := some (astPrefix, hover, univs, span)
+          | some (prevPath, _, _, _) =>
               if astPrefix.length > prevPath.length then
-                best := some (astPrefix, hover, span)
+                best := some (astPrefix, hover, univs, span)
         break
 
   match best with
   | none => none
-  | some (_, hover, span) => some (hover, span)
+  | some (_, hover, univs, span) => some (hover, univs, span)
 
 end Qdt

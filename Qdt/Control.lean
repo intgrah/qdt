@@ -72,11 +72,14 @@ instance {n} : MonadLiftT (SemM q₀ n n) (TermM q₀ n) where
   return (← read).univParams
 
 @[inline] def emitDiagnostic (err : Error) : ElabM q₀ Unit := do
-  let path ← currentPath q₀
-  modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
+  let ctx ← read
+  modify fun st =>
+    { st with diagnostics := st.diagnostics.push { path := ctx.path, univParams := ctx.univParams, error := err } }
 
 @[inline] def emitDiagnosticAt (path : Path) (err : Error) : ElabM q₀ Unit := do
-  modify fun st => { st with diagnostics := st.diagnostics.push { path, error := err } }
+  let ctx ← read
+  modify fun st =>
+    { st with diagnostics := st.diagnostics.push { path, univParams := ctx.univParams, error := err } }
 
 def raiseError {α : Type} (err : Error) : OptionT (ElabM q₀) α := do
   emitDiagnostic q₀ err
@@ -132,9 +135,10 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
   modify fun st => { st with metas := #[] }
 
 @[inline] def emitHover (hover : HoverContent) : ElabM q₀ Unit := do
-  if !(← readThe ElabContext).collectHovers then return
-  let path ← currentPath q₀
-  modify fun st => { st with hovers := st.hovers.push { path, hover } }
+  let ctx ← readThe ElabContext
+  if !ctx.collectHovers then return
+  modify fun st =>
+    { st with hovers := st.hovers.push { path := ctx.path, univParams := ctx.univParams, hover } }
 
 def getLocalEnv : ElabM q₀ Global := do
   return (← get).localEnv

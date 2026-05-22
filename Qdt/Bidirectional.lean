@@ -13,8 +13,8 @@ open Frontend (Ast Path)
 
 variable (q₀ : Key)
 
-def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
-    ElabM q₀ (Tm n) := do
+def freshMeta' {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
+    ElabM q₀ (MVarId × Tm n) := do
   let decl ← currentDecl q₀
   let localPis ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote q₀⟩
   let expectedTy ← expected.quote q₀
@@ -29,7 +29,11 @@ def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n)
   }
   let id ← freshMetaId q₀ info
   let args : List (Tm n) := (List.finRange n).map (fun i => Tm.var i.rev)
-  return Tm.apps (.mvar id) args
+  return (id, Tm.apps (.mvar id) args)
+
+def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
+    ElabM q₀ (Tm n) :=
+  return (← freshMeta' q₀ anchor ctx expected).2
 
 @[inline] def emitType {n : Nat} (ctx : TermContext n) (ty : VTy n) : ElabM q₀ Unit := do
   if !(← readThe ElabContext).collectHovers then return
@@ -79,15 +83,13 @@ def inferIdent {n : Nat} (ctx : TermContext n) (name : Name) (univs : List Unive
         for univ in univs do
           checkUniverseLevel q₀ univ
         let univs ←
-          if univs.length < info.numUnivParams then
-            let missing := info.numUnivParams - univs.length
-            let extras ← (List.range missing).mapM fun _ => do
+          if univs.isEmpty && info.numUnivParams > 0 then
+            (List.range info.numUnivParams).mapM fun _ => do
               let id ← Universe.freshUMVar q₀
               pure (Universe.mvar id)
-            pure (univs ++ extras)
           else pure univs
         let ty ←
-          if univs.isEmpty then pure info.ty
+          if info.numUnivParams = 0 then pure info.ty
           else instantiateLevels q₀ name info.numUnivParams info.ty univs
         return (.const name univs, ← ty.eval q₀ .nil)
     | none => raiseError q₀ (.unboundVariable name)
@@ -253,7 +255,8 @@ partial def checkTyWithLevelCore {n : Nat} (ctx : TermContext n) : Ast → Optio
   | .missing => failure
   | .node `Term.hole _ => OptionT.lift do
       let anchor ← currentPath q₀
-      let tm ← freshMeta q₀ anchor ctx (.u .zero)
+      let (id, tm) ← freshMeta' q₀ anchor ctx (.u .zero)
+      emitHover q₀ (.hole id ctx.names (Ty.u (n := n) .zero))
       return (.el tm, .zero)
   | .node `Term.u cs => do
       let level ← checkAstUniverse q₀ cs[0]!
@@ -391,8 +394,8 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.sorry _ => OptionT.lift (emitSorryTm q₀ ctx expected)
   | .node `Term.hole _ => OptionT.lift do
       let anchor ← currentPath q₀
-      let tm ← freshMeta q₀ anchor ctx expected
-      emitType q₀ ctx expected
+      let (id, tm) ← freshMeta' q₀ anchor ctx expected
+      emitHover q₀ (.hole id ctx.names (← expected.quote q₀))
       return tm
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
@@ -478,5 +481,37 @@ public def reportUnsolvedMetas : ElabM q₀ Bool := do
       unless info.errored do
         emitDiagnosticAt q₀ info.path (.unsolvedMetavariable info.decl i info.ty)
   return hadUnsolved
+
+partial def resolveHoleHover (metaId : MVarId) {n : Nat} (ctxNames : List Name) (ty : Ty n) :
+    ElabM q₀ HoverContent := do
+  let ty ← ty.zonk q₀
+  let some info ← getMetaInfo q₀ metaId
+    | return .typeOnly ctxNames ty
+  if info.solution.isNone then
+    return .typeOnly ctxNames ty
+  let args : List (Tm n) := (List.finRange n).map (fun i => .var i.rev)
+  let v ← (Tm.apps (.mvar metaId) args).eval q₀ (Env.identity n) >>= (·.whnf q₀)
+  let tm ← v.quote q₀
+  match tm with
+  | .const c _ =>
+      match ← fetchConstantInfo q₀ c with
+      | some constInfo => return .signature c .nil constInfo.ty
+      | none => return .typeOnly ctxNames ty
+  | .var ⟨i, _⟩ =>
+      match ctxNames[i]? with
+      | some name => return .localVar name ctxNames ty
+      | none => return .typeOnly ctxNames ty
+  | _ => return .typeOnly ctxNames ty
+
+public def resolveHoleHovers : ElabM q₀ Unit := do
+  let st ← get
+  let mut newHovers : Array HoverInfo := Array.emptyWithCapacity st.hovers.size
+  for h in st.hovers do
+    match h.hover with
+    | .hole metaId ctxNames ty =>
+        let resolved ← resolveHoleHover q₀ metaId ctxNames ty
+        newHovers := newHovers.push { h with hover := resolved }
+    | _ => newHovers := newHovers.push h
+  modify fun st => { st with hovers := newHovers }
 
 end Qdt

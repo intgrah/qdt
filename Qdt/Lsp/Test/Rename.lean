@@ -19,4 +19,4 @@ setText (filepath := "A.qdt") qdt!(
 def renamed := Type
 )
 
-diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo⟩])
+diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo, _⟩])

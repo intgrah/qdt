@@ -26,17 +26,17 @@ def mkRange (text : String) (span : Span) : Range :=
     «end» := fileMap.utf8PosToLspPos ⟨endByte⟩
   }
 
-def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic where
+def mkDiagnostic (text : String) (span : Span) (univs : List Name) (err : Error) : Lsp.Diagnostic where
   range := mkRange text span
   severity? := some DiagnosticSeverity.error
   source? := some "qdt"
-  message := toString err
+  message := err.format univs
 
-def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic where
+def mkDiagnosticNoSpan (univs : List Name) (err : Error) : Lsp.Diagnostic where
   range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
   severity? := some DiagnosticSeverity.error
   source? := some "qdt"
-  message := toString err
+  message := err.format univs
 
 def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
   match System.Uri.fileUriToPath? uri with
@@ -109,8 +109,8 @@ def ServerM.sendFileProgress (uri : DocumentUri) (ranges : Array Range) : Server
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
     match sourceMap.resolveSpan d.path with
-    | some span => mkDiagnostic text span d.error
-    | none => mkDiagnosticNoSpan d.error
+    | some span => mkDiagnostic text span d.univParams d.error
+    | none => mkDiagnosticNoSpan d.univParams d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
     (ElabInfo × SourceMap) × lspBuild.σ :=
@@ -268,9 +268,9 @@ def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : Se
 
   let ((info, sourceMap), _) := Id.run <| StateT.run (s := ps.store) <| elaborateFile lspBuild file
 
-  let some (hoverContent, span) := lookupHoverAtPosition sourceMap info codepointPos
+  let some (hoverContent, hoverUnivs, span) := lookupHoverAtPosition sourceMap info codepointPos
     | sendResponse id Json.null
-  let content := hoverContent.format
+  let content := hoverContent.format hoverUnivs
   let range := mkRange text span
   let markupContent : MarkupContent := {
     kind := MarkupKind.markdown

@@ -22,6 +22,6 @@ def foo : Type 1 := Type
 --  ^
 )
 
-diagnostics (· matches #[⟨_, .unboundVariable `foo⟩])
+diagnostics (· matches #[⟨_, .unboundVariable `foo, _⟩])
 hover ⟨1, 4⟩ "bar : Type 1" ⟨1, 4⟩ ⟨1, 7⟩
 hover ⟨3, 4⟩ "foo : Type 1" ⟨3, 4⟩ ⟨3, 7⟩

@@ -32,7 +32,8 @@ public def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List 
           | .node `Term.hole _ =>
               OptionT.lift do
                 let nameAnchor : Path := 0 :: idx :: (← currentPath q₀)
-                let tm ← freshMeta q₀ nameAnchor ctx (.u .zero)
+                let (id, tm) ← freshMeta' q₀ nameAnchor ctx (.u .zero)
+                withChild q₀ idx (withChild q₀ 1 (emitHover q₀ (.hole id ctx.names (Ty.u (n := b) .zero))))
                 pure (.el tm, .zero)
           | _ =>
               OptionT.lift (withChild q₀ idx (withChild q₀ 1 (checkTyWithLevel q₀ ctx tyAst)))

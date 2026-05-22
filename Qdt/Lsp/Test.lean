@@ -64,8 +64,8 @@ def hover (pos : Lean.Position) (expected : String)
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
   match lookupHoverAtPosition sourceMap info codepointPos with
   | none => fail s!"no hover at {repr pos}, expected '{expected}'"
-  | some (content, span) =>
-    let formatted := content.format
+  | some (content, univs, span) =>
+    let formatted := content.format univs
     if formatted != expected then
       fail s!"hover mismatch at {repr pos}: expected '{expected}', got '{formatted}'"
     let expectedStart := utf8PosToCodepointPos text (fileMap.ofPosition start).byteIdx
@@ -83,7 +83,7 @@ def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Un
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
   match lookupHoverAtPosition sourceMap info codepointPos with
   | none => return
-  | some (content, _) =>
-    fail s!"expected no hover at {repr pos}, got '{content.format}'"
+  | some (content, univs, _) =>
+    fail s!"expected no hover at {repr pos}, got '{content.format univs}'"
 
 end Qdt.Lsp.Test

@@ -39,7 +39,7 @@ def buildOwnerIndex (prog : Ast) : HashMap Name Nat × Array Diagnostic := Id.ru
       else []
     for name in names do
       if m.contains name then
-        diags := diags.push ⟨[0, idx], .alreadyDefined name⟩
+        diags := diags.push { path := [0, idx], error := .alreadyDefined name }
       else
         m := m.insert name idx
   return (m, diags)
@@ -111,7 +111,7 @@ public def tasks : Tasks config
       let path := match sourceMap.astPathAtPosition err.pos with
         | some p => p
         | none => []
-      ⟨path, .syntaxError err⟩
+      { path, error := .syntaxError err }
     return (ast, sourceMap, diagnostics)
   | .ast filepath => do
     let (ast, _, _) ← (Task.fetch (ℭ := config) (q₀ := Key.ast filepath) (Key.astSourceMap filepath) sorry : Task config (Key.ast filepath) _)

@@ -12,7 +12,7 @@ setText (filepath := "B.qdt") qdt!(
 def bar := foo
 )
 
-diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo⟩])
+diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo, _⟩])
 
 setText (filepath := "B.qdt") qdt!(
 import A
@@ -27,4 +27,4 @@ setText (filepath := "B.qdt") qdt!(
 def bar := foo
 )
 
-diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo⟩])
+diagnostics (filepath := "B.qdt") (· matches #[⟨_, .unboundVariable `foo, _⟩])
