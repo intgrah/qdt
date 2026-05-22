@@ -23,20 +23,20 @@ def WellFounded.apply.{u, v} (α : Type u) (r : α → α → Type v) : WellFoun
 
 def WellFounded.fixF.{u, v, w}
     (α : Type u)
-    (r : α → α → Type v)
     (C : α → Type w)
+    (r : α → α → Type v)
     (F : (x : α) → ((y : α) → r y x → C y) → C x) :
     (x : α) → Acc α r x → C x :=
   Acc.rec _ _ (fun x _ => C x) (fun x _ => F x)
 
 def WellFounded.fix.{u, v, w}
     (α : Type u)
-    (r : α → α → Type v)
     (C : α → Type w)
+    (r : α → α → Type v)
     (hwf : WellFounded α r)
     (F : (x : α) → ((y : α) → r y x → C y) → C x)
     (x : α) : C x :=
-  WellFounded.fixF _ _ C F x (WellFounded.apply _ _ hwf x)
+  WellFounded.fixF _ C _ F x (WellFounded.apply _ _ hwf x)
 
 def Acc.subsingleton.{u, v} (α : Type u) (r : α → α → Type v) :
     (x : α) → (a1 a2 : Acc α r x) → Eq (Acc α r x) a1 a2 :=
@@ -66,66 +66,66 @@ def Acc.subsingleton.{u, v} (α : Type u) (r : α → α → Type v) :
 
 def WellFounded.fixF_eq.{u, v, w}
     (α : Type u)
-    (r : α → α → Type v)
     (C : α → Type w)
+    (r : α → α → Type v)
     (F : (x : α) → ((y : α) → r y x → C y) → C x)
     (x : α) (acx : Acc α r x) :
-    Eq (C x) (WellFounded.fixF α r C F x acx)
-      (F x (fun (y : α) (p : r y x) => WellFounded.fixF α r C F y (Acc.inv α r x y acx p))) :=
+    Eq (C x) (WellFounded.fixF α C r F x acx)
+      (F x (fun (y : α) (p : r y x) => WellFounded.fixF α C r F y (Acc.inv α r x y acx p))) :=
   Acc.rec α r
     (fun (x : α) (acx : Acc α r x) =>
-      Eq (C x) (WellFounded.fixF α r C F x acx)
-        (F x (fun (y : α) (p : r y x) => WellFounded.fixF α r C F y (Acc.inv α r x y acx p))))
+      Eq (C x) (WellFounded.fixF α C r F x acx)
+        (F x (fun (y : α) (p : r y x) => WellFounded.fixF α C r F y (Acc.inv α r x y acx p))))
     (fun (x : α) (h : (y : α) → r y x → Acc α r y) _ =>
       Eq.refl _ _)
     x acx
 
 def WellFounded.fixF_irrel.{u, v, w}
     (α : Type u)
-    (r : α → α → Type v)
     (C : α → Type w)
+    (r : α → α → Type v)
     (F : (x : α) → ((y : α) → r y x → C y) → C x)
     (x : α) (a1 a2 : Acc α r x) :
-    Eq (C x) (WellFounded.fixF α r C F x a1) (WellFounded.fixF α r C F x a2) :=
+    Eq (C x) (WellFounded.fixF α C r F x a1) (WellFounded.fixF α C r F x a2) :=
   congrArg (Acc α r x) (C x)
-    (WellFounded.fixF α r C F x)
+    (WellFounded.fixF α C r F x)
     a1 a2
     (Acc.subsingleton α r x a1 a2)
 
 def WellFounded.fix_eq.{u, v, w}
     (α : Type u)
-    (r : α → α → Type v)
     (C : α → Type w)
+    (r : α → α → Type v)
     (hwf : WellFounded α r)
     (F : (x : α) → ((y : α) → r y x → C y) → C x)
     (x : α) :
-    Eq (C x) (WellFounded.fix α r C hwf F x)
-      (F x (fun (y : α) (_ : r y x) => WellFounded.fix α r C hwf F y)) :=
+    Eq (C x) (WellFounded.fix α C r hwf F x)
+      (F x (fun (y : α) (_ : r y x) => WellFounded.fix α C r hwf F y)) :=
   WellFounded.rec α r
     (fun (hwf : WellFounded α r) =>
-      Eq (C x) (WellFounded.fix α r C hwf F x)
-        (F x (fun (y : α) (_ : r y x) => WellFounded.fix α r C hwf F y)))
+      Eq (C x) (WellFounded.fix α C r hwf F x)
+        (F x (fun (y : α) (_ : r y x) => WellFounded.fix α C r hwf F y)))
     (fun (h : (a : α) → Acc α r a) =>
       Acc.rec α r
         (fun (x : α) (a : Acc α r x) =>
-          Eq (C x) (WellFounded.fixF α r C F x a)
-            (F x (fun (y : α) (_ : r y x) => WellFounded.fixF α r C F y (h y))))
+          Eq (C x) (WellFounded.fixF α C r F x a)
+            (F x (fun (y : α) (_ : r y x) => WellFounded.fixF α C r F y (h y))))
         (fun (x : α) (hx : (y : α) → r y x → Acc α r y) _ =>
           congrArg
             ((y : α) → r y x → C y) (C x)
             (F x)
-            (fun (y : α) (hy : r y x) => WellFounded.fixF α r C F y (hx y hy))
-            (fun (y : α) (_ : r y x) => WellFounded.fixF α r C F y (h y))
+            (fun (y : α) (hy : r y x) => WellFounded.fixF α C r F y (hx y hy))
+            (fun (y : α) (_ : r y x) => WellFounded.fixF α C r F y (h y))
             (funext α
               (fun (y : α) => r y x → C y)
-              (fun (y : α) (hy : r y x) => WellFounded.fixF α r C F y (hx y hy))
-              (fun (y : α) (_ : r y x) => WellFounded.fixF α r C F y (h y))
+              (fun (y : α) (hy : r y x) => WellFounded.fixF α C r F y (hx y hy))
+              (fun (y : α) (_ : r y x) => WellFounded.fixF α C r F y (h y))
               (fun (y : α) =>
                 funext (r y x) (fun _ => C y)
-                  (fun (hy : r y x) => WellFounded.fixF α r C F y (hx y hy))
-                  (fun (_ : r y x) => WellFounded.fixF α r C F y (h y))
+                  (fun (hy : r y x) => WellFounded.fixF α C r F y (hx y hy))
+                  (fun (_ : r y x) => WellFounded.fixF α C r F y (h y))
                   (fun (hy : r y x) =>
-                    WellFounded.fixF_irrel α r C F y (hx y hy) (h y)))))
+                    WellFounded.fixF_irrel α C r F y (hx y hy) (h y)))))
         x (h x))
     hwf
 
