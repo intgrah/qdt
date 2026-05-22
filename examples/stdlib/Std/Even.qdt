@@ -26,12 +26,12 @@ def right_inv_pointwise (e : Even) : Nat.toEven (Even.half e) = e :=
       Even.mk y half (Eq.symm Nat double y p);
   let step1 : Nat.toEven half = mkEven n double_eq_n :=
     Eq.rec Nat double
-      (fun (y : Nat) (p : double = y) => Nat.toEven half = mkEven y p)
+      (fun y p => Nat.toEven half = mkEven y p)
       (Eq.refl Even (Nat.toEven half))
       n double_eq_n;
   let step2 : mkEven n double_eq_n = e :=
     congrArg (n = double) Even
-      (fun (p : n = double) => Even.mk n half p)
+      (fun p => Even.mk n half p)
       (Eq.symm Nat double n double_eq_n)
       half_spec
       (Nat.isSet n double (Eq.symm Nat double n double_eq_n) half_spec);
