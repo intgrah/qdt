@@ -16,7 +16,7 @@ def Acc.inv.{u, v} (α : Type u) (r : α → α → Type v) (x y : α) (hx : Acc
     y hyx
 
 inductive WellFounded.{u, v} (α : Type u) (r : α → α → Type v) : Type (max u v) where
-  | intro (h : (a : α) → Acc α r a) : WellFounded α r
+  | intro (h : (a : α) → Acc α r a)
 
 def WellFounded.apply.{u, v} (α : Type u) (r : α → α → Type v) : WellFounded α r → (x : α) → Acc α r x :=
   WellFounded.rec _ _ (fun _ => (a : α) → Acc α r a) (fun h => h)
@@ -41,27 +41,25 @@ def WellFounded.fix.{u, v, w}
 def Acc.subsingleton.{u, v} (α : Type u) (r : α → α → Type v) :
     (x : α) → (a1 a2 : Acc α r x) → Eq (Acc α r x) a1 a2 :=
   Acc.rec α r
-    (fun (x : α) (a1 : Acc α r x) =>
+    (fun x (a1 : Acc α r x) =>
       (a2 : Acc α r x) → Eq (Acc α r x) a1 a2)
-    (fun (x : α) (h1 : (y : α) → r y x → Acc α r y)
-         (ih : (y : α) → (hy : r y x) → (a2 : Acc α r y) → Eq (Acc α r y) (h1 y hy) a2)
-         (a2 : Acc α r x) =>
+    (fun x h1 ih a2 =>
       Acc.rec α r
         (fun (x : α) (a2 : Acc α r x) =>
           (h1 : (y : α) → r y x → Acc α r y) →
           ((y : α) → (hy : r y x) → (a2 : Acc α r y) → Eq (Acc α r y) (h1 y hy) a2) →
           Eq (Acc α r x) (Acc.intro α r x h1) a2)
-        (fun (x : α) (h2 : (y : α) → r y x → Acc α r y) _
+        (fun x h2 _
              (h1 : (y : α) → r y x → Acc α r y)
              (ih : (y : α) → (hy : r y x) → (a2 : Acc α r y) → Eq (Acc α r y) (h1 y hy) a2) =>
           congrArg
             ((y : α) → r y x → Acc α r y) (Acc α r x)
             (Acc.intro α r x)
             h1 h2
-            (funext α (fun (y : α) => r y x → Acc α r y) h1 h2
-              (fun (y : α) =>
-                funext (r y x) (fun _ => Acc α r y) (h1 y) (h2 y)
-                  (fun (hy : r y x) => ih y hy (h2 y hy)))))
+            (funext α (fun y => r y x → Acc α r y) h1 h2
+              (fun y =>
+                funext (r y x) _ (h1 y) (h2 y)
+                  (fun hy => ih y hy (h2 y hy)))))
         x a2 h1 ih)
 
 def WellFounded.fixF_eq.{u, v, w}
