@@ -16,7 +16,8 @@ def StateT.pure.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad m) (�
 
 def StateT.bind.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad m) (α β : Type u) (x : StateT σ m α) (f : α → StateT σ m β) : StateT σ m β :=
   fun (s : σ) =>
-    Monad.bind m
+    Monad.bind
+      m
       inst
       (Prod α σ)
       (Prod β σ)
@@ -24,34 +25,40 @@ def StateT.bind.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad m) (�
       (fun (p : Prod α σ) => f (Prod.fst α σ p) (Prod.snd α σ p))
 
 def StateT.instMonad.{u, v} (σ : Type u) (m : Type u → Type v) (inst : Monad m) : Monad (StateT σ m) :=
-  Monad.mk (StateT σ m)
+  Monad.mk
+    (StateT σ m)
     (StateT.pure σ m inst)
     (StateT.bind σ m inst)
     (fun (α β : Type u) (a : α) (f : α → StateT σ m β) =>
-      funext σ
+      funext
+        σ
         (fun (_ : σ) => m (Prod β σ))
         (StateT.bind σ m inst α β (StateT.pure σ m inst α a) f)
         (f a)
         (fun (s : σ) =>
-          Monad.bind_pure_left m
+          Monad.bind_pure_left
+            m
             inst
             (Prod α σ)
             (Prod β σ)
             (Prod.mk α σ a s)
             (fun (p : Prod α σ) => f (Prod.fst α σ p) (Prod.snd α σ p))))
     (fun (α : Type u) (x : StateT σ m α) =>
-      funext σ
+      funext
+        σ
         (fun (_ : σ) => m (Prod α σ))
         (StateT.bind σ m inst α α x (StateT.pure σ m inst α))
         x
         (fun (s : σ) => Monad.bind_pure_right m inst (Prod α σ) (x s)))
     (fun (α β γ : Type u) (x : StateT σ m α) (f : α → StateT σ m β) (g : β → StateT σ m γ) =>
-      funext σ
+      funext
+        σ
         (fun (_ : σ) => m (Prod γ σ))
         (StateT.bind σ m inst β γ (StateT.bind σ m inst α β x f) g)
         (StateT.bind σ m inst α γ x (fun (a : α) => StateT.bind σ m inst β γ (f a) g))
         (fun (s : σ) =>
-          Monad.bind_assoc m
+          Monad.bind_assoc
+            m
             inst
             (Prod α σ)
             (Prod β σ)

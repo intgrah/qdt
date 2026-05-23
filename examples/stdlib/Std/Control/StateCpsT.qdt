@@ -20,7 +20,8 @@ def StateCpsT.bind.{u, v} (σ : Type u) (m : Type u → Type v) (α β : Type u)
   fun (δ : Type u) (s : σ) (k : β → σ → m δ) => x δ s (fun (a : α) (s' : σ) => f a δ s' k)
 
 def StateCpsT.instMonad.{u, v} (σ : Type u) (m : Type u → Type v) : Monad (StateCpsT σ m) :=
-  Monad.mk (StateCpsT σ m)
+  Monad.mk
+    (StateCpsT σ m)
     (StateCpsT.pure σ m)
     (StateCpsT.bind σ m)
     (fun (α β : Type u) (a : α) (f : α → StateCpsT σ m β) => Eq.refl _ _)

@@ -15,7 +15,8 @@ def Category.Small.{u} : Type u → Type (u + 1) := Category
 def Category.Large.{u} : Type (u + 1) → Type (u + 1) := Category
 
 def Category.Set.{u} : Category.Large Type u :=
-  Category.mk Type u
+  Category.mk
+    Type u
     (fun A B => A → B)
     id
     (fun A B C f g => comp A B C g f)
@@ -27,7 +28,8 @@ def Category.Discrete.{u} (A : Type u) (hset : isSet A) : Category.Small A :=
   let EqA := Eq A;
   let refl := Eq.refl A;
   let trans := Eq.trans A;
-  Category.mk A
+  Category.mk
+    A
     EqA
     refl
     trans
@@ -40,14 +42,16 @@ def Category.op.{u} (C : Type u) (cat : Category C) : Category C :=
   let Hom := Category.Hom C cat;
   let id := Category.id C cat;
   let comp := Category.comp C cat;
-  Category.mk C
+  Category.mk
+    C
     (fun A B => Hom B A)
     id
     (fun A B D f g => comp D B A g f)
     (fun A B f => Category.comp_id C cat B A f)
     (fun A B f => Category.id_comp C cat B A f)
     (fun A B D E f g h =>
-      Eq.symm (Hom E A)
+      Eq.symm
+        (Hom E A)
         (comp E B A (comp E D B h g) f)
         (comp E D A h (comp D B A g f))
         (Category.comp_assoc C cat E D B A h g f))
@@ -62,7 +66,8 @@ def Category.Functor.id.{u} (C : Type u) (cat : Category C) : Category.Functor C
   let Hom := Category.Hom C cat;
   let catId := Category.id C cat;
   let catComp := Category.comp C cat;
-  Category.Functor.mk C
+  Category.Functor.mk
+    C
     cat
     C
     cat
@@ -80,7 +85,8 @@ def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C)
   let HomE := Category.Hom E catE;
   let compD := Category.comp D catD;
   let compE := Category.comp E catE;
-  Category.Functor.mk C
+  Category.Functor.mk
+    C
     catC
     E
     catE
@@ -93,11 +99,13 @@ def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C)
         Category.Functor.map_id C catC D catD F X;
       let h2 : Eq (HomE GFX GFX) (G.map FX FX (Category.id D catD FX)) (Category.id E catE GFX) :=
         Category.Functor.map_id D catD E catE G FX;
-      Eq.trans (HomE GFX GFX)
+      Eq.trans
+        (HomE GFX GFX)
         (G.map FX FX (F.map X X (Category.id C catC X)))
         (G.map FX FX (Category.id D catD FX))
         (Category.id E catE GFX)
-        (congrArg (HomD FX FX)
+        (congrArg
+          (HomD FX FX)
           (HomE GFX GFX)
           (G.map FX FX)
           (F.map X X (Category.id C catC X))
@@ -117,11 +125,13 @@ def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C)
         Category.Functor.map_comp C catC D catD F X Y Z f g;
       let h2 : Eq (HomE GFX GFZ) (G.map FX FZ (compD FX FY FZ Ff Fg)) (compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg)) :=
         Category.Functor.map_comp D catD E catE G FX FY FZ Ff Fg;
-      Eq.trans (HomE GFX GFZ)
+      Eq.trans
+        (HomE GFX GFZ)
         (G.map FX FZ (F.map X Z (Category.comp C catC X Y Z f g)))
         (G.map FX FZ (compD FX FY FZ Ff Fg))
         (compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg))
-        (congrArg (HomD FX FZ)
+        (congrArg
+          (HomD FX FZ)
           (HomE GFX GFZ)
           (G.map FX FZ)
           (F.map X Z (Category.comp C catC X Y Z f g))
@@ -144,7 +154,8 @@ def Category.NatTrans.id.{u₁, u₂} (C : Type u₁) (catC : Category C) (D : T
   let idD := Category.id D catD;
   let compD := Category.comp D catD;
   let F.map := Category.Functor.map C catC D catD F;
-  Category.NatTrans.mk C
+  Category.NatTrans.mk
+    C
     catC
     D
     catD
@@ -157,7 +168,8 @@ def Category.NatTrans.id.{u₁, u₂} (C : Type u₁) (catC : Category C) (D : T
       let Ff := F.map X Y f;
       let h1 : Eq (HomD FX FY) (compD FX FY FY Ff (idD FY)) Ff := Category.comp_id D catD FX FY Ff;
       let h2 : Eq (HomD FX FY) (compD FX FX FY (idD FX) Ff) Ff := Category.id_comp D catD FX FY Ff;
-      Eq.trans (HomD FX FY)
+      Eq.trans
+        (HomD FX FY)
         (compD FX FY FY Ff (idD FY))
         Ff
         (compD FX FX FY (idD FX) Ff)

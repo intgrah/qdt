@@ -157,19 +157,13 @@ partial def fmtTerm (prec : Nat) (cst : Cst) : Format :=
           | _, _ => Format.nil
       | `Lean.Parser.Term.app =>
           let (head, chainArgs) := collectAppChain (.node k args)
-          match chainArgs.toList with
-          | []        => fmtTerm prec head
-          | [single]  =>
-              parensIf (prec > Prec.app) <|
-                group (fmtTerm Prec.app head
-                        ++ nest 2 (line ++ fmtTerm (Prec.app + 1) single))
-          | first :: rest =>
-              let tail := rest.foldl
-                (fun acc a => acc ++ line ++ fmtTerm (Prec.app + 1) a)
-                Format.nil
-              parensIf (prec > Prec.app) <|
-                group (fmtTerm Prec.app head ++ " " ++ fmtTerm (Prec.app + 1) first
-                        ++ nest 2 tail)
+          if chainArgs.isEmpty then fmtTerm prec head
+          else
+            let body := chainArgs.foldl
+              (fun acc a => acc ++ line ++ fmtTerm (Prec.app + 1) a)
+              Format.nil
+            parensIf (prec > Prec.app) <|
+              group (fmtTerm Prec.app head ++ nest 2 body)
       | `Lean.Parser.Term.explicitUniv =>
           let nt := nonTrivia args
           match nt[0]?, nt[1]? with

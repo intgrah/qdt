@@ -10,14 +10,16 @@ def trans_sym_left.{u} (α : Type u) (x z : α) (h : Eq α x z) : Eq (Eq α z z)
   Eq.rec _ _ (fun z h => Eq.trans α z x z (Eq.symm α x z h) h = Eq.refl α z) (Eq.refl _ _) _ h
 
 def hedberg_f.{u} (α : Type u) (dec : (x y : α) → Decidable (Eq α x y)) (x y : α) (p : Eq α x y) : Eq α x y :=
-  Decidable.rec (Eq α x y)
+  Decidable.rec
+    (Eq α x y)
     (fun _ => Eq α x y)
     (fun h => h)
     (fun nh => Empty.elim _ (nh p))
     (dec x y)
 
 def hedberg_f_const.{u} (α : Type u) (dec : (x y : α) → Decidable (Eq α x y)) (x y : α) (p q : Eq α x y) : hedberg_f α dec x y p = hedberg_f α dec x y q :=
-  Decidable.rec (Eq α x y)
+  Decidable.rec
+    (Eq α x y)
     (fun d =>
       Decidable.rec (Eq α x y) (fun _ => Eq α x y) (fun h => h) (fun nh => Empty.elim _ (nh p)) d =
       Decidable.rec (Eq α x y) (fun _ => Eq α x y) (fun h => h) (fun nh => Empty.elim _ (nh q)) d)
@@ -26,7 +28,8 @@ def hedberg_f_const.{u} (α : Type u) (dec : (x y : α) → Decidable (Eq α x y
     (dec x y)
 
 def hedberg_g_id.{u} (α : Type u) (dec : (x y : α) → Decidable (Eq α x y)) (x y : α) (p : Eq α x y) : Eq.trans α x x y (Eq.symm α x x (hedberg_f α dec x x (Eq.refl _ _))) (hedberg_f α dec x y p) = p :=
-  Eq.rec _
+  Eq.rec
+    _
     _
     (fun y p =>
       Eq.trans α x x y (Eq.symm α x x (hedberg_f α dec x x (Eq.refl _ _))) (hedberg_f α dec x y p) =
@@ -42,21 +45,25 @@ def hedberg.{u} (α : Type u) (dec : (x y : α) → Decidable (Eq α x y)) : isS
     let g_id_p := hedberg_g_id α dec x y p;
     let g_id_q := hedberg_g_id α dec x y q;
     let g_const : Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y p) = Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y q) :=
-      congrArg (Eq α x y)
+      congrArg
+        (Eq α x y)
         (Eq α x y)
         (Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))))
         (f x y p)
         (f x y q)
         f_const;
-    Eq.trans (Eq α x y)
+    Eq.trans
+      (Eq α x y)
       p
       (Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y p))
       q
-      (Eq.symm (Eq α x y)
+      (Eq.symm
+        (Eq α x y)
         (Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y p))
         p
         g_id_p)
-      (Eq.trans (Eq α x y)
+      (Eq.trans
+        (Eq α x y)
         (Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y p))
         (Eq.trans α x x y (Eq.symm α x x (f x x (Eq.refl α x))) (f x y q))
         q

@@ -24,23 +24,27 @@ def WellFounded.fix.{u, v, w} (α : Type u) (C : α → Type w) (r : α → α �
   WellFounded.fixF _ C _ F x (WellFounded.apply _ _ hwf x)
 
 def Acc.subsingleton.{u, v} (α : Type u) (r : α → α → Type v) : (x : α) → (a1 a2 : Acc α r x) → Eq (Acc α r x) a1 a2 :=
-  Acc.rec α
+  Acc.rec
+    α
     r
     (fun x (a1 : Acc α r x) => (a2 : Acc α r x) → Eq (Acc α r x) a1 a2)
     (fun x h1 ih a2 =>
-      Acc.rec α
+      Acc.rec
+        α
         r
         (fun (x : α) (a2 : Acc α r x) =>
           (h1 : (y : α) → r y x → Acc α r y) →
           ((y : α) → (hy : r y x) → (a2 : Acc α r y) → Eq (Acc α r y) (h1 y hy) a2) →
           Eq (Acc α r x) (Acc.intro α r x h1) a2)
         (fun x h2 _ (h1 : (y : α) → r y x → Acc α r y) (ih : (y : α) → (hy : r y x) → (a2 : Acc α r y) → Eq (Acc α r y) (h1 y hy) a2) =>
-          congrArg ((y : α) → r y x → Acc α r y)
+          congrArg
+            ((y : α) → r y x → Acc α r y)
             (Acc α r x)
             (Acc.intro α r x)
             h1
             h2
-            (funext α
+            (funext
+              α
               (fun y => r y x → Acc α r y)
               h1
               h2
@@ -51,10 +55,12 @@ def Acc.subsingleton.{u, v} (α : Type u) (r : α → α → Type v) : (x : α) 
         ih)
 
 def WellFounded.fixF_eq.{u, v, w} (α : Type u) (C : α → Type w) (r : α → α → Type v) (F : (x : α) → ((y : α) → r y x → C y) → C x) (x : α) (acx : Acc α r x) : Eq (C x) (WellFounded.fixF α C r F x acx) (F x (fun (y : α) (p : r y x) => WellFounded.fixF α C r F y (Acc.inv α r x y acx p))) :=
-  Acc.rec α
+  Acc.rec
+    α
     r
     (fun (x : α) (acx : Acc α r x) =>
-      Eq (C x)
+      Eq
+        (C x)
         (WellFounded.fixF α C r F x acx)
         (F x (fun (y : α) (p : r y x) => WellFounded.fixF α C r F y (Acc.inv α r x y acx p))))
     (fun (x : α) (h : (y : α) → r y x → Acc α r y) _ => Eq.refl _ _)
@@ -65,31 +71,38 @@ def WellFounded.fixF_irrel.{u, v, w} (α : Type u) (C : α → Type w) (r : α �
   congrArg (Acc α r x) (C x) (WellFounded.fixF α C r F x) a1 a2 (Acc.subsingleton α r x a1 a2)
 
 def WellFounded.fix_eq.{u, v, w} (α : Type u) (C : α → Type w) (r : α → α → Type v) (hwf : WellFounded α r) (F : (x : α) → ((y : α) → r y x → C y) → C x) (x : α) : Eq (C x) (WellFounded.fix α C r hwf F x) (F x (fun (y : α) (_ : r y x) => WellFounded.fix α C r hwf F y)) :=
-  WellFounded.rec α
+  WellFounded.rec
+    α
     r
     (fun (hwf : WellFounded α r) =>
-      Eq (C x)
+      Eq
+        (C x)
         (WellFounded.fix α C r hwf F x)
         (F x (fun (y : α) _ => WellFounded.fix α C r hwf F y)))
     (fun (h : (a : α) → Acc α r a) =>
-      Acc.rec α
+      Acc.rec
+        α
         r
         (fun (x : α) (a : Acc α r x) =>
-          Eq (C x)
+          Eq
+            (C x)
             (WellFounded.fixF α C r F x a)
             (F x (fun y _ => WellFounded.fixF α C r F y (h y))))
         (fun (x : α) (hx : (y : α) → r y x → Acc α r y) _ =>
-          congrArg ((y : α) → r y x → C y)
+          congrArg
+            ((y : α) → r y x → C y)
             (C x)
             (F x)
             (fun (y : α) (hy : r y x) => WellFounded.fixF α C r F y (hx y hy))
             (fun (y : α) (_ : r y x) => WellFounded.fixF α C r F y (h y))
-            (funext α
+            (funext
+              α
               (fun y => r y x → C y)
               (fun y hy => WellFounded.fixF α C r F y (hx y hy))
               (fun y _ => WellFounded.fixF α C r F y (h y))
               (fun y =>
-                funext (r y x)
+                funext
+                  (r y x)
                   (fun _ => C y)
                   (fun hy => WellFounded.fixF α C r F y (hx y hy))
                   (fun _ => WellFounded.fixF α C r F y (h y))
@@ -99,7 +112,8 @@ def WellFounded.fix_eq.{u, v, w} (α : Type u) (C : α → Type w) (r : α → �
     hwf
 
 def WellFounded.empty.{u} (α : Type u) : WellFounded α (Relation.empty α) :=
-  WellFounded.intro α
+  WellFounded.intro
+    α
     (Relation.empty α)
     (fun x => Acc.intro α (Relation.empty α) x (fun y => Empty.elim (Acc α (Relation.empty α) y)))
 
@@ -110,11 +124,13 @@ def Subrelation.wf.{u, v} (α : Type u) (q r : α → α → Type v) (h : Subrel
   WellFounded.intro α q (fun a => Subrelation.accessible α q r h a (WellFounded.apply α r hwf a))
 
 def Acc.transGen.{u, v} (α : Type u) (r : α → α → Type v) : (a : α) → Acc α r a → Acc α (Relation.TransGen α r) a :=
-  Acc.rec α
+  Acc.rec
+    α
     r
     (fun x _ => Acc α (Relation.TransGen α r) x)
     (fun x _ ih =>
-      Acc.intro α
+      Acc.intro
+        α
         (Relation.TransGen α r)
         x
         (fun y =>
@@ -124,6 +140,7 @@ def Acc.transGen'.{u, v} (α : Type u) (r : α → α → Type v) : (a : α) →
   sorry
 
 def WellFounded.transGen.{u, v} (α : Type u) (r : α → α → Type v) (h : WellFounded α r) : WellFounded α (Relation.TransGen α r) :=
-  WellFounded.intro α
+  WellFounded.intro
+    α
     (Relation.TransGen α r)
     (fun a => Acc.transGen α r a (WellFounded.apply α r h a))

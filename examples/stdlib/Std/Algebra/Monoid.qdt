@@ -14,7 +14,8 @@ def Monoid.npow.{u} (A : Type u) (inst : Monoid A) (n : Nat) (x : A) : A :=
   Nat.rec _ (Monoid.one A inst) (fun _ => Monoid.mul A inst x) n
 
 def Monoid.Free.{u} (A : Type u) : Monoid (List A) :=
-  Monoid.mk _
+  Monoid.mk
+    _
     (List.append A)
     (List.append_assoc A)
     (List.nil A)

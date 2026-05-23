@@ -46,7 +46,8 @@ def Group.mul_inv_cancel.{u} (A : Type u) (inst : Group A) (x : A) : Group.mul A
   Eq.trans A (mul x x') (mul x'' x') one step_rewrite (inv_mul_cancel x')
 
 def Group.toMonoid.{u} (A : Type u) (inst : Group A) : Monoid A :=
-  Monoid.mk _
+  Monoid.mk
+    _
     (Group.mul A inst)
     (Group.mul_assoc A inst)
     (Group.one A inst)

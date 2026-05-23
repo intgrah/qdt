@@ -15,7 +15,8 @@ def ContT.bind.{u, v} (ρ : Type u) (m : Type u → Type v) (α β : Type u) (x 
   fun k => x (fun a => f a k)
 
 def ContT.instMonad.{u, v} (ρ : Type u) (m : Type u → Type v) : Monad (ContT ρ m) :=
-  Monad.mk (ContT ρ m)
+  Monad.mk
+    (ContT ρ m)
     (ContT.pure ρ m)
     (ContT.bind ρ m)
     (fun α β a f => Eq.refl _ _)

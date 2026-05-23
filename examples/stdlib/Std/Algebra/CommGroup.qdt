@@ -12,7 +12,8 @@ structure CommGroup.{u} (A : Type u) : Type u where
   (mul_comm (x y : A) : mul x y = mul y x)
 
 def CommGroup.toGroup.{u} (A : Type u) (inst : CommGroup A) : Group A :=
-  Group.mk _
+  Group.mk
+    _
     (CommGroup.mul A inst)
     (CommGroup.mul_assoc A inst)
     (CommGroup.one A inst)
