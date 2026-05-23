@@ -130,11 +130,11 @@ export default grammar({
     identifier: (_) =>
       token(
         seq(
-          /[\p{L}_][\p{L}\p{N}_']*/,
-          repeat(seq(".", /[\p{L}_][\p{L}\p{N}_']*/)),
+          /[\p{L}_][\p{L}\p{N}_']*/u,
+          repeat(seq(".", /[\p{L}_][\p{L}\p{N}_']*/u)),
         ),
       ),
 
-    _ident_word: (_) => /[\p{L}_][\p{L}\p{N}_']*/,
+    _ident_word: (_) => /[\p{L}_][\p{L}\p{N}_']*/u,
   },
 });

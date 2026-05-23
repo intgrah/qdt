@@ -698,7 +698,8 @@
         "members": [
           {
             "type": "PATTERN",
-            "value": "[\\p{L}_][\\p{L}\\p{N}_']*"
+            "value": "[\\p{L}_][\\p{L}\\p{N}_']*",
+            "flags": "u"
           },
           {
             "type": "REPEAT",
@@ -711,7 +712,8 @@
                 },
                 {
                   "type": "PATTERN",
-                  "value": "[\\p{L}_][\\p{L}\\p{N}_']*"
+                  "value": "[\\p{L}_][\\p{L}\\p{N}_']*",
+                  "flags": "u"
                 }
               ]
             }
@@ -721,7 +723,8 @@
     },
     "_ident_word": {
       "type": "PATTERN",
-      "value": "[\\p{L}_][\\p{L}\\p{N}_']*"
+      "value": "[\\p{L}_][\\p{L}\\p{N}_']*",
+      "flags": "u"
     }
   },
   "extras": [
