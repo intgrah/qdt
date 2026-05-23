@@ -5,7 +5,7 @@ def ack : Nat → Nat → Nat :=
     Nat.succ
     (fun m ack_m =>
       WellFounded.fix _
-        (fun _ => Nat)
+        _
         _
         Nat.lt_wf
         (fun n rec_n =>
@@ -19,7 +19,7 @@ def ack_zero (n : Nat) : ack 0 n = Nat.succ n := Eq.refl _ _
 
 def ack_succ_zero (m : Nat) : ack (Nat.succ m) 0 = ack m 1 :=
   WellFounded.fix_eq _
-    (fun _ => Nat)
+    _
     _
     Nat.lt_wf
     (fun n rec_n =>
@@ -32,7 +32,7 @@ def ack_succ_zero (m : Nat) : ack (Nat.succ m) 0 = ack m 1 :=
 
 def ack_succ_succ (m n : Nat) : ack (Nat.succ m) (Nat.succ n) = ack m (ack (Nat.succ m) n) :=
   WellFounded.fix_eq _
-    (fun _ => Nat)
+    _
     _
     Nat.lt_wf
     (fun n rec_n =>
