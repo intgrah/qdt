@@ -1,10 +1,11 @@
 lean_include := `lean --print-prefix` / "include"
 c_sources := "FSWatch/c/rdcw.c FSWatch/c/inotify.c Incremental/c/shake.c"
+qdt_bin := justfile_directory() / ".lake/build/bin/qdt"
 
 default: qdt
 
 install:
-    ln -sf {{justfile_directory()}}/.lake/build/bin/qdt ~/.local/bin/qdt
+    ln -sf {{qdt_bin}} ~/.local/bin/qdt
 
 qdt:
     lake build qdt
@@ -20,23 +21,11 @@ compile_commands:
       > compile_commands.json
 
 stdlib:
-    qdt --root examples/stdlib Std
+    {{qdt_bin}} build --root examples/stdlib Std
 
 normalisation-bench:
-    qdt --root examples/normalisation-bench Bench
+    {{qdt_bin}} build --root examples/normalisation-bench Bench
 
-long-discrete:
-    cd examples/long && ./discrete.sh > Discrete.qdt
-    qdt --root examples/long Discrete
-
-long-chain:
-    cd examples/long && ./chain.sh > Chain.qdt
-    qdt --root examples/long Chain
-
-long-random:
-    cd examples/long && ./random.sh > Random.qdt
-    qdt --root examples/long Random
-
-long-triangle:
-    cd examples/long && ./triangle.sh > Triangle.qdt
-    qdt --root examples/long Triangle
+long NAME:
+    cd examples/long && ./{{NAME}}.sh > {{capitalize(NAME)}}.qdt
+    {{qdt_bin}} build --root examples/long {{capitalize(NAME)}}
