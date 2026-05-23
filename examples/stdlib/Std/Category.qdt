@@ -14,9 +14,9 @@ def Category.Small.{u} : Type u → Type (u + 1) := Category
 
 def Category.Large.{u} : Type (u + 1) → Type (u + 1) := Category
 
-def Category.Set.{u} : Category.Large Type u :=
+def Category.Set.{u} : Category.Large (Type u) :=
   Category.mk
-    Type u
+    (Type u)
     (fun A B => A → B)
     id
     (fun A B C f g => comp A B C g f)

@@ -575,7 +575,7 @@ partial def atomArgFn : ParserFn := fun s =>
   let (id?, s) := peekIdentStr s
   match id? with
   | some "sorry" => parseSorryFn s
-  | some "Type" => parseTypeFn s
+  | some "Type" => parseTypeAtomFn s
   | some name =>
       if isKeyword name then s.setError "keyword"
       else parseIdentWithUnivFn s
@@ -633,6 +633,9 @@ partial def optLevelFn : ParserFn := fun s =>
 
 partial def parseTypeFn : ParserFn :=
   nodeFn `Lean.Parser.Term.type (consumeKeywordFn "Type" >> optLevelFn)
+
+partial def parseTypeAtomFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.type (consumeKeywordFn "Type")
 
 partial def parseUnitFn : ParserFn :=
   nodeFn `Lean.Parser.Term.unit (atomRawFn "(" >> triviaFn >> atomRawFn ")")

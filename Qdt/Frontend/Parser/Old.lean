@@ -304,7 +304,7 @@ partial def tryAppArg (minPrec : Nat) (left : Cst) (triviaArr : Array Cst) : Par
 partial def atomArg : ParserM Cst := do
   match ← peekIdentStr with
   | some "sorry" => parseSorry
-  | some "Type" => parseType
+  | some "Type" => parseTypeAtom
   | some name =>
       if name ∈ keywords then fail "keyword"
       parseIdentWithUniv
@@ -351,6 +351,9 @@ partial def optLevel : ParserM (Array Cst) :=
 
 partial def parseType : ParserM Cst :=
   node `Lean.Parser.Term.type <| one (atomRaw "Type") ++ optLevel
+
+partial def parseTypeAtom : ParserM Cst :=
+  node `Lean.Parser.Term.type <| one (atomRaw "Type")
 
 partial def parseUnit : ParserM Cst :=
   node `Lean.Parser.Term.unit <| one (atomRaw "(") ++ trivia ++ one (atomRaw ")")

@@ -140,7 +140,9 @@ partial def fmtTerm (prec : Nat) (cst : Cst) : Format :=
       | `Lean.Parser.Term.type =>
           let nt := nonTrivia args
           match nt[1]? with
-          | some lvl => "Type " ++ fmtLevel (Prec.app + 1) lvl
+          | some lvl =>
+              parensIf (prec > Prec.app) <|
+                "Type " ++ fmtLevel (Prec.app + 1) lvl
           | none     => "Type"
       | `Lean.Parser.Term.paren =>
           let nt := nonTrivia args
