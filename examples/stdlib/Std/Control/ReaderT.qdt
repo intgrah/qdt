@@ -1,8 +1,7 @@
 import Std.Monad
 import Std.Control.Id
 
-def ReaderT.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) : Type (max u v) :=
-  ρ → m α
+def ReaderT.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) : Type (max u v) := ρ → m α
 
 def ReaderT.run.{u, v} (ρ : Type u) (m : Type u → Type v) (α : Type u) (x : ReaderT ρ m α) (r : ρ) : m α :=
   x r
@@ -21,22 +20,25 @@ def ReaderT.instMonad.{u, v} (ρ : Type u) (m : Type u → Type v) (inst : Monad
     (ReaderT.pure ρ m inst)
     (ReaderT.bind ρ m inst)
     (fun (α β : Type u) (a : α) (f : α → ReaderT ρ m β) =>
-      funext ρ (fun (_ : ρ) => m β)
+      funext ρ
+        (fun (_ : ρ) => m β)
         (ReaderT.bind ρ m inst α β (ReaderT.pure ρ m inst α a) f)
         (f a)
         (fun (r : ρ) => Monad.bind_pure_left m inst α β a (fun (a' : α) => f a' r)))
     (fun (α : Type u) (x : ReaderT ρ m α) =>
-      funext ρ (fun (_ : ρ) => m α)
+      funext ρ
+        (fun (_ : ρ) => m α)
         (ReaderT.bind ρ m inst α α x (ReaderT.pure ρ m inst α))
         x
         (fun (r : ρ) => Monad.bind_pure_right m inst α (x r)))
     (fun (α β γ : Type u) (x : ReaderT ρ m α) (f : α → ReaderT ρ m β) (g : β → ReaderT ρ m γ) =>
-      funext ρ (fun (_ : ρ) => m γ)
+      funext ρ
+        (fun (_ : ρ) => m γ)
         (ReaderT.bind ρ m inst β γ (ReaderT.bind ρ m inst α β x f) g)
         (ReaderT.bind ρ m inst α γ x (fun (a : α) => ReaderT.bind ρ m inst β γ (f a) g))
-        (fun (r : ρ) => Monad.bind_assoc m inst α β γ (x r) (fun (a : α) => f a r) (fun (b : β) => g b r)))
+        (fun (r : ρ) =>
+          Monad.bind_assoc m inst α β γ (x r) (fun (a : α) => f a r) (fun (b : β) => g b r)))
 
 def ReaderM.{u} (ρ : Type u) (α : Type u) : Type u := ReaderT ρ Id α
 
-def ReaderM.instMonad.{u} (ρ : Type u) : Monad (ReaderM ρ) :=
-  ReaderT.instMonad ρ Id Id.instMonad
+def ReaderM.instMonad.{u} (ρ : Type u) : Monad (ReaderM ρ) := ReaderT.instMonad ρ Id Id.instMonad

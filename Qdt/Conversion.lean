@@ -227,6 +227,12 @@ public partial def VTy.conv {n} (a b : VTy n) (cs : ConvState := .rigid) : ElabM
       let b₂Val ← b₂.eval q₀ (env₂.weaken.cons var)
       b₁Val.conv b₂Val cs
   | .el n₁, .el n₂ => n₁.conv q₀ n₂ cs
+  | a, .el ⟨.mvar id, sp⟩ => do
+      let aVTm ← (← a.reify q₀).eval q₀ (Env.identity n)
+      aVTm.conv q₀ (.neutral ⟨.mvar id, sp⟩) cs
+  | .el ⟨.mvar id, sp⟩, b => do
+      let bVTm ← (← b.reify q₀).eval q₀ (Env.identity n)
+      (VTm.neutral ⟨.mvar id, sp⟩).conv q₀ bVTm cs
   | _, _ => return false
 
 end Qdt

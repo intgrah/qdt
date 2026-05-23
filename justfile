@@ -1,17 +1,13 @@
 lean_include := `lean --print-prefix` / "include"
 c_sources := "FSWatch/c/rdcw.c FSWatch/c/inotify.c Incremental/c/shake.c"
 
-default: qdt qdt-lsp
+default: qdt
 
 install:
     ln -sf {{justfile_directory()}}/.lake/build/bin/qdt ~/.local/bin/qdt
-    ln -sf {{justfile_directory()}}/.lake/build/bin/qdt-lsp ~/.local/bin/qdt-lsp
 
 qdt:
     lake build qdt
-
-qdt-lsp:
-    lake build qdt-lsp
 
 test:
     lake test

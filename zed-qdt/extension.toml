@@ -6,8 +6,8 @@ schema_version = 1
 authors = ["IntGrah"]
 repository = "https://github.com/IntGrah/qdt"
 
-[language_servers.qdt-lsp]
-name = "QDT LSP"
+[language_servers.qdt]
+name = "QDT"
 languages = ["QDT"]
 
 [grammars.qdt]

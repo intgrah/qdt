@@ -7,6 +7,5 @@ structure Prod.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
 def Prod.swap.{u, v} (α : Type u) (β : Type v) (p : Prod α β) : Prod β α :=
   Prod.mk _ _ (Prod.snd _ _ p) (Prod.fst _ _ p)
 
-def Prod.eta.{u, v} (α : Type u) (β : Type v) (p : Prod α β) :
-    Prod.mk α β (Prod.fst α β p) (Prod.snd α β p) = p :=
+def Prod.eta.{u, v} (α : Type u) (β : Type v) (p : Prod α β) : Prod.mk α β (Prod.fst α β p) (Prod.snd α β p) = p :=
   Eq.refl _ _

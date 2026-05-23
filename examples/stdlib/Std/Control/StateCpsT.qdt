@@ -23,9 +23,7 @@ def StateCpsT.instMonad.{u, v} (σ : Type u) (m : Type u → Type v) : Monad (St
   Monad.mk (StateCpsT σ m)
     (StateCpsT.pure σ m)
     (StateCpsT.bind σ m)
-    (fun (α β : Type u) (a : α) (f : α → StateCpsT σ m β) =>
-      Eq.refl _ _)
-    (fun (α : Type u) (x : StateCpsT σ m α) =>
-      Eq.refl _ _)
+    (fun (α β : Type u) (a : α) (f : α → StateCpsT σ m β) => Eq.refl _ _)
+    (fun (α : Type u) (x : StateCpsT σ m α) => Eq.refl _ _)
     (fun (α β γ : Type u) (x : StateCpsT σ m α) (f : α → StateCpsT σ m β) (g : β → StateCpsT σ m γ) =>
       Eq.refl _ _)

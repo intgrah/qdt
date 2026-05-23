@@ -109,4 +109,23 @@ def resolveSpan (m : SourceMap) (path : Path) : Option Span := Id.run do
 
 end SourceMap
 
+def utf8PosToCodepointPos (s : String) (bytePos : Nat) : Nat :=
+  go 0 0
+where
+  go (cp : Nat) (bp : Nat) : Nat :=
+    if bp ≥ bytePos then cp
+    else if bp < s.utf8ByteSize then
+      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
+    else cp
+  partial_fixpoint
+
+def codepointPosToUtf8Pos (s : String) (cpPos : Nat) : Nat :=
+  go 0 0
+where
+  go (cp : Nat) (bp : Nat) : Nat :=
+    if cp >= cpPos then bp
+    else if bp < s.utf8ByteSize then
+      go (cp + 1) (String.Pos.Raw.next s ⟨bp⟩).byteIdx
+    else bp
+
 end Qdt.Frontend

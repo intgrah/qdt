@@ -22,7 +22,7 @@
         "qdt.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to the qdt-lsp executable"
+          "description": "Absolute path to the qdt executable"
         }
       }
     },

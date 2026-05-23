@@ -237,7 +237,7 @@ partial def desugarTerm (cst : Cst) : DesugarM Ast := do
           | _, _ => return .missing
 
       | `Lean.Parser.Term.let =>
-          desugarLet args nonTrivia
+          desugarLet nonTrivia
 
       | `Lean.Parser.Term.sorry =>
           return .node `Term.sorry #[]
@@ -474,7 +474,7 @@ where
         let rest ← withAstChild 1 <| desugarDepArrowGo parentArgs binderArgs tail typeIc? bodyIc (some ty) arrowCstOffset
         return .node `Term.pi #[binder, rest]
 
-  desugarLet (parentArgs : Array Cst) (nonTrivia : Array IndexedCst) : DesugarM Ast := do
+  desugarLet (nonTrivia : Array IndexedCst) : DesugarM Ast := do
     match nonTrivia[1]? with
     | some nameIc =>
         match getIdentVal nameIc.cst with

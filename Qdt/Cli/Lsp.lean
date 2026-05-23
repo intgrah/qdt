@@ -1,17 +1,22 @@
 module
 
-import Lean.Data.Lsp.Communication
-import Lean.Data.Lsp.InitShutdown
-import Qdt.Common
-import Qdt.Lsp
-import Incremental.SalsaC
+public import Cli.Basic
+public import Lean.Data.Lsp.Communication
+public import Lean.Data.Lsp.InitShutdown
+public import Qdt.Common
+public import Qdt.Lsp
+public import Incremental.SalsaC
 
-namespace Qdt
+@[expose] public section
 
+open Cli
 open Std (DHashMap HashMap HashSet)
 open Lean JsonRpc Lsp
 open System (FilePath)
 open Incremental
+
+namespace Qdt
+
 open Frontend (Path SourceMap Span)
 
 def lspBuild : Build config (DHashMap InputKey InputVal) tasks Id Id :=
@@ -165,7 +170,7 @@ def ServerM.handleInitialize (id : RequestID) (params? : Option Json.Structured)
   }
   let result : InitializeResult := {
     capabilities := caps
-    serverInfo? := some { name := "qdt-lsp", version? := some "0.1.0" }
+    serverInfo? := some { name := "qdt", version? := some "0.1.0" }
   }
   sendResponse id (toJson result)
 
@@ -287,26 +292,31 @@ def ServerM.main (stdin : IO.FS.Stream) : ServerM Unit := do
     match ← stdin.readLspMessage with
     | .request id "initialize" params? =>
       try handleInitialize id params?
-      catch e => sendError id ErrorCode.internalError s!"initialize failed: {e}"
+      catch e =>
+        IO.eprintln s!"qdt: initialize failed: {e}"
+        sendError id ErrorCode.internalError s!"initialize failed: {e}"
     | .request id "shutdown" _ =>
       handleShutdown id
     | .request id "textDocument/hover" params? =>
       try handleHover id params?
-      catch e => sendError id ErrorCode.internalError s!"hover failed: {e}"
+      catch e =>
+        IO.eprintln s!"qdt: hover failed: {e}"
+        sendError id ErrorCode.internalError s!"hover failed: {e}"
     | .request id method _ =>
       sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
     | .notification "exit" _ => throw (IO.userError "exit")
     | .notification "textDocument/didOpen" params? =>
-      handleDidOpen params?
+      try handleDidOpen params?
+      catch e => IO.eprintln s!"qdt: didOpen failed: {e}"
     | .notification "textDocument/didChange" params? =>
-      handleDidChange params?
-    | .notification "textDocument/didClose" params? => handleDidClose params?
+      try handleDidChange params?
+      catch e => IO.eprintln s!"qdt: didChange failed: {e}"
+    | .notification "textDocument/didClose" params? =>
+      try handleDidClose params?
+      catch e => IO.eprintln s!"qdt: didClose failed: {e}"
     | _ => continue
 
-end Qdt
-
-open Qdt in
-public def main : IO UInt32 := do
+def runLspCmd (_parsed : Parsed) : IO UInt32 := do
   let stdin ← IO.getStdin
   let stdout ← IO.getStdout
   let st : ServerState := { hOut := stdout }
@@ -314,5 +324,12 @@ public def main : IO UInt32 := do
     (ServerM.main stdin).run' st
     pure 0
   catch e =>
-    println! "fatal: {e}"
+    IO.eprintln s!"qdt: fatal: {e}"
     pure 1
+
+def lspCmd : Cmd := `[Cli|
+  lsp VIA runLspCmd;
+  "Run the QDT language server over stdin/stdout"
+]
+
+end Qdt

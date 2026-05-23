@@ -1,5 +1,10 @@
 {
   "lsp": {
-    "qdt-lsp": { "binary": { "path": ".lake/build/bin/qdt-lsp" } },
+    "qdt": {
+      "binary": {
+        "path": ".lake/build/bin/qdt",
+        "arguments": ["lsp"],
+      },
+    },
   },
 }

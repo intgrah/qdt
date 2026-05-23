@@ -8,33 +8,56 @@ inductive List.{u} (α : Type u) : Type u where
   | nil
   | cons (head : α) (tail : List α)
 
-def List.append.{u} (α : Type u) (xs ys : List α) : List α := List.rec α _ ys (fun h _ => List.cons α h) xs
-def List.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : List α → List β := List.rec α _ (List.nil β) (fun h _ => List.cons β (f h))
-def List.all.{u} (α : Type u) (p : α → Bool) : List α → Bool := List.rec α _ Bool.true (fun h _ => Bool.and (p h))
-def List.any.{u} (α : Type u) (p : α → Bool) : List α → Bool := List.rec α _ Bool.false (fun h _ => Bool.or (p h))
+def List.append.{u} (α : Type u) (xs ys : List α) : List α :=
+  List.rec α _ ys (fun h _ => List.cons α h) xs
 
-def List.foldr.{u, v} (α : Type u) (β : Type v) (f : α → β → β) (z : β) : List α → β := List.rec α _ z (fun h _ => f h)
-def List.foldl.{u, v} (α : Type u) (β : Type v) (f : β → α → β) (z : β) (xs : List α) : β := List.rec α (fun _ => β → β) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
-def List.filter.{u} (α : Type u) (p : α → Bool) : List α → List α := List.rec α _ (List.nil α) (fun h t ih => Bool.ite (List α) (p h) (List.cons α h ih) ih)
-def List.filterMap.{u, v} (α : Type u) (β : Type v) (f : α → Option β) : List α → List β := List.rec α _ (List.nil β) (fun h t ih => Option.rec β (fun _ => List β) ih (fun b => List.cons β b ih) (f h))
+def List.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : List α → List β :=
+  List.rec α _ (List.nil β) (fun h _ => List.cons β (f h))
 
-def List.flatten.{u} (α : Type u) : List (List α) → List α := List.rec _ _ (List.nil α) (fun xs _ => List.append α xs)
-def List.flatMap.{u, v} (α : Type u) (β : Type v) (f : α → List β) (xs : List α) : List β := List.flatten β (List.map α (List β) f xs)
+def List.all.{u} (α : Type u) (p : α → Bool) : List α → Bool :=
+  List.rec α _ Bool.true (fun h _ => Bool.and (p h))
+
+def List.any.{u} (α : Type u) (p : α → Bool) : List α → Bool :=
+  List.rec α _ Bool.false (fun h _ => Bool.or (p h))
+
+def List.foldr.{u, v} (α : Type u) (β : Type v) (f : α → β → β) (z : β) : List α → β :=
+  List.rec α _ z (fun h _ => f h)
+
+def List.foldl.{u, v} (α : Type u) (β : Type v) (f : β → α → β) (z : β) (xs : List α) : β :=
+  List.rec α (fun _ => β → β) (fun acc => acc) (fun h _ ih acc => ih (f acc h)) xs z
+
+def List.filter.{u} (α : Type u) (p : α → Bool) : List α → List α :=
+  List.rec α _ (List.nil α) (fun h t ih => Bool.ite (List α) (p h) (List.cons α h ih) ih)
+
+def List.filterMap.{u, v} (α : Type u) (β : Type v) (f : α → Option β) : List α → List β :=
+  List.rec α
+    _
+    (List.nil β)
+    (fun h t ih => Option.rec β (fun _ => List β) ih (fun b => List.cons β b ih) (f h))
+
+def List.flatten.{u} (α : Type u) : List (List α) → List α :=
+  List.rec _ _ (List.nil α) (fun xs _ => List.append α xs)
+
+def List.flatMap.{u, v} (α : Type u) (β : Type v) (f : α → List β) (xs : List α) : List β :=
+  List.flatten β (List.map α (List β) f xs)
 
 def List.length.{u} (α : Type u) : List α → Nat := List.rec α _ 0 (fun _ _ => Nat.succ)
 
-def List.length_append.{u} (α : Type u) (xs ys : List α)
-    : List.length α (List.append α xs ys) = Nat.add (List.length α xs) (List.length α ys) :=
+def List.length_append.{u} (α : Type u) (xs ys : List α) : List.length α (List.append α xs ys) = Nat.add (List.length α xs) (List.length α ys) :=
   List.rec α
     (fun zs => List.length α (List.append α zs ys) = Nat.add (List.length α zs) (List.length α ys))
     (Eq.symm _ _ _ (Nat.zero_add (List.length α ys)))
     (fun h t ih =>
-      Eq.trans _ _ _ _
+      Eq.trans _
+        _
+        _
+        _
         (congrArg _ _ Nat.succ _ _ ih)
         (Eq.symm _ _ _ (Nat.succ_add (List.length α t) (List.length α ys))))
     xs
 
-def List.nil_append.{u} (α : Type u) (xs : List α) : List.append α (List.nil α) xs = xs := Eq.refl (List α) xs
+def List.nil_append.{u} (α : Type u) (xs : List α) : List.append α (List.nil α) xs = xs :=
+  Eq.refl (List α) xs
 
 def List.append_nil.{u} (α : Type u) (xs : List α) : List.append α xs (List.nil α) = xs :=
   List.rec α
@@ -47,42 +70,60 @@ def List.append_assoc.{u} (α : Type u) (xs ys zs : List α) : List.append α (L
   List.rec α
     (fun xs => List.append α (List.append α xs ys) zs = List.append α xs (List.append α ys zs))
     (Eq.refl (List α) (List.append α ys zs))
-    (fun h t =>
-      congrArg _ _ (List.cons α h) _ _)
+    (fun h t => congrArg _ _ (List.cons α h) _ _)
     xs
 
-def List.map_append.{u, v} (α : Type u) (β : Type v) (f : α → β) (xs ys : List α)
-    : Eq (List β) (List.map α β f (List.append α xs ys)) (List.append β (List.map α β f xs) (List.map α β f ys)) :=
+def List.map_append.{u, v} (α : Type u) (β : Type v) (f : α → β) (xs ys : List α) : Eq (List β) (List.map α β f (List.append α xs ys)) (List.append β (List.map α β f xs) (List.map α β f ys)) :=
   List.rec α
-    (fun zs => Eq (List β) (List.map α β f (List.append α zs ys)) (List.append β (List.map α β f zs) (List.map α β f ys)))
+    (fun zs =>
+      Eq (List β)
+        (List.map α β f (List.append α zs ys))
+        (List.append β (List.map α β f zs) (List.map α β f ys)))
     (Eq.refl (List β) (List.map α β f ys))
-    (fun h t ih =>
-      congrArg _ _ (List.cons β (f h)) _ _ ih)
+    (fun h t ih => congrArg _ _ (List.cons β (f h)) _ _ ih)
     xs
 
-def List.flatten_append.{u} (α : Type u) (xss yss : List (List α))
-    : Eq (List α) (List.flatten α (List.append (List α) xss yss)) (List.append α (List.flatten α xss) (List.flatten α yss)) :=
+def List.flatten_append.{u} (α : Type u) (xss yss : List (List α)) : Eq (List α) (List.flatten α (List.append (List α) xss yss)) (List.append α (List.flatten α xss) (List.flatten α yss)) :=
   List.rec (List α)
-    (fun zss => Eq (List α) (List.flatten α (List.append (List α) zss yss)) (List.append α (List.flatten α zss) (List.flatten α yss)))
+    (fun zss =>
+      Eq (List α)
+        (List.flatten α (List.append (List α) zss yss))
+        (List.append α (List.flatten α zss) (List.flatten α yss)))
     (Eq.refl (List α) (List.flatten α yss))
     (fun xs xss' ih =>
-      Eq.trans _ _ _ _
+      Eq.trans _
+        _
+        _
+        _
         (congrArg _ _ (List.append α xs) _ _ ih)
-        (Eq.symm _ _ _
-          (List.append_assoc α xs (List.flatten α xss') (List.flatten α yss))))
+        (Eq.symm _ _ _ (List.append_assoc α xs (List.flatten α xss') (List.flatten α yss))))
     xss
 
-def List.flatMap_assoc.{u} (α β γ : Type u) (xs : List α) (f : α → List β) (g : β → List γ)
-    : Eq (List γ) (List.flatMap β γ g (List.flatMap α β f xs)) (List.flatMap α γ (fun x => List.flatMap β γ g (f x)) xs) :=
+def List.flatMap_assoc.{u} (α β γ : Type u) (xs : List α) (f : α → List β) (g : β → List γ) : List.flatMap β γ g (List.flatMap α β f xs) = List.flatMap α γ (fun x => List.flatMap β γ g (f x)) xs :=
   List.rec α
-    (fun zs => Eq (List γ) (List.flatMap β γ g (List.flatMap α β f zs)) (List.flatMap α γ (fun x => List.flatMap β γ g (f x)) zs))
+    (fun zs =>
+      Eq (List γ)
+        (List.flatMap β γ g (List.flatMap α β f zs))
+        (List.flatMap α γ (fun x => List.flatMap β γ g (f x)) zs))
     (Eq.refl (List γ) (List.nil γ))
     (fun h t ih =>
-      Eq.trans _ _ _ _
-        (Eq.trans _ _ _ _
-          (congrArg _ _ (List.flatten γ) _ _
+      Eq.trans _
+        _
+        _
+        _
+        (Eq.trans _
+          _
+          _
+          _
+          (congrArg _
+            _
+            (List.flatten γ)
+            _
+            _
             (List.map_append β (List γ) g (f h) (List.flatten β (List.map α (List β) f t))))
-          (List.flatten_append γ (List.map β (List γ) g (f h)) (List.map β (List γ) g (List.flatten β (List.map α (List β) f t)))))
+          (List.flatten_append γ
+            (List.map β (List γ) g (f h))
+            (List.map β (List γ) g (List.flatten β (List.map α (List β) f t)))))
         (congrArg _ _ (List.append γ (List.flatMap β γ g (f h))) _ _ ih))
     xs
 
@@ -101,31 +142,29 @@ inductive List.Sublist.{u} (α : Type u) : List α → List α → Type u where
   | cons (a : α) (l1 l2 : List α) : List.Sublist α l1 l2 → List.Sublist α l1 (List.cons α a l2)
   | cons2 (a : α) (l1 l2 : List α) : List.Sublist α l1 l2 → List.Sublist α (List.cons α a l1) (List.cons α a l2)
 
-inductive Forall2.{u, v, w} (α : Type u) (β : Type v) (R : α → β → Type w) : List α → List β → Type (max u (max v w)) where
+inductive Forall2.{u, v, w} (α : Type u) (β : Type v) (R : α → β → Type w) : List α → List β → Type (max u max v w) where
   | nil : Forall2 α β R (List.nil α) (List.nil β)
   | cons (a : α) (b : β) (as : List α) (bs : List β) : R a b → Forall2 α β R as bs → Forall2 α β R (List.cons α a as) (List.cons β b bs)
 
-inductive SublistForall2.{u, v, w} (α : Type u) (β : Type v) (R : α → β → Type w) : List α → List β → Type (max u (max v w)) where
+inductive SublistForall2.{u, v, w} (α : Type u) (β : Type v) (R : α → β → Type w) : List α → List β → Type (max u max v w) where
   | nil (l : List β) : SublistForall2 α β R (List.nil α) l
   | cons (a : α) (b : β) (l1 : List α) (l2 : List β) : R a b → SublistForall2 α β R l1 l2 → SublistForall2 α β R (List.cons α a l1) (List.cons β b l2)
   | cons_right (b : β) (l1 : List α) (l2 : List β) : SublistForall2 α β R l1 l2 → SublistForall2 α β R l1 (List.cons β b l2)
 
 def List.pure.{u} (α : Type u) (a : α) : List α := List.cons α a (List.nil α)
 
-def List.bind.{u} (α β : Type u) (xs : List α) (f : α → List β) : List β :=
-  List.flatMap α β f xs
+def List.bind.{u} (α β : Type u) (xs : List α) (f : α → List β) : List β := List.flatMap α β f xs
 
 def List.instMonad : Monad List :=
   Monad.mk List
     List.pure
     List.bind
-    (fun α β a f =>
-      List.append_nil β (f a))
+    (fun α β a f => List.append_nil β (f a))
     (fun α x =>
-      List.rec α (fun xs => Eq (List α) (List.bind α α xs (List.pure α)) xs)
+      List.rec α
+        (fun xs => Eq (List α) (List.bind α α xs (List.pure α)) xs)
         (Eq.refl (List α) (List.nil α))
         (fun h t ih =>
           congrArg (List α) (List α) (List.cons α h) (List.bind α α t (List.pure α)) t ih)
         x)
-    (fun α β γ x f g =>
-      List.flatMap_assoc α β γ x f g)
+    (fun α β γ x f g => List.flatMap_assoc α β γ x f g)

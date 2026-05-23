@@ -228,10 +228,13 @@ partial def checkEq {n : Nat}
     (a : Ast)
     (b : Ast) :
     OptionT (ElabM q₀) (Tm n × Universe) := do
-  let (aTm, ty) ← withChild q₀ 0 (inferTm ctx a)
-  let bTm ← withChild q₀ 1 (checkTmCore ctx ty b)
-  let tyTm ← ty.reify q₀
-  let level ← ty.inferLevel q₀ ctx.ctx
+  let anchor ← currentPath q₀
+  let levelId ← Universe.freshUMVar q₀
+  let level : Universe := .mvar levelId
+  let (_, tyTm) ← freshMeta' q₀ anchor ctx (.u level)
+  let tyVal : VTy n ← (Ty.el tyTm).eval q₀ ctx.env
+  let aTm ← withChild q₀ 0 (checkTmCore ctx tyVal a)
+  let bTm ← withChild q₀ 1 (checkTmCore ctx tyVal b)
   return (Tm.const `Eq [level] |>.apps [tyTm, aTm, bTm], level)
 
 partial def inferPi {n : Nat}
@@ -361,30 +364,36 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       return tm
   | ast@(.node `Term.lam cs) => do
       let body := cs[1]!
-      let .pi _ a ⟨env, b⟩ := expected
-        | raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← (← inferTm ctx ast).snd.quote q₀)
-      match cs[0]! with
-      | .node `Binder.untyped bs =>
-        let x := bs[0]!.getName
-        withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
-        let ctx' := ctx.bind x a
-        let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
-        let b ← withChild q₀ 1 (checkTmCore ctx' b body)
+      match expected with
+      | .pi _ a ⟨env, b⟩ =>
+        match cs[0]! with
+        | .node `Binder.untyped bs =>
+          let x := bs[0]!.getName
+          withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
+          let ctx' := ctx.bind x a
+          let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
+          let b ← withChild q₀ 1 (checkTmCore ctx' b body)
+          emitType q₀ ctx expected
+          return .lam x (← a.quote q₀) b
+        | .node `Binder.typed bs =>
+          let x := bs[0]!.getName
+          let ann ← OptionT.lift (withChild q₀ 0 (withChild q₀ 1 (checkTy ctx bs[1]!)))
+          let annVal : VTy n ← ann.eval q₀ ctx.env
+          if !(← VTy.conv q₀ annVal a) then
+            raiseTypeMismatch q₀ ctx (← a.quote q₀) (← annVal.quote q₀)
+          withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
+          let ctx' := ctx.bind x a
+          let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
+          let body ← withChild q₀ 1 (checkTmCore ctx' b body)
+          emitType q₀ ctx expected
+          return .lam x (← a.quote q₀) body
+        | _ => failure
+      | _ =>
+        let (inferredTm, inferredTy) ← inferTm ctx ast
+        if !(← VTy.conv q₀ inferredTy expected) then
+          raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← inferredTy.quote q₀)
         emitType q₀ ctx expected
-        return .lam x (← a.quote q₀) b
-      | .node `Binder.typed bs =>
-        let x := bs[0]!.getName
-        let ann ← OptionT.lift (withChild q₀ 0 (withChild q₀ 1 (checkTy ctx bs[1]!)))
-        let annVal : VTy n ← ann.eval q₀ ctx.env
-        if !(← VTy.conv q₀ annVal a) then
-          raiseTypeMismatch q₀ ctx (← a.quote q₀) (← annVal.quote q₀)
-        withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
-        let ctx' := ctx.bind x a
-        let b ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
-        let body ← withChild q₀ 1 (checkTmCore ctx' b body)
-        emitType q₀ ctx expected
-        return .lam x (← a.quote q₀) body
-      | _ => failure
+        return inferredTm
   | .node `Term.letE cs => do
       let name := cs[0]!.getName
       let (rhsTm, rhsTySyn, _rhsVal, ctx') ← processLetRhs ctx name cs[1]! cs[2]!
@@ -503,15 +512,24 @@ partial def resolveHoleHover (metaId : MVarId) {n : Nat} (ctxNames : List Name) 
       | none => return .typeOnly ctxNames ty
   | _ => return .typeOnly ctxNames ty
 
+public def zonkHover : HoverContent → ElabM q₀ HoverContent
+  | .signature name params retTy => do
+      let params ← params.mapM (m := ElabM q₀) fun ⟨n, t⟩ => return ⟨n, ← t.zonk q₀⟩
+      return .signature name params (← retTy.zonk q₀)
+  | .localVar name ctxNames ty => do
+      return .localVar name ctxNames (← ty.zonk q₀)
+  | .typeOnly ctxNames ty => do
+      return .typeOnly ctxNames (← ty.zonk q₀)
+  | h@(.hole _ _ _) => return h
+
 public def resolveHoleHovers : ElabM q₀ Unit := do
   let st ← get
   let mut newHovers : Array HoverInfo := Array.emptyWithCapacity st.hovers.size
   for h in st.hovers do
-    match h.hover with
-    | .hole metaId ctxNames ty =>
-        let resolved ← resolveHoleHover q₀ metaId ctxNames ty
-        newHovers := newHovers.push { h with hover := resolved }
-    | _ => newHovers := newHovers.push h
+    let resolved ← match h.hover with
+      | .hole metaId ctxNames ty => resolveHoleHover q₀ metaId ctxNames ty
+      | other => zonkHover q₀ other
+    newHovers := newHovers.push { h with hover := resolved }
   modify fun st => { st with hovers := newHovers }
 
 end Qdt

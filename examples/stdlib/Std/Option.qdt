@@ -7,8 +7,7 @@ inductive Option.{u} (α : Type u) : Type u where
 def Option.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : Option α → Option β :=
   Option.rec _ (fun _ => Option β) (Option.none _) (fun a => Option.some _ (f a))
 
-def Option.bind.{u, v} (α : Type u) (β : Type v)
-    (o : Option α) (f : α → Option β) : Option β :=
+def Option.bind.{u, v} (α : Type u) (β : Type v) (o : Option α) (f : α → Option β) : Option β :=
   Option.rec _ (fun _ => Option β) (Option.none _) f o
 
 def Option.getD.{u} (α : Type u) (o : Option α) (dflt : α) : α :=

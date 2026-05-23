@@ -1,29 +1,25 @@
 module
 
-public import Cli.Extensions
-public import Qdt.Cli
-public import Qdt.Cli.Runner
+public import Cli.Basic
+public import Qdt.Cli.Build
+public import Qdt.Cli.Fmt
+public import Qdt.Cli.Lsp
 
 open Cli
 
+def Qdt.printHelp (p : Parsed) : IO UInt32 := do
+  p.printHelp
+  return 0
+
 def Qdt.cmd : Cmd := `[Cli|
-  qdt VIA run;
+  qdt VIA Qdt.printHelp;
   "Query-based Dependent Type elaborator"
 
-  FLAGS:
-    r, root : String;              "Project root directory (default: cwd)"
-    w, watch;                      "Enable watch mode"
-    "build" : BuildSystem;         "Build system to use (default: shake-c)"
-
-  ARGS:
-    ...modules : String;           "Modules to check (dotted names; e.g. Std.Nat). Must not contain '/' or '.qdt'."
-
-  EXTENSIONS:
-    defaultValues! #[("build", "shake-c")]
+  SUBCOMMANDS:
+    Qdt.buildCmd;
+    Qdt.fmtCmd;
+    Qdt.lspCmd
 ]
-  where run (parsed : Parsed) : IO UInt32 := do
-    let cfg ← parseConfig parsed
-    Qdt.Cli.runBuild cfg
 
 public def main : List String → IO UInt32 :=
   Qdt.cmd.validate

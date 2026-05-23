@@ -1,53 +1,89 @@
 /-
 https://github.com/AndrasKovacs/normalization-bench
 -/
-
 def Nat.{u} : Type (u + 1) := (N : Type u) → (N → N) → N → N
+
 def Nat.succ.{u} (a : Nat.{u}) : Nat.{u} := fun N s z => s (a N s z)
+
 def Nat.mul.{u} (a b : Nat.{u}) : Nat.{u} := fun N s z => a N (b N s) z
 
 def n2.{u} : Nat.{u} := fun N s z => s (s z)
+
 def n5.{u} : Nat.{u} := fun N s z => s (s (s (s (s z))))
+
 def n10.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n5.{u}
+
 def n10'.{u} : Nat.{u} := Nat.mul.{u} n5.{u} n2.{u}
+
 def n20.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n10.{u}
+
 def n20'.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n10'.{u}
+
 def n21.{u} : Nat.{u} := Nat.succ.{u} n20.{u}
+
 def n21'.{u} : Nat.{u} := Nat.succ.{u} n20'.{u}
+
 def n22.{u} : Nat.{u} := Nat.succ.{u} n21.{u}
+
 def n22'.{u} : Nat.{u} := Nat.succ.{u} n21'.{u}
+
 def n100.{u} : Nat.{u} := Nat.mul.{u} n10.{u} n10.{u}
+
 def n100'.{u} : Nat.{u} := Nat.mul.{u} n10'.{u} n10'.{u}
+
 def n10000.{u} : Nat.{u} := Nat.mul.{u} n100.{u} n100.{u}
+
 def n10000'.{u} : Nat.{u} := Nat.mul.{u} n100'.{u} n100'.{u}
+
 def n100000.{u} : Nat.{u} := Nat.mul.{u} n10000.{u} n10.{u}
+
 def n100000'.{u} : Nat.{u} := Nat.mul.{u} n10000'.{u} n10'.{u}
+
 def n1000000.{u} : Nat.{u} := Nat.mul.{u} n10000.{u} n100.{u}
+
 def n1000000'.{u} : Nat.{u} := Nat.mul.{u} n10000'.{u} n100'.{u}
+
 def n5000000.{u} : Nat.{u} := Nat.mul.{u} n1000000.{u} n5.{u}
+
 def n5000000'.{u} : Nat.{u} := Nat.mul.{u} n1000000'.{u} n5.{u}
+
 def n10000000.{u} : Nat.{u} := Nat.mul.{u} n1000000.{u} n10.{u}
+
 def n10000000'.{u} : Nat.{u} := Nat.mul.{u} n1000000'.{u} n10'.{u}
+
 def n20000000.{u} : Nat.{u} := Nat.mul.{u} n10000000.{u} n2.{u}
+
 def n20000000'.{u} : Nat.{u} := Nat.mul.{u} n10000000'.{u} n2.{u}
 
 def Tree : Type 1 := (T : Type 0) → T → (T → T → T) → T
+
 def Tree.leaf : Tree := fun T l n => l
+
 def Tree.node (t₁ t₂ : Tree) : Tree := fun T l n => n (t₁ T l n) (t₂ T l n)
+
 def Tree.full (n : Nat.{1}) : Tree := n Tree (fun t => Tree.node t t) Tree.leaf
 
 def t2097151 : Tree := Tree.full n20.{1}
+
 def t4194303 : Tree := Tree.full n21.{1}
+
 def t8388607 : Tree := Tree.full n22.{1}
+
 def t2097151' : Tree := Tree.full n20'.{1}
+
 def t4194303' : Tree := Tree.full n21'.{1}
+
 def t8388607' : Tree := Tree.full n22'.{1}
 
 inductive Eq.{u} (α : Type u) : α → α → Type u where
   | refl (a : α) : Eq.{u} α a a
 
 def test₁ : Eq.{1} Nat.{0} n5000000.{0} n5000000'.{0} := Eq.refl.{1} Nat.{0} n5000000.{0}
+
 def test₂ : Eq.{1} Nat.{0} n10000000.{0} n10000000'.{0} := Eq.refl.{1} Nat.{0} n10000000.{0}
+
 def test₃ : Eq.{1} Tree t2097151 t2097151' := Eq.refl.{1} Tree t2097151
+
 def test₄ : Eq.{1} Tree t4194303 t4194303' := Eq.refl.{1} Tree t4194303
+
 def test₅ : Eq.{1} Tree t8388607 t8388607' := Eq.refl.{1} Tree t8388607

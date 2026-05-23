@@ -1,13 +1,13 @@
 import Std.Eq
 
 def id.{u} (α : Type u) (a : α) : α := a
-def const.{u, v} (α : Type u) (β : Type v) (a : α) (b : β) := a
-def comp.{u, v, w} (α : Type u) (β : Type v) (γ : Type w) (f : β → γ) (g : α → β) (x : α) : γ := f (g x)
 
-def comp_assoc.{u, v, w, x}
-  (α : Type u) (β : Type v) (γ : Type w) (δ : Type x)
-  (f : γ → δ) (g : β → γ) (h : α → β) :
-    comp α β δ (comp β γ δ f g) h = comp α γ δ f (comp α β γ g h) :=
+def const.{u, v} (α : Type u) (β : Type v) (a : α) (b : β) := a
+
+def comp.{u, v, w} (α : Type u) (β : Type v) (γ : Type w) (f : β → γ) (g : α → β) (x : α) : γ :=
+  f (g x)
+
+def comp_assoc.{u, v, w, x} (α : Type u) (β : Type v) (γ : Type w) (δ : Type x) (f : γ → δ) (g : β → γ) (h : α → β) : comp α β δ (comp β γ δ f g) h = comp α γ δ f (comp α β γ g h) :=
   Eq.refl _ _
 
 axiom funext.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (h : (x : α) → Eq (β x) (f x) (g x)) : Eq ((x : α) → β x) f g

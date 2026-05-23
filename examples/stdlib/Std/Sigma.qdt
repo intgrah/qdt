@@ -4,6 +4,5 @@ structure Sigma.{u, v} (α : Type u) (β : α → Type v) : Type (max u v) where
   (fst : α)
   (snd : β fst)
 
-def Sigma.eta.{u, v} (α : Type u) (β : α → Type v) (p : Sigma α β) :
-    Sigma.mk α β (Sigma.fst α β p) (Sigma.snd α β p) = p :=
+def Sigma.eta.{u, v} (α : Type u) (β : α → Type v) (p : Sigma α β) : Sigma.mk α β (Sigma.fst α β p) (Sigma.snd α β p) = p :=
   Eq.refl _ _

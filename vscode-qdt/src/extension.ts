@@ -54,14 +54,14 @@ export async function activate(
     output.appendLine("[qdt] qdt.serverPath is not set");
     output.show(true);
     VSCode.window.showErrorMessage(
-      "Set qdt.serverPath to the absolute path of qdt-lsp",
+      "Set qdt.serverPath to the absolute path of the qdt binary",
     );
     return;
   }
 
   const serverOptions: ServerOptions = {
     command: serverPath,
-    args: [],
+    args: ["lsp"],
     options: { cwd: VSCode.workspace.workspaceFolders?.[0]?.uri.fsPath },
   };
 
@@ -108,7 +108,7 @@ export async function activate(
   } catch (err: unknown) {
     output.appendLine(`[qdt] Failed to start: ${String(err)}`);
     output.show(true);
-    VSCode.window.showErrorMessage("qdt-lsp not on PATH");
+    VSCode.window.showErrorMessage("qdt not on PATH");
   }
 }
 

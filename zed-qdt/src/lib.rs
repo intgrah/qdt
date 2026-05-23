@@ -14,12 +14,10 @@ impl zed::Extension for QdtExtension {
     ) -> zed::Result<zed::Command> {
         let binary = LspSettings::for_worktree(language_server_id.as_ref(), worktree)?
             .binary
-            .ok_or_else(|| {
-                "qdt-lsp: set lsp.qdt-lsp.binary.path in Zed settings".to_string()
-            })?;
+            .ok_or_else(|| "qdt: set lsp.qdt.binary.path in Zed settings".to_string())?;
         let command = binary
             .path
-            .ok_or_else(|| "qdt-lsp: lsp.qdt-lsp.binary.path is required".to_string())?;
+            .ok_or_else(|| "qdt: lsp.qdt.binary.path is required".to_string())?;
         Ok(zed::Command {
             command,
             args: binary.arguments.unwrap_or_default(),

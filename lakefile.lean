@@ -28,7 +28,6 @@ lean_lib Test where
 
 @[default_target]
 lean_exe qdt where root := `Main
-lean_exe «qdt-lsp» where root := `Lsp
 
 def buildCObj (pkg : Package) (src : FilePath) : FetchM (Job FilePath) := do
   let oFile := pkg.buildDir / "c" / src.withExtension "o"

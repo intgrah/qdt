@@ -10,9 +10,6 @@ def Id.instMonad.{u} : Monad Id :=
   Monad.mk Id
     Id.pure
     Id.bind
-    (fun (α β : Type u) (a : α) (f : α → Id β) =>
-      Eq.refl _ _)
-    (fun (α : Type u) (x : Id α) =>
-      Eq.refl _ _)
-    (fun (α β γ : Type u) (x : Id α) (f : α → Id β) (g : β → Id γ) =>
-      Eq.refl _ _)
+    (fun (α β : Type u) a f => Eq.refl _ _)
+    (fun α x => Eq.refl _ _)
+    (fun α β γ x f g => Eq.refl _ _)
