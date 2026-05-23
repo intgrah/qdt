@@ -26,14 +26,14 @@ structure ElabContext where
 deriving Repr, Inhabited
 
 structure MetaInfo where
-  arity    : Nat
+  arity : Nat
   numScopeArgs : Nat := 0
   ctxNames : List Name
-  ty       : Ty 0
+  ty : Ty 0
   solution : Option (Tm 0) := none
-  path     : Path
-  decl     : Name
-  errored  : Bool := false
+  path : Path
+  decl : Name
+  errored : Bool := false
 deriving Inhabited
 
 structure ElabState where
@@ -192,7 +192,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
   let ctx ← readThe ElabContext
   let currentDeclName := (← read).currentDecl
   unless name == currentDeclName do
-    let (declIndex, _) ← (Task.fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry : Task config q₀ _)
+    let (declIndex, _) ← Task.fetch (q₀ := q₀) (Key.declarationIndex ctx.filepath) sorry
     match declIndex[name]? with
     | some nameIdx =>
         match declIndex[currentDeclName]? with
@@ -203,7 +203,7 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
         | none => pure ()
     | none =>
         let existing : Val (Key.constant ctx.filepath name) ←
-          (Task.fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry : Task config q₀ _)
+          Task.fetch (q₀ := q₀) (Key.constant ctx.filepath name) sorry
         if existing.isSome then
           emitDiagnostic q₀ (.alreadyDefined name)
           return false

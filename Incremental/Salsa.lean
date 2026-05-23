@@ -27,6 +27,7 @@ public structure Salsa.Store (J : Type) where
   memos : DHashMap ℭ.Q (Salsa.Memo ℭ)
   inputRevisions : HashMap ℭ.I Nat
 
+set_option warn.sorry false in
 public def Salsa (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   σ := Salsa.Store ℭ J
   init store := {

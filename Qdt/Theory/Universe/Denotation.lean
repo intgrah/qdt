@@ -223,7 +223,7 @@ theorem toUniverse_denote : ∀ (nf : NF), Universe.denote ρ nf.toUniverse = NF
     split
     next hCond =>
       rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
-      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars]
+      simp only [Universe.denote, denote, denoteList]
       have : c + 1 ≤ Nat.max (Nat.max (ρ i + j) (denoteList ρ rest)) (denoteMVars M) := by
         rcases hCond with h | h | h
         · exact Nat.le_trans
@@ -244,7 +244,7 @@ theorem toUniverse_denote : ∀ (nf : NF), Universe.denote ρ nf.toUniverse = NF
               (reifyMVars (reifyLevels ((Universe.level i).addOffset j) rest) M))
               (Universe.denote ρ (Universe.zero.addOffset (c + 1))) = _
       rw [reifyMVars_denote, reifyLevels_denote, denote_addOffset]
-      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denoteMVars, denote_addOffset]
+      simp only [Universe.denote, Nat.zero_add, denote, denoteList, denote_addOffset]
       grind
 
 end NF

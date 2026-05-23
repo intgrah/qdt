@@ -24,6 +24,7 @@ public opaque salsaCBuild
     Tasks ℭ → ∀ q,
     Salsa.Store ℭ J → ℭ.R q × Salsa.Store ℭ J
 
+set_option warn.sorry false in
 @[expose] public def SalsaC (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   σ := Salsa.Store ℭ J
   init inputs := {

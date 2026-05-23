@@ -5,6 +5,7 @@ public import Lean.Data.Lsp.Communication
 public import Lean.Data.Lsp.InitShutdown
 public import Qdt.Common
 public import Qdt.Lsp
+public import Qdt.Frontend.Format
 public import Incremental.SalsaC
 
 @[expose] public section
@@ -172,7 +173,9 @@ def ServerM.handleInitialize (id : RequestID) (params? : Option Json.Structured)
     capabilities := caps
     serverInfo? := some { name := "qdt", version? := some "0.1.0" }
   }
-  sendResponse id (toJson result)
+  let resultJson := toJson result
+  let caps := resultJson.getObjValD "capabilities" |>.setObjVal! "documentFormattingProvider" (toJson true)
+  sendResponse id (resultJson.setObjVal! "capabilities" caps)
 
 def ServerM.handleShutdown (id : RequestID) : ServerM Unit := do
   modify fun st => { st with shutdownRequested := true }
@@ -287,6 +290,33 @@ def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : Se
   }
   sendResponse id (toJson hover)
 
+def ServerM.handleFormatting (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
+  let some params := params?
+    | throw (IO.userError "formatting: missing params")
+  let paramsJson := toJson params
+  let uri : DocumentUri ← match paramsJson.getObjValAs? Json "textDocument" |>.bind (·.getObjValAs? String "uri") with
+    | .ok u => pure u
+    | .error e => throw (IO.userError s!"formatting: bad params: {e}")
+  let some file ← uriToPath? uri
+    | sendResponse id Json.null
+  let ps ← getProject file
+  let text := (ps.inputs.get? (.text file)).getD ""
+  let (cst, errs) := Qdt.Frontend.Parser.parse text
+  if !errs.isEmpty then
+    sendResponse id Json.null
+    return
+  let output := Qdt.Frontend.Format.render cst 100
+  if text == output then
+    sendResponse id (toJson (#[] : Array TextEdit))
+    return
+  let fileMap := Lean.FileMap.ofString text
+  let endPos := fileMap.utf8PosToLspPos ⟨text.utf8ByteSize⟩
+  let edit : TextEdit := {
+    range := { start := ⟨0, 0⟩, «end» := endPos }
+    newText := output
+  }
+  sendResponse id (toJson #[edit])
+
 def ServerM.main (stdin : IO.FS.Stream) : ServerM Unit := do
   while true do
     match ← stdin.readLspMessage with
@@ -302,6 +332,11 @@ def ServerM.main (stdin : IO.FS.Stream) : ServerM Unit := do
       catch e =>
         IO.eprintln s!"qdt: hover failed: {e}"
         sendError id ErrorCode.internalError s!"hover failed: {e}"
+    | .request id "textDocument/formatting" params? =>
+      try handleFormatting id params?
+      catch e =>
+        IO.eprintln s!"qdt: formatting failed: {e}"
+        sendError id ErrorCode.internalError s!"formatting failed: {e}"
     | .request id method _ =>
       sendError id ErrorCode.methodNotFound s!"unknown method: {method}"
     | .notification "exit" _ => throw (IO.userError "exit")

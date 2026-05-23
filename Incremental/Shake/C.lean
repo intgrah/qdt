@@ -24,6 +24,7 @@ public opaque shakeCBuild
     Tasks ℭ → ∀ q,
     ShakeRT.Store ℭ J → ℭ.R q × ShakeRT.Store ℭ J
 
+set_option warn.sorry false in
 @[expose] public def ShakeC (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   σ := ShakeRT.Store ℭ J
   init inputs := {

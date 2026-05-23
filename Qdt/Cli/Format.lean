@@ -17,7 +17,7 @@ def Diagnostic.format (file : FilePath) (text : String) (sm : Frontend.SourceMap
   | some span =>
       let bytePos := Frontend.codepointPosToUtf8Pos text span.startPos
       let ⟨line, col⟩ := posToLineCol text bytePos
-      s!"{file}:{line}:{col}: error: {d.error.format d.univParams}"
+      s!"{file}:{line}:{col + 1}: error: {d.error.format d.univParams}"
   | none =>
       s!"{file}: error: {d.error.format d.univParams}"
 

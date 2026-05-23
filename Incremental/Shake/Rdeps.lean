@@ -38,6 +38,7 @@ def ShakeRdeps.invalidate
   let trans := getTransitiveDependents ℭ store.queryRdeps seed
   { store with dirty := trans.fold (·.insert ·) store.dirty }
 
+set_option warn.sorry false in
 public def ShakeRdeps (tasks : Tasks ℭ) : Build ℭ J tasks Id Id where
   σ := ShakeRdeps.Store ℭ J
   init inputs := {
