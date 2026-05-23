@@ -7,14 +7,14 @@ def Eq.ndrec.{v, u} (α : Type u) (a : α) (motive : α → Type v) (h : motive 
 def Eq.subst.{v, u} (α : Type u) (P : α → Type v) (a b : α) (p : a = b) (h : P a) : P b :=
   Eq.ndrec _ _ P h _ p
 
-def Eq.symm.{u} (α : Type u) (a b : α) (p : Eq α a b) : Eq α b a :=
-  Eq.subst _ (fun y => Eq α y a) _ _ p (Eq.refl _ _)
+def Eq.symm.{u} (α : Type u) (a b : α) (p : a = b) : b = a :=
+  Eq.subst _ (fun y => y = a) _ _ p (Eq.refl _ _)
 
-def Eq.trans.{u} (α : Type u) (a b c : α) (p : Eq α a b) (q : Eq α b c) : Eq α a c :=
-  Eq.subst _ (fun z => Eq α a z) _ _ q p
+def Eq.trans.{u} (α : Type u) (a b c : α) (p : a = b) (q : b = c) : a = c :=
+  Eq.subst _ (fun z => a = z) _ _ q p
 
-def congrArg.{u, v} (α : Type u) (β : Type v) (f : α → β) (x y : α) (p : Eq α x y) : Eq β (f x) (f y) :=
-  Eq.subst _ (fun z => Eq β (f x) (f z)) _ _ p (Eq.refl _ _)
+def congrArg.{u, v} (α : Type u) (β : Type v) (f : α → β) (x y : α) (p : x = y) : f x = f y :=
+  Eq.subst _ (fun z => f x = f z) _ _ p (Eq.refl _ _)
 
-def congrFun.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (p : Eq ((x : α) → β x) f g) (x : α) : Eq (β x) (f x) (g x) :=
-  Eq.subst ((x : α) → β x) (fun h => Eq (β x) (f x) (h x)) _ _ p (Eq.refl _ _)
+def congrFun.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (p : f = g) (x : α) : f x = g x :=
+  Eq.subst ((x : α) → β x) (fun h => f x = h x) _ _ p (Eq.refl _ _)

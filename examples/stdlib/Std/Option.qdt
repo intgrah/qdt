@@ -1,16 +1,15 @@
 import Std.Init
 
 inductive Option.{u} (α : Type u) : Type u where
-  | none : Option α
-  | some : α → Option α
+  | none
+  | some (a : α)
 
 def Option.map.{u, v} (α : Type u) (β : Type v) (f : α → β) : Option α → Option β :=
-  Option.rec _ (fun _ => Option β) (Option.none _) (fun a => Option.some _ (f a))
+  Option.rec _ _ (Option.none _) (fun a => Option.some _ (f a))
 
 def Option.bind.{u, v} (α : Type u) (β : Type v) (o : Option α) (f : α → Option β) : Option β :=
-  Option.rec _ (fun _ => Option β) (Option.none _) f o
+  Option.rec _ _ (Option.none _) f o
 
-def Option.getD.{u} (α : Type u) (o : Option α) (dflt : α) : α :=
-  Option.rec _ (fun _ => α) dflt (id _) o
+def Option.getD.{u} (α : Type u) (o : Option α) (dflt : α) : α := Option.rec _ _ dflt (id _) o
 
-def Option.pure.{u} (α : Type u) (a : α) : Option α := Option.some _ a
+def Option.pure.{u} : (α : Type u) → (a : α) → Option α := Option.some

@@ -4,9 +4,6 @@ inductive Bool where
 
 def Bool.ite.{u} (α : Type u) (b : Bool) (t f : α) := Bool.rec _ t f b
 
-def Bool.dite.{u} (motive : Bool → Type u) (b : Bool) (t : motive Bool.true) (f : motive Bool.false) : motive b :=
-  Bool.rec motive t f b
-
 def Bool.not (b : Bool) := Bool.ite _ Bool.false Bool.true b
 
 def Bool.and (a b : Bool) := Bool.ite _ Bool.false b a

@@ -49,7 +49,12 @@ def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty
 public partial def checkAstUniverse : Ast → OptionT (ElabM q₀) Universe
   | .node `Level.zero _ => do return .zero
   | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
-  | .node `Level.max cs => do return (← checkAstUniverse cs[0]!).mkMax (← checkAstUniverse cs[1]!)
+  | .node `Level.max cs => do
+      if h : cs.size = 0 then failure
+      else
+        let last ← checkAstUniverse cs[cs.size - 1]
+        cs.extract 0 (cs.size - 1) |>.foldrM (init := last) fun c acc => do
+          return (← checkAstUniverse c).mkMax acc
   | .node `Level.name cs => do
       let name := cs[0]!.getName
       let univParams ← getUnivParams q₀

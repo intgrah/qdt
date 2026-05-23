@@ -78,27 +78,22 @@ def List.append_assoc.{u} (α : Type u) (xs ys zs : List α) : List.append α (L
     (fun h t => congrArg _ _ (List.cons α h) _ _)
     xs
 
-def List.map_append.{u, v} (α : Type u) (β : Type v) (f : α → β) (xs ys : List α) : Eq (List β) (List.map α β f (List.append α xs ys)) (List.append β (List.map α β f xs) (List.map α β f ys)) :=
+def List.map_append.{u, v} (α : Type u) (β : Type v) (f : α → β) (xs ys : List α) : List.map α β f (List.append α xs ys) = List.append β (List.map α β f xs) (List.map α β f ys) :=
   List.rec
     α
     (fun zs =>
-      Eq
-        (List β)
-        (List.map α β f (List.append α zs ys))
-        (List.append β (List.map α β f zs) (List.map α β f ys)))
+      List.map α β f (List.append α zs ys) = List.append β (List.map α β f zs) (List.map α β f ys))
     (Eq.refl (List β) (List.map α β f ys))
     (fun h t ih => congrArg _ _ (List.cons β (f h)) _ _ ih)
     xs
 
-def List.flatten_append.{u} (α : Type u) (xss yss : List (List α)) : Eq (List α) (List.flatten α (List.append (List α) xss yss)) (List.append α (List.flatten α xss) (List.flatten α yss)) :=
+def List.flatten_append.{u} (α : Type u) (xss yss : List (List α)) : List.flatten α (List.append (List α) xss yss) = List.append α (List.flatten α xss) (List.flatten α yss) :=
   List.rec
-    (List α)
+    _
     (fun zss =>
-      Eq
-        (List α)
-        (List.flatten α (List.append (List α) zss yss))
-        (List.append α (List.flatten α zss) (List.flatten α yss)))
-    (Eq.refl (List α) (List.flatten α yss))
+      List.flatten α (List.append (List α) zss yss) =
+      List.append α (List.flatten α zss) (List.flatten α yss))
+    (Eq.refl _ (List.flatten α yss))
     (fun xs xss' ih =>
       Eq.trans
         _
@@ -113,10 +108,8 @@ def List.flatMap_assoc.{u} (α β γ : Type u) (xs : List α) (f : α → List �
   List.rec
     α
     (fun zs =>
-      Eq
-        (List γ)
-        (List.flatMap β γ g (List.flatMap α β f zs))
-        (List.flatMap α γ (fun x => List.flatMap β γ g (f x)) zs))
+      List.flatMap β γ g (List.flatMap α β f zs) =
+      List.flatMap α γ (fun x => List.flatMap β γ g (f x)) zs)
     (Eq.refl (List γ) (List.nil γ))
     (fun h t ih =>
       Eq.trans
@@ -138,8 +131,8 @@ def List.flatMap_assoc.{u} (α β γ : Type u) (xs : List α) (f : α → List �
             (List.map_append β (List γ) g (f h) (List.flatten β (List.map α (List β) f t))))
           (List.flatten_append
             γ
-            (List.map β (List γ) g (f h))
-            (List.map β (List γ) g (List.flatten β (List.map α (List β) f t)))))
+            (List.map β _ g (f h))
+            (List.map β _ g (List.flatten β (List.map α (List β) f t)))))
         (congrArg _ _ (List.append γ (List.flatMap β γ g (f h))) _ _ ih))
     xs
 
@@ -180,9 +173,8 @@ def List.instMonad : Monad List :=
     (fun α x =>
       List.rec
         α
-        (fun xs => Eq (List α) (List.bind α α xs (List.pure α)) xs)
+        (fun xs => List.bind α α xs (List.pure α) = xs)
         (Eq.refl (List α) (List.nil α))
-        (fun h t ih =>
-          congrArg (List α) (List α) (List.cons α h) (List.bind α α t (List.pure α)) t ih)
+        (fun h t => congrArg _ _ (List.cons α h) (List.bind α α t (List.pure α)) t)
         x)
-    (fun α β γ x f g => List.flatMap_assoc α β γ x f g)
+    List.flatMap_assoc

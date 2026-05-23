@@ -40,9 +40,9 @@ def WriterT.bind_bind_to_pure.{u, v} (ω : Type u) (m : Type u → Type v) (inst
         (Prod β ω)
         (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW w (Prod.snd β ω q)));
   let rhs : Prod β ω → m (Prod β ω) := Monad.pure m inst (Prod β ω);
-  let norm_q : (q : Prod β ω) → Eq (m (Prod β ω)) (lhs q) (rhs q) :=
+  let norm_q : (q : Prod β ω) → lhs q = rhs q :=
     fun (q : Prod β ω) =>
-      let prod_eq : Eq (Prod β ω) (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW w (Prod.snd β ω q))) q :=
+      let prod_eq : Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW w (Prod.snd β ω q)) = q :=
         Eq.trans
           (Prod β ω)
           (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW w (Prod.snd β ω q)))
@@ -63,8 +63,7 @@ def WriterT.bind_bind_to_pure.{u, v} (ω : Type u) (m : Type u → Type v) (inst
         (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW w (Prod.snd β ω q)))
         q
         prod_eq;
-  let fn_eq : Eq (Prod β ω → m (Prod β ω)) lhs rhs :=
-    funext (Prod β ω) (fun (q : Prod β ω) => m (Prod β ω)) lhs rhs (fun (q : Prod β ω) => norm_q q);
+  let fn_eq : lhs = rhs := funext _ (fun _ => m (Prod β ω)) lhs rhs norm_q;
   Eq.trans
     (m (Prod β ω))
     (Monad.bind m inst (Prod β ω) (Prod β ω) x lhs)
@@ -111,9 +110,9 @@ def WriterT.bind_pure_left.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
             ω
             (Prod.fst β ω q)
             (Monoid.mul ω instW (Monoid.one ω instW) (Prod.snd β ω q))));
-  let step1 : Eq (m (Prod β ω)) (Monad.bind m inst (Prod α ω) (Prod β ω) (Monad.pure m inst (Prod α ω) (Prod.mk α ω a (Monoid.one ω instW))) k) mid :=
+  let step1 : Monad.bind m inst (Prod α ω) (Prod β ω) (Monad.pure m inst (Prod α ω) (Prod.mk α ω a (Monoid.one ω instW))) k = mid :=
     Monad.bind_pure_left m inst (Prod α ω) (Prod β ω) (Prod.mk α ω a (Monoid.one ω instW)) k;
-  let step2 : Eq (m (Prod β ω)) mid (f a) :=
+  let step2 : mid = f a :=
     WriterT.bind_bind_to_pure
       ω
       m
@@ -163,9 +162,9 @@ def WriterT.bind_pure_right.{u, v} (ω : Type u) (m : Type u → Type v) (inst :
     fun (p : Prod α ω) =>
       Monad.pure m inst (Prod α ω) (Prod.mk α ω (Prod.fst α ω p) (Prod.snd α ω p));
   let rhs : Prod α ω → m (Prod α ω) := Monad.pure m inst (Prod α ω);
-  let norm_p : (p : Prod α ω) → Eq (m (Prod α ω)) (bind_body p) (rhs p) :=
+  let norm_p : (p : Prod α ω) → bind_body p = rhs p :=
     fun (p : Prod α ω) =>
-      let inner_eq : Eq (m (Prod α ω)) (bind_body p) (mid p) :=
+      let inner_eq : bind_body p = mid p :=
         Monad.bind_pure_left
           m
           inst
@@ -182,7 +181,7 @@ def WriterT.bind_pure_right.{u, v} (ω : Type u) (m : Type u → Type v) (inst :
                 ω
                 (Prod.fst α ω q)
                 (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd α ω q))));
-      let mul_eq : Eq (m (Prod α ω)) (mid p) (mid2 p) :=
+      let mul_eq : mid p = mid2 p :=
         congrArg
           (Prod α ω)
           (m (Prod α ω))
@@ -196,7 +195,7 @@ def WriterT.bind_pure_right.{u, v} (ω : Type u) (m : Type u → Type v) (inst :
             (Monoid.mul ω instW (Prod.snd α ω p) (Monoid.one ω instW))
             (Prod.snd α ω p)
             (Monoid.mul_one ω instW (Prod.snd α ω p)));
-      let eta_eq : Eq (m (Prod α ω)) (mid2 p) (rhs p) :=
+      let eta_eq : mid2 p = rhs p :=
         congrArg
           (Prod α ω)
           (m (Prod α ω))
@@ -211,13 +210,8 @@ def WriterT.bind_pure_right.{u, v} (ω : Type u) (m : Type u → Type v) (inst :
         (rhs p)
         inner_eq
         (Eq.trans (m (Prod α ω)) (mid p) (mid2 p) (rhs p) mul_eq eta_eq);
-  let fn_eq : Eq (Prod α ω → m (Prod α ω)) bind_body rhs :=
-    funext
-      (Prod α ω)
-      (fun (p : Prod α ω) => m (Prod α ω))
-      bind_body
-      rhs
-      (fun (p : Prod α ω) => norm_p p);
+  let fn_eq : bind_body = rhs :=
+    funext _ (fun (p : Prod α ω) => m (Prod α ω)) bind_body rhs (fun (p : Prod α ω) => norm_p p);
   Eq.trans
     (m (Prod α ω))
     (Monad.bind m inst (Prod α ω) (Prod α ω) x bind_body)
@@ -264,7 +258,7 @@ def WriterT.bind_assoc_lhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
             inst
             R
             (Prod.mk γ ω (Prod.fst γ ω s) (Monoid.mul ω instW (Prod.snd β ω r) (Prod.snd γ ω s))));
-  let step1 : Eq (m R) (Monad.bind m inst Q R (Monad.bind m inst P Q x K1) K2) (Monad.bind m inst P R x (fun (p : P) => Monad.bind m inst Q R (K1 p) K2)) :=
+  let step1 : Monad.bind m inst Q R (Monad.bind m inst P Q x K1) K2 = Monad.bind m inst P R x (fun (p : P) => Monad.bind m inst Q R (K1 p) K2) :=
     Monad.bind_assoc m inst P Q R x K1 K2;
   let mid1 : P → m R :=
     fun (p : P) =>
@@ -310,7 +304,7 @@ def WriterT.bind_assoc_lhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
               Q
               (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd β ω q))))
             K2);
-  let norm_mid : (p : P) → Eq (m R) (mid1 p) (mid2 p) :=
+  let norm_mid : (p : P) → mid1 p = mid2 p :=
     fun (p : P) =>
       Monad.bind_assoc
         m
@@ -326,7 +320,7 @@ def WriterT.bind_assoc_lhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
             Q
             (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd β ω q))))
         K2;
-  let step2 : Eq (m R) (Monad.bind m inst P R x mid1) (Monad.bind m inst P R x mid2) :=
+  let step2 : Monad.bind m inst P R x mid1 = Monad.bind m inst P R x mid2 :=
     congrArg
       (P → m R)
       (m R)
@@ -344,7 +338,7 @@ def WriterT.bind_assoc_lhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
         (f (Prod.fst α ω p))
         (fun (q : Q) =>
           K2 (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd β ω q))));
-  let norm_mid2 : (p : P) → Eq (m R) (mid2 p) (mid3 p) :=
+  let norm_mid2 : (p : P) → mid2 p = mid3 p :=
     fun (p : P) =>
       congrArg
         (Q → m R)
@@ -394,7 +388,7 @@ def WriterT.bind_assoc_lhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
               R
               (Prod.mk β ω (Prod.fst β ω q) (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd β ω q)))
               K2));
-  let step3 : Eq (m R) (Monad.bind m inst P R x mid2) (Monad.bind m inst P R x mid3) :=
+  let step3 : Monad.bind m inst P R x mid2 = Monad.bind m inst P R x mid3 :=
     congrArg
       (P → m R)
       (m R)
@@ -531,7 +525,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
                   ω
                   (Prod.fst γ ω r)
                   (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd γ ω r)))));
-  let norm_inner : (p : P) → Eq (m R) (inner p) (mid1 p) :=
+  let norm_inner : (p : P) → inner p = mid1 p :=
     fun (p : P) =>
       Monad.bind_assoc
         m
@@ -563,7 +557,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
             inst
             R
             (Prod.mk γ ω (Prod.fst γ ω r) (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd γ ω r))));
-  let step1 : Eq (m R) (Monad.bind m inst P R x inner) (Monad.bind m inst P R x mid1) :=
+  let step1 : Monad.bind m inst P R x inner = Monad.bind m inst P R x mid1 :=
     congrArg
       (P → m R)
       (m R)
@@ -611,7 +605,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
                       ω
                       (Prod.fst γ ω r)
                       (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd γ ω r))))));
-  let norm_mid1 : (p : P) → Eq (m R) (mid1 p) (mid2 p) :=
+  let norm_mid1 : (p : P) → mid1 p = mid2 p :=
     fun (p : P) =>
       congrArg
         (Q → m R)
@@ -776,7 +770,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
                     ω
                     (Prod.fst γ ω r)
                     (Monoid.mul ω instW (Prod.snd α ω p) (Prod.snd γ ω r))))));
-  let step2 : Eq (m R) (Monad.bind m inst P R x mid1) (Monad.bind m inst P R x mid2) :=
+  let step2 : Monad.bind m inst P R x mid1 = Monad.bind m inst P R x mid2 :=
     congrArg
       (P → m R)
       (m R)
@@ -813,7 +807,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
                     instW
                     (Prod.snd α ω p)
                     (Monoid.mul ω instW (Prod.snd β ω q) (Prod.snd γ ω s))))));
-  let norm_mid2 : (p : P) → Eq (m R) (mid2 p) (mid3 p) :=
+  let norm_mid2 : (p : P) → mid2 p = mid3 p :=
     fun (p : P) =>
       congrArg
         (Q → m R)
@@ -1120,7 +1114,7 @@ def WriterT.bind_assoc_rhs.{u, v} (ω : Type u) (m : Type u → Type v) (inst : 
                             instW
                             (Prod.snd α ω p)
                             (Monoid.mul ω instW (Prod.snd β ω q) (Prod.snd γ ω s))))))))));
-  let step3 : Eq (m R) (Monad.bind m inst P R x mid2) (Monad.bind m inst P R x mid3) :=
+  let step3 : Monad.bind m inst P R x mid2 = Monad.bind m inst P R x mid3 :=
     congrArg
       (P → m R)
       (m R)
@@ -1204,7 +1198,7 @@ def WriterT.bind_assoc.{u, v} (ω : Type u) (m : Type u → Type v) (inst : Mona
                     instW
                     (Prod.snd α ω p)
                     (Monoid.mul ω instW (Prod.snd β ω q) (Prod.snd γ ω s))))));
-  let assoc_step : Eq (m R) (Monad.bind m inst P R x normal_l) (Monad.bind m inst P R x normal_r) :=
+  let assoc_step : Monad.bind m inst P R x normal_l = Monad.bind m inst P R x normal_r :=
     congrArg
       (P → m R)
       (m R)

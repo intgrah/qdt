@@ -5,9 +5,9 @@ axiom quotient.{u, v} (α : Type u) : (α → α → Type v) → Type (max u v)
 
 axiom quotient.class_of.{u, v} (α : Type u) (R : α → α → Type v) (a : α) : quotient α R
 
-axiom quotient.eq_of_rel.{u, v} (α : Type u) (R : α → α → Type v) (a a' : α) (h : R a a') : Eq (quotient α R) (quotient.class_of α R a) (quotient.class_of α R a')
+axiom quotient.eq_of_rel.{u, v} (α : Type u) (R : α → α → Type v) (a a' : α) (h : R a a') : quotient.class_of α R a = quotient.class_of α R a'
 
 axiom quotient.rec.{u, v, w} (α : Type u) (R : α → α → Type v) (P : quotient α R → Type w) (Pc : (a : α) → P (quotient.class_of α R a)) (Pp : (a a' : α) → (h : R a a') → Pathover (quotient α R) P (quotient.class_of α R a) (Pc a) (quotient.class_of α R a') (quotient.eq_of_rel α R a a' h) (Pc a')) (x : quotient α R) : P x
 
-def quotient.rec_class_of.{u, v, w} (α : Type u) (R : α → α → Type v) (P : quotient α R → Type w) (Pc : (a : α) → P (quotient.class_of α R a)) (Pp : (a a' : α) → (h : R a a') → Pathover (quotient α R) P (quotient.class_of α R a) (Pc a) (quotient.class_of α R a') (quotient.eq_of_rel α R a a' h) (Pc a')) (a : α) : Eq (P (quotient.class_of α R a)) (quotient.rec α R P Pc Pp (quotient.class_of α R a)) (Pc a) :=
+def quotient.rec_class_of.{u, v, w} (α : Type u) (R : α → α → Type v) (P : quotient α R → Type w) (Pc : (a : α) → P (quotient.class_of α R a)) (Pp : (a a' : α) → (h : R a a') → Pathover (quotient α R) P (quotient.class_of α R a) (Pc a) (quotient.class_of α R a') (quotient.eq_of_rel α R a a' h) (Pc a')) (a : α) : quotient.rec α R P Pc Pp (quotient.class_of α R a) = Pc a :=
   Eq.refl _ _

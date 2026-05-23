@@ -3,23 +3,23 @@ import Std.Init
 
 structure Functor.{u, v} (f : Type u → Type v) : Type (max (u + 1) v) where
   (map (α β : Type u) : (α → β) → f α → f β)
-  (map_id (α : Type u) (x : f α) : Eq (f α) (map α α (id α) x) x)
-  (map_comp (α β γ : Type u) (g : β → γ) (h : α → β) (x : f α) : Eq (f γ) (map α γ (comp α β γ g h) x) (map β γ g (map α β h x)))
+  (map_id (α : Type u) (x : f α) : map α α (id α) x = x)
+  (map_comp (α β γ : Type u) (g : β → γ) (h : α → β) (x : f α) : map α γ (comp α β γ g h) x = map β γ g (map α β h x))
 
 structure Applicative.{u, v} (f : Type u → Type v) : Type (max (u + 1) v) where
   (pure (α : Type u) : α → f α)
   (ap (α β : Type u) : f (α → β) → f α → f β)
-  (ap_id (α : Type u) (x : f α) : Eq (f α) (ap α α (pure (α → α) (id α)) x) x)
-  (ap_homo (α β : Type u) (g : α → β) (x : α) : Eq (f β) (ap α β (pure (α → β) g) (pure α x)) (pure β (g x)))
-  (ap_interchange (α β : Type u) (g : f (α → β)) (y : α) : Eq (f β) (ap α β g (pure α y)) (ap (α → β) β (pure ((α → β) → β) (fun h => h y)) g))
-  (ap_comp (α β γ : Type u) (g : f (β → γ)) (h : f (α → β)) (x : f α) : Eq (f γ) (ap α γ (ap (α → β) (α → γ) (ap (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp α β γ)) g) h) x) (ap β γ g (ap α β h x)))
+  (ap_id (α : Type u) (x : f α) : ap α α (pure (α → α) (id α)) x = x)
+  (ap_homo (α β : Type u) (g : α → β) (x : α) : ap α β (pure (α → β) g) (pure α x) = pure β (g x))
+  (ap_interchange (α β : Type u) (g : f (α → β)) (y : α) : ap α β g (pure α y) = ap (α → β) β (pure ((α → β) → β) (fun h => h y)) g)
+  (ap_comp (α β γ : Type u) (g : f (β → γ)) (h : f (α → β)) (x : f α) : ap α γ (ap (α → β) (α → γ) (ap (β → γ) ((α → β) → α → γ) (pure ((β → γ) → (α → β) → α → γ) (comp α β γ)) g) h) x = ap β γ g (ap α β h x))
 
 structure Monad.{u, v} (m : Type u → Type v) : Type (max (u + 1) v) where
   (pure (α : Type u) : α → m α)
   (bind (α β : Type u) : m α → (α → m β) → m β)
-  (bind_pure_left (α β : Type u) (a : α) (f : α → m β) : Eq (m β) (bind α β (pure α a) f) (f a))
-  (bind_pure_right (α : Type u) (x : m α) : Eq (m α) (bind α α x (pure α)) x)
-  (bind_assoc (α β γ : Type u) (x : m α) (f : α → m β) (g : β → m γ) : Eq (m γ) (bind β γ (bind α β x f) g) (bind α γ x (fun a => bind β γ (f a) g)))
+  (bind_pure_left (α β : Type u) (a : α) (f : α → m β) : bind α β (pure α a) f = f a)
+  (bind_pure_right (α : Type u) (x : m α) : bind α α x (pure α) = x)
+  (bind_assoc (α β γ : Type u) (x : m α) (f : α → m β) (g : β → m γ) : bind β γ (bind α β x f) g = bind α γ x (fun a => bind β γ (f a) g))
 
 def Monad.map.{u, v} (m : Type u → Type v) (inst : Monad m) (α β : Type u) (f : α → β) (x : m α) : m β :=
   Monad.bind m inst α β x (fun a => Monad.pure m inst β (f a))
@@ -85,7 +85,7 @@ def Applicative.toFunctor.{u, v} (f : Type u → Type v) (inst : Applicative f) 
                 (Applicative.ap_homo f inst (β → γ) ((α → β) → α → γ) (comp α β γ) g))
               (Applicative.ap_homo f inst (α → β) (α → γ) (comp α β γ g) h)))))
 
-def Monad.ap_comp_rhs_inner.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u) (f : β → γ) (g' : α → β) (x : m α) : Eq (m γ) (Monad.bind m inst β γ (Monad.bind m inst α β x (fun a => Monad.pure m inst β (g' a))) (fun b => Monad.pure m inst γ (f b))) (Monad.bind m inst α γ x (fun a => Monad.pure m inst γ (f (g' a)))) :=
+def Monad.ap_comp_rhs_inner.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ : Type u) (f : β → γ) (g' : α → β) (x : m α) : Monad.bind m inst β γ (Monad.bind m inst α β x (fun a => Monad.pure m inst β (g' a))) (fun b => Monad.pure m inst γ (f b)) = Monad.bind m inst α γ x (fun a => Monad.pure m inst γ (f (g' a))) :=
   let pure := Monad.pure m inst;
   let bind := Monad.bind m inst;
   let step1 := Monad.bind_assoc m inst α β γ x (fun a => pure β (g' a)) (fun b => pure γ (f b));
@@ -211,7 +211,7 @@ def Monad.ap_comp_lhs.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ 
       (pure BGtoABtoAG (comp α β γ))
       (fun f => bind BG ABtoAG g (fun a => pure ABtoAG (f a)));
   let ap1_reduced := bind BG ABtoAG g (fun a => pure ABtoAG (comp α β γ a));
-  let step1_ap1 : Eq (m ABtoAG) ap1_expanded ap1_reduced :=
+  let step1_ap1 : ap1_expanded = ap1_reduced :=
     Monad.bind_pure_left
       m
       inst
@@ -221,7 +221,7 @@ def Monad.ap_comp_lhs.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ 
       (fun f => bind BG ABtoAG g (fun a => pure ABtoAG (f a)));
   let ap2_k := fun (f : ABtoAG) => bind AB AG h (fun (b : AB) => pure AG (f b));
   let ap2_of_ap1 := bind ABtoAG AG ap1_expanded ap2_k;
-  let ap2_step1 : Eq (m AG) ap2_of_ap1 (bind ABtoAG AG ap1_reduced ap2_k) :=
+  let ap2_step1 : ap2_of_ap1 = bind ABtoAG AG ap1_reduced ap2_k :=
     congrArg (m ABtoAG) (m AG) (fun y => bind ABtoAG AG y ap2_k) ap1_expanded ap1_reduced step1_ap1;
   let ap2_step2 :=
     Monad.bind_assoc m inst BG ABtoAG AG g (fun a => pure ABtoAG (comp α β γ a)) ap2_k;
@@ -249,7 +249,7 @@ def Monad.ap_comp_lhs.{u, v} (m : Type u → Type v) (inst : Monad m) (α β γ 
     Eq.trans (m AG) ap2_of_ap1 (bind BG AG g ap2_inner_k1) ap2_reduced ap2_mid ap2_step3;
   let ap3_k := fun (f : AG) => bind α γ x (fun (a : α) => pure γ (f a));
   let lhs := bind AG γ ap2_of_ap1 ap3_k;
-  let lhs_step1 : Eq (m γ) lhs (bind AG γ ap2_reduced ap3_k) :=
+  let lhs_step1 : lhs = bind AG γ ap2_reduced ap3_k :=
     congrArg (m AG) (m γ) (fun y => bind AG γ y ap3_k) ap2_of_ap1 ap2_reduced ap2_eq;
   let lhs_step2 := Monad.bind_assoc m inst BG AG γ g ap2_inner_k2 ap3_k;
   let lhs_inner_k1 := fun (f : BG) => bind AG γ (ap2_inner_k2 f) ap3_k;

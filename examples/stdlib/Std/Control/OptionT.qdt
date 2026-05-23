@@ -7,10 +7,10 @@ def OptionT.{u, v} (m : Type u → Type v) (α : Type u) : Type v := m (Option �
 def OptionT.run.{u, v} (m : Type u → Type v) (α : Type u) (x : OptionT m α) : m (Option α) := x
 
 def OptionT.pure.{u, v} (m : Type u → Type v) (inst : Monad m) (α : Type u) (a : α) : OptionT m α :=
-  Monad.pure m inst (Option α) (Option.some α a)
+  Monad.pure m inst _ (Option.some α a)
 
 def OptionT.none.{u, v} (m : Type u → Type v) (inst : Monad m) (α : Type u) : OptionT m α :=
-  Monad.pure m inst (Option α) (Option.none α)
+  Monad.pure m inst _ (Option.none α)
 
 def OptionT.bindCont.{u, v} (m : Type u → Type v) (inst : Monad m) (α β : Type u) (f : α → OptionT m β) (o : Option α) : m (Option β) :=
   Option.rec α (fun _ => m (Option β)) (Monad.pure m inst (Option β) (Option.none β)) f o
@@ -22,10 +22,7 @@ def OptionT.bindCont_pure.{u, v} (m : Type u → Type v) (inst : Monad m) (α : 
   Option.rec
     α
     (fun o =>
-      Eq
-        (m (Option α))
-        (OptionT.bindCont m inst α α (OptionT.pure m inst α) o)
-        (Monad.pure m inst (Option α) o))
+      OptionT.bindCont m inst α α (OptionT.pure m inst α) o = Monad.pure m inst (Option α) o)
     (Eq.refl _ _)
     (fun a => Eq.refl _ _)
     o
@@ -34,16 +31,14 @@ def OptionT.bindCont_assoc.{u, v} (m : Type u → Type v) (inst : Monad m) (α �
   Option.rec
     α
     (fun o =>
-      Eq
-        (m (Option γ))
-        (Monad.bind
-          m
-          inst
-          (Option β)
-          (Option γ)
-          (OptionT.bindCont m inst α β f o)
-          (OptionT.bindCont m inst β γ g))
-        (OptionT.bindCont m inst α γ (fun a => OptionT.bind m inst β γ (f a) g) o))
+      Monad.bind
+        m
+        inst
+        (Option β)
+        (Option γ)
+        (OptionT.bindCont m inst α β f o)
+        (OptionT.bindCont m inst β γ g) =
+      OptionT.bindCont m inst α γ (fun a => OptionT.bind m inst β γ (f a) g) o)
     (Monad.bind_pure_left
       m
       inst

@@ -11,4 +11,4 @@ def I.zero : I := quotient.class_of _ _ Bool.true
 
 def I.one : I := quotient.class_of _ _ Bool.false
 
-def I.seg : Eq I I.zero I.one := quotient.eq_of_rel Bool I.rel Bool.true Bool.false Unit.unit
+def I.seg : I.zero = I.one := quotient.eq_of_rel Bool I.rel Bool.true Bool.false Unit.unit

@@ -139,14 +139,9 @@ partial def desugarLevel (cst : Cst) : DesugarM Ast := do
         | .token `atom "max" => false
         | .token `ident "max" => false
         | _ => true
-      if h : levelArgs.size ≥ 2 then
-        let first ← withCstOffset levelArgs[0].offset <| withAstChild 0 <| desugarLevel levelArgs[0].cst
-        let second ← withCstOffset levelArgs[1].offset <| withAstChild 1 <| desugarLevel levelArgs[1].cst
-        let rest ← levelArgs.toList.drop 2 |>.mapIdxM fun i ic =>
-          withCstOffset ic.offset <| withAstChild (i + 2) <| desugarLevel ic.cst
-        return rest.foldl (fun acc u => .node `Level.max #[acc, u]) (.node `Level.max #[first, second])
-      else
-        return .missing
+      let children ← levelArgs.toList.mapIdxM fun i ic =>
+        withCstOffset ic.offset <| withAstChild i <| desugarLevel ic.cst
+      return .node `Level.max children.toArray
   | .node `Lean.Parser.Level.addLit args =>
       let nonTrivia := nonTriviaIndices args
       match nonTrivia[0]?, nonTrivia[2]? with
