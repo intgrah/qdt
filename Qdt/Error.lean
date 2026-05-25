@@ -142,7 +142,11 @@ def HoverContent.format (univs : List Name) : HoverContent → String
       let (piParts, retStr) := peelPis ctxNames retTy
       let allParts := ctxParts ++ piParts
       let paramsStr := " ".intercalate allParts
-      let nameStr := if name.isAnonymous then "_" else toString name
+      let baseName := if name.isAnonymous then "_" else toString name
+      let univSuffix :=
+        if univs.isEmpty then ""
+        else ".{" ++ ", ".intercalate (univs.map toString) ++ "}"
+      let nameStr := baseName ++ univSuffix
       if paramsStr.isEmpty then s!"{nameStr} : {retStr}"
       else s!"{nameStr} {paramsStr} : {retStr}"
   | .localVar name ctxNames ty =>

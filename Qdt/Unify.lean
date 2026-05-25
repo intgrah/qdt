@@ -93,7 +93,7 @@ private partial def tmContainsMeta {n} (id : MVarId) : Tm n → Bool
   | .mvar id' => id == id'
 end
 
-private partial def wrapLams : (a : Nat) → Tm a → Tm 0
+partial def wrapLams : (a : Nat) → Tm a → Tm 0
   | 0, t => t
   | k + 1, t => wrapLams k (.lam .anonymous (.u .zero) t)
 
@@ -155,14 +155,13 @@ partial def patternVarPrefix {n} (_mvarArity : Nat) (args : List (VTm n)) :
 
 partial def processConstApprox {n} (id : MVarId) {args : List (VTm n)}
     (pp : PatternPrefix args) (rhs : Tm n) :
-    ElabM q₀ Bool := do
+    ElabM q₀ (Option ((a : Nat) × Tm a)) := do
   let numArgs := args.length
-  let defaultCase : ElabM q₀ Bool := do
+  let defaultCase : ElabM q₀ (Option ((a : Nat) × Tm a)) := do
     let r : Idx n → Option (Idx numArgs) := fun _ => none
-    let some body := renameTm r rhs | return false
-    if tmContainsMeta id body then return false
-    assignMeta q₀ id (wrapLams numArgs body)
-    return true
+    let some body := renameTm r rhs | return none
+    if tmContainsMeta id body then return none
+    return some ⟨numArgs, body⟩
   if pp.prefixLen = 0 then return ← defaultCase
   let hLe : pp.prefixLen ≤ numArgs := pp.prefixLen_le
   let entries : List (Nat × Idx numArgs) :=
@@ -175,12 +174,11 @@ partial def processConstApprox {n} (id : MVarId) {args : List (VTm n)}
   match renameTm r rhs with
   | some body =>
       if tmContainsMeta id body then return ← defaultCase
-      assignMeta q₀ id (wrapLams numArgs body)
-      return true
+      return some ⟨numArgs, body⟩
   | none => defaultCase
 
 partial def solveMVar {n} (id : MVarId) (sp : Spine n) (rhs : VTm n) :
-    ElabM q₀ Bool := do
+    ElabM q₀ (Option ((a : Nat) × Tm a)) := do
   let rhs ← rhs.quote q₀
   let args := (sp.toAppList).getD []
   let (arity, numScopeArgs) := match ← getMetaInfo q₀ id with
@@ -198,15 +196,15 @@ partial def solveMVar {n} (id : MVarId) (sp : Spine n) (rhs : VTm n) :
       entries.lookup k
     match renameTm r rhs with
     | some body =>
-        if tmContainsMeta id body then return false
-        assignMeta q₀ id (wrapLams a body)
-        return true
-    | none => return false
+        if tmContainsMeta id body then return none
+        return some ⟨a, body⟩
+    | none => return none
   else
     if numScopeArgs != args.length then
       processConstApprox q₀ id pp rhs
     else
-      return false
+      return none
+
 
 end Unify
 

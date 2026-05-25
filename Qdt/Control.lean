@@ -85,10 +85,22 @@ def raiseError {α : Type} (err : Error) : OptionT (ElabM q₀) α := do
   emitDiagnostic q₀ err
   failure
 
-def promoteUniverseMVars (userCount : Nat) (mvarIds : List UMVarId) :
+partial def mintFreshUnivNames (used : Std.HashSet Name) (count : Nat) : List Name :=
+  go count 1 used #[]
+where
+  go (need i : Nat) (used : Std.HashSet Name) (acc : Array Name) : List Name :=
+    if need = 0 then acc.toList
+    else
+      let nm := (`u).appendIndexAfter i
+      if used.contains nm then go need (i + 1) used acc
+      else go (need - 1) (i + 1) (used.insert nm) (acc.push nm)
+
+def promoteUniverseMVars (userParams : List Name) (mvarIds : List UMVarId) :
     List Name × (UMVarId → Option Universe) :=
   let dedup := mvarIds.eraseDups
-  let names := dedup.zipIdx.map fun (_, i) => (`_uvar).num i
+  let userCount := userParams.length
+  let used : Std.HashSet Name := userParams.foldl (init := ∅) (·.insert ·)
+  let names := mintFreshUnivNames used dedup.length
   let table : Std.HashMap UMVarId Universe :=
     dedup.zipIdx.foldl (init := ∅) fun acc (id, i) =>
       acc.insert id (.level (userCount + i))

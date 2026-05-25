@@ -123,21 +123,25 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   let tm ← tm.zonk q₀
   let ty ← ty.zonk q₀
   let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
-  resolveHoleHovers q₀
-  withChild q₀ 0 (emitHover q₀ (.signature d.name paramTys ty))
+  let tmClosed := Tm.lams paramTys tm
+  let tyClosed := Ty.pis paramTys ty
+  let (promotedNames, subst) :=
+    promoteUniverseMVars d.univParams (tyClosed.freeUMVars ++ tmClosed.freeUMVars)
+  let ty := ty.substUMVars subst
+  let tm := tm.substUMVars subst
+  let paramTys ← paramTys.mapM (fun (n, t) => return (n, t.substUMVars subst))
+  let allUnivParams := d.univParams ++ promotedNames
+  withReader (fun (ctx : ElabContext) => { ctx with univParams := allUnivParams }) do
+    resolveHoleHovers q₀
+    withChild q₀ 0 (emitHover q₀ (.signature d.name paramTys ty))
   let tm := Tm.lams paramTys tm
   let ty := Ty.pis paramTys ty
   let hadUnsolved ← reportUnsolvedMetas q₀
   if hadUnsolved then
     return
-  let userCount := d.univParams.length
-  let (promotedNames, subst) :=
-    promoteUniverseMVars userCount (ty.freeUMVars ++ tm.freeUMVars)
-  let ty := ty.substUMVars subst
-  let tm := tm.substUMVars subst
   checkUnusedUniverseParams q₀ d.name d.univParams (ty.usedLevels ++ tm.usedLevels)
   let _ ← addConstant q₀ d.name
-    (.definition { numUnivParams := userCount + promotedNames.length, ty, tm })
+    (.definition { numUnivParams := allUnivParams.length, ty, tm })
 
 def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
@@ -164,17 +168,20 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   let _ ← Universe.retryPostponed q₀
   let ty ← ty.zonk q₀
   let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
-  resolveHoleHovers q₀
-  withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
+  let tyClosed := Ty.pis paramTys ty
+  let (promotedNames, subst) := promoteUniverseMVars a.univParams tyClosed.freeUMVars
+  let ty := ty.substUMVars subst
+  let paramTys ← paramTys.mapM (fun (n, t) => return (n, t.substUMVars subst))
+  let allUnivParams := a.univParams ++ promotedNames
+  withReader (fun (ctx : ElabContext) => { ctx with univParams := allUnivParams }) do
+    resolveHoleHovers q₀
+    withChild q₀ 0 (emitHover q₀ (.signature a.name paramTys ty))
   let ty := Ty.pis paramTys ty
   let hadUnsolved ← reportUnsolvedMetas q₀
   if hadUnsolved then
     return
-  let userCount := a.univParams.length
-  let (promotedNames, subst) := promoteUniverseMVars userCount ty.freeUMVars
-  let ty := ty.substUMVars subst
   checkUnusedUniverseParams q₀ a.name a.univParams ty.usedLevels
-  let numUnivParams := userCount + promotedNames.length
+  let numUnivParams := allUnivParams.length
   let entry := (Hit.recogniseAxiom a.name numUnivParams ty).getD
     (.axiom { numUnivParams, ty })
   let _ ← addConstant q₀ a.name entry
@@ -183,11 +190,10 @@ def Inductive.elab (info : Inductive) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError q₀ err
   let result ← Inductive.elab' q₀ info
-  let userCount := info.univParams.length
   let allConsts := result.indEntry.snd :: result.recEntry.snd ::
     result.ctorEntries.map Prod.snd
   let allMVars := allConsts.flatMap Constant.freeUMVars
-  let (promotedNames, subst) := promoteUniverseMVars userCount allMVars
+  let (promotedNames, subst) := promoteUniverseMVars info.univParams allMVars
   let promotedCount := promotedNames.length
   let updateConst (c : Constant) : Constant :=
     let c := c.substUMVars subst

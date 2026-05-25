@@ -3,6 +3,7 @@ module
 public import Qdt.Conversion
 public import Qdt.Quote
 public import Qdt.Unify
+public import Qdt.Theory.Substitution.Basic
 
 public section
 
@@ -455,6 +456,14 @@ public partial def checkTm {n : Nat} (ctx : TermContext n) (expected : VTy n) (a
   | none => emitSorryTm q₀ ctx expected
 end
 
+public partial def Tm.headBeta {n} : Tm n → Tm n
+  | .app f a =>
+      let f := f.headBeta
+      match f with
+      | .lam _ _ body => (body.subst (Subst.beta a)).headBeta
+      | f => .app f a
+  | t => t
+
 mutual
 
 public partial def Tm.zonk {n} (q₀ : Key) : Tm n → ElabM q₀ (Tm n)
@@ -462,7 +471,7 @@ public partial def Tm.zonk {n} (q₀ : Key) : Tm n → ElabM q₀ (Tm n)
   | .var i => return .var i
   | .const c us => return .const c (← us.mapM (Universe.zonk q₀))
   | .lam x ty body => return .lam x (← ty.zonk q₀) (← body.zonk q₀)
-  | .app f a => return .app (← f.zonk q₀) (← a.zonk q₀)
+  | .app f a => return (Tm.app (← f.zonk q₀) (← a.zonk q₀)).headBeta
   | .pi' x a b => return .pi' x (← a.zonk q₀) (← b.zonk q₀)
   | .proj i t => return .proj i (← t.zonk q₀)
   | .letE x ty rhs body =>
@@ -474,7 +483,8 @@ public partial def Tm.zonk {n} (q₀ : Key) : Tm n → ElabM q₀ (Tm n)
           | some closedBody =>
               let v0 ← closedBody.eval q₀ (Env.nil : Env 0 0)
               let vn : VTm n := v0.weaken (Nat.zero_le n)
-              vn.quote q₀
+              let tm ← vn.quote q₀
+              tm.zonk q₀
           | none => return .mvar id
       | none => return .mvar id
 

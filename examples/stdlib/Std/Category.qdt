@@ -93,9 +93,9 @@ def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C)
     (fun X =>
       let FX := F.obj X;
       let GFX := G.obj FX;
-      let h1 : Eq (HomD FX FX) (F.map X X (Category.id C catC X)) (Category.id D catD FX) :=
+      let h1 : F.map X X (Category.id C catC X) = Category.id D catD FX :=
         Category.Functor.map_id C catC D catD F X;
-      let h2 : Eq (HomE GFX GFX) (G.map FX FX (Category.id D catD FX)) (Category.id E catE GFX) :=
+      let h2 : G.map FX FX (Category.id D catD FX) = Category.id E catE GFX :=
         Category.Functor.map_id D catD E catE G FX;
       Eq.trans
         (HomE GFX GFX)
@@ -119,9 +119,9 @@ def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C)
       let GFZ := G.obj FZ;
       let Ff := F.map X Y f;
       let Fg := F.map Y Z g;
-      let h1 : Eq (HomD FX FZ) (F.map X Z (Category.comp C catC X Y Z f g)) (compD FX FY FZ Ff Fg) :=
+      let h1 : F.map X Z (Category.comp C catC X Y Z f g) = compD FX FY FZ Ff Fg :=
         Category.Functor.map_comp C catC D catD F X Y Z f g;
-      let h2 : Eq (HomE GFX GFZ) (G.map FX FZ (compD FX FY FZ Ff Fg)) (compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg)) :=
+      let h2 : G.map FX FZ (compD FX FY FZ Ff Fg) = compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg) :=
         Category.Functor.map_comp D catD E catE G FX FY FZ Ff Fg;
       Eq.trans
         (HomE GFX GFZ)
@@ -164,12 +164,12 @@ def Category.NatTrans.id.{u₁, u₂} (C : Type u₁) (catC : Category C) (D : T
       let FX := F.obj X;
       let FY := F.obj Y;
       let Ff := F.map X Y f;
-      let h1 : Eq (HomD FX FY) (compD FX FY FY Ff (idD FY)) Ff := Category.comp_id D catD FX FY Ff;
-      let h2 : Eq (HomD FX FY) (compD FX FX FY (idD FX) Ff) Ff := Category.id_comp D catD FX FY Ff;
+      let h1 : compD FX FY FY Ff (idD FY) = Ff := Category.comp_id D catD FX FY Ff;
+      let h2 : compD FX FX FY (idD FX) Ff = Ff := Category.id_comp D catD FX FY Ff;
       Eq.trans
-        (HomD FX FY)
-        (compD FX FY FY Ff (idD FY))
-        Ff
+        _
+        _
+        _
         (compD FX FX FY (idD FX) Ff)
         h1
         (Eq.symm (HomD FX FY) (compD FX FX FY (idD FX) Ff) Ff h2))

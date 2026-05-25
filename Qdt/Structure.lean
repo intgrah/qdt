@@ -153,7 +153,7 @@ public def Structure.elab' (info : Structure) :
     indResult.indEntry.snd.freeUMVars ++
     indResult.recEntry.snd.freeUMVars ++
     indResult.ctorEntries.flatMap (fun (_, c) => c.freeUMVars)
-  let (promotedNames, subst) := promoteUniverseMVars userCount indFreeMVars
+  let (promotedNames, subst) := promoteUniverseMVars info.univParams indFreeMVars
   let promotedCount := promotedNames.length
   let totalUnivParams := userCount + promotedCount
   let extras : List Universe :=
