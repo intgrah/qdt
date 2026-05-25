@@ -9,7 +9,7 @@ package qdt where
   license := "Apache-2.0"
   leanOptions := #[⟨`autoImplicit, false⟩]
 
-require "leanprover-community" / mathlib @ git "v4.28.0"
+require "leanprover-community" / mathlib @ git "master"
 
 lean_lib FSWatch
 lean_lib Incremental
