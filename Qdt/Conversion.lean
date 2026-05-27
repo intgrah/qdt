@@ -14,7 +14,6 @@ variable (q₀ : Key)
 inductive ConvState
   | rigid
   | flex
-  | full
 
 def Ctx.lookupTy : {n : Nat} → Idx n → Ctx 0 n → Ty n
   | _ + 1, ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.shiftAfter 0 1
@@ -75,8 +74,7 @@ public partial def VTm.conv {n} (cctx : VCtx n) (a b : VTm n) (cs : ConvState :=
       | .flex => ne₁.conv cctx ne₂ cs
       | .rigid =>
         if ← ne₁.conv cctx ne₂ .flex then return true
-        (← a.whnf q₀).conv cctx (← b.whnf q₀) .full
-      | .full => (← a.whnf q₀).conv cctx (← b.whnf q₀) cs
+        (← a.whnf q₀).conv cctx (← b.whnf q₀) .rigid
   | .glued _ _, other => do (← a.whnf q₀).conv cctx other cs
   | other, .glued _ _ => do other.conv cctx (← b.whnf q₀) cs
   | .neutral n₁, .neutral n₂ => do
@@ -189,8 +187,8 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
                 if ← sp₁.conv cctx sp₂ .flex then return true
                 match ← deltaReduction q₀ n₁ us₁ with
                 | some v₁ =>
-                    (← applySpine q₀ sp₁ v₁).conv cctx (← applySpine q₀ sp₂ v₁) .full
-                | none => sp₁.conv cctx sp₂ .full
+                    (← applySpine q₀ sp₁ v₁).conv cctx (← applySpine q₀ sp₂ v₁) .rigid
+                | none => sp₁.conv cctx sp₂ .rigid
             | _ => sp₁.conv cctx sp₂ cs
           else
             match cs with
@@ -198,11 +196,11 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
             | _ =>
               match ← deltaReduction q₀ n₁ us₁, ← deltaReduction q₀ n₂ us₂ with
               | some v₁, some v₂ =>
-                  (← applySpine q₀ sp₁ v₁).conv cctx (← applySpine q₀ sp₂ v₂) .full
+                  (← applySpine q₀ sp₁ v₁).conv cctx (← applySpine q₀ sp₂ v₂) .rigid
               | some v₁, none =>
-                  (← applySpine q₀ sp₁ v₁).conv cctx (.neutral ne₂) .full
+                  (← applySpine q₀ sp₁ v₁).conv cctx (.neutral ne₂) .rigid
               | none, some v₂ =>
-                  (VTm.neutral ne₁).conv cctx (← applySpine q₀ sp₂ v₂) .full
+                  (VTm.neutral ne₁).conv cctx (← applySpine q₀ sp₂ v₂) .rigid
               | none, none =>
                   return (← etaConv cctx ne₁ (.neutral ne₂) cs)
                     || (← etaConv cctx ne₂ (.neutral ne₁) cs)
@@ -211,14 +209,14 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
           | .flex => return false
           | _ =>
             match ← deltaReduction q₀ n₁ us₁ with
-            | some v₁ => (← applySpine q₀ sp₁ v₁).conv cctx (.neutral ne₂) .full
+            | some v₁ => (← applySpine q₀ sp₁ v₁).conv cctx (.neutral ne₂) .rigid
             | none => etaConv cctx ne₁ (.neutral ne₂) cs
       | .var _, .const n₂ us₂ =>
           match cs with
           | .flex => return false
           | _ =>
             match ← deltaReduction q₀ n₂ us₂ with
-            | some v₂ => (VTm.neutral ne₁).conv cctx (← applySpine q₀ sp₂ v₂) .full
+            | some v₂ => (VTm.neutral ne₁).conv cctx (← applySpine q₀ sp₂ v₂) .rigid
             | none => etaConv cctx ne₂ (.neutral ne₁) cs
       | .mvar i₁, .mvar i₂ =>
           if i₁ == i₂ then
@@ -227,16 +225,16 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
             | _ =>
               if ← sp₁.conv cctx sp₂ .flex then return true
               match ← metaReduction q₀ i₁ sp₁, ← metaReduction q₀ i₁ sp₂ with
-              | some v₁, some v₂ => v₁.conv cctx v₂ .full
-              | _, _ => sp₁.conv cctx sp₂ .full
+              | some v₁, some v₂ => v₁.conv cctx v₂ .rigid
+              | _, _ => sp₁.conv cctx sp₂ .rigid
           else
             match cs with
             | .flex => return false
             | _ =>
               match ← metaReduction q₀ i₁ sp₁, ← metaReduction q₀ i₂ sp₂ with
-              | some v₁, some v₂ => v₁.conv cctx v₂ .full
-              | some v₁, none => v₁.conv cctx (.neutral ne₂) .full
-              | none, some v₂ => (VTm.neutral ne₁).conv cctx v₂ .full
+              | some v₁, some v₂ => v₁.conv cctx v₂ .rigid
+              | some v₁, none => v₁.conv cctx (.neutral ne₂) .rigid
+              | none, some v₂ => (VTm.neutral ne₁).conv cctx v₂ .rigid
               | none, none =>
                   if ← solveMVarChecked i₁ cctx sp₁ (.neutral ne₂) then return true
                   if ← solveMVarChecked i₂ cctx sp₂ (.neutral ne₁) then return true
@@ -247,7 +245,7 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
           | .flex => return false
           | _ =>
             match ← metaReduction q₀ i₁ sp₁ with
-            | some v₁ => v₁.conv cctx (.neutral ne₂) .full
+            | some v₁ => v₁.conv cctx (.neutral ne₂) .rigid
             | none =>
               if ← solveMVarChecked i₁ cctx sp₁ (.neutral ne₂) then return true
               solveMVarFOApprox i₁ cctx sp₁ (.neutral ne₂) cs
@@ -256,7 +254,7 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
           | .flex => return false
           | _ =>
             match ← metaReduction q₀ i₂ sp₂ with
-            | some v₂ => (VTm.neutral ne₁).conv cctx v₂ .full
+            | some v₂ => (VTm.neutral ne₁).conv cctx v₂ .rigid
             | none =>
               if ← solveMVarChecked i₂ cctx sp₂ (.neutral ne₁) then return true
               solveMVarFOApprox i₂ cctx sp₂ (.neutral ne₁) cs
