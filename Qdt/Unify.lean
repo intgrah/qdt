@@ -1,7 +1,6 @@
 module
 
 public import Qdt.Quote
-public import Qdt.Theory.Universe.Solve
 
 public section
 
@@ -17,12 +16,12 @@ private def liftRen {n m : Nat} (r : Idx n → Option (Idx m)) :
   | ⟨k + 1, _⟩ => return (← r ⟨k, by omega⟩).succ
 
 mutual
-partial def Ty.rename {n m : Nat} (r : Idx n → Option (Idx m)) : Ty n → Option (Ty m)
+def Ty.rename {n m : Nat} (r : Idx n → Option (Idx m)) : Ty n → Option (Ty m)
   | .u u => return .u u
   | .pi x dom cod => return .pi x (← dom.rename r) (← cod.rename (liftRen r))
   | .el t => return .el (← t.rename r)
 
-partial def Tm.rename {n m : Nat} (r : Idx n → Option (Idx m)) : Tm n → Option (Tm m)
+def Tm.rename {n m : Nat} (r : Idx n → Option (Idx m)) : Tm n → Option (Tm m)
   | .u' u => return .u' u
   | .var i => return .var (← r i)
   | .const c us => return .const c us
@@ -36,12 +35,12 @@ partial def Tm.rename {n m : Nat} (r : Idx n → Option (Idx m)) : Tm n → Opti
 end
 
 mutual
-partial def Ty.containsMeta {n} (id : MVarId) : Ty n → Bool
+def Ty.containsMeta {n} (id : MVarId) : Ty n → Bool
   | .u _ => false
   | .pi _ a b => a.containsMeta id || b.containsMeta id
   | .el t => t.containsMeta id
 
-partial def Tm.containsMeta {n} (id : MVarId) : Tm n → Bool
+def Tm.containsMeta {n} (id : MVarId) : Tm n → Bool
   | .u' _ | .var _ | .const _ _ => false
   | .lam _ ty body => ty.containsMeta id || body.containsMeta id
   | .app f a => f.containsMeta id || a.containsMeta id
@@ -52,65 +51,68 @@ partial def Tm.containsMeta {n} (id : MVarId) : Tm n → Bool
   | .mvar id' => id == id'
 end
 
-def MetaInfo.freshType {a : Nat} (ctxNames : List Name) (ctx : Ctx 0 a) :
-    ElabM q₀ (Ty a) := do
-  let univ ← Universe.freshUMVar q₀
-  let id ← freshMetaId q₀ {
-    arity := a
-    ctx
-    ty := .u (.mvar univ),
-    ctxNames
-    path := (← read).path, decl := (← read).currentDecl,
-  }
-  return .el (Tm.apps (.mvar id) ((List.finRange a).map (Tm.var ·.rev)))
-
-mutual
-
-def Ty.takePisOrFresh {a : Nat} (ctxNames : List Name) (ctx : Ctx 0 a) :
-    (extra : Nat) → Ty a → ElabM q₀ (Ctx a (a + extra))
-  | 0, _ => return .nil
-  | k + 1, .pi name dom body => do
-      let inner ← body.takePisOrFresh (name :: ctxNames) (ctx.snoc (name, dom)) k
-      have : a + 1 + k = a + (k + 1) := by omega
-      return this ▸ ((Tele.nil.snoc (name, dom) : Ctx a (a + 1)).append inner)
-  | k + 1, _ => allFresh ctxNames ctx (k + 1)
-
-def allFresh {a : Nat} (ctxNames : List Name) (ctx : Ctx 0 a) :
-    (extra : Nat) → ElabM q₀ (Ctx a (a + extra))
-  | 0 => return .nil
-  | k + 1 => do
-      let dom ← MetaInfo.freshType q₀ ctxNames ctx
-      let inner ← allFresh (.anonymous :: ctxNames) (ctx.snoc (.anonymous, dom)) k
-      have : a + 1 + k = a + (k + 1) := by omega
-      return this ▸ ((Tele.nil.snoc (.anonymous, dom) : Ctx a (a + 1)).append inner)
-
-end
-
-def MetaInfo.wrap (info : MetaInfo) {numArgs : Nat} (body : Tm numArgs) :
-    ElabM q₀ (Tm info.arity) := do
-  if h : info.arity ≤ numArgs then
-    have : info.arity + (numArgs - info.arity) = numArgs := by omega
-    return Tm.lams (this ▸ (← info.ty.takePisOrFresh q₀ info.ctxNames info.ctx (numArgs - info.arity))) body
-  else
-    panic! "MetaInfo.wrap: numArgs ({numArgs}) < arity ({info.arity})"
-
-partial def Spine.patternPrefix {n} : List (VTm n) → List (Lvl n)
+def Spine.patternPrefix {n} : List (VTm n) → List (Lvl n)
   | [] => []
   | .neutral ⟨.var lvl, .nil⟩ :: rest =>
       let inner := Spine.patternPrefix rest
       if lvl ∈ inner then [] else lvl :: inner
   | _ => []
 
-partial def MetaInfo.solve {n} (info : MetaInfo) (id : MVarId) (sp : Spine n) (rhs : VTm n) :
+def Ty.takePis {a : Nat} : (extra : Nat) → Ty a → Option (Ctx a (a + extra))
+  | 0, _ => some .nil
+  | k + 1, .pi name dom body => do
+      let inner ← body.takePis k
+      have : a + 1 + k = a + (k + 1) := by omega
+      return this ▸ ((Tele.nil.snoc (name, dom) : Ctx a (a + 1)).append inner)
+  | _ + 1, _ => none
+
+def MetaInfo.wrap (info : MetaInfo) {numArgs : Nat} (body : Tm numArgs)
+    (hintTele : Option (Ctx info.arity numArgs) := none) :
+    Option (Tm info.arity) := do
+  if let some tele := hintTele then
+    return Tm.lams tele body
+  if h : info.arity ≤ numArgs then
+    have : info.arity + (numArgs - info.arity) = numArgs := by omega
+    return Tm.lams (this ▸ (← info.ty.takePis (numArgs - info.arity))) body
+  none
+
+def computeHintTele {n} (info : MetaInfo) (cctx : VCtx n) (args : List (VTm n))
+    (patPrefix : List (Lvl n)) :
+    ElabM q₀ (Option (Ctx info.arity args.length)) := do
+  if hLe : info.arity ≤ args.length then
+    let entries : List (Nat × Nat) :=
+      patPrefix.zipIdx.map fun (lvl, pos) => (lvl.rev.val, pos)
+    let rec go (i : Nat) (hLe' : info.arity + i ≤ args.length)
+        (acc : Ctx info.arity (info.arity + i)) :
+        ElabM q₀ (Option (Ctx info.arity args.length)) := do
+      if hStop : info.arity + i = args.length then
+        return some (hStop ▸ acc)
+      else
+        have hIdx : info.arity + i < args.length := by omega
+        let .neutral ⟨.var lvl, .nil⟩ := args[info.arity + i] | return none
+        let (name, vty) := cctx.lookupByLevel lvl
+        let tyQ ← vty.quote q₀
+        let some ty := tyQ.rename fun idx => do
+            let pos ← entries.lookup idx.val
+            if h : pos < info.arity + i then some (Fin.rev ⟨pos, h⟩) else none
+          | return none
+        go (i + 1) (by omega) (acc.snoc (name, ty))
+    termination_by args.length - (info.arity + i)
+    go 0 hLe Tele.nil
+  else
+    return none
+
+partial def MetaInfo.solve {n} (info : MetaInfo) (id : MVarId) (cctx : VCtx n)
+    (sp : Spine n) (rhs : VTm n) :
     ElabM q₀ (Option (Tm info.arity)) := do
   let some args := sp.toAppList | return none
   let rhs ← rhs.quote q₀
+  let patPrefix := Spine.patternPrefix args
   let entries : List (Nat × Idx args.length) :=
-    Spine.patternPrefix args |>.zip (List.finRange args.length) |>.map fun (lvl, i) =>
-      (lvl.rev, i.rev)
-  let rename (r : Idx n → Option (Idx args.length)) : Option (Tm args.length) :=
-    rhs.rename r |>.filter (!·.containsMeta id)
-  let body := rename (entries.lookup ·.val) <|> rename (fun _ => none)
-  body.mapM (info.wrap q₀)
+    patPrefix.zip (List.finRange args.length) |>.map fun (lvl, i) => (lvl.rev, i.rev)
+  let some body := rhs.rename (entries.lookup ·.val) |>.filter (!·.containsMeta id)
+    | return none
+  let hintTele ← computeHintTele q₀ info cctx args patPrefix
+  return info.wrap body hintTele
 
 end Qdt

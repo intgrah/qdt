@@ -393,7 +393,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.ident cs => do
       let univs ← checkAstUniverses q₀ cs[1]!
       let (tm, ty) ← inferIdent q₀ ctx cs[0]!.getName univs
-      if !(← VTy.conv q₀ ty expected) then
+      if !(← VTy.conv q₀ ctx.ctx ty expected) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← ty.quote q₀)
       emitIdentHover q₀ ctx cs[0]!.getName tm ty
       return tm
@@ -414,7 +414,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
           let x := bs[0]!.getName
           let ann ← OptionT.lift (withChild q₀ 0 (withChild q₀ 1 (checkTy ctx bs[1]!)))
           let annVal : VTy n ← ann.eval q₀ ctx.env
-          if !(← VTy.conv q₀ annVal a) then
+          if !(← VTy.conv q₀ ctx.ctx annVal a) then
             raiseTypeMismatch q₀ ctx (← a.quote q₀) (← annVal.quote q₀)
           withChild q₀ 0 (withChild q₀ 0 (emitHover q₀ (.localVar x ctx.names (← a.quote q₀))))
           let ctx' := ctx.bind x a
@@ -425,7 +425,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
         | _ => failure
       | _ =>
         let (inferredTm, inferredTy) ← inferTm ctx ast
-        if !(← VTy.conv q₀ inferredTy expected) then
+        if !(← VTy.conv q₀ ctx.ctx inferredTy expected) then
           raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← inferredTy.quote q₀)
         emitType q₀ ctx expected
         return inferredTm
@@ -444,25 +444,25 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
   | .node `Term.pi cs => do
       let .node `Binder.typed bs := cs[0]! | failure
       let (tm, level) ← inferPi ctx bs[0]!.getName bs[1]! cs[1]!
-      if !(← expected.conv q₀ (.u level)) then
+      if !(← expected.conv q₀ ctx.ctx (.u level)) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level)
       emitType q₀ ctx expected
       return tm
   | .node `Term.eq cs => do
       let (tm, level) ← checkEq ctx cs[0]! cs[1]!
-      if !(← expected.conv q₀ (.u level)) then
+      if !(← expected.conv q₀ ctx.ctx (.u level)) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level)
       emitType q₀ ctx expected
       return tm
   | .node `Term.ann cs => do
       let (tm, ty) ← inferAnn ctx cs[0]! cs[1]!
-      if !(← VTy.conv q₀ ty expected) then
+      if !(← VTy.conv q₀ ctx.ctx ty expected) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← ty.quote q₀)
       emitType q₀ ctx expected
       return tm
   | .node `Term.u cs => do
       let level ← checkAstUniverse q₀ cs[0]!
-      if !(← expected.conv q₀ (.u level.mkSucc)) then
+      if !(← expected.conv q₀ ctx.ctx (.u level.mkSucc)) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (.u level.mkSucc)
       emitType q₀ ctx expected
       return .u' level
@@ -473,7 +473,7 @@ partial def checkTmCore {n : Nat} (ctx : TermContext n) (expected : VTy n) : Ast
       let aTm ← OptionT.lift (withChild q₀ 1 (checkTm ctx aTy cs[1]!))
       let aVal ← aTm.eval q₀ ctx.env
       let tyVal ← bTy.eval q₀ (env.cons aVal)
-      if !(← VTy.conv q₀ tyVal expected) then
+      if !(← VTy.conv q₀ ctx.ctx tyVal expected) then
         raiseTypeMismatch q₀ ctx (← expected.quote q₀) (← tyVal.quote q₀)
       emitType q₀ ctx expected
       return .app fTm aTm

@@ -37,9 +37,17 @@ def TermContext.define {n} (name : Name) (ty : VTy n) (value : VTm n) (tctx : Te
   ctx := tctx.ctx.snoc (.defined name ty value)
   env := tctx.env.weaken.cons value.weaken
 
-def VCtx.lookup {n} : Idx n → VCtx n → VTy n
-  | ⟨0, _⟩, .snoc _ entry => entry.ty.weaken
-  | ⟨i + 1, _⟩, .snoc ctx' _ => (lookup ⟨i, by omega⟩ ctx').weaken
+def VCtx.lookupNameTy {n} : Idx n → VCtx n → Name × VTy n
+  | ⟨0, _⟩, .snoc _ entry => (entry.name, entry.ty.weaken)
+  | ⟨i + 1, _⟩, .snoc ctx' _ =>
+      let (name, ty) := lookupNameTy ⟨i, by omega⟩ ctx'
+      (name, ty.weaken)
+
+@[inline] def VCtx.lookup {n} (i : Idx n) (ctx : VCtx n) : VTy n :=
+  (ctx.lookupNameTy i).snd
+
+@[inline] def VCtx.lookupByLevel {n} (lvl : Lvl n) (ctx : VCtx n) : Name × VTy n :=
+  ctx.lookupNameTy lvl.rev
 
 def TermContext.lookup {n} (i : Idx n) (tctx : TermContext n) : VTy n :=
   tctx.ctx.lookup i
