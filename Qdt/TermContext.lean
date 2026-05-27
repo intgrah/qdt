@@ -8,7 +8,18 @@ namespace Qdt
 
 open Lean (Name)
 
-def VCtx : Nat → Type := Tele (Name × VTy ·) 0
+structure VEntry (n : Nat) where
+  name : Name
+  ty : VTy n
+  value? : Option (VTm n) := none
+
+abbrev VEntry.bound {n} (name : Name) (ty : VTy n) : VEntry n :=
+  { name, ty, value? := none }
+
+abbrev VEntry.defined {n} (name : Name) (ty : VTy n) (value : VTm n) : VEntry n :=
+  { name, ty, value? := some value }
+
+def VCtx : Nat → Type := Tele VEntry 0
 
 structure TermContext (n : Nat) where
   ctx : VCtx n
@@ -19,26 +30,26 @@ def TermContext.empty : TermContext 0 where
   env := Env.nil
 
 def TermContext.bind {n} (name : Name) (ty : VTy n) (tctx : TermContext n) : TermContext (n + 1) where
-  ctx := tctx.ctx.snoc ⟨name, ty⟩
+  ctx := tctx.ctx.snoc (.bound name ty)
   env := tctx.env.weaken.cons (VTm.varAt n)
 
 def TermContext.define {n} (name : Name) (ty : VTy n) (value : VTm n) (tctx : TermContext n) : TermContext (n + 1) where
-  ctx := tctx.ctx.snoc ⟨name, ty⟩
+  ctx := tctx.ctx.snoc (.defined name ty value)
   env := tctx.env.weaken.cons value.weaken
 
 def VCtx.lookup {n} : Idx n → VCtx n → VTy n
-  | ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.weaken
+  | ⟨0, _⟩, .snoc _ entry => entry.ty.weaken
   | ⟨i + 1, _⟩, .snoc ctx' _ => (lookup ⟨i, by omega⟩ ctx').weaken
 
 def TermContext.lookup {n} (i : Idx n) (tctx : TermContext n) : VTy n :=
   tctx.ctx.lookup i
 
 def TermContext.findName? {n} (name : Name) (tctx : TermContext n) : Option (Idx n × VTy n) :=
-  let rec go {n} : Tele (Name × VTy ·) 0 n → Option (Idx n × VTy n)
+  let rec go {n} : Tele VEntry 0 n → Option (Idx n × VTy n)
     | .nil => none
-    | .snoc ts ⟨n, ty⟩ => do
-      if n = name then
-        return (⟨0, by omega⟩, ty.weaken)
+    | .snoc ts entry => do
+      if entry.name = name then
+        return (⟨0, by omega⟩, entry.ty.weaken)
       else
         let (k, ty) ← go ts
         return (k.succ, ty.weaken)
@@ -46,7 +57,7 @@ def TermContext.findName? {n} (name : Name) (tctx : TermContext n) : Option (Idx
 
 def VCtx.names {n} : VCtx n → List Name
   | .nil => []
-  | .snoc ts ⟨name, _⟩ => name :: VCtx.names ts
+  | .snoc ts entry => entry.name :: VCtx.names ts
 
 def TermContext.names {n} (tctx : TermContext n) : List Name :=
   tctx.ctx.names

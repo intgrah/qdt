@@ -59,7 +59,7 @@ public partial def VTy.inferLevel {n} (ctx : VCtx n) : VTy n → ElabM q₀ Univ
   | .pi _x a ⟨env, b⟩ => do
       let aLevel ← a.inferLevel ctx
       let bVal : VTy (n + 1) ← b.eval q₀ (env.weaken.cons (VTm.varAt n))
-      let bLevel ← bVal.inferLevel (ctx.snoc ⟨.anonymous, a⟩)
+      let bLevel ← bVal.inferLevel (ctx.snoc (.bound .anonymous a))
       return aLevel.mkMax bLevel
   | .el ⟨.const name us, _sp⟩ => do
       let some info ← fetchConstantInfo q₀ name

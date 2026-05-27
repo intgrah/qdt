@@ -14,22 +14,52 @@ open Frontend (Ast Path)
 
 variable (q₀ : Key)
 
+structure BoundView (n : Nat) where
+  arity : Nat
+  subst : Subst n arity
+  tys : Ctx 0 arity
+  origLvls : Array (Lvl n)
+
+def buildBoundView : {n : Nat} → VCtx n → ElabM q₀ (BoundView n)
+  | 0, .nil => return {
+      arity := 0
+      subst := fun ⟨_, h⟩ => absurd h (Nat.not_lt_zero _)
+      tys := .nil
+      origLvls := #[] }
+  | m + 1, .snoc rest entry => do
+      let rv ← buildBoundView rest
+      let castOld (l : Lvl m) : Lvl (m + 1) := ⟨l.val, Nat.lt_succ_of_lt l.isLt⟩
+      let liftedOrigLvls := rv.origLvls.map castOld
+      match entry with
+      | .bound name ty =>
+          let tyInner : Ty rv.arity := (← ty.quote q₀).subst rv.subst
+          return {
+            arity := rv.arity + 1
+            subst := rv.subst.up
+            tys := rv.tys.snoc (name, tyInner)
+            origLvls := liftedOrigLvls.push ⟨m, Nat.lt_succ_self _⟩ }
+      | .defined _ _ value =>
+          let valueInner : Tm rv.arity := (← value.quote q₀).subst rv.subst
+          return {
+            arity := rv.arity
+            subst := Subst.cons valueInner rv.subst
+            tys := rv.tys
+            origLvls := liftedOrigLvls }
+
 def freshMeta' {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
     ElabM q₀ (MVarId × Tm n) := do
   let decl ← currentDecl q₀
-  let localPis ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote q₀⟩
-  let expectedTy ← expected.quote q₀
-  let closedTy : Ty 0 := Ty.pis localPis expectedTy
-  let info : MetaInfo := {
-    arity := n
+  let view ← buildBoundView q₀ ctx.ctx
+  let ty : Ty view.arity := (← expected.quote q₀).subst view.subst
+  let id ← freshMetaId q₀ {
+    arity := view.arity
+    ctx := view.tys
+    ty
     ctxNames := ctx.names
-    ty := closedTy
-    solution := none
     path := anchor
-    decl := decl
+    decl
   }
-  let id ← freshMetaId q₀ info
-  let args : List (Tm n) := (List.finRange n).map (fun i => Tm.var i.rev)
+  let args : List (Tm n) := view.origLvls.toList.map fun lvl => Tm.var lvl.rev
   return (id, Tm.apps (.mvar id) args)
 
 def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n) :
@@ -107,15 +137,15 @@ def emitSorryAxiom {n : Nat}
   let decl ← currentDecl q₀
   let id ← modifyGet fun s => (s.sorryId, { s with sorryId := s.sorryId + 1 })
   let sorryName := decl.str "_sorry" |>.num id
-  let locals ← ctx.ctx.mapM fun ⟨name, vty⟩ => return ⟨name, ← vty.quote q₀⟩
   let univParams ← getUnivParams q₀
+  let sorryUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
+  let view ← buildBoundView q₀ ctx.ctx
   let _ ← addConstant q₀ sorryName (.axiom {
     numUnivParams := univParams.length
-    ty := Ty.pis locals retTy
+    ty := Ty.pis view.tys (retTy.subst view.subst)
     synthetic := true
   })
-  let args := List.finRange n |>.map (fun i => Tm.var i.rev)
-  let sorryUnivs := List.finRange univParams.length |>.map fun i => Universe.level i.val
+  let args : List (Tm n) := view.origLvls.toList.map fun lvl => Tm.var lvl.rev
   return Tm.const sorryName sorryUnivs |>.apps args
 
 def emitSorryTm {n : Nat}
@@ -139,8 +169,7 @@ def emitSorryTy {n : Nat}
 
 mutual
 partial def Tm.hasSyntheticSorry {n} : Tm n → ElabM q₀ Bool
-  | .u' _ => return false
-  | .var _ => return false
+  | .u' _ | .var _ => return false
   | .const name _ => isSyntheticSorryName q₀ name
   | .lam _ ty body => do return (← ty.hasSyntheticSorry) || (← body.hasSyntheticSorry)
   | .app f a => do return (← f.hasSyntheticSorry) || (← a.hasSyntheticSorry)
@@ -471,22 +500,30 @@ public partial def Tm.zonk {n} (q₀ : Key) : Tm n → ElabM q₀ (Tm n)
   | .var i => return .var i
   | .const c us => return .const c (← us.mapM (Universe.zonk q₀))
   | .lam x ty body => return .lam x (← ty.zonk q₀) (← body.zonk q₀)
-  | .app f a => return (Tm.app (← f.zonk q₀) (← a.zonk q₀)).headBeta
+  | t@(.app _ _) => do
+      let (head, args) := Tm.splitApps t
+      let args ← args.mapM (Tm.zonk q₀)
+      match head with
+      | .mvar id => zonkMVarApp q₀ id args
+      | other =>
+          let other ← Tm.zonk q₀ other
+          return (Tm.apps other args).headBeta
   | .pi' x a b => return .pi' x (← a.zonk q₀) (← b.zonk q₀)
   | .proj i t => return .proj i (← t.zonk q₀)
   | .letE x ty rhs body =>
       return .letE x (← ty.zonk q₀) (← rhs.zonk q₀) (← body.zonk q₀)
-  | .mvar id => do
-      match ← getMetaInfo q₀ id with
-      | some info =>
-          match info.solution with
-          | some closedBody =>
-              let v0 ← closedBody.eval q₀ (Env.nil : Env 0 0)
-              let vn : VTm n := v0.weaken (Nat.zero_le n)
-              let tm ← vn.quote q₀
-              tm.zonk q₀
-          | none => return .mvar id
-      | none => return .mvar id
+  | .mvar id => zonkMVarApp q₀ id []
+
+private partial def zonkMVarApp {n} (q₀ : Key) (id : MVarId) (args : List (Tm n)) :
+    ElabM q₀ (Tm n) := do
+  let info ← getMetaInfo q₀ id
+  let some body := info.solution | return Tm.apps (.mvar id) args
+  let firstA := args.take info.arity
+  if h : firstA.length = info.arity then
+    let body ← Tm.zonk q₀ body
+    return (Tm.apps (body.subst (Subst.fromArgs firstA h)) (args.drop info.arity)).headBeta
+  else
+    panic! "zonkMVarApp: meta ?{id} applied to {args.length} args, expected ≥ {info.arity}"
 
 public partial def Ty.zonk {n} (q₀ : Key) : Ty n → ElabM q₀ (Ty n)
   | .u u => return .u (← Universe.zonk q₀ u)
@@ -503,14 +540,13 @@ public def reportUnsolvedMetas : ElabM q₀ Bool := do
     if info.solution.isNone then
       hadUnsolved := true
       unless info.errored do
-        emitDiagnosticAt q₀ info.path (.unsolvedMetavariable info.decl i info.ty)
+        emitDiagnosticAt q₀ info.path (.unsolvedMetavariable info.decl i (Ty.pis info.ctx info.ty))
   return hadUnsolved
 
 partial def resolveHoleHover (metaId : MVarId) {n : Nat} (ctxNames : List Name) (ty : Ty n) :
     ElabM q₀ HoverContent := do
   let ty ← ty.zonk q₀
-  let some info ← getMetaInfo q₀ metaId
-    | return .typeOnly ctxNames ty
+  let info ← getMetaInfo q₀ metaId
   if info.solution.isNone then
     return .typeOnly ctxNames ty
   let args : List (Tm n) := (List.finRange n).map (fun i => .var i.rev)
@@ -529,7 +565,7 @@ partial def resolveHoleHover (metaId : MVarId) {n : Nat} (ctxNames : List Name) 
 
 public def zonkHover : HoverContent → ElabM q₀ HoverContent
   | .signature name params retTy => do
-      let params ← params.mapM (m := ElabM q₀) fun ⟨n, t⟩ => return ⟨n, ← t.zonk q₀⟩
+      let params ← params.mapM fun ⟨n, t⟩ => return ⟨n, ← t.zonk q₀⟩
       return .signature name params (← retTy.zonk q₀)
   | .localVar name ctxNames ty => do
       return .localVar name ctxNames (← ty.zonk q₀)

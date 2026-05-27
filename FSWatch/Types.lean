@@ -8,12 +8,12 @@ namespace FSWatch
 
 open System (FilePath)
 
-inductive IsDirectory where
+inductive IsDirectory
   | file
   | directory
 deriving Repr, BEq
 
-inductive EventKind where
+inductive EventKind
   | added
   | modified
   | removed

@@ -108,7 +108,7 @@ structure Diagnostic where
   univParams : List Name := []
 deriving Inhabited, Hashable
 
-inductive HoverContent where
+inductive HoverContent
   | signature (name : Name) {n : Nat} (params : Ctx 0 n) (retTy : Ty n)
   | localVar (name : Name) (ctxNames : List Name) {n : Nat} (ty : Ty n)
   | typeOnly (ctxNames : List Name) {n : Nat} (ty : Ty n)

@@ -10,7 +10,7 @@ namespace Qdt
 open Cli
 open System (FilePath)
 
-inductive BuildSystem where
+inductive BuildSystem
   | busy
   | lessBusy
   | salsa

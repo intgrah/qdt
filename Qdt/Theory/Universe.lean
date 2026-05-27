@@ -8,7 +8,7 @@ open Lean (Name)
 
 abbrev UMVarId := Nat
 
-inductive Universe where
+inductive Universe
   | level (i : Nat)
   | zero
   | succ (u : Universe)

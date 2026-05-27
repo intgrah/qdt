@@ -12,7 +12,7 @@ open System (FilePath)
 
 namespace Qdt
 
-inductive FmtResult where
+inductive FmtResult
   | unchanged
   | changed (output : String)
   | parseErrors (errs : Array Frontend.Parser.ParseError)
@@ -77,9 +77,9 @@ def processFile
       if check then
         IO.eprintln s!"{path}: would reformat"
       else if diff then
-        IO.println s!"--- {path}"
-        IO.println s!"+++ {path}"
-        IO.println output
+        println! "--- {path}"
+        println! "+++ {path}"
+        println! output
       else if inPlace then
         try atomicWrite path output catch e =>
           IO.eprintln s!"{path}: {e}"

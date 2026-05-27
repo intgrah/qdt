@@ -258,7 +258,7 @@ def ServerM.handleHover (id : RequestID) (params? : Option Json.Structured) : Se
   let some params := params?
     | throw (IO.userError "hover: missing params")
   let .ok params := fromJson? (α := HoverParams) (toJson params)
-    | throw (IO.userError s!"hover: bad params")
+    | throw (IO.userError "hover: bad params")
 
   let uri := params.textDocument.uri
   let lspPos := params.position

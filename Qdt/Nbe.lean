@@ -68,10 +68,19 @@ partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (
   let v ← (info.tm.substLevels us).eval Env.nil
   return some (VTm.weaken (Nat.zero_le n) v)
 
-partial def metaReduction {n} (id : MVarId) : ElabM q₀ (Option (VTm n)) := do
-  let some soln ← metaSolution q₀ id | return none
-  let v ← soln.eval Env.nil
-  return some (VTm.weaken (Nat.zero_le n) v)
+partial def metaReduction {n} (id : MVarId) (sp : Spine n) :
+    ElabM q₀ (Option (VTm n)) := do
+  let info ← getMetaInfo q₀ id
+  let some body := info.solution | return none
+  let some args := sp.toAppList | return none
+  if hGe : info.arity ≤ args.length then
+    let envList := (args.take info.arity).reverse
+    have hLen : envList.length = info.arity := by
+      simp [envList, List.length_reverse, List.length_take]; omega
+    let env : Env n info.arity := hLen ▸ Env.ofList envList
+    some <$> (args.drop info.arity).foldlM (·.app ·) (← body.eval env)
+  else
+    panic! s!"metaReduction: meta ?{id} applied to {args.length} args, expected ≥ {info.arity}"
 
 partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
   | .nil, v => return v
@@ -87,8 +96,8 @@ partial def VTm.whnf {n} : VTm n → ElabM q₀ (VTm n)
       | some v => v.whnf
       | none => return .neutral ⟨.const name us, sp⟩
   | .neutral ⟨.mvar id, sp⟩ => do
-    match ← metaReduction id with
-    | some v => (← applySpine sp v).whnf
+    match ← metaReduction id sp with
+    | some v => v.whnf
     | none => return .neutral ⟨.mvar id, sp⟩
   | .glued ⟨_, sp⟩ (.const name us) => do
     match ← deltaReduction name us with
@@ -98,9 +107,10 @@ partial def VTm.whnf {n} : VTm n → ElabM q₀ (VTm n)
       | some v => v.whnf
       | none => return .neutral ⟨.const name us, sp⟩
   | .glued ⟨_, sp⟩ (.mvar id) => do
-    match ← metaReduction id with
-    | some v => (← applySpine sp v).whnf
+    match ← metaReduction id sp with
+    | some v => v.whnf
     | none => return .neutral ⟨.mvar id, sp⟩
+
   | v => return v
 
 partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM q₀ (VTm n) := do
@@ -118,6 +128,8 @@ partial def iotaReduction {n}
     | return none
   let numParamsMotivesMinors := info.numParams + info.numMotives + info.numMinors
   let numTotal := numParamsMotivesMinors + info.numIndices + 1
+  if spList.length < numTotal then
+    return none
   if spList.length < numTotal then
     return none
   let major := spList[numTotal - 1]!

@@ -84,6 +84,10 @@ abbrev Ty.arrow {n} (ty : Ty n) := Ty.pi .anonymous ty
 def Tm.apps {n} : Tm n → List (Tm n) → Tm n :=
   List.foldl Tm.app
 
+def Tm.splitApps {n} : Tm n → Tm n × List (Tm n)
+  | .app f a => let (h, as) := splitApps f; (h, as ++ [a])
+  | h => (h, [])
+
 def Ty.pis {a b} : Ctx a b → Ty b → Ty a
   | .nil => id
   | .snoc bs (name, ty) => pis bs ∘ pi name ty
@@ -250,21 +254,16 @@ theorem Universe.Bounded.subst {k : Nat} {us : List Universe}
     (hus : ∀ u ∈ us, Universe.Bounded k u) :
     ∀ {u : Universe}, u.Bounded us.length → (u.subst us).Bounded k
   | .level i, h => by
-      show (us[i]?.getD (.level i)).normalise.Bounded k
-      have hi : i < us.length := h
-      have hSome : us[i]? = some us[i] := List.getElem?_eq_getElem hi
+      change (us[i]?.getD (.level i)).normalise.Bounded k
+      have hSome : us[i]? = some us[i] := List.getElem?_eq_getElem h
       rw [hSome]
-      exact Universe.Bounded.normalise (hus _ (List.getElem_mem hi))
+      exact Universe.Bounded.normalise (hus _ (List.getElem_mem h))
   | .zero, _ => trivial
   | .mvar _, _ => trivial
-  | .succ u, h => by
-      show (Universe.subst us u).mkSucc.Bounded k
-      exact Universe.mkSucc_bounded (Universe.Bounded.subst hus (u := u) h)
-  | .max u v, h => by
-      have ⟨hu, hv⟩ : u.Bounded us.length ∧ v.Bounded us.length := h
-      show ((Universe.subst us u).mkMax (Universe.subst us v)).Bounded k
-      exact Universe.mkMax_bounded
-        (Universe.Bounded.subst hus (u := u) hu)
-        (Universe.Bounded.subst hus (u := v) hv)
+  | .succ u, h => Universe.mkSucc_bounded (Universe.Bounded.subst hus (u := u) h)
+  | .max u v, ⟨hu, hv⟩ =>
+      Universe.mkMax_bounded
+        (Universe.Bounded.subst hus hu)
+        (Universe.Bounded.subst hus hv)
 
 end Qdt

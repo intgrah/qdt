@@ -225,6 +225,10 @@ end SubstitutionLemmas
 
 def Subst.beta {n : Nat} (s : Tm n) : Subst (n + 1) n := s .: Subst.id n
 
+def Ty.applyArg {n} : Ty n → Tm n → Option (Ty n)
+  | .pi _ _ body, arg => some (body.subst (Subst.beta arg))
+  | _, _ => none
+
 @[simp]
 theorem Subst.shift_beta {n} (s : Tm n) :
     shift.comp (beta s) = id n :=

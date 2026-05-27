@@ -27,14 +27,18 @@ deriving Repr, Inhabited
 
 structure MetaInfo where
   arity : Nat
-  numScopeArgs : Nat := 0
+  ctx : Ctx 0 arity
+  ty : Ty arity
   ctxNames : List Name
-  ty : Ty 0
-  solution : Option (Tm 0) := none
+  solution : Option (Tm arity) := none
   path : Path
   decl : Name
   errored : Bool := false
-deriving Inhabited
+
+instance : Inhabited MetaInfo where
+  default :=
+    { arity := 0, ctx := .nil, ty := .u .zero, ctxNames := [],
+      solution := none, path := default, decl := default }
 
 structure ElabState where
   localEnv : Global
@@ -112,30 +116,20 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
     if !used.contains i then
       raiseError q₀ (.unusedUniverseParam declName name)
 
-@[inline] def getMetaInfo (id : MVarId) : ElabM q₀ (Option MetaInfo) := do
-  return (← get).metas[id]?
+@[inline] def getMetaInfo (id : MVarId) : ElabM q₀ MetaInfo := do
+  return (← get).metas[id]!
 
-@[inline] def metaSolution (id : MVarId) : ElabM q₀ (Option (Tm 0)) := do
-  match (← get).metas[id]? with
-  | some info => return info.solution
-  | none => return none
-
-@[inline] def assignMeta (id : MVarId) (soln : Tm 0) : ElabM q₀ Unit :=
-  modify fun st =>
-    match st.metas[id]? with
-    | some info => { st with metas := st.metas.set! id { info with solution := some soln } }
-    | none => st
+@[inline] def assignMeta (info : MetaInfo) (id : MVarId) (soln : Tm info.arity) :
+    ElabM q₀ Unit :=
+  modify fun st => { st with metas := st.metas.set! id { info with solution := some soln } }
 
 @[inline] def markMetaErrored (id : MVarId) : ElabM q₀ Unit :=
   modify fun st =>
-    match st.metas[id]? with
-    | some info => { st with metas := st.metas.set! id { info with errored := true } }
-    | none => st
+    let info := st.metas[id]!
+    { st with metas := st.metas.set! id { info with errored := true } }
 
 @[inline] def metaIsErrored (id : MVarId) : ElabM q₀ Bool := do
-  match (← get).metas[id]? with
-  | some info => return info.errored
-  | none => return false
+  return (← get).metas[id]!.errored
 
 @[inline] def freshMetaId (info : MetaInfo) : ElabM q₀ MVarId := do
   let st ← get
@@ -151,9 +145,6 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
   if !ctx.collectHovers then return
   modify fun st =>
     { st with hovers := st.hovers.push { path := ctx.path, univParams := ctx.univParams, hover } }
-
-def getLocalEnv : ElabM q₀ Global := do
-  return (← get).localEnv
 
 def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
   let st ← get

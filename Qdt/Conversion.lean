@@ -11,7 +11,7 @@ namespace Qdt
 
 variable (q₀ : Key)
 
-inductive ConvState where
+inductive ConvState
   | rigid
   | flex
   | full
@@ -20,13 +20,6 @@ def Ctx.lookupTy : {n : Nat} → Idx n → Ctx 0 n → Ty n
   | _ + 1, ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.shiftAfter 0 1
   | _ + 1, ⟨i + 1, h⟩, .snoc rest _ =>
       (Ctx.lookupTy ⟨i, by omega⟩ rest).shiftAfter 0 1
-
-def Ty.collectTele {a : Nat} : Ty a → Σ b, Ctx a b × Ty b :=
-  go Tele.nil
-where
-  go {a b : Nat} (acc : Ctx a b) : Ty b → Σ nb : Nat, Ctx a nb × Ty nb
-    | .pi name ty body => go (acc.snoc (name, ty)) body
-    | t => ⟨b, acc, t⟩
 
 partial def Tm.inferTy {a : Nat} (q₀ : Key) (paramCtx : Ctx 0 a) : Tm a →
     ElabM q₀ (Option (Ty a))
@@ -38,13 +31,38 @@ partial def Tm.inferTy {a : Nat} (q₀ : Key) (paramCtx : Ctx 0 a) : Tm a →
       return some (info.ty.substLevels us).wkClosed
   | .app f arg => do
       let some fTy ← Tm.inferTy q₀ paramCtx f | return none
-      match fTy with
-      | .pi _ _ body => return some (body.subst (Subst.beta arg))
-      | _ => return none
+      let .pi _ _ body := fTy | return none
+      return some (body.subst (Subst.beta arg))
+  | .lam name ty body => do
+      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, ty)) body | return none
+      return some (.pi name ty bodyTy)
+  | .pi' name dom cod => do
+      let some domTy ← Tm.inferTy q₀ paramCtx dom | return none
+      let .u uA := domTy | return none
+      let some codTy ← Tm.inferTy q₀ (paramCtx.snoc (name, .el dom)) cod | return none
+      let .u uB := codTy | return none
+      return some (.u (uA.mkMax uB))
+  | .letE name ty rhs body => do
+      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, ty)) body | return none
+      return some (bodyTy.subst (Subst.beta rhs))
+  | .proj i t => do
+      let some tTy ← Tm.inferTy q₀ paramCtx t | return none
+      let .el body := tTy | return none
+      let (head, structArgs) := Tm.splitApps body
+      let .const structName us := head | return none
+      let some indInfo ← fetchInductive q₀ structName | return none
+      if indInfo.numCtors ≠ 1 then return none
+      let some ctorName := indInfo.ctorNames.toList.head? | return none
+      let some ctorInfo ← fetchConstructor q₀ ctorName | return none
+      let ctorTy : Ty a := (ctorInfo.ty.substLevels us).wkClosed
+      let applied := List.range i |>.foldl (fun ty j => ty.bind (·.applyArg (.proj j t)))
+                       (structArgs.foldl (fun ty arg => ty.bind (·.applyArg arg)) (some ctorTy))
+      return applied.bind fun
+        | .pi _ fieldTy _ => some fieldTy
+        | _ => none
   | .mvar id => do
-      let some info ← getMetaInfo q₀ id | return none
-      return some info.ty.wkClosed
-  | _ => return none
+      let info ← getMetaInfo q₀ id
+      return some (Ty.pis info.ctx info.ty).wkClosed
 
 mutual
 
@@ -202,20 +220,17 @@ partial def Neutral.conv {n} : Neutral n → Neutral n → ConvState → ElabM q
             | .flex => sp₁.conv sp₂ cs
             | _ =>
               if ← sp₁.conv sp₂ .flex then return true
-              match ← metaReduction q₀ i₁ with
-              | some v => (← applySpine q₀ sp₁ v).conv (← applySpine q₀ sp₂ v) .full
-              | none => sp₁.conv sp₂ .full
+              match ← metaReduction q₀ i₁ sp₁, ← metaReduction q₀ i₁ sp₂ with
+              | some v₁, some v₂ => v₁.conv v₂ .full
+              | _, _ => sp₁.conv sp₂ .full
           else
             match cs with
             | .flex => return false
             | _ =>
-              match ← metaReduction q₀ i₁, ← metaReduction q₀ i₂ with
-              | some v₁, some v₂ =>
-                  (← applySpine q₀ sp₁ v₁).conv (← applySpine q₀ sp₂ v₂) .full
-              | some v₁, none =>
-                  (← applySpine q₀ sp₁ v₁).conv (.neutral ne₂) .full
-              | none, some v₂ =>
-                  (VTm.neutral ne₁).conv (← applySpine q₀ sp₂ v₂) .full
+              match ← metaReduction q₀ i₁ sp₁, ← metaReduction q₀ i₂ sp₂ with
+              | some v₁, some v₂ => v₁.conv v₂ .full
+              | some v₁, none => v₁.conv (.neutral ne₂) .full
+              | none, some v₂ => (VTm.neutral ne₁).conv v₂ .full
               | none, none =>
                   if ← solveMVarChecked i₁ sp₁ (.neutral ne₂) then return true
                   if ← solveMVarChecked i₂ sp₂ (.neutral ne₁) then return true
@@ -225,8 +240,8 @@ partial def Neutral.conv {n} : Neutral n → Neutral n → ConvState → ElabM q
           match cs with
           | .flex => return false
           | _ =>
-            match ← metaReduction q₀ i₁ with
-            | some v₁ => (← applySpine q₀ sp₁ v₁).conv (.neutral ne₂) .full
+            match ← metaReduction q₀ i₁ sp₁ with
+            | some v₁ => v₁.conv (.neutral ne₂) .full
             | none =>
               if ← solveMVarChecked i₁ sp₁ (.neutral ne₂) then return true
               solveMVarFOApprox i₁ sp₁ (.neutral ne₂) cs
@@ -234,15 +249,15 @@ partial def Neutral.conv {n} : Neutral n → Neutral n → ConvState → ElabM q
           match cs with
           | .flex => return false
           | _ =>
-            match ← metaReduction q₀ i₂ with
-            | some v₂ => (VTm.neutral ne₁).conv (← applySpine q₀ sp₂ v₂) .full
+            match ← metaReduction q₀ i₂ sp₂ with
+            | some v₂ => (VTm.neutral ne₁).conv v₂ .full
             | none =>
               if ← solveMVarChecked i₂ sp₂ (.neutral ne₁) then return true
               solveMVarFOApprox i₂ sp₂ (.neutral ne₁) cs
 
 partial def Spine.conv {n} : Spine n → Spine n → ConvState → ElabM q₀ Bool
   | .nil, .nil, _ => return true
-  | .app sp₁ t₁, .app sp₂ t₂, cs => return (← t₁.conv t₂ cs) && (← sp₁.conv sp₂ cs)
+  | .app sp₁ t₁, .app sp₂ t₂, cs => return (← sp₁.conv sp₂ cs) && (← t₁.conv t₂ cs)
   | .proj sp₁ i₁, .proj sp₂ i₂, cs => return i₁ == i₂ && (← sp₁.conv sp₂ cs)
   | _, _, _ => return false
 
@@ -266,19 +281,14 @@ public partial def VTy.conv {n} (a b : VTy n) (cs : ConvState := .rigid) : ElabM
 
 partial def solveMVarChecked {n} (id : MVarId) (sp : Spine n) (rhs : VTm n) :
     ElabM q₀ Bool := do
-  let some ⟨a, body⟩ ← Unify.solveMVar q₀ id sp rhs | return false
-  assignMeta q₀ id (Unify.wrapLams a body)
-  if let some info ← getMetaInfo q₀ id then
-    let ⟨b, paramCtx, codomain⟩ := info.ty.collectTele
-    if h : b = a then
-      let paramCtx : Ctx 0 a := h ▸ paramCtx
-      let codomain : Ty a := h ▸ codomain
-      if let some bodyTy ← Tm.inferTy q₀ paramCtx body then
-        let codomainV ← codomain.eval q₀ (Env.identity a)
-        let bodyTyV ← bodyTy.eval q₀ (Env.identity a)
-        match codomainV, bodyTyV with
-        | .u _, .u _ => let _ ← codomainV.conv bodyTyV
-        | _, _ => pure ()
+  let info ← getMetaInfo q₀ id
+  let normalizedTy ← (← info.ty.eval q₀ (Env.identity info.arity)).quote q₀
+  let infoNorm : MetaInfo := { info with ty := normalizedTy }
+  let some soln ← infoNorm.solve q₀ id sp rhs | return false
+  assignMeta q₀ infoNorm id soln
+  if let some codU := normalizedTy.getResultUniverse? then
+    if let some (.u bodyU) ← Tm.inferTy q₀ info.ctx soln then
+      let _ ← Universe.solveUEq q₀ codU bodyU
   return true
 
 end
