@@ -7,7 +7,7 @@ import Qdt.Test
       (motive : Empty.{u} → Type w)
       (p : Empty.{u}) :
       motive p :=
-    Empty.rec.{w, u} motive p
+    @Empty.rec.{w, u} motive p
 )
 
 #pass (
@@ -19,7 +19,7 @@ import Qdt.Test
       (unit : motive Unit.unit.{u})
       (p : Unit.{u}) :
       motive p :=
-    Unit.rec.{w, u} motive unit p
+    @Unit.rec.{w, u} motive unit p
 )
 
 #pass (
@@ -33,7 +33,7 @@ import Qdt.Test
       (false : motive Bool.false.{u})
       (p : Bool.{u}) :
       motive p :=
-    Bool.rec.{w, u} motive true false p
+    @Bool.rec.{w, u} motive true false p
 )
 
 #pass (
@@ -44,8 +44,8 @@ import Qdt.Test
       (C : Type u)
       (A : C → Type v)
       (motive : W.{u, v} C A → Type w)
-      (tree : (root : C) → (subtr : A root → W.{u, v} C A) → ((a : A root) → motive (subtr a)) → motive (W.tree.{u, v} C A root subtr))
+      (tree : (root : C) → (subtr : A root → W.{u, v} C A) → ((a : A root) → motive (subtr a)) → motive (@W.tree.{u, v} C A root subtr))
       (t : W.{u, v} C A) :
       motive t :=
-    W.rec.{w, u, v} C A motive tree t
+    @W.rec.{w, u, v} C A motive tree t
 )

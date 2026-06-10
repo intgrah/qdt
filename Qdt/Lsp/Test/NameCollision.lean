@@ -16,8 +16,7 @@ setText (filepath := "C.qdt") qdt!(
 import A
 import B
 def bar := foo
---  ^
 )
 
-noDiagnostics (filepath := "C.qdt")
-hover (filepath := "C.qdt") ⟨3, 4⟩ "bar : Type 1" ⟨3, 4⟩ ⟨3, 7⟩
+diagnostics (filepath := "C.qdt") fun ds =>
+  ds.any fun d => d.error matches .duplicateImport ..

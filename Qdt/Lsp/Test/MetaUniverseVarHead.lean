@@ -5,14 +5,14 @@ open Qdt.Lsp.Test
 #eval! test do
 
 setText (filepath := "Eq.qdt") qdt!(
-inductive Eq.{u} (α : Type u) (a : α) : α → Type u where
-  | refl : Eq α a a
+inductive Eq.{u} {α : Type u} : α → α → Type u where
+  | refl (a : α) : Eq a a
 )
 
 setText qdt!(
 import Eq
 
-def reflect.{u} (α : Type u) (x : α) : x = x := Eq.refl _ _
+def reflect.{u} (α : Type u) (x : α) : x = x := Eq.refl _
 --  ^
 )
 

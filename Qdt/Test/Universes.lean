@@ -108,6 +108,13 @@ open Qdt
   def instTwoParams.{u, v} : Type (max (u + 1) (v + 1)) := arr.{u + 1, v + 1} (Type u) (Type v)
 )
 
+#pass (
+  axiom famArg.{u, v} {α : Type u} {β : α → Type v} (f : (x : α) → β x) : Type (max u v)
+  def absorbMaxMVar.{u, v, w} {α : Type u} {δ : α → Type v} {γ : α → Type w}
+      (f : (x : α) → δ x → γ x) : Type (max u (max v w)) :=
+    famArg f
+)
+
 /-! ## Failure tests-/
 
 #fail (
