@@ -1,7 +1,7 @@
 inductive Empty.{u} : Type u where
 
-def Empty.elim.{v} (α : Type v) : Empty → α := Empty.rec _
+def Empty.elim.{v} {α : Type v} : Empty → α := Empty.rec
 
 def Not.{u} (α : Type u) := α → Empty
 
-def absurd.{u, v} (α : Type u) (β : Type v) (ha : α) (hna : Not α) : β := Empty.elim _ (hna ha)
+def absurd.{u, v} {α : Type u} {β : Type v} (ha : α) (hna : Not α) : β := Empty.elim (hna ha)

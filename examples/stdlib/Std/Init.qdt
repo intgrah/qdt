@@ -1,13 +1,17 @@
 import Std.Eq
 
-def id.{u} (α : Type u) (a : α) : α := a
+def id.{u} {α : Type u} (a : α) : α := a
 
-def const.{u, v} (α : Type u) (β : Type v) (a : α) (b : β) := a
+def const.{u, v} {α : Type u} {β : Type v} (a : α) (b : β) := a
 
-def comp.{u, v, w} (α : Type u) (β : Type v) (γ : Type w) (f : β → γ) (g : α → β) (x : α) : γ :=
+def comp.{u, v, w} {α : Type u} {β : Type v} {γ : Type w} (f : β → γ) (g : α → β) (x : α) : γ :=
   f (g x)
 
-def comp_assoc.{u, v, w, x} (α : Type u) (β : Type v) (γ : Type w) (δ : Type x) (f : γ → δ) (g : β → γ) (h : α → β) : comp α β δ (comp β γ δ f g) h = comp α γ δ f (comp α β γ g h) :=
-  Eq.refl _ _
+def comp_assoc.{u, v, w, x}
+    {α : Type u} {β : Type v} {γ : Type w} {δ : Type x} (f : γ → δ) (g : β → γ) (h : α → β) :
+    comp (comp f g) h = comp f (comp g h) :=
+  rfl
 
-axiom funext.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (h : (x : α) → f x = g x) : f = g
+axiom funext.{u, v}
+    {α : Type u} {β : α → Type v} {f g : (x : α) → β x} (h : (x : α) → f x = g x) :
+    f = g

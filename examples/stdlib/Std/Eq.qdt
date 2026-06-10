@@ -1,20 +1,31 @@
-inductive Eq.{u} (α : Type u) (a : α) : α → Type u where
-  | refl : Eq α a a
+inductive Eq.{u} {α : Type u} : α → α → Type u where
+  | refl (a : α) : Eq a a
 
-def Eq.ndrec.{v, u} (α : Type u) (a : α) (motive : α → Type v) (h : motive a) (b : α) (p : a = b) : motive b :=
-  Eq.rec _ _ (fun x _ => motive x) h _ p
+def rfl.{u} {α : Type u} {a : α} : a = a := Eq.refl a
 
-def Eq.subst.{v, u} (α : Type u) (P : α → Type v) (a b : α) (p : a = b) (h : P a) : P b :=
-  Eq.ndrec _ _ P h _ p
+def Eq.ndrec.{v, u}
+    (α : Type u) (a : α) (motive : α → Type v) (h : motive a) (b : α) (p : a = b) :
+    motive b :=
+  @Eq.rec α a (fun x _ => motive x) h b p
 
-def Eq.symm.{u} (α : Type u) (a b : α) (p : a = b) : b = a :=
-  Eq.subst _ (fun y => y = a) _ _ p (Eq.refl _ _)
+-- TODO motive implicit
+def Eq.subst.{v, u}
+    {α : Type u} (motive : α → Type v) {a b : α} (p : a = b) (h : motive a) :
+    motive b :=
+  Eq.ndrec _ _ motive h _ p
 
-def Eq.trans.{u} (α : Type u) (a b c : α) (p : a = b) (q : b = c) : a = c :=
-  Eq.subst _ (fun z => a = z) _ _ q p
+def Eq.symm.{u} {α : Type u} {a b : α} (p : a = b) : b = a := Eq.subst (fun y => y = a) p rfl
 
-def congrArg.{u, v} (α : Type u) (β : Type v) (f : α → β) (x y : α) (p : x = y) : f x = f y :=
-  Eq.subst _ (fun z => f x = f z) _ _ p (Eq.refl _ _)
+def Eq.trans.{u} {α : Type u} {a b c : α} (p : a = b) (q : b = c) : a = c :=
+  Eq.subst (fun z => a = z) q p
 
-def congrFun.{u, v} (α : Type u) (β : α → Type v) (f g : (x : α) → β x) (p : f = g) (x : α) : f x = g x :=
-  Eq.subst ((x : α) → β x) (fun h => f x = h x) _ _ p (Eq.refl _ _)
+def congrArg.{u, v} {α : Type u} {β : Type v} (f : α → β) {a₁ a₂ : α} (h : a₁ = a₂) : f a₁ = f a₂ :=
+  Eq.subst (fun z => f a₁ = f z) h rfl
+
+def congrFun.{u, v}
+    {α : Type u} {β : α → Type v} {f g : (x : α) → β x} (h : f = g) (a : α) :
+    f a = g a :=
+  Eq.subst (fun h : (z : α) → β z => f a = h a) h rfl
+
+def congrFun'.{u, v} {α : Type u} {β : Type v} {f g : α → β} (h : f = g) (a : α) : f a = g a :=
+  Eq.subst (fun h : α → β => f a = h a) h rfl

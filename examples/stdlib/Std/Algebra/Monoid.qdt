@@ -3,29 +3,25 @@ import Std.Nat
 import Std.List
 import Std.Algebra.Semigroup
 
-structure Monoid.{u} (A : Type u) : Type u where
-  (mul : A → A → A)
-  (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
-  (one : A)
-  (mul_one (x : A) : mul x one = x)
-  (one_mul (x : A) : mul one x = x)
+structure Monoid.{u} (M : Type u) : Type u where
+  (mul : M → M → M)
+  (mul_assoc (x y z : M) : mul (mul x y) z = mul x (mul y z))
+  (one : M)
+  (mul_one (x : M) : mul x one = x)
+  (one_mul (x : M) : mul one x = x)
 
-def Monoid.npow.{u} (A : Type u) (inst : Monoid A) (n : Nat) (x : A) : A :=
-  Nat.rec _ (Monoid.one A inst) (fun _ => Monoid.mul A inst x) n
+def Monoid.npow.{u} {M : Type u} (inst : Monoid M) (n : Nat) (x : M) : M :=
+  Nat.rec (Monoid.one inst) (fun _ => Monoid.mul inst x) n
 
-def Monoid.Free.{u} (A : Type u) : Monoid (List A) :=
-  Monoid.mk
-    _
-    (List.append A)
-    (List.append_assoc A)
-    (List.nil A)
-    (List.append_nil A)
-    (List.nil_append A)
+def Monoid.Free.{u} (M : Type u) : Monoid (List M) :=
+  Monoid.mk List.append List.append_assoc List.nil List.append_nil List.nil_append
 
-def Monoid.toSemigroup.{u} (A : Type u) (inst : Monoid A) : Semigroup A :=
-  Semigroup.mk _ (Monoid.mul A inst) (Monoid.mul_assoc A inst)
+def Monoid.toSemigroup.{u} {M : Type u} (inst : Monoid M) : Semigroup M :=
+  Semigroup.mk (Monoid.mul inst) (Monoid.mul_assoc inst)
 
-structure Monoid.Hom.{u, v} (A : Type u) (B : Type v) (instA : Monoid A) (instB : Monoid B) : Type (max u v) where
-  (toFun : A → B)
-  (map_mul (a b : A) : toFun (Monoid.mul A instA a b) = Monoid.mul B instB (toFun a) (toFun b))
-  (map_one : toFun (Monoid.one A instA) = Monoid.one B instB)
+structure MonoidHom.{u, v}
+    (M₁ : Type u) (M₂ : Type v) (instA : Monoid M₁) (instB : Monoid M₂) :
+    Type (max u v) where
+  (toFun : M₁ → M₂)
+  (map_mul {a b : M₁} : toFun (Monoid.mul instA a b) = Monoid.mul instB (toFun a) (toFun b))
+  (map_one : toFun (Monoid.one instA) = Monoid.one instB)

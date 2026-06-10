@@ -4,10 +4,9 @@ import Std.Init
 structure Equiv.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
   (toFun : α → β)
   (invFun : β → α)
-  (left_inv : comp α β α invFun toFun = id α)
-  (right_inv : comp β α β toFun invFun = id β)
+  (left_inv : comp invFun toFun = id)
+  (right_inv : comp toFun invFun = id)
 
-def Equiv.refl.{u} (α : Type u) : Equiv α α :=
-  Equiv.mk _ _ (id α) (id α) (Eq.refl _ _) (Eq.refl _ _)
+def Equiv.refl.{u} (α : Type u) : Equiv α α := Equiv.mk id id rfl rfl
 
 axiom ua.{u} (α β : Type u) (e : Equiv α β) : α = β

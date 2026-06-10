@@ -2,10 +2,10 @@ inductive Bool where
   | true
   | false
 
-def Bool.ite.{u} (α : Type u) (b : Bool) (t f : α) := Bool.rec _ t f b
+def Bool.ite.{u} {α : Type u} (b : Bool) (t f : α) := @Bool.rec _ t f b
 
-def Bool.not (b : Bool) := Bool.ite _ Bool.false Bool.true b
+def Bool.not (b : Bool) := Bool.ite Bool.false Bool.true b
 
-def Bool.and (a b : Bool) := Bool.ite _ Bool.false b a
+def Bool.and (a b : Bool) := Bool.ite Bool.false b a
 
-def Bool.or (a b : Bool) := Bool.ite _ b Bool.true a
+def Bool.or (a b : Bool) := Bool.ite b Bool.true a

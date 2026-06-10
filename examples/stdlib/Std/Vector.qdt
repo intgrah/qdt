@@ -7,30 +7,23 @@ inductive Vector.{u} (α : Type u) : Nat → Type u where
   | cons (n : Nat) (head : α) (tail : Vector α n) : Vector α (Nat.succ n)
 
 def Vector.toList.{u} (α : Type u) : (n : Nat) → Vector α n → List α :=
-  Vector.rec α (fun _ _ => List α) (List.nil α) (fun m h _ => List.cons α h)
+  @Vector.rec _ _ List.nil (fun m h _ => List.cons h)
 
-def Vector.ofList.{u} (α : Type u) (xs : List α) : Vector α (List.length α xs) :=
-  List.rec
+def Vector.ofList.{u} (α : Type u) (xs : List α) : Vector α (List.length xs) :=
+  @List.rec
     α
-    (fun xs => Vector α (List.length α xs))
-    (Vector.nil α)
-    (fun h t ih => Vector.cons α (List.length α t) h ih)
+    (fun xs => Vector α (List.length xs))
+    Vector.nil
+    (fun h t ih => Vector.cons (List.length t) h ih)
     xs
 
 def Vector.map.{u, v} (α : Type u) (β : Type v) (n : Nat) (f : α → β) : Vector α n → Vector β n :=
-  Vector.rec α (fun k _ => Vector β k) (Vector.nil β) (fun m h _ => Vector.cons β m (f h)) n
+  @Vector.rec α (fun k _ => Vector β k) Vector.nil (fun m h _ => Vector.cons m (f h)) n
 
-def Vector.append.{u} (α : Type u) (m n : Nat) (xs : Vector α m) (ys : Vector α n) : Vector α (m + n) :=
+def Vector.append.{u}
+    (α : Type u) (m n : Nat) (xs : Vector α m) (ys : Vector α n) :
+    Vector α (m + n) :=
   Eq.subst
     _
-    (Vector α)
-    _
-    _
     (Nat.add_comm n m)
-    (Vector.rec
-      α
-      (fun m _ => Vector α (n + m))
-      ys
-      (fun m h _ ih => Vector.cons α (n + m) h ih)
-      m
-      xs)
+    (@Vector.rec α (fun m _ => Vector α (n + m)) ys (fun m h _ => Vector.cons (n + m) h) m xs)

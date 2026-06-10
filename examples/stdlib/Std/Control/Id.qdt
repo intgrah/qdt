@@ -2,15 +2,9 @@ import Std.Monad
 
 def Id.{u} (α : Type u) : Type u := α
 
-def Id.pure.{u} (α : Type u) (a : α) : Id α := a
+def Id.pure.{u} {α : Type u} (a : α) : Id α := a
 
-def Id.bind.{u} (α β : Type u) (x : Id α) (f : α → Id β) : Id β := f x
+def Id.bind.{u} {α β : Type u} (x : Id α) (f : α → Id β) : Id β := f x
 
-def Id.instMonad.{u} : Monad Id :=
-  Monad.mk
-    Id
-    Id.pure
-    Id.bind
-    (fun (α β : Type u) a f => Eq.refl _ _)
-    (fun α x => Eq.refl _ _)
-    (fun α β γ x f g => Eq.refl _ _)
+def Id.instMonad : Monad Id :=
+  Monad.mk Id.pure Id.bind (fun a f => rfl) (fun x => rfl) (fun x f g => rfl)

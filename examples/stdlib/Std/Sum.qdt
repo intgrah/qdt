@@ -4,14 +4,10 @@ inductive Sum.{u, v} (α : Type u) (β : Type v) : Type (max u v) where
   | inl (a : α)
   | inr (b : β)
 
-def Sum.elim.{u, v, w} (α : Type u) (β : Type v) (γ : Type w) (f : α → γ) (g : β → γ) (s : Sum α β) : γ :=
-  Sum.rec _ _ (fun _ => γ) (fun a => f a) (fun b => g b) s
+def Sum.elim.{u, v, w}
+    {α : Type u} {β : Type v} {γ : Type w} (f : α → γ) (g : β → γ) (s : Sum α β) :
+    γ :=
+  Sum.rec f g s
 
-def Sum.eta.{u, v} (α : Type u) (β : Type v) (s : Sum α β) : Sum.elim α β (Sum α β) (Sum.inl α β) (Sum.inr α β) s = s :=
-  Sum.rec
-    _
-    _
-    (fun x => Sum.elim α β (Sum α β) (Sum.inl α β) (Sum.inr α β) x = x)
-    (fun a => Eq.refl _ _)
-    (fun b => Eq.refl _ _)
-    s
+def Sum.eta.{u, v} {α : Type u} {β : Type v} (s : Sum α β) : Sum.elim Sum.inl Sum.inr s = s :=
+  @Sum.rec _ _ (fun x => Sum.elim Sum.inl Sum.inr x = x) (fun a => rfl) (fun b => rfl) s

@@ -1,23 +1,22 @@
 import Std.Eq
 import Std.Algebra.Group
 
-structure CommGroup.{u} (A : Type u) : Type u where
-  (mul : A → A → A)
-  (mul_assoc (x y z : A) : mul (mul x y) z = mul x (mul y z))
-  (one : A)
-  (mul_one (x : A) : mul x one = x)
-  (one_mul (x : A) : mul one x = x)
-  (inv : A → A)
-  (inv_mul_cancel (x : A) : mul (inv x) x = one)
-  (mul_comm (x y : A) : mul x y = mul y x)
+structure CommGroup.{u} (G : Type u) : Type u where
+  (mul : G → G → G)
+  (mul_assoc (x y z : G) : mul (mul x y) z = mul x (mul y z))
+  (one : G)
+  (mul_one (x : G) : mul x one = x)
+  (one_mul (x : G) : mul one x = x)
+  (inv : G → G)
+  (inv_mul_cancel (x : G) : mul (inv x) x = one)
+  (mul_comm (x y : G) : mul x y = mul y x)
 
-def CommGroup.toGroup.{u} (A : Type u) (inst : CommGroup A) : Group A :=
+def CommGroup.toGroup.{u} (G : Type u) (inst : CommGroup G) : Group G :=
   Group.mk
-    _
-    (CommGroup.mul A inst)
-    (CommGroup.mul_assoc A inst)
-    (CommGroup.one A inst)
-    (CommGroup.mul_one A inst)
-    (CommGroup.one_mul A inst)
-    (CommGroup.inv A inst)
-    (CommGroup.inv_mul_cancel A inst)
+    (CommGroup.mul inst)
+    (CommGroup.mul_assoc inst)
+    (CommGroup.one inst)
+    (CommGroup.mul_one inst)
+    (CommGroup.one_mul inst)
+    (CommGroup.inv inst)
+    (CommGroup.inv_mul_cancel inst)

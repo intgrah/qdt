@@ -5,171 +5,86 @@ import Std.HSet
 structure Category.{v, u} (Ob : Type u) : Type (max u (v + 1)) where
   (Hom : Ob → Ob → Type v)
   (id (A : Ob) : Hom A A)
-  (comp (A B C : Ob) : Hom A B → Hom B C → Hom A C)
-  (id_comp (A B : Ob) (f : Hom A B) : comp A A B (id A) f = f)
-  (comp_id (A B : Ob) (f : Hom A B) : comp A B B f (id B) = f)
-  (comp_assoc (A B C D : Ob) (f : Hom A B) (g : Hom B C) (h : Hom C D) : comp A C D (comp A B C f g) h = comp A B D f (comp B C D g h))
+  (comp {A B C : Ob} : Hom A B → Hom B C → Hom A C)
+  (id_comp {A B : Ob} (f : Hom A B) : comp (id A) f = f)
+  (comp_id {A B : Ob} (f : Hom A B) : comp f (id B) = f)
+  (comp_assoc
+      {A B C D : Ob} (f : Hom A B) (g : Hom B C) (h : Hom C D) :
+      comp (comp f g) h = comp f (comp g h))
 
-def Category.Small.{u} : Type u → Type (u + 1) := Category
+def Category.Small.{u} : Type u → Type (u + 1) := Category.{u, u}
 
-def Category.Large.{u} : Type (u + 1) → Type (u + 1) := Category
+def Category.Large.{u} : Type (u + 1) → Type (u + 1) := Category.{u, u + 1}
 
 def Category.Types.{u} : Category.Large (Type u) :=
   Category.mk
-    (Type u)
     (fun A B => A → B)
-    id
-    (fun A B C f g => comp A B C g f)
-    (fun A B f => Eq.refl _ _)
-    (fun A B f => Eq.refl _ _)
-    (fun A B C D f g h => Eq.refl _ _)
+    @id
+    (fun f g => comp g f)
+    (fun f => rfl)
+    (fun f => rfl)
+    (fun f g h => rfl)
 
 def Category.Discrete.{u} (A : Type u) (hset : isSet A) : Category.Small A :=
-  let trans := Eq.trans A;
   Category.mk
-    A
-    (Eq A)
-    (Eq.refl A)
-    trans
-    (fun a b f => hset a b (trans a a b (Eq.refl A a) f) f)
-    (fun a b f => hset a b (trans a b b f (Eq.refl A b)) f)
-    (fun a b c d f g h =>
-      hset a d (trans a c d (trans a b c f g) h) (trans a b d f (trans b c d g h)))
+    Eq
+    Eq.refl
+    Eq.trans
+    (fun f => hset _ _ (Eq.trans rfl f) f)
+    (fun f => hset _ _ (Eq.trans f rfl) f)
+    (fun f g h => hset _ _ (Eq.trans (Eq.trans f g) h) (Eq.trans f (Eq.trans g h)))
 
 def Category.op.{u} (C : Type u) (cat : Category C) : Category C :=
-  let Hom := Category.Hom C cat;
-  let id := Category.id C cat;
-  let comp := Category.comp C cat;
   Category.mk
-    C
-    (fun A B => Hom B A)
-    id
-    (fun A B D f g => comp D B A g f)
-    (fun A B f => Category.comp_id C cat B A f)
-    (fun A B f => Category.id_comp C cat B A f)
-    (fun A B D E f g h =>
-      Eq.symm
-        (Hom E A)
-        (comp E B A (comp E D B h g) f)
-        (comp E D A h (comp D B A g f))
-        (Category.comp_assoc C cat E D B A h g f))
+    (fun A B => Category.Hom cat B A)
+    (Category.id cat)
+    (fun f g => Category.comp cat g f)
+    (Category.comp_id cat)
+    (Category.id_comp cat)
+    (fun f g h => Eq.symm (Category.comp_assoc cat h g f))
 
-structure Category.Functor.{v₁, v₂, u₁, u₂} (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D) : Type (max v₁ max v₂ max u₁ u₂) where
+structure Category.Functor.{v₁, v₂, u₁, u₂}
+    {C : Type u₁} (catC : Category.{v₁, u₁} C) {D : Type u₂} (catD : Category.{v₂, u₂} D) :
+    Type (max v₁ v₂ u₁ u₂) where
   (obj : C → D)
-  (map (X Y : C) : Category.Hom C catC X Y → Category.Hom D catD (obj X) (obj Y))
-  (map_id (X : C) : map X X (Category.id C catC X) = Category.id D catD (obj X))
-  (map_comp (X Y Z : C) (f : Category.Hom C catC X Y) (g : Category.Hom C catC Y Z) : map X Z (Category.comp C catC X Y Z f g) = Category.comp D catD (obj X) (obj Y) (obj Z) (map X Y f) (map Y Z g))
+  (map {X Y : C} : Category.Hom catC X Y → Category.Hom catD (obj X) (obj Y))
+  (map_id {X : C} : map (Category.id catC X) = Category.id catD (obj X))
+  (map_comp
+      {X Y Z : C} (f : Category.Hom catC X Y) (g : Category.Hom catC Y Z) :
+      map (Category.comp catC f g) = Category.comp catD (map f) (map g))
 
-def Category.Functor.id.{u} (C : Type u) (cat : Category C) : Category.Functor C cat C cat :=
-  let Hom := Category.Hom C cat;
-  let catId := Category.id C cat;
-  let catComp := Category.comp C cat;
+def Category.Functor.id.{u} (C : Type u) (cat : Category C) : Category.Functor cat cat :=
+  Category.Functor.mk id id rfl (fun f g => rfl)
+
+def Category.Functor.comp.{u₁, u₂, u₃}
+    (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D) (E : Type u₃)
+    (catE : Category E) (F : Category.Functor catC catD) (G : Category.Functor catD catE) :
+    Category.Functor catC catE :=
   Category.Functor.mk
-    C
-    cat
-    C
-    cat
-    (id C)
-    (fun X Y f => f)
-    (fun X => Eq.refl (Hom X X) (catId X))
-    (fun X Y Z f g => Eq.refl (Hom X Z) (catComp X Y Z f g))
-
-def Category.Functor.comp.{u₁, u₂, u₃} (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D) (E : Type u₃) (catE : Category E) (F : Category.Functor C catC D catD) (G : Category.Functor D catD E catE) : Category.Functor C catC E catE :=
-  let F.obj := Category.Functor.obj C catC D catD F;
-  let F.map := Category.Functor.map C catC D catD F;
-  let G.obj := Category.Functor.obj D catD E catE G;
-  let G.map := Category.Functor.map D catD E catE G;
-  let HomD := Category.Hom D catD;
-  let HomE := Category.Hom E catE;
-  let compD := Category.comp D catD;
-  let compE := Category.comp E catE;
-  Category.Functor.mk
-    C
-    catC
-    E
-    catE
-    (fun X => G.obj (F.obj X))
-    (fun X Y f => G.map (F.obj X) (F.obj Y) (F.map X Y f))
-    (fun X =>
-      let FX := F.obj X;
-      let GFX := G.obj FX;
-      let h1 : F.map X X (Category.id C catC X) = Category.id D catD FX :=
-        Category.Functor.map_id C catC D catD F X;
-      let h2 : G.map FX FX (Category.id D catD FX) = Category.id E catE GFX :=
-        Category.Functor.map_id D catD E catE G FX;
+    (comp (Category.Functor.obj G) (Category.Functor.obj F))
+    (comp (Category.Functor.map G) (Category.Functor.map F))
+    (Eq.trans
+      (congrArg (Category.Functor.map G) (Category.Functor.map_id F))
+      (Category.Functor.map_id G))
+    (fun f g =>
       Eq.trans
-        (HomE GFX GFX)
-        (G.map FX FX (F.map X X (Category.id C catC X)))
-        (G.map FX FX (Category.id D catD FX))
-        (Category.id E catE GFX)
-        (congrArg
-          (HomD FX FX)
-          (HomE GFX GFX)
-          (G.map FX FX)
-          (F.map X X (Category.id C catC X))
-          (Category.id D catD FX)
-          h1)
-        h2)
-    (fun X Y Z f g =>
-      let FX := F.obj X;
-      let FY := F.obj Y;
-      let FZ := F.obj Z;
-      let GFX := G.obj FX;
-      let GFY := G.obj FY;
-      let GFZ := G.obj FZ;
-      let Ff := F.map X Y f;
-      let Fg := F.map Y Z g;
-      let h1 : F.map X Z (Category.comp C catC X Y Z f g) = compD FX FY FZ Ff Fg :=
-        Category.Functor.map_comp C catC D catD F X Y Z f g;
-      let h2 : G.map FX FZ (compD FX FY FZ Ff Fg) = compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg) :=
-        Category.Functor.map_comp D catD E catE G FX FY FZ Ff Fg;
-      Eq.trans
-        (HomE GFX GFZ)
-        (G.map FX FZ (F.map X Z (Category.comp C catC X Y Z f g)))
-        (G.map FX FZ (compD FX FY FZ Ff Fg))
-        (compE GFX GFY GFZ (G.map FX FY Ff) (G.map FY FZ Fg))
-        (congrArg
-          (HomD FX FZ)
-          (HomE GFX GFZ)
-          (G.map FX FZ)
-          (F.map X Z (Category.comp C catC X Y Z f g))
-          (compD FX FY FZ Ff Fg)
-          h1)
-        h2)
+        (congrArg (Category.Functor.map G) (Category.Functor.map_comp F f g))
+        (Category.Functor.map_comp G _ _))
 
-structure Category.NatTrans.{v₁, v₂, u₁, u₂} (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D) (F G : Category.Functor C catC D catD) : Type (max u₁ max v₁ v₂) where
-  (app (X : C) : Category.Hom D catD (Category.Functor.obj C catC D catD F X) (Category.Functor.obj C catC D catD G X))
-  (naturality (X Y : C) (f : Category.Hom C catC X Y) : let F.obj := Category.Functor.obj C catC D catD F;
-  let G.obj := Category.Functor.obj C catC D catD G;
-  let F.map := Category.Functor.map C catC D catD F;
-  let G.map := Category.Functor.map C catC D catD G;
-  let compD := Category.comp D catD;
-  Eq (Category.Hom D catD _ _) (compD _ _ _ (F.map X Y f) (app Y)) (compD _ _ _ (app X) (G.map X Y f)))
+structure Category.NatTrans.{v₁, v₂, u₁, u₂}
+    {C : Type u₁} (catC : Category.{v₁, u₁} C) {D : Type u₂} (catD : Category.{v₂, u₂} D)
+    (F G : Category.Functor catC catD) :
+    Type (max u₁ max v₁ v₂) where
+  (app (X : C) : Category.Hom catD (Category.Functor.obj F X) (Category.Functor.obj G X))
+  (naturality
+      {X Y : C} (f : Category.Hom catC X Y) :
+      Category.comp catD (Category.Functor.map F f) (app Y) =
+      Category.comp catD (app X) (Category.Functor.map G f))
 
-def Category.NatTrans.id.{u₁, u₂} (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D) (F : Category.Functor C catC D catD) : Category.NatTrans C catC D catD F F :=
-  let F.obj := Category.Functor.obj C catC D catD F;
-  let HomD := Category.Hom D catD;
-  let idD := Category.id D catD;
-  let compD := Category.comp D catD;
-  let F.map := Category.Functor.map C catC D catD F;
+def Category.NatTrans.id.{u₁, u₂}
+    (C : Type u₁) (catC : Category C) (D : Type u₂) (catD : Category D)
+    (F : Category.Functor catC catD) :
+    Category.NatTrans catC catD F F :=
   Category.NatTrans.mk
-    C
-    catC
-    D
-    catD
-    F
-    F
-    (fun X => idD (F.obj X))
-    (fun X Y f =>
-      let FX := F.obj X;
-      let FY := F.obj Y;
-      let Ff := F.map X Y f;
-      let h1 : compD FX FY FY Ff (idD FY) = Ff := Category.comp_id D catD FX FY Ff;
-      let h2 : compD FX FX FY (idD FX) Ff = Ff := Category.id_comp D catD FX FY Ff;
-      Eq.trans
-        _
-        _
-        _
-        (compD FX FX FY (idD FX) Ff)
-        h1
-        (Eq.symm (HomD FX FY) (compD FX FX FY (idD FX) Ff) Ff h2))
+    (fun X => Category.id catD (Category.Functor.obj F X))
+    (fun f => Eq.trans (Category.comp_id catD _) (Eq.symm (Category.id_comp catD _)))

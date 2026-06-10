@@ -1,5 +1,5 @@
-inductive HEq.{u} (α : Type u) (a : α) : (β : Type u) → β → Type u where
-  | refl : HEq α a α a
+inductive HEq.{u} {α : Type u} (a : α) : {β : Type u} → β → Type u where
+  | refl : HEq a a
 
-def HEq.symm.{u} (α : Type u) (a : α) (β : Type u) (b : β) : HEq α a β b → HEq β b α a :=
-  HEq.rec _ _ (fun β b _ => HEq β b α a) (HEq.refl _ _) _ _
+def HEq.symm.{u} {α : Type u} (a : α) {β : Type u} (b : β) : HEq a b → HEq b a :=
+  @HEq.rec α a (fun b _ => HEq b a) HEq.refl β b

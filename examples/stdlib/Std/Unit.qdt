@@ -3,6 +3,6 @@ import Std.Eq
 inductive Unit.{u} : Type u where
   | unit
 
-def Unit.eta (t : Unit) : Unit.unit = t := Eq.refl _ _
+def Unit.eta (t : Unit) : Unit.unit = t := rfl
 
-def Unit.ext (a b : Unit) : a = b := Eq.trans _ _ _ _ (Eq.symm _ _ _ (Unit.eta a)) (Unit.eta b)
+def Unit.ext (a b : Unit) : a = b := Eq.trans (Eq.symm (Unit.eta a)) (Unit.eta b)
