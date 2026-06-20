@@ -21,7 +21,10 @@ impl zed::Extension for QdtExtension {
         Ok(zed::Command {
             command,
             args: binary.arguments.unwrap_or_default(),
-            env: binary.env.map(|m| m.into_iter().collect()).unwrap_or_default(),
+            env: binary
+                .env
+                .map(|m| m.into_iter().collect())
+                .unwrap_or_default(),
         })
     }
 }

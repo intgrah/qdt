@@ -66,7 +66,7 @@ def reportOnce (root entry : FilePath) (perFile : Array (FilePath × Array Diagn
   IO.eprintln (renderForest root forest)
   for (file, diags) in perFile do
     for d in diags do
-      println! s!"{relativize root file.toString}: error: {d.error.format d.univParams}"
+      println! s!"{relativize root file.toString}: error: {d.error.format}"
 
 def runTraceOnce (cfg : Config) : IO UInt32 := do
   let inputs ← scanInputs cfg.root

@@ -23,16 +23,16 @@ mutual
 
 def Ty.ren {m n : Nat} (ξ : Ren m n) : Ty m → Ty n
   | .u i => .u i
-  | .pi x a b => .pi x (a.ren ξ) (b.ren ξ.up)
+  | .pi x bi a b => .pi x bi (a.ren ξ) (b.ren ξ.up)
   | .el t => .el (t.ren ξ)
 
 def Tm.ren {m n : Nat} (ξ : Ren m n) : Tm m → Tm n
   | .u' i => .u' i
   | .var i => .var (ξ i)
   | .const x us => .const x us
-  | .lam x a body => .lam x (a.ren ξ) (body.ren ξ.up)
+  | .lam x bi a body => .lam x bi (a.ren ξ) (body.ren ξ.up)
   | .app f a => .app (f.ren ξ) (a.ren ξ)
-  | .pi' x a b => .pi' x (a.ren ξ) (b.ren ξ.up)
+  | .pi' x bi a b => .pi' x bi (a.ren ξ) (b.ren ξ.up)
   | .proj i t => .proj i (t.ren ξ)
   | .letE x ty t body => .letE x (ty.ren ξ) (t.ren ξ) (body.ren ξ.up)
   | .mvar id => .mvar id

@@ -19,11 +19,13 @@ open Frontend.Parser (ParseError)
 inductive InputKey : Type
   | text (filepath : FilePath)
   | inputFiles
+  | projectRoot
 deriving DecidableEq, Repr, Inhabited, Hashable
 
 abbrev InputVal : InputKey → Type
   | .text _ => String
-  | .inputFiles => HashSet FilePath
+  | .inputFiles => HashMap FilePath FilePath
+  | .projectRoot => FilePath
 
 abbrev InputV := Option ∘ InputVal
 
@@ -91,6 +93,7 @@ def Key.display : Key → String
 def InputKey.display : InputKey → String
   | .text p => s!"text:{p}"
   | .inputFiles => "inputFiles"
+  | .projectRoot => "projectRoot"
 
 abbrev Val : Key → Type
   | .astSourceMap _ => Ast × SourceMap × Array Diagnostic
@@ -112,7 +115,7 @@ abbrev Val : Key → Type
   | .checkFile _ => Array Diagnostic
   | .checkProject => Array Diagnostic
 
-instance {α} [Hashable α] : Hashable (HashMap Name α) where
+instance {κ α} [BEq κ] [Hashable κ] [Hashable α] : Hashable (HashMap κ α) where
   hash m := hash <| m.toArray
 
 instance {α} [BEq α] [Hashable α] : Hashable (HashSet α) where

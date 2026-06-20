@@ -75,18 +75,13 @@ def elabAction (q₀ : Key) (cmd : Ast) : ElabM q₀ (Option Unit) :=
   else if let some s := Structure.parse cmd then s.elab q₀
   else return
 
-def resolveModule (modName : Name) (inputFiles : HashSet FilePath) : Option FilePath :=
-  let expectedPath : FilePath :=
+def resolveModule (root : FilePath) (modName : Name) (inputFiles : HashMap FilePath FilePath) : Option FilePath :=
+  let rel : FilePath :=
     modName.componentsRev.reverse.map toString
     |> String.intercalate "/"
     |> FilePath.mk
     |>.addExtension "qdt"
-  let expectedStr := expectedPath.toString
-  let isStrictSuffix (path : String) : Bool :=
-    path == expectedStr ||
-    path.endsWith ("/" ++ expectedStr)
-  inputFiles.toList.find? fun file =>
-    isStrictSuffix file.toString
+  inputFiles[root / rel]?
 
 partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FilePath)) : List FilePath :=
   let rec visit (f : FilePath) (visited : HashSet FilePath) (sorted : List FilePath) : (HashSet FilePath × List FilePath) :=
@@ -99,6 +94,28 @@ partial def topoSort (files : List FilePath) (adj : HashMap FilePath (List FileP
 
   let (_, sorted) := files.foldl (fun (v, s) f => visit f v s) (HashSet.emptyWithCapacity 0, [])
   sorted.reverse
+
+partial def importedDecls (q₀ : Key)
+    (frontier : List FilePath) (visited : HashSet FilePath)
+    (definedBy : HashMap Name (Array FilePath)) :
+    Task config q₀ (HashMap Name (Array FilePath)) := do
+  match frontier with
+  | [] => return definedBy
+  | path :: rest =>
+    if visited.contains path then
+      importedDecls q₀ rest visited definedBy
+    else
+      let visited := visited.insert path
+      let (fdecls, _) ← (Task.fetch (ℭ := config) (q₀ := q₀) (Key.declarationIndex path) sorry : Task config q₀ _)
+      let mut definedBy := definedBy
+      for (name, _) in fdecls.toList do
+        definedBy := definedBy.insert name ((definedBy.getD name #[]).push path)
+      let imps ← (Task.fetch (ℭ := config) (q₀ := q₀) (Key.imports path) sorry : Task config q₀ _)
+      let mut frontier := rest
+      for modName in imps do
+        if let some p ← (Task.fetch (ℭ := config) (q₀ := q₀) (Key.moduleFile modName) sorry : Task config q₀ _) then
+          frontier := p :: frontier
+      importedDecls q₀ frontier visited definedBy
 
 public def tasks : Tasks config
   | .astSourceMap filepath => do
@@ -128,8 +145,9 @@ public def tasks : Tasks config
         result := result.push imp.moduleName
     return result
   | .moduleFile modName => do
+    let some root ← (Task.input (ℭ := config) (q₀ := Key.moduleFile modName) InputKey.projectRoot : Task config (Key.moduleFile modName) _) | return none
     let some inputFiles ← (Task.input (ℭ := config) (q₀ := Key.moduleFile modName) InputKey.inputFiles : Task config (Key.moduleFile modName) _) | return none
-    return resolveModule modName inputFiles
+    return resolveModule root modName inputFiles
   | .transitiveImports filepath => do
     let imports ← (Task.fetch (ℭ := config) (q₀ := Key.transitiveImports filepath) (Key.imports filepath) sorry : Task config (Key.transitiveImports filepath) _)
     let mut result : HashSet FilePath := HashSet.emptyWithCapacity 0
@@ -213,6 +231,17 @@ public def tasks : Tasks config
     let (_, _, parseDiags) ← (Task.fetch (ℭ := config) (q₀ := Key.checkFile filepath) (Key.astSourceMap filepath) sorry : Task config (Key.checkFile filepath) _)
     let (decls, dupDiags) ← (Task.fetch (ℭ := config) (q₀ := Key.checkFile filepath) (Key.declarationIndex filepath) sorry : Task config (Key.checkFile filepath) _)
     let mut allDiags := parseDiags ++ dupDiags
+    let directImports ← (Task.fetch (ℭ := config) (q₀ := Key.checkFile filepath) (Key.imports filepath) sorry : Task config (Key.checkFile filepath) _)
+    let mut seed : List FilePath := []
+    for modName in directImports do
+      match ← (Task.fetch (ℭ := config) (q₀ := Key.checkFile filepath) (Key.moduleFile modName) sorry : Task config (Key.checkFile filepath) _) with
+      | some p => seed := p :: seed
+      | none => allDiags := allDiags.push { path := [], error := .unresolvedImport modName }
+    let definedBy ← importedDecls (Key.checkFile filepath) seed
+      ((HashSet.emptyWithCapacity 1).insert filepath) (HashMap.emptyWithCapacity 0)
+    for (name, files) in definedBy.toList do
+      if files.size ≥ 2 then
+        allDiags := allDiags.push { path := [], error := .duplicateImport name }
     let mut seenIdx : HashSet Nat := HashSet.emptyWithCapacity decls.size
     for (name, idx) in decls.toList do
       if seenIdx.contains idx then continue
@@ -222,7 +251,7 @@ public def tasks : Tasks config
     return allDiags
   | .checkProject => do
       let some inputFiles ← (Task.input (ℭ := config) (q₀ := Key.checkProject) InputKey.inputFiles : Task config Key.checkProject _) | return #[]
-      let files := inputFiles.toList
+      let files := inputFiles.values.eraseDups
 
       let mut adj : HashMap FilePath (List FilePath) := HashMap.emptyWithCapacity 0
       for file in files do

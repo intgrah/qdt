@@ -10,7 +10,7 @@ namespace Universe
 
 def FVMVars : Universe → List UMVarId
   | .zero => []
-  | .level _ => []
+  | .param _ => []
   | .mvar id => [id]
   | .succ u => u.FVMVars
   | .max u v => u.FVMVars ++ v.FVMVars

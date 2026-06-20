@@ -14,12 +14,12 @@ mutual
 
 partial def Ty.eval {n c} : Ty c → SemM q₀ n c (VTy n)
   | .u i => return .u i
-  | .pi x a b => return .pi x (← a.eval) ⟨← read, b⟩
+  | .pi x bi a b => return .pi x bi (← a.eval) ⟨← read, b⟩
   | .el t => do doEl (← t.eval)
 
 partial def doEl {n} : VTm n → ElabM q₀ (VTy n)
   | .u' i => return .u i
-  | .pi' x a ⟨env, b⟩ => return .pi x (← doEl a) ⟨env, .el b⟩
+  | .pi' x bi a ⟨env, b⟩ => return .pi x bi (← doEl a) ⟨env, .el b⟩
   | .neutral ne => do
     match ← (VTm.neutral ne).whnf with
     | .neutral ne' => return .el ne'
@@ -35,9 +35,9 @@ partial def Tm.eval {n c} : Tm c → SemM q₀ n c (VTm n)
     | some (.definition _) => return .glued ⟨.const name us, .nil⟩ (.const name us)
     | some _ => return .neutral ⟨.const name us, .nil⟩
     | none => return .neutral ⟨.const name us, .nil⟩
-  | .lam x a body => return .lam x (← a.eval) ⟨← read, body⟩
+  | .lam x bi a body => return .lam x bi (← a.eval) ⟨← read, body⟩
   | .app fn arg => do (← fn.eval).app (← arg.eval)
-  | .pi' x a b => return .pi' x (← a.eval) ⟨← read, b⟩
+  | .pi' x bi a b => return .pi' x bi (← a.eval) ⟨← read, b⟩
   | .proj i t => do (← t.eval).proj i
   | .letE _x _a t body => do body.eval (.cons (← t.eval) (← read))
   | .mvar id => return .glued ⟨.mvar id, .nil⟩ (.mvar id)
@@ -45,7 +45,7 @@ partial def Tm.eval {n c} : Tm c → SemM q₀ n c (VTm n)
 partial def VTm.app {n} (fn arg : VTm n) : ElabM q₀ (VTm n) :=
   match fn with
   | .u' .. => panic! "VTm.app: expected lambda or neutral"
-  | .lam _ _ clos => betaReduction clos arg
+  | .lam _ _ _ clos => betaReduction clos arg
   | .neutral ne => return .neutral (ne.app arg)
   | .glued ne key => return .glued (ne.app arg) key
   | .pi' .. => panic! "VTm.app: expected lambda or neutral"
@@ -64,9 +64,13 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (Option (VTm n)) := do
+  if let some v := (← get).deltaCache[(name, us)]? then
+    return some (VTm.weaken (Nat.zero_le n) v)
   let some (.definition info) ← fetchConstant q₀ name | return none
-  let v ← (info.tm.substLevels us).eval Env.nil
+  let v ← (info.tm.instantiateParams info.univParams us).eval Env.nil
+  modify fun st => { st with deltaCache := st.deltaCache.insert (name, us) v }
   return some (VTm.weaken (Nat.zero_le n) v)
+
 
 partial def metaReduction {n} (id : MVarId) (sp : Spine n) :
     ElabM q₀ (Option (VTm n)) := do
@@ -80,7 +84,8 @@ partial def metaReduction {n} (id : MVarId) (sp : Spine n) :
     let env : Env n info.arity := hLen ▸ Env.ofList envList
     some <$> (args.drop info.arity).foldlM (·.app ·) (← body.eval env)
   else
-    panic! s!"metaReduction: meta ?{id} applied to {args.length} args, expected ≥ {info.arity}"
+    let lam : VTm n ← (Tm.lams info.ctx body).eval Env.nil
+    some <$> args.foldlM (·.app ·) lam
 
 partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
   | .nil, v => return v
@@ -146,7 +151,7 @@ partial def iotaReduction {n}
   let envList := args.reverse
   let env := Env.ofList envList
   let numFields := rule.numFields
-  let rhs := rule.rhs.substLevels recUs
+  let rhs := rule.rhs.instantiateParams info.univParams recUs
   if h : envList.length = numParamsMotivesMinors + numFields then
     let env' : Env n (numParamsMotivesMinors + numFields) := h ▸ env
     let result ← rhs.eval env'

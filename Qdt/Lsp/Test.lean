@@ -19,47 +19,54 @@ structure TestState where
 
 abbrev TestM := StateRefT TestState IO
 
+def testRoot : FilePath := "/qdt-test"
+
+def key (filepath : FilePath) : FilePath := testRoot / filepath
+
 def test (action : TestM Unit) : IO Unit := do
   let check : TestM Unit := do
     action
     let errors := (← get).errors
     if !errors.isEmpty then
       throw (IO.userError ("\n".intercalate errors.toList))
-  let inputs := DHashMap.emptyWithCapacity 64
+  let inputs : DHashMap InputKey InputVal :=
+    (DHashMap.emptyWithCapacity 64).insert .projectRoot testRoot
   check.run' { inputs, store := testBuild.init inputs }
 
 def fail (msg : String) : TestM Unit :=
   modify fun st => { st with errors := st.errors.push msg }
 
 def setText (text : String) (filepath : FilePath := "test.qdt") : TestM Unit := do
+  let fp := key filepath
   let st ← get
-  let inputs := st.inputs.insert (.text filepath) text
-  let inputFiles : HashSet FilePath :=
+  let inputs := st.inputs.insert (.text fp) text
+  let inputFiles : Std.HashMap FilePath FilePath :=
     match st.inputs.get? .inputFiles with
-    | some fs => fs.insert filepath
-    | none => {filepath}
+    | some fs => fs.insert fp fp
+    | none => (∅ : Std.HashMap FilePath FilePath).insert fp fp
   let inputs := inputs.insert .inputFiles inputFiles
-  let (_, store) := (testBuild.set (.text filepath) (some text)).run st.store
+  let inputs := inputs.insert .projectRoot testRoot
+  let (_, store) := (testBuild.set (.text fp) (some text)).run st.store
   let (_, store) := (testBuild.set .inputFiles (some inputFiles)).run store
-  let (_, store) := StateT.run (s := store) <| testBuild.run (Key.checkFile filepath)
-  modify fun _ => { inputs, store }
+  let (_, store) := (testBuild.set .projectRoot (some testRoot)).run store
+  let (_, store) := StateT.run (s := store) <| testBuild.run (Key.checkFile fp)
+  modify fun st => { st with inputs, store }
 
 def diagnostics (check : Array Diagnostic → Bool) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let store := (← get).store
-  let (diags, _) := StateT.run (s := store) <| testBuild.run (Key.checkFile filepath)
+  let (diags, _) := StateT.run (s := store) <| testBuild.run (Key.checkFile (key filepath))
   if !check diags then
     fail s!"diagnostics check failed: {diags.map (·.error)}"
 
-/-- Assert that there are no diagnostics. -/
 def noDiagnostics (filepath : FilePath := "test.qdt") : TestM Unit :=
   diagnostics Array.isEmpty filepath
 
 def hover (pos : Lean.Position) (expected : String)
     (start stop : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let st ← get
-  let text := (st.inputs.get? (.text filepath)).getD ""
+  let text := (st.inputs.get? (.text (key filepath))).getD ""
   let fileMap := Lean.FileMap.ofString text
-  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
+  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild (key filepath)
   let bytePos := fileMap.ofPosition pos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
   match lookupHoverAtPosition sourceMap info codepointPos with
@@ -77,8 +84,8 @@ def hover (pos : Lean.Position) (expected : String)
 
 def noHover (pos : Lean.Position) (filepath : FilePath := "test.qdt") : TestM Unit := do
   let st ← get
-  let text := (st.inputs.get? (.text filepath)).getD ""
-  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild filepath
+  let text := (st.inputs.get? (.text (key filepath))).getD ""
+  let ((info, sourceMap), _) := StateT.run (s := st.store) <| elaborateFile testBuild (key filepath)
   let bytePos := (Lean.FileMap.ofString text).ofPosition pos
   let codepointPos := utf8PosToCodepointPos text bytePos.byteIdx
   match lookupHoverAtPosition sourceMap info codepointPos with

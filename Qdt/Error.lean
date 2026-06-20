@@ -23,9 +23,12 @@ inductive Error
   | inferSorry
   | expectedFunctionType {c} (names : List Name) (got : Ty c)
   | typeMismatch {c} (names : List Name) (expected : Ty c) (got : Ty c)
+  | binderMismatch {c} (names : List Name) (expected : Ty c)
   | unboundVariable (name : Name)
   | unboundUniverseVariable (name : Name)
   | alreadyDefined (name : Name)
+  | duplicateImport (name : Name)
+  | unresolvedImport (name : Name)
   | typeFamilyCtorReturnTypeRequired (ctorName : Name)
   | inductiveReturnTypeMustBeTypeUniverse (indName : Name)
   | structureResultTypeMustBeTypeUniverse (structName : Name)
@@ -40,9 +43,10 @@ inductive Error
   | inferHole
   | unusedUniverseParam (declName : Name) (paramName : Name)
   | unsolvedUniverseMetavariable (declName : Name)
+  | stuckUniverseConstraint (lhs : Universe) (rhs : Universe)
 deriving Inhabited, Hashable
 
-def Error.format (univs : List Name) (e : Error) : String :=
+def Error.format (e : Error) : String :=
   match e with
   | .msg s =>
     s
@@ -51,7 +55,7 @@ def Error.format (univs : List Name) (e : Error) : String :=
   | .importCycle modules =>
     s!"Import cycle: {modules}"
   | .expectedType names got =>
-    s!"Expected type, got {got.fmt univs names Prec.min}"
+    s!"Expected type, got {got.fmt names Prec.min}"
   | .syntaxError err =>
     s!"Syntax error: {err.msg}"
   | .duplicateUniverseParam name =>
@@ -61,15 +65,21 @@ def Error.format (univs : List Name) (e : Error) : String :=
   | .inferSorry =>
     "Cannot infer type of sorry"
   | .expectedFunctionType names got =>
-    s!"Expected function type, got {got.fmt univs names Prec.min}"
+    s!"Expected function type, got {got.fmt names Prec.min}"
   | .typeMismatch names expected got =>
-    s!"Type mismatch: expected\n{expected.fmt univs names Prec.min},\ngot\n{got.fmt univs names Prec.min}"
+    s!"Type mismatch: expected\n{expected.fmt names Prec.min},\ngot\n{got.fmt names Prec.min}"
+  | .binderMismatch names expected =>
+    s!"Lambda binder is implicit, but the expected type is {expected.fmt names Prec.min}"
   | .unboundVariable name =>
     s!"Unbound variable {name}"
   | .unboundUniverseVariable name =>
     s!"Unbound universe variable {name}"
   | .alreadyDefined name =>
     s!"{name} is already defined"
+  | .duplicateImport name =>
+    s!"ambiguous declaration '{name}': defined in multiple imported modules"
+  | .unresolvedImport name =>
+    s!"unresolved import '{name}': no such module under the project root"
   | .typeFamilyCtorReturnTypeRequired ctorName =>
     s!"{ctorName}: constructor must specify return type for inductive type family"
   | .inductiveReturnTypeMustBeTypeUniverse indName =>
@@ -85,21 +95,23 @@ def Error.format (univs : List Name) (e : Error) : String :=
   | .ctorParamMismatch ctorName =>
     s!"{ctorName}: inductive type parameters must be constant throughout the definition"
   | .fieldUniverseTooLarge ctorName fieldName fieldUniv indUniv =>
-    s!"{ctorName}: field '{fieldName}' has type in universe {(Universe.fmt univs fieldUniv 0).pretty}, but inductive lives in {(Universe.fmt univs indUniv 0).pretty}"
+    s!"{ctorName}: field '{fieldName}' has type in universe {(Universe.fmt fieldUniv 0).pretty}, but inductive lives in {(Universe.fmt indUniv 0).pretty}"
   | .ctorNameNotAtomic ctorName =>
     s!"{ctorName}: constructor name must be atomic"
   | .fieldNameNotAtomic structName =>
     s!"{structName}: field name must be atomic"
   | .unsolvedMetavariable decl id ty =>
-    s!"unsolved metavariable ?m{id} : {ty.fmt univs [] Prec.min} in {decl}"
+    s!"unsolved metavariable ?m{id} : {ty.fmt [] Prec.min} in {decl}"
   | .inferHole =>
     "cannot infer the value of a hole here; provide a type annotation"
   | .unusedUniverseParam declName paramName =>
     s!"{declName}: unused universe parameter '{paramName}'"
   | .unsolvedUniverseMetavariable declName =>
     s!"{declName}: unsolved universe metavariable"
+  | .stuckUniverseConstraint lhs rhs =>
+    s!"stuck at solving universe constraint\n  {lhs.fmt Prec.min} =?= {rhs.fmt Prec.min}"
 
-instance : ToString Error where toString := Error.format []
+instance : ToString Error where toString := Error.format
 
 @[pp_using_anonymous_constructor]
 structure Diagnostic where
@@ -123,21 +135,26 @@ deriving Hashable
 
 def HoverContent.format (univs : List Name) : HoverContent → String
   | .signature name params retTy =>
+      let binderDelims : BinderInfo → String × String
+        | .explicit => ("(", ")")
+        | .implicit => ("{", "}")
       let rec collectParams {a b : Nat} (names : List Name) : Ctx a b → List String × List Name
         | .nil => ([], names)
-        | .snoc bs ⟨pname, pty⟩ =>
+        | .snoc bs ⟨pname, bi, pty⟩ =>
             let (prev, prevNames) := collectParams names bs
             let x := freshName prevNames pname
-            (prev ++ [s!"({x} : {pty.fmt univs prevNames Prec.min})"], x :: prevNames)
+            let (l, r) := binderDelims bi
+            (prev ++ [s!"{l}{x} : {pty.fmt prevNames Prec.min}{r}"], x :: prevNames)
       let rec peelPis {m : Nat} (names : List Name) : Ty m → List String × String
-        | .pi pname dom cod =>
-            if pname.isAnonymous then
-              ([], toString ((Ty.pi pname dom cod).fmt univs names Prec.min))
+        | .pi pname bi dom cod =>
+            if pname.isAnonymous ∧ bi matches .explicit then
+              ([], toString ((Ty.pi pname bi dom cod).fmt names Prec.min))
             else
               let x := freshName names pname
               let (rest, retStr) := peelPis (x :: names) cod
-              (s!"({x} : {dom.fmt univs names Prec.min})" :: rest, retStr)
-        | ty => ([], toString (ty.fmt univs names Prec.min))
+              let (l, r) := binderDelims bi
+              (s!"{l}{x} : {dom.fmt names Prec.min}{r}" :: rest, retStr)
+        | ty => ([], toString (ty.fmt names Prec.min))
       let (ctxParts, ctxNames) := collectParams [] params
       let (piParts, retStr) := peelPis ctxNames retTy
       let allParts := ctxParts ++ piParts
@@ -150,12 +167,15 @@ def HoverContent.format (univs : List Name) : HoverContent → String
       if paramsStr.isEmpty then s!"{nameStr} : {retStr}"
       else s!"{nameStr} {paramsStr} : {retStr}"
   | .localVar name ctxNames ty =>
-      let nameStr := if name.isAnonymous then "_" else toString name
-      s!"{nameStr} : {ty.fmt univs ctxNames Prec.min}"
+      let nameStr :=
+        if name.isAnonymous then "_"
+        else if isInaccessible name then toString (displayName ctxNames name)
+        else toString name
+      s!"{nameStr} : {ty.fmt ctxNames Prec.min}"
   | .typeOnly ctxNames ty =>
-      s!"{ty.fmt univs ctxNames Prec.min}"
+      s!"{ty.fmt ctxNames Prec.min}"
   | .hole _ ctxNames ty =>
-      s!"{ty.fmt univs ctxNames Prec.min}"
+      s!"{ty.fmt ctxNames Prec.min}"
 
 instance {α} : Monoid (Array α) where
   one := #[]

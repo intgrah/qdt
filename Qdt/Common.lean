@@ -2,12 +2,14 @@ module
 
 public import Qdt.Incremental.Query
 public import Aesop.BuiltinRules
+public import Lake.Toml.Load
+public import Lean.Parser.Extension
 
 @[expose] public section
 
 namespace Qdt
 
-open Std (DHashMap HashSet)
+open Std (DHashMap HashMap HashSet)
 open System (FilePath)
 open Incremental
 
@@ -31,16 +33,32 @@ partial def listSrcFiles (dir : FilePath) : IO (List FilePath) := do
         result := path :: result
   return result
 
+def configFileName : FilePath := "qdt.toml"
+
+def loadProjectConfig (root : FilePath) : IO (Except String Unit) := do
+  let tomlPath := root / configFileName
+  if !(← tomlPath.pathExists) then
+    return .error s!"no {configFileName} at project root '{root}'"
+  let input ← IO.FS.readFile tomlPath
+  let ictx := Lean.Parser.mkInputContext input tomlPath.toString
+  match ← (Lake.Toml.loadToml ictx).toBaseIO with
+  | .ok _ => return .ok ()
+  | .error log =>
+      let msgs ← log.toList.mapM (·.toString)
+      return .error (s!"failed to parse {tomlPath}:\n" ++ "\n".intercalate msgs)
+
 def scanInputs (root : FilePath) : IO (DHashMap InputKey InputVal) := do
+  let root ← IO.FS.realPath root
   let rawFiles ← listSrcFiles root
   let mut inputs : DHashMap InputKey InputVal := DHashMap.emptyWithCapacity 64
-  let mut inputFiles : HashSet FilePath := ∅
+  let mut inputFiles : HashMap FilePath FilePath := ∅
   for file in rawFiles do
     let absPath ← IO.FS.realPath file
-    inputFiles := inputFiles.insert absPath
+    inputFiles := inputFiles.insert file absPath
     let text ← IO.FS.readFile absPath
     inputs := inputs.insert (.text absPath) text
   inputs := inputs.insert .inputFiles inputFiles
+  inputs := inputs.insert .projectRoot root
   return inputs
 
 end Qdt

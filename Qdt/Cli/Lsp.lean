@@ -32,17 +32,17 @@ def mkRange (text : String) (span : Span) : Range :=
     «end» := fileMap.utf8PosToLspPos ⟨endByte⟩
   }
 
-def mkDiagnostic (text : String) (span : Span) (univs : List Name) (err : Error) : Lsp.Diagnostic where
+def mkDiagnostic (text : String) (span : Span) (err : Error) : Lsp.Diagnostic where
   range := mkRange text span
   severity? := some DiagnosticSeverity.error
   source? := some "qdt"
-  message := err.format univs
+  message := err.format
 
-def mkDiagnosticNoSpan (univs : List Name) (err : Error) : Lsp.Diagnostic where
+def mkDiagnosticNoSpan (err : Error) : Lsp.Diagnostic where
   range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
   severity? := some DiagnosticSeverity.error
   source? := some "qdt"
-  message := err.format univs
+  message := err.format
 
 def uriToPath? (uri : DocumentUri) : IO (Option FilePath) := do
   match System.Uri.fileUriToPath? uri with
@@ -57,6 +57,7 @@ structure ProjectState where
   root : FilePath
   inputs : DHashMap InputKey InputVal
   store : lspBuild.σ
+  configError : Option String
 
 structure ServerState where
   hOut : IO.FS.Stream
@@ -72,9 +73,12 @@ def ServerM.getProject (filepath : FilePath) : ServerM ProjectState := do
   match st.projects[root]? with
   | some ps => return ps
   | none =>
+      let configError ← match ← loadProjectConfig root with
+        | .ok _ => pure none
+        | .error msg => pure (some msg)
       let inputs ← scanInputs root
       let store := lspBuild.init inputs
-      let ps : ProjectState := { root, inputs, store }
+      let ps : ProjectState := { root, inputs, store, configError }
       modify fun st => { st with projects := st.projects.insert root ps }
       return ps
 
@@ -115,8 +119,8 @@ def ServerM.sendFileProgress (uri : DocumentUri) (ranges : Array Range) : Server
 def buildDiagnostics (text : String) (info : ElabInfo) (sourceMap : SourceMap) : Array Lsp.Diagnostic :=
   info.diagnostics.map fun d =>
     match sourceMap.resolveSpan d.path with
-    | some span => mkDiagnostic text span d.univParams d.error
-    | none => mkDiagnosticNoSpan d.univParams d.error
+    | some span => mkDiagnostic text span d.error
+    | none => mkDiagnosticNoSpan d.error
 
 def runElabTask (ps : ProjectState) (filepath : FilePath) :
     (ElabInfo × SourceMap) × lspBuild.σ :=
@@ -127,10 +131,10 @@ def runElabTask (ps : ProjectState) (filepath : FilePath) :
 def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := do
   let ps ← getProject file
   let inputs := ps.inputs.insert (.text file) text
-  let inputFiles : HashSet FilePath :=
+  let inputFiles : HashMap FilePath FilePath :=
     match ps.inputs.get? .inputFiles with
-    | some fs => fs.insert file
-    | none => {file}
+    | some fs => fs.insert file file
+    | none => (∅ : HashMap FilePath FilePath).insert file file
   let inputs := inputs.insert .inputFiles inputFiles
   let (_, store) := (lspBuild.set (.text file) (some text)).run ps.store
   let (_, store) := (lspBuild.set .inputFiles (some inputFiles)).run store
@@ -138,12 +142,23 @@ def ServerM.updateFileText (file : FilePath) (text : String) : ServerM Unit := d
 
 def ServerM.elaborateAndPublish (file : FilePath) (uri : DocumentUri) (version? : Option Int) : ServerM Unit := do
   let ps ← getProject file
-  let text := (ps.inputs.get? (.text file)).getD ""
-  let ((info, sourceMap), store') := runElabTask ps file
-  setProject { ps with store := store' }
-  let diagnostics := buildDiagnostics text info sourceMap
-  publishDiagnostics uri version? diagnostics
-  sendFileProgress uri #[]
+  match ps.configError with
+  | some msg =>
+      let diag : Lsp.Diagnostic := {
+        range := { start := ⟨0, 0⟩, «end» := ⟨0, 0⟩ }
+        severity? := some DiagnosticSeverity.error
+        source? := some "qdt"
+        message := msg
+      }
+      publishDiagnostics uri version? #[diag]
+      sendFileProgress uri #[]
+  | none =>
+      let text := (ps.inputs.get? (.text file)).getD ""
+      let ((info, sourceMap), store') := runElabTask ps file
+      setProject { ps with store := store' }
+      let diagnostics := buildDiagnostics text info sourceMap
+      publishDiagnostics uri version? diagnostics
+      sendFileProgress uri #[]
 
 def ServerM.handleInitialize (id : RequestID) (params? : Option Json.Structured) : ServerM Unit := do
   let some params := params?

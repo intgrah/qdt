@@ -1,5 +1,9 @@
 module
 
+public import Lean.Data.Name
+public import Init.Data.Ord
+public import Init.Data.Order.Ord
+
 @[expose] public section
 
 namespace Qdt
@@ -9,7 +13,7 @@ open Lean (Name)
 abbrev UMVarId := Nat
 
 inductive Universe
-  | level (i : Nat)
+  | param (n : Name)
   | zero
   | succ (u : Universe)
   | max (u v : Universe)
@@ -29,34 +33,62 @@ open Lean (Name)
 def parenIf (p : Bool) : Std.Format → Std.Format :=
   if p then .paren else id
 
-protected def fmt (univs : List Name) (u : Universe) (prec : Nat) : Std.Format :=
+protected def fmt (u : Universe) (prec : Nat) : Std.Format :=
   match u with
   | .zero => "0"
-  | .level i =>
-    match univs[i]? with
-    | some n => Std.Format.text n.toString
-    | none => "u#" ++ repr i
+  | .param n => Std.Format.text n.toString
   | .mvar id => "?u#" ++ repr id
   | .succ u' =>
     let rec countSuccs (acc : Nat) : Universe → Nat × Std.Format
       | .succ u'' => countSuccs (acc + 1) u''
       | .zero => (acc + 1, repr (acc + 1))
-      | base => (acc + 1, parenIf (prec > 10) (base.fmt univs 66 ++ " + " ++ repr (acc + 1)))
+      | base => (acc + 1, parenIf (prec > 10) (base.fmt 66 ++ " + " ++ repr (acc + 1)))
     (countSuccs 0 u').snd
   | .max u' v' =>
-    parenIf (prec > 10) ("max " ++ u'.fmt univs 11 ++ " " ++ v'.fmt univs 11)
-
-protected def reprPrec (u : Universe) (prec : Nat) : Std.Format :=
-  Universe.fmt [] u prec
+    parenIf (prec > 10) ("max " ++ u'.fmt 11 ++ " " ++ v'.fmt 11)
 
 instance : Repr Universe where
-  reprPrec := Universe.reprPrec
+  reprPrec := Universe.fmt
 
 instance : ToString Universe where
   toString u := (repr u).pretty
 
-#guard toString (Universe.level 0 |>.succ.succ.succ.succ) == "u#0 + 4"
-#guard (Universe.fmt [`u] (Universe.level 0 |>.succ.succ) 0).pretty == "u + 2"
+#guard toString (Universe.param `u |>.succ.succ.succ.succ) == "u + 4"
+#guard (Universe.fmt (Universe.param `u |>.succ.succ) 0).pretty == "u + 2"
+
+def nameCmp : Name → Name → Ordering
+  | .anonymous, .anonymous => .eq
+  | .anonymous, _ => .lt
+  | _, .anonymous => .gt
+  | .num p₁ i₁, .num p₂ i₂ => match nameCmp p₁ p₂ with | .eq => compare i₁ i₂ | o => o
+  | .num _ _, .str _ _ => .lt
+  | .str _ _, .num _ _ => .gt
+  | .str p₁ s₁, .str p₂ s₂ => match nameCmp p₁ p₂ with | .eq => compare s₁ s₂ | o => o
+
+theorem nameCmp_eq : ∀ {n₁ n₂ : Name}, nameCmp n₁ n₂ = .eq → n₁ = n₂
+  | .anonymous, .anonymous, _ => rfl
+  | .str p₁ s₁, .str p₂ s₂, h => by
+      simp only [nameCmp] at h
+      split at h
+      · next hp =>
+          have := Std.LawfulEqOrd.eq_of_compare (α := String) h
+          have := nameCmp_eq hp
+          subst this; subst ‹s₁ = s₂›; rfl
+      · next => exact absurd h (by simp_all)
+  | .num p₁ i₁, .num p₂ i₂, h => by
+      simp only [nameCmp] at h
+      split at h
+      · next hp =>
+          have := Std.LawfulEqOrd.eq_of_compare (α := Nat) h
+          have := nameCmp_eq hp
+          subst this; subst ‹i₁ = i₂›; rfl
+      · next => exact absurd h (by simp_all)
+  | .anonymous, .str _ _, h => by simp [nameCmp] at h
+  | .anonymous, .num _ _, h => by simp [nameCmp] at h
+  | .str _ _, .anonymous, h => by simp [nameCmp] at h
+  | .num _ _, .anonymous, h => by simp [nameCmp] at h
+  | .str _ _, .num _ _, h => by simp [nameCmp] at h
+  | .num _ _, .str _ _, h => by simp [nameCmp] at h
 
 def addOffset (u : Universe) : Nat → Universe
   | 0 => u
@@ -64,7 +96,7 @@ def addOffset (u : Universe) : Nat → Universe
 
 structure NF where
   constant : Nat
-  levels : List (Nat × Nat)
+  params : List (Name × Nat)
   mvars : List (UMVarId × Nat)
 deriving Repr, DecidableEq
 
@@ -72,45 +104,55 @@ namespace NF
 
 def zero : NF := ⟨0, [], []⟩
 
-def level (i : Nat) : NF := ⟨0, [(i, 0)], []⟩
+def param (n : Name) : NF := ⟨0, [(n, 0)], []⟩
 
 def mvar (id : UMVarId) : NF := ⟨0, [], [(id, 0)]⟩
 
-def maxOffset : List (Nat × Nat) → Nat
+def maxOffset : List (Name × Nat) → Nat
   | [] => 0
   | (_, k) :: rest => Nat.max k (maxOffset rest)
 
 def succ : NF → NF
   | ⟨c, L, M⟩ => ⟨c + 1, L.map fun p => (p.1, p.2 + 1), M.map fun p => (p.1, p.2 + 1)⟩
 
-def merge : List (Nat × Nat) → List (Nat × Nat) → List (Nat × Nat)
+def merge : List (Name × Nat) → List (Name × Nat) → List (Name × Nat)
+  | [], ys => ys
+  | xs, [] => xs
+  | (n₁, k₁) :: xs, (n₂, k₂) :: ys =>
+    match nameCmp n₁ n₂ with
+    | .lt => (n₁, k₁) :: merge xs ((n₂, k₂) :: ys)
+    | .gt => (n₂, k₂) :: merge ((n₁, k₁) :: xs) ys
+    | .eq => (n₁, Nat.max k₁ k₂) :: merge xs ys
+
+def mergeMVars : List (UMVarId × Nat) → List (UMVarId × Nat) → List (UMVarId × Nat)
   | [], ys => ys
   | xs, [] => xs
   | (i₁, k₁) :: xs, (i₂, k₂) :: ys =>
-    if i₁ < i₂      then (i₁, k₁) :: merge xs ((i₂, k₂) :: ys)
-    else if i₁ > i₂ then (i₂, k₂) :: merge ((i₁, k₁) :: xs) ys
-    else                 (i₁, Nat.max k₁ k₂) :: merge xs ys
+    match compare i₁ i₂ with
+    | .lt => (i₁, k₁) :: mergeMVars xs ((i₂, k₂) :: ys)
+    | .gt => (i₂, k₂) :: mergeMVars ((i₁, k₁) :: xs) ys
+    | .eq => (i₁, Nat.max k₁ k₂) :: mergeMVars xs ys
 
 def maxOf : NF → NF → NF
-  | ⟨c₁, L₁, M₁⟩, ⟨c₂, L₂, M₂⟩ => ⟨Nat.max c₁ c₂, merge L₁ L₂, merge M₁ M₂⟩
+  | ⟨c₁, L₁, M₁⟩, ⟨c₂, L₂, M₂⟩ => ⟨Nat.max c₁ c₂, merge L₁ L₂, mergeMVars M₁ M₂⟩
 
 def ofUniverse : Universe → NF
   | .zero => zero
-  | .level i => level i
+  | .param n => param n
   | .mvar id => mvar id
   | .succ u => succ (ofUniverse u)
   | .max u v => maxOf (ofUniverse u) (ofUniverse v)
 
-def reifyLevels : Universe → List (Nat × Nat) → Universe :=
-  List.foldl (fun acc (i, k) => Universe.max acc ((Universe.level i).addOffset k))
+def reifyParams : Universe → List (Name × Nat) → Universe :=
+  List.foldl (fun acc (n, k) => Universe.max acc ((Universe.param n).addOffset k))
 
 def reifyMVars : Universe → List (UMVarId × Nat) → Universe :=
   List.foldl (fun acc (id, k) => Universe.max acc ((Universe.mvar id).addOffset k))
 
 def toUniverse : NF → Universe
   | ⟨0, [], []⟩ => Universe.zero
-  | ⟨0, (i, k) :: rest, M⟩ =>
-      reifyMVars (reifyLevels ((Universe.level i).addOffset k) rest) M
+  | ⟨0, (n, k) :: rest, M⟩ =>
+      reifyMVars (reifyParams ((Universe.param n).addOffset k) rest) M
   | ⟨0, [], (id, k) :: rest⟩ =>
       reifyMVars ((Universe.mvar id).addOffset k) rest
   | ⟨c + 1, [], []⟩ =>
@@ -119,8 +161,8 @@ def toUniverse : NF → Universe
       let main := reifyMVars ((Universe.mvar id).addOffset k) rest
       if k ≥ c + 1 ∨ rest.any (fun (_, k') => decide (k' ≥ c + 1)) then main
       else main.max (Universe.zero.addOffset (c + 1))
-  | ⟨c + 1, (i, k) :: rest, M⟩ =>
-      let main := reifyMVars (reifyLevels ((Universe.level i).addOffset k) rest) M
+  | ⟨c + 1, (n, k) :: rest, M⟩ =>
+      let main := reifyMVars (reifyParams ((Universe.param n).addOffset k) rest) M
       if k ≥ c + 1 ∨ rest.any (fun (_, k') => decide (k' ≥ c + 1))
           ∨ M.any (fun (_, k') => decide (k' ≥ c + 1)) then main
       else main.max (Universe.zero.addOffset (c + 1))
@@ -135,54 +177,64 @@ def mkSucc (u : Universe) : Universe :=
 def mkMax (u v : Universe) : Universe :=
   normalise (.max u v)
 
-def checkLevels (numParams : Nat) : Universe → Except Nat Unit
-  | .level i => do if i < numParams then return else throw i
+def checkParams (params : List Name) : Universe → Except Name Unit
+  | .param n => do if n ∈ params then return else throw n
   | .zero => do return
   | .mvar _ => do return
-  | .succ u => do u.checkLevels numParams
-  | .max u v => do u.checkLevels numParams; v.checkLevels numParams
+  | .succ u => do u.checkParams params
+  | .max u v => do u.checkParams params; v.checkParams params
 
-def usedLevels : Universe → List Nat
-  | .level i => [i]
+def usedParams : Universe → List Name
+  | .param n => [n]
   | .zero => []
   | .mvar _ => []
-  | .succ u => u.usedLevels
-  | .max u v => u.usedLevels ++ v.usedLevels
+  | .succ u => u.usedParams
+  | .max u v => u.usedParams ++ v.usedParams
 
 def hasMVar : Universe → Bool
-  | .level _ => false
+  | .param _ => false
   | .zero => false
   | .mvar _ => true
   | .succ u => u.hasMVar
   | .max u v => u.hasMVar || v.hasMVar
 
 def freeMVars : Universe → List UMVarId
-  | .level _ => []
+  | .param _ => []
   | .zero => []
   | .mvar id => [id]
   | .succ u => u.freeMVars
   | .max u v => u.freeMVars ++ v.freeMVars
 
 def substMVars (f : UMVarId → Option Universe) : Universe → Universe
-  | .level i => .level i
+  | .param n => .param n
   | .zero => .zero
   | .mvar id => (f id).getD (.mvar id)
   | .succ u => (u.substMVars f).mkSucc
   | .max u v => (u.substMVars f).mkMax (v.substMVars f)
 
-def shift (k : Nat) : Universe → Universe
-  | .level i => .level (i + k)
+@[specialize] def subst (σ : Name → Option Universe) : Universe → Universe
+  | .param n =>
+    match σ n with
+    | some u => u
+    | none => panic! s!"Universe.subst: param {n} not in substitution"
   | .zero => .zero
   | .mvar id => .mvar id
-  | .succ u => .succ (u.shift k)
-  | .max u v => .max (u.shift k) (v.shift k)
+  | .succ u => (u.subst σ).mkSucc
+  | .max u v => (u.subst σ).mkMax (v.subst σ)
+
+def getParamSubst : List Name → List Universe → Name → Option Universe
+  | p :: ps, u :: us, p' => if p == p' then some u else getParamSubst ps us p'
+  | _, _, _ => none
+
+def instantiateParams (u : Universe) (paramNames : List Name) (vs : List Universe) : Universe :=
+  u.subst (getParamSubst paramNames vs)
 
 section Tests
 
 open Universe
 
-private abbrev u : Universe := .level 0
-private abbrev v : Universe := .level 1
+private abbrev u : Universe := .param `u
+private abbrev v : Universe := .param `v
 
 #guard normalise u == u
 #guard normalise 0 == 0
@@ -191,168 +243,166 @@ private abbrev v : Universe := .level 1
 
 end Tests
 
-def Bounded (k : Nat) : Universe → Prop
-  | .level i => i < k
+def Bounded (Γ : List Name) : Universe → Prop
+  | .param n => n ∈ Γ
   | .zero => True
   | .mvar _ => True
-  | .succ u => u.Bounded k
-  | .max u v => u.Bounded k ∧ v.Bounded k
+  | .succ u => u.Bounded Γ
+  | .max u v => u.Bounded Γ ∧ v.Bounded Γ
 
-theorem Bounded.addOffset {k : Nat} (n : Nat) :
-    ∀ {u : Universe}, u.Bounded k → (u.addOffset n).Bounded k := by
+theorem Bounded.addOffset {Γ : List Name} (n : Nat) :
+    ∀ {u : Universe}, u.Bounded Γ → (u.addOffset n).Bounded Γ := by
   induction n with
   | zero => intro u h; exact h
   | succ n ih => intro u h; exact ih (u := u.succ) h
 
 namespace NF
 
-def Bounded (k : Nat) (nf : NF) : Prop :=
-  ∀ p ∈ nf.levels, p.1 < k
+def Bounded (Γ : List Name) (nf : NF) : Prop :=
+  ∀ p ∈ nf.params, p.1 ∈ Γ
 
-theorem Bounded.zero {k : Nat} : NF.Bounded k NF.zero := by
+theorem Bounded.zero {Γ : List Name} : NF.Bounded Γ NF.zero := by
   intro p hp; cases hp
 
-theorem Bounded.level {k i : Nat} (h : i < k) : NF.Bounded k (NF.level i) := by
+theorem Bounded.param {Γ : List Name} {n : Name} (h : n ∈ Γ) : NF.Bounded Γ (NF.param n) := by
   intro p hp
   cases hp with
   | head => exact h
   | tail _ ht => cases ht
 
-theorem Bounded.succ {k : Nat} {nf : NF} (h : NF.Bounded k nf) :
-    NF.Bounded k (NF.succ nf) := by
+theorem Bounded.succ {Γ : List Name} {nf : NF} (h : NF.Bounded Γ nf) :
+    NF.Bounded Γ (NF.succ nf) := by
   cases nf with
   | mk c L =>
     intro p hp
-    show p.1 < k
+    show p.1 ∈ Γ
     simp only [NF.succ, List.mem_map] at hp
     have ⟨p', hp', hpEq⟩ := hp
     rw [← hpEq]
     exact h p' hp'
 
-private theorem Bounded.merge_aux {k : Nat} :
-    ∀ (L₁ L₂ : List (Nat × Nat)),
-    (∀ p ∈ L₁, p.1 < k) → (∀ p ∈ L₂, p.1 < k) →
-    ∀ p ∈ NF.merge L₁ L₂, p.1 < k
+private theorem Bounded.merge_aux {Γ : List Name} :
+    ∀ (L₁ L₂ : List (Name × Nat)),
+    (∀ p ∈ L₁, p.1 ∈ Γ) → (∀ p ∈ L₂, p.1 ∈ Γ) →
+    ∀ p ∈ NF.merge L₁ L₂, p.1 ∈ Γ
   | [], _, _, h₂ => fun p hp => h₂ p (by simpa [NF.merge] using hp)
-  | (i₁, k₁) :: _, [], h₁, _ => fun p hp =>
+  | (n₁, k₁) :: _, [], h₁, _ => fun p hp =>
     h₁ p (by simpa [NF.merge] using hp)
-  | (i₁, k₁) :: xs, (i₂, k₂) :: ys, h₁, h₂ => by
+  | (n₁, k₁) :: xs, (n₂, k₂) :: ys, h₁, h₂ => by
     intro p hp
     unfold NF.merge at hp
     split at hp
-    next hLt =>
+    next =>
       cases hp with
-      | head => exact h₁ (i₁, k₁) List.mem_cons_self
+      | head => exact h₁ (n₁, k₁) List.mem_cons_self
       | tail _ ht =>
-        exact Bounded.merge_aux xs ((i₂, k₂) :: ys)
+        exact Bounded.merge_aux xs ((n₂, k₂) :: ys)
           (fun p hp => h₁ p (List.mem_cons_of_mem _ hp)) h₂ p ht
-    next hNotLt =>
-      split at hp
-      next hGt =>
-        cases hp with
-        | head => exact h₂ (i₂, k₂) List.mem_cons_self
-        | tail _ ht =>
-          exact Bounded.merge_aux ((i₁, k₁) :: xs) ys h₁
-            (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
-      next hNotGt =>
-        cases hp with
-        | head => exact h₁ (i₁, k₁) List.mem_cons_self
-        | tail _ ht =>
-          exact Bounded.merge_aux xs ys
-            (fun p hp => h₁ p (List.mem_cons_of_mem _ hp))
-            (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
+    next =>
+      cases hp with
+      | head => exact h₂ (n₂, k₂) List.mem_cons_self
+      | tail _ ht =>
+        exact Bounded.merge_aux ((n₁, k₁) :: xs) ys h₁
+          (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
+    next =>
+      cases hp with
+      | head => exact h₁ (n₁, k₁) List.mem_cons_self
+      | tail _ ht =>
+        exact Bounded.merge_aux xs ys
+          (fun p hp => h₁ p (List.mem_cons_of_mem _ hp))
+          (fun p hp => h₂ p (List.mem_cons_of_mem _ hp)) p ht
 
-theorem Bounded.maxOf {k : Nat} : ∀ {nf₁ nf₂ : NF},
-    NF.Bounded k nf₁ → NF.Bounded k nf₂ →
-    NF.Bounded k (NF.maxOf nf₁ nf₂)
+theorem Bounded.maxOf {Γ : List Name} : ∀ {nf₁ nf₂ : NF},
+    NF.Bounded Γ nf₁ → NF.Bounded Γ nf₂ →
+    NF.Bounded Γ (NF.maxOf nf₁ nf₂)
   | ⟨_, L₁, _⟩, ⟨_, L₂, _⟩, h₁, h₂ => Bounded.merge_aux L₁ L₂ h₁ h₂
 
-theorem Bounded.ofUniverse {k : Nat} : ∀ {u : Universe},
-    u.Bounded k → NF.Bounded k (NF.ofUniverse u)
+theorem Bounded.ofUniverse {Γ : List Name} : ∀ {u : Universe},
+    u.Bounded Γ → NF.Bounded Γ (NF.ofUniverse u)
   | .zero, _ => Bounded.zero
-  | .level _, h => Bounded.level h
+  | .param _, h => Bounded.param h
   | .mvar _, _ => by intro p hp; cases hp
   | .succ u, h => Bounded.succ (Bounded.ofUniverse (u := u) h)
   | .max _ _, ⟨hu, hv⟩ =>
     Bounded.maxOf (Bounded.ofUniverse hu) (Bounded.ofUniverse hv)
 
-private theorem Bounded.reifyLevels_aux {k : Nat} {u : Universe}
-    (hu : u.Bounded k) :
-    ∀ (L : List (Nat × Nat)), (∀ p ∈ L, p.1 < k) →
-    (NF.reifyLevels u L).Bounded k
+private theorem Bounded.reifyParams_aux {Γ : List Name} {u : Universe}
+    (hu : u.Bounded Γ) :
+    ∀ (L : List (Name × Nat)), (∀ p ∈ L, p.1 ∈ Γ) →
+    (NF.reifyParams u L).Bounded Γ
   | [], _ => hu
-  | (i, j) :: rest, hL => by
-    unfold NF.reifyLevels
+  | (n, j) :: rest, hL => by
+    unfold NF.reifyParams
     simp only [List.foldl]
-    apply Bounded.reifyLevels_aux
+    apply Bounded.reifyParams_aux
     · exact ⟨hu, Universe.Bounded.addOffset j
-        (hL (i, j) List.mem_cons_self : Universe.Bounded k (Universe.level i))⟩
+        (hL (n, j) List.mem_cons_self : Universe.Bounded Γ (Universe.param n))⟩
     · exact fun p hp => hL p (List.mem_cons_of_mem _ hp)
 
-private theorem Bounded.reifyMVars_aux {k : Nat} {u : Universe}
-    (hu : u.Bounded k) :
-    ∀ (M : List (UMVarId × Nat)), (NF.reifyMVars u M).Bounded k
+private theorem Bounded.reifyMVars_aux {Γ : List Name} {u : Universe}
+    (hu : u.Bounded Γ) :
+    ∀ (M : List (UMVarId × Nat)), (NF.reifyMVars u M).Bounded Γ
   | [] => hu
   | (_, j) :: rest => by
     unfold NF.reifyMVars
     simp only [List.foldl]
     apply Bounded.reifyMVars_aux
-    exact ⟨hu, Universe.Bounded.addOffset j (show Universe.Bounded k (Universe.mvar _) from trivial)⟩
+    exact ⟨hu, Universe.Bounded.addOffset j (show Universe.Bounded Γ (Universe.mvar _) from trivial)⟩
 
-theorem Bounded.toUniverse {k : Nat} :
-    ∀ {nf : NF}, NF.Bounded k nf → nf.toUniverse.Bounded k
+theorem Bounded.toUniverse {Γ : List Name} :
+    ∀ {nf : NF}, NF.Bounded Γ nf → nf.toUniverse.Bounded Γ
   | ⟨0, [], []⟩, _ => trivial
-  | ⟨0, (i, j) :: rest, M⟩, h => by
-    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
-    have hRest : ∀ p ∈ rest, p.1 < k :=
+  | ⟨0, (n, j) :: rest, M⟩, h => by
+    have hn : Universe.Bounded Γ (Universe.param n) := h (n, j) List.mem_cons_self
+    have hRest : ∀ p ∈ rest, p.1 ∈ Γ :=
       fun p hp => h p (List.mem_cons_of_mem _ hp)
     exact Bounded.reifyMVars_aux
-      (Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest) M
+      (Bounded.reifyParams_aux (Universe.Bounded.addOffset j hn) rest hRest) M
   | ⟨0, [], (_, j) :: rest⟩, _ => by
     exact Bounded.reifyMVars_aux
-      (Universe.Bounded.addOffset j (show Universe.Bounded k (Universe.mvar _) from trivial)) rest
+      (Universe.Bounded.addOffset j (show Universe.Bounded Γ (Universe.mvar _) from trivial)) rest
   | ⟨c + 1, [], []⟩, _ => by
-    exact Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)
+    exact Universe.Bounded.addOffset (c + 1) (show Universe.Bounded Γ Universe.zero from trivial)
   | ⟨c + 1, [], (id, k') :: rest⟩, h => by
-    have bMain : Universe.Bounded k
+    have bMain : Universe.Bounded Γ
         (NF.reifyMVars ((Universe.mvar id).addOffset k') rest) :=
       Bounded.reifyMVars_aux
-        (Universe.Bounded.addOffset k' (show Universe.Bounded k (Universe.mvar id) from trivial)) rest
-    show Universe.Bounded k _
+        (Universe.Bounded.addOffset k' (show Universe.Bounded Γ (Universe.mvar id) from trivial)) rest
+    show Universe.Bounded Γ _
     simp only [NF.toUniverse]
     split
     · exact bMain
     · exact ⟨bMain,
-        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
-  | ⟨c + 1, (i, j) :: rest, M⟩, h => by
-    have hi : Universe.Bounded k (Universe.level i) := h (i, j) List.mem_cons_self
-    have hRest : ∀ p ∈ rest, p.1 < k :=
+        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded Γ Universe.zero from trivial)⟩
+  | ⟨c + 1, (n, j) :: rest, M⟩, h => by
+    have hn : Universe.Bounded Γ (Universe.param n) := h (n, j) List.mem_cons_self
+    have hRest : ∀ p ∈ rest, p.1 ∈ Γ :=
       fun p hp => h p (List.mem_cons_of_mem _ hp)
-    have bMain : Universe.Bounded k
-        (NF.reifyMVars (NF.reifyLevels ((Universe.level i).addOffset j) rest) M) :=
+    have bMain : Universe.Bounded Γ
+        (NF.reifyMVars (NF.reifyParams ((Universe.param n).addOffset j) rest) M) :=
       Bounded.reifyMVars_aux
-        (Bounded.reifyLevels_aux (Universe.Bounded.addOffset j hi) rest hRest) M
-    show Universe.Bounded k _
+        (Bounded.reifyParams_aux (Universe.Bounded.addOffset j hn) rest hRest) M
+    show Universe.Bounded Γ _
     simp only [NF.toUniverse]
     split
     · exact bMain
     · exact ⟨bMain,
-        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded k Universe.zero from trivial)⟩
+        Universe.Bounded.addOffset (c + 1) (show Universe.Bounded Γ Universe.zero from trivial)⟩
 
 end NF
 
-theorem Bounded.normalise {k : Nat} {u : Universe} (h : u.Bounded k) :
-    u.normalise.Bounded k :=
+theorem Bounded.normalise {Γ : List Name} {u : Universe} (h : u.Bounded Γ) :
+    u.normalise.Bounded Γ :=
   NF.Bounded.toUniverse (NF.Bounded.ofUniverse h)
 
-theorem mkSucc_bounded {k : Nat} {u : Universe} (h : u.Bounded k) :
-    (Universe.mkSucc u).Bounded k :=
-  Bounded.normalise (h : u.succ.Bounded k)
+theorem mkSucc_bounded {Γ : List Name} {u : Universe} (h : u.Bounded Γ) :
+    (Universe.mkSucc u).Bounded Γ :=
+  Bounded.normalise (h : u.succ.Bounded Γ)
 
-theorem mkMax_bounded {k : Nat} {u v : Universe}
-    (hu : u.Bounded k) (hv : v.Bounded k) :
-    (Universe.mkMax u v).Bounded k :=
-  Bounded.normalise (⟨hu, hv⟩ : (u.max v).Bounded k)
+theorem mkMax_bounded {Γ : List Name} {u v : Universe}
+    (hu : u.Bounded Γ) (hv : v.Bounded Γ) :
+    (Universe.mkMax u v).Bounded Γ :=
+  Bounded.normalise (⟨hu, hv⟩ : (u.max v).Bounded Γ)
 
 end Universe
 

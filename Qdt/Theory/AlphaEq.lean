@@ -23,10 +23,10 @@ inductive Ty.AlphaEq : ∀ {n}, Ty n → Ty n → Prop
     t₁ ≡α t₂ →
     t₂ ≡α t₃ →
     t₁ ≡α t₃
-  | congrPi {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Ty (n + 1)} :
+  | congrPi {n} {x₁ x₂ : Name} {bi₁ bi₂ : BinderInfo} {a₁ a₂ : Ty n} {b₁ b₂ : Ty (n + 1)} :
     a₁ ≡α a₂ →
     b₁ ≡α b₂ →
-    .pi x₁ a₁ b₁ ≡α .pi x₂ a₂ b₂
+    .pi x₁ bi₁ a₁ b₁ ≡α .pi x₂ bi₂ a₂ b₂
   | congrEl {n} (t₁ t₂ : Tm n) : t₁ ≡α t₂ → Ty.el t₁ ≡α Ty.el t₂
 
 inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
@@ -43,14 +43,14 @@ inductive Tm.AlphaEq : ∀ {n}, Tm n → Tm n → Prop
     a₁ ≡α a₂ →
     b₁ ≡α b₂ →
     Tm.app a₁ b₁ ≡α Tm.app a₂ b₂
-  | congrPiHat {n} {x₁ x₂ : Name} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
+  | congrPiHat {n} {x₁ x₂ : Name} {bi₁ bi₂ : BinderInfo} {a₁ a₂ : Tm n} {b₁ b₂ : Tm (n + 1)} :
     a₁ ≡α a₂ →
     b₁ ≡α b₂ →
-    .pi' x₁ a₁ b₁ ≡α .pi' x₂ a₂ b₂
-  | congrLam {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
+    .pi' x₁ bi₁ a₁ b₁ ≡α .pi' x₂ bi₂ a₂ b₂
+  | congrLam {n} {x₁ x₂ : Name} {bi₁ bi₂ : BinderInfo} {a₁ a₂ : Ty n} {b₁ b₂ : Tm (n + 1)} :
     a₁ ≡α a₂ →
     b₁ ≡α b₂ →
-    .lam x₁ a₁ b₁ ≡α .lam x₂ a₂ b₂
+    .lam x₁ bi₁ a₁ b₁ ≡α .lam x₂ bi₂ a₂ b₂
   | congrLetE {n} {x₁ x₂ : Name} {a₁ a₂ : Ty n} {b₁ b₂ : Tm n} {c₁ c₂ : Tm (n + 1)} :
     a₁ ≡α a₂ →
     b₁ ≡α b₂ →

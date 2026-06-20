@@ -17,7 +17,7 @@ namespace Qdt.Cli
 
 open Incremental
 
-def runBuild (cfg : Config) : IO UInt32 :=
+def runBuildWith (cfg : Config) : IO UInt32 :=
   match cfg.buildSystem with
   | .busy => Runner.runId cfg (Busy config Input tasks)
   | .lessBusy => Runner.runId cfg (LessBusy config Input tasks)
@@ -31,5 +31,10 @@ def runBuild (cfg : Config) : IO UInt32 :=
       (ShakeStandardRdeps config Input (fun _ => Hashable.toEmbedding)
         (fun _ => Hashable.toEmbedding) tasks)
   | .shakeTrace => Runner.runTrace cfg
+
+def runBuild (cfg : Config) : IO UInt32 := do
+  match ← Qdt.loadProjectConfig cfg.root with
+  | .error msg => IO.eprintln msg; return 1
+  | .ok _ => runBuildWith cfg
 
 end Qdt.Cli

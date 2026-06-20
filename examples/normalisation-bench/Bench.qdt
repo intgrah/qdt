@@ -3,79 +3,79 @@ https://github.com/AndrasKovacs/normalization-bench
 -/
 def Nat.{u} : Type (u + 1) := (N : Type u) → (N → N) → N → N
 
-def Nat.succ.{u} (a : Nat.{u}) : Nat.{u} := fun N s z => s (a N s z)
+def Nat.succ (a : Nat) : Nat := fun N s z => s (a N s z)
 
-def Nat.mul.{u} (a b : Nat.{u}) : Nat.{u} := fun N s z => a N (b N s) z
+def Nat.mul (a b : Nat) : Nat := fun N s z => a N (b N s) z
 
-def n2.{u} : Nat.{u} := fun N s z => s (s z)
+def n2 : Nat := fun N s z => s (s z)
 
-def n5.{u} : Nat.{u} := fun N s z => s (s (s (s (s z))))
+def n5 : Nat := fun N s z => s (s (s (s (s z))))
 
-def n10.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n5.{u}
+def n10 : Nat := Nat.mul n2 n5
 
-def n10'.{u} : Nat.{u} := Nat.mul.{u} n5.{u} n2.{u}
+def n10' : Nat := Nat.mul n5 n2
 
-def n20.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n10.{u}
+def n20 : Nat := Nat.mul n2 n10
 
-def n20'.{u} : Nat.{u} := Nat.mul.{u} n2.{u} n10'.{u}
+def n20' : Nat := Nat.mul n2 n10'
 
-def n21.{u} : Nat.{u} := Nat.succ.{u} n20.{u}
+def n21 : Nat := Nat.succ n20
 
-def n21'.{u} : Nat.{u} := Nat.succ.{u} n20'.{u}
+def n21' : Nat := Nat.succ n20'
 
-def n22.{u} : Nat.{u} := Nat.succ.{u} n21.{u}
+def n22 : Nat := Nat.succ n21
 
-def n22'.{u} : Nat.{u} := Nat.succ.{u} n21'.{u}
+def n22' : Nat := Nat.succ n21'
 
-def n100.{u} : Nat.{u} := Nat.mul.{u} n10.{u} n10.{u}
+def n100 : Nat := Nat.mul n10 n10
 
-def n100'.{u} : Nat.{u} := Nat.mul.{u} n10'.{u} n10'.{u}
+def n100' : Nat := Nat.mul n10' n10'
 
-def n10000.{u} : Nat.{u} := Nat.mul.{u} n100.{u} n100.{u}
+def n10000 : Nat := Nat.mul n100 n100
 
-def n10000'.{u} : Nat.{u} := Nat.mul.{u} n100'.{u} n100'.{u}
+def n10000' : Nat := Nat.mul n100' n100'
 
-def n100000.{u} : Nat.{u} := Nat.mul.{u} n10000.{u} n10.{u}
+def n100000 : Nat := Nat.mul n10000 n10
 
-def n100000'.{u} : Nat.{u} := Nat.mul.{u} n10000'.{u} n10'.{u}
+def n100000' : Nat := Nat.mul n10000' n10'
 
-def n1000000.{u} : Nat.{u} := Nat.mul.{u} n10000.{u} n100.{u}
+def n1000000 : Nat := Nat.mul n10000 n100
 
-def n1000000'.{u} : Nat.{u} := Nat.mul.{u} n10000'.{u} n100'.{u}
+def n1000000' : Nat := Nat.mul n10000' n100'
 
-def n5000000.{u} : Nat.{u} := Nat.mul.{u} n1000000.{u} n5.{u}
+def n5000000 : Nat := Nat.mul n1000000 n5
 
-def n5000000'.{u} : Nat.{u} := Nat.mul.{u} n1000000'.{u} n5.{u}
+def n5000000' : Nat := Nat.mul n1000000' n5
 
-def n10000000.{u} : Nat.{u} := Nat.mul.{u} n1000000.{u} n10.{u}
+def n10000000 : Nat := Nat.mul n1000000 n10
 
-def n10000000'.{u} : Nat.{u} := Nat.mul.{u} n1000000'.{u} n10'.{u}
+def n10000000' : Nat := Nat.mul n1000000' n10'
 
-def n20000000.{u} : Nat.{u} := Nat.mul.{u} n10000000.{u} n2.{u}
+def n20000000 : Nat := Nat.mul n10000000 n2
 
-def n20000000'.{u} : Nat.{u} := Nat.mul.{u} n10000000'.{u} n2.{u}
+def n20000000' : Nat := Nat.mul n10000000' n2
 
-def Tree : Type 1 := (T : Type 0) → T → (T → T → T) → T
+def Tree.{u} : Type (u + 1) := (T : Type u) → T → (T → T → T) → T
 
 def Tree.leaf : Tree := fun T l n => l
 
 def Tree.node (t₁ t₂ : Tree) : Tree := fun T l n => n (t₁ T l n) (t₂ T l n)
 
-def Tree.full (n : Nat.{1}) : Tree := n Tree (fun t => Tree.node t t) Tree.leaf
+def Tree.full (n : Nat) : Tree := n Tree (fun t => Tree.node t t) Tree.leaf
 
-def t2097151 : Tree := Tree.full n20.{1}
+def t2097151 : Tree := Tree.full n20
 
-def t4194303 : Tree := Tree.full n21.{1}
+def t4194303 : Tree := Tree.full n21
 
-def t8388607 : Tree := Tree.full n22.{1}
+def t8388607 : Tree := Tree.full n22
 
-def t2097151' : Tree := Tree.full n20'.{1}
+def t2097151' : Tree := Tree.full n20'
 
-def t4194303' : Tree := Tree.full n21'.{1}
+def t4194303' : Tree := Tree.full n21'
 
-def t8388607' : Tree := Tree.full n22'.{1}
+def t8388607' : Tree := Tree.full n22'
 
-inductive Eq.{u} (α : Type u) : α → α → Type u where
-  | refl (a : α) : Eq.{u} α a a
+inductive Eq.{u} {α : Type u} : α → α → Type u where
+  | refl (a : α) : Eq a a
 
-def test100k : Eq.{1} Nat.{0} n100000.{0} n100000'.{0} := Eq.refl.{1} Nat.{0} n100000.{0}
+def test100k : Eq n100000 n100000' := Eq.refl _

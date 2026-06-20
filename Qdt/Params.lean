@@ -12,8 +12,9 @@ open Frontend (Ast Path)
 
 variable (q₀ : Key)
 
-def getTypedBinder : Ast → Option (Name × Ast)
-  | .node `Binder.typed cs => some (cs[0]!.getName, cs[1]!)
+def getTypedBinder : Ast → Option (Name × BinderInfo × Ast)
+  | .node `Binder.typed cs => some (cs[0]!.getName, .explicit, cs[1]!)
+  | .node `Binder.implicit cs => some (cs[0]!.getName, .implicit, cs[1]!)
   | _ => none
 
 public def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List Ast) :
@@ -25,23 +26,24 @@ public def Params.elabWithLevels {n : Nat} (ctx : TermContext n) (params : List 
         OptionT (ElabM q₀) (TermContext (b + params.length) × Ctx a (b + params.length) × List Universe)
     | [] => return (ctx, acc, levels.reverse)
     | ast :: bs => do
-        let some (name, tyAst) := getTypedBinder ast
+        let some (name, bi, tyAst) := getTypedBinder ast
           | failure
         let (ty, level) ←
           match tyAst with
           | .node `Term.hole _ =>
               OptionT.lift do
                 let nameAnchor : Path := 0 :: idx :: (← currentPath q₀)
-                let (id, tm) ← freshMeta' q₀ nameAnchor ctx (.u .zero)
-                withChild q₀ idx (withChild q₀ 1 (emitHover q₀ (.hole id ctx.names (Ty.u (n := b) .zero))))
-                pure (.el tm, .zero)
+                let level : Universe := .mvar (← Universe.freshUMVar q₀)
+                let (id, tm) ← freshMeta' q₀ nameAnchor ctx (.u level)
+                withChild q₀ idx (withChild q₀ 1 (emitHover q₀ (.hole id ctx.names (Ty.u (n := b) level))))
+                pure (.el tm, level)
           | _ =>
               OptionT.lift (withChild q₀ idx (withChild q₀ 1 (checkTyWithLevel q₀ ctx tyAst)))
         let tyVal ← ty.eval q₀ ctx.env
         let tyQuoted ← tyVal.quote q₀
         withChild q₀ idx (withChild q₀ 0 (emitHover q₀ (.localVar name ctx.names tyQuoted)))
-        let ctx := ctx.bind name tyVal
-        let ih ← go (b + 1) (idx + 1) ctx (acc.snoc ⟨name, ty⟩) (level :: levels) bs
+        let ctx ← ctx.bindV q₀ name tyVal
+        let ih ← go (b + 1) (idx + 1) ctx (acc.snoc ⟨name, bi, ty⟩) (level :: levels) bs
         return by simpa only [List.length_cons, Nat.add_comm bs.length, Nat.add_assoc b] using ih
 
 public def Params.elabFrom {n : Nat} (ctx : TermContext n) (params : List Ast) :

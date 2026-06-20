@@ -1,6 +1,6 @@
 module
 
-public import Qdt.Inductive
+public import Qdt.Inductive.Core
 import Qdt.Bidirectional
 import Qdt.Params
 
@@ -80,7 +80,7 @@ def mkPrevEnv
     (x : VTm (numParams + 1)) :
     {b : Nat} → Ctx numParams b → OptionT (ElabM q₀) (Env (numParams + 1) b)
   | _, .nil => return mkParamEnv numParams
-  | _, .snoc fs ⟨name, _⟩ => do
+  | _, .snoc fs ⟨name, _, _⟩ => do
       let envTail ← mkPrevEnv structName numParams univs params x fs
       let fname ← getAtomicFieldString q₀ structName name
       let projName := structName.str fname
@@ -95,9 +95,10 @@ def checkFields {m} (ctx : TermContext m) : List StructureField → Nat → Opti
     let (fieldParamCtx, fieldParamTele) ←
       withChild q₀ (4 + j) (withChild q₀ 1 (Params.elabFrom q₀ ctx field.params))
     let fieldRetTy ← OptionT.lift (withChild q₀ (4 + j) (withChild q₀ 2 (checkTy q₀ fieldParamCtx field.ty)))
+    OptionT.lift (resumePostponed q₀ true)
     let fullFieldTy := Ty.pis fieldParamTele fieldRetTy
     let fullFieldTyVal ← fullFieldTy.eval q₀ ctx.env
-    checkFields (ctx.bind field.name fullFieldTyVal) rest (j + 1)
+    checkFields (← ctx.bindV q₀ field.name fullFieldTyVal) rest (j + 1)
 
 public structure StructureResult (numParams : Nat) : Type where
   indResult : InductiveResult numParams
@@ -140,24 +141,22 @@ public def Structure.elab' (info : Structure) :
     | failure
   let ⟨_fieldTeleEnd, fieldTele, _retTy⟩ := ctorTy.getTele
 
-  let userCount := info.univParams.length
   let paramTys : Ctx 0 info.params.length ←
-    paramTys.mapM fun (n, t) => return (n, ← t.zonk q₀)
+    paramTys.mapM fun (n, bi, t) => return (n, bi, ← t.zonk q₀)
   let paramFreeMVars : List UMVarId :=
     let rec go {a b : Nat} : Ctx a b → List UMVarId
       | .nil => []
-      | .snoc rest (_, t) => go rest ++ t.freeUMVars
+      | .snoc rest (_, _, t) => go rest ++ t.freeUMVars
     go paramTys
   let indFreeMVars :=
     paramFreeMVars ++
     indResult.indEntry.snd.freeUMVars ++
     indResult.recEntry.snd.freeUMVars ++
     indResult.ctorEntries.flatMap (fun (_, c) => c.freeUMVars)
-  let (promotedNames, subst) := promoteUniverseMVars info.univParams indFreeMVars
-  let promotedCount := promotedNames.length
-  let totalUnivParams := userCount + promotedCount
-  let extras : List Universe :=
-    List.finRange promotedCount |>.map fun i => Universe.level (userCount + i.val)
+  let (promotedNames, subst) :=
+    promoteUniverseMVars indResult.recEntry.snd.toConstantInfo.univParams indFreeMVars
+  let structUnivParams := info.univParams ++ promotedNames
+  let extras : List Universe := promotedNames.map Universe.param
   let indName := info.name
   let recName := info.recName
   let ctorName := info.name.str "mk"
@@ -168,19 +167,19 @@ public def Structure.elab' (info : Structure) :
   let updateConst (c : Constant) : Constant :=
     let c := c.substUMVars subst
     let c := extendAll c
-    c.setNumUnivParams (c.toConstantInfo.numUnivParams + promotedCount)
+    c.setUnivParams (c.toConstantInfo.univParams ++ promotedNames)
   let indEntry := (indResult.indEntry.fst, updateConst indResult.indEntry.snd)
   let recEntry := (indResult.recEntry.fst, updateConst indResult.recEntry.snd)
   let ctorEntries := indResult.ctorEntries.map fun (n, c) => (n, updateConst c)
-  replaceEntry q₀ indEntry.fst indEntry.snd
-  replaceEntry q₀ recEntry.fst recEntry.snd
+  addPending q₀ indEntry.fst indEntry.snd
+  addPending q₀ recEntry.fst recEntry.snd
   for (cname, cconst) in ctorEntries do
-    replaceEntry q₀ cname cconst
+    addPending q₀ cname cconst
   let indResult : InductiveResult numParams :=
     { indEntry, ctorEntries, recEntry, ctorTys := indResult.ctorTys }
-  let fieldTele := fieldTele.map (fun (n, t) => (n, Ty.substUMVars subst t))
+  let fieldTele := fieldTele.map (fun (n, bi, t) => (n, bi, Ty.substUMVars subst t))
   let paramTys : Ctx 0 info.params.length :=
-    paramTys.map fun (n, t) => (n, Ty.substUMVars subst t)
+    paramTys.map fun (n, bi, t) => (n, bi, Ty.substUMVars subst t)
 
   checkFields q₀ paramCtx info.fields 0
 
@@ -193,7 +192,7 @@ public def Structure.elab' (info : Structure) :
 
   let x : VTm np1 := VTm.varAt numParams
 
-  let structUnivs := List.finRange totalUnivParams |>.map fun i => Universe.level i.val
+  let structUnivs := structUnivParams.map Universe.param
   let majorTy : VTm numParams := VTm.const info.name structUnivs
   let majorTy ← majorTy.apps q₀ paramsVal
   let majorTy ← majorTy.quote q₀
@@ -205,7 +204,7 @@ public def Structure.elab' (info : Structure) :
       Ctx numParams b →
       OptionT (ElabM q₀) (List (Name × Constant))
     | .nil => return acc
-    | .snoc (b := idx) fs ⟨name, ty⟩ => do
+    | .snoc (b := idx) fs ⟨name, _, ty⟩ => do
         let acc ← goProj acc fs
 
         let fname ← getAtomicFieldString q₀ info.name name
@@ -220,19 +219,19 @@ public def Structure.elab' (info : Structure) :
         let fieldIdx := idx - numParams
         let projBody : Tm np1 := Tm.proj fieldIdx pVar
 
-        let projBodyTy : Ty numParams := Ty.pi `self majorTy ftyTy
-        let projTy : Ty 0 := Ty.pis paramTys projBodyTy
+        let projBodyTy : Ty numParams := Ty.pi `self .explicit majorTy ftyTy
+        let projTy : Ty 0 := Ty.pis paramTys.toImplicit projBodyTy
         let projTm : Tm 0 :=
-          Tm.lams paramTys <|
-          Tm.lam `self majorTy projBody
+          Tm.lams paramTys.toImplicit <|
+          Tm.lam `self .explicit majorTy projBody
 
         let projTy ← projTy.zonk q₀
         let projTm ← projTm.zonk q₀
         let projTy := projTy.substUMVars subst
         let projTm := projTm.substUMVars subst
-        let entry : Name × Constant := (projName, .definition { numUnivParams := totalUnivParams, ty := projTy, tm := projTm })
-        let _ ← addConstant q₀ projName entry.2
-        withChild q₀ (4 + fieldIdx) (emitHover q₀ (.signature projName (paramTys.snoc ⟨`self, majorTy⟩) ftyTy))
+        let entry : Name × Constant := (projName, .definition { univParams := structUnivParams, ty := projTy, tm := projTm })
+        addPending q₀ projName entry.2
+        withChild q₀ (4 + fieldIdx) (emitHover q₀ (.signature projName (paramTys.toImplicit.snoc ⟨`self, .explicit, majorTy⟩) ftyTy))
         return acc ++ [entry]
 
   let projEntries ← goProj [] fieldTele

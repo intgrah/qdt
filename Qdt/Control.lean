@@ -10,6 +10,7 @@ namespace Qdt
 
 open Lean (Name)
 open Incremental
+
 open Frontend (Path SourceMap)
 open System (FilePath)
 
@@ -23,6 +24,7 @@ structure ElabContext where
   collectHovers : Bool
   currentDecl : Name
   path : Path := []
+  mayPostpone : Bool := true
 deriving Repr, Inhabited
 
 structure MetaInfo where
@@ -31,6 +33,8 @@ structure MetaInfo where
   ty : Ty arity
   ctxNames : List Name
   solution : Option (Tm arity) := none
+  groundSolution : Bool := false
+  tyNorm : Option (Ty arity) := none
   path : Path
   decl : Name
   errored : Bool := false
@@ -40,16 +44,30 @@ instance : Inhabited MetaInfo where
     { arity := 0, ctx := .nil, ty := .u .zero, ctxNames := [],
       solution := none, path := default, decl := default }
 
+structure PostponeEntry where
+  {n : Nat}
+  ctx : TermContext n
+  expected : VTy n
+  ast : Frontend.Ast
+  placeholder : Tm n
+  path : Path
+  univParams : List Name
+
 structure ElabState where
   localEnv : Global
+  pending : Global := ∅
   sorryId : Nat
+  inaccessibleId : Nat := 0
   entryCache : Std.HashMap Name (Option Constant)
   diagnostics : Array Diagnostic := #[]
   hovers : Array HoverInfo := #[]
   metas : Array MetaInfo := #[]
+  deltaCache : Std.HashMap (Name × List Universe) (VTm 0) := ∅
   usubst : Universe.Subst := .empty
   nextUMVar : UMVarId := 0
   postponedUEqs : Array (Universe × Universe) := #[]
+  postponeSignal : Bool := false
+  postponed : Array PostponeEntry := #[]
 deriving Inhabited
 
 abbrev ElabM :=
@@ -102,18 +120,17 @@ where
 def promoteUniverseMVars (userParams : List Name) (mvarIds : List UMVarId) :
     List Name × (UMVarId → Option Universe) :=
   let dedup := mvarIds.eraseDups
-  let userCount := userParams.length
   let used : Std.HashSet Name := userParams.foldl (init := ∅) (·.insert ·)
   let names := mintFreshUnivNames used dedup.length
   let table : Std.HashMap UMVarId Universe :=
-    dedup.zipIdx.foldl (init := ∅) fun acc (id, i) =>
-      acc.insert id (.level (userCount + i))
+    (dedup.zip names).foldl (init := ∅) fun acc (id, nm) =>
+      acc.insert id (.param nm)
   (names, fun id => table[id]?)
 
 def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
-    (used : List Nat) : OptionT (ElabM q₀) Unit := do
-  for (name, i) in univParams.zipIdx do
-    if !used.contains i then
+    (used : List Name) : OptionT (ElabM q₀) Unit := do
+  for name in univParams do
+    if !used.contains name then
       raiseError q₀ (.unusedUniverseParam declName name)
 
 @[inline] def getMetaInfo (id : MVarId) : ElabM q₀ MetaInfo := do
@@ -122,6 +139,14 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
 @[inline] def assignMeta (info : MetaInfo) (id : MVarId) (soln : Tm info.arity) :
     ElabM q₀ Unit :=
   modify fun st => { st with metas := st.metas.set! id { info with solution := some soln } }
+
+@[inline] def compressMetaSolution (info : MetaInfo) (id : MVarId) (soln : Tm info.arity)
+    (ground : Bool) : ElabM q₀ Unit :=
+  modify fun st =>
+    { st with metas := st.metas.set! id { info with solution := some soln, groundSolution := ground } }
+
+@[inline] def setMetaTyNorm (info : MetaInfo) (id : MVarId) (t : Ty info.arity) : ElabM q₀ Unit :=
+  modify fun st => { st with metas := st.metas.set! id { info with tyNorm := some t } }
 
 @[inline] def markMetaErrored (id : MVarId) : ElabM q₀ Unit :=
   modify fun st =>
@@ -138,7 +163,7 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
   return id
 
 @[inline] def resetMetas : ElabM q₀ Unit :=
-  modify fun st => { st with metas := #[] }
+  modify fun st => { st with metas := #[], postponed := #[], postponeSignal := false }
 
 @[inline] def emitHover (hover : HoverContent) : ElabM q₀ Unit := do
   let ctx ← readThe ElabContext
@@ -149,6 +174,8 @@ def checkUnusedUniverseParams (declName : Name) (univParams : List Name)
 def fetchConstant (name : Name) : ElabM q₀ (Option Constant) := do
   let st ← get
   if let some e := st.localEnv[name]? then
+    return some e
+  if let some e := st.pending[name]? then
     return some e
   let ctx ← readThe ElabContext
   if let some result := st.entryCache[name]? then
@@ -213,9 +240,8 @@ def addConstant (name : Name) (constant : Constant) : ElabM q₀ Bool := do
   set { st with localEnv := st.localEnv.insert name constant }
   return true
 
-def replaceEntry (name : Name) (constant : Constant) : ElabM q₀ Unit := do
-  let st ← get
-  set { st with localEnv := st.localEnv.insert name constant }
+def addPending (name : Name) (constant : Constant) : ElabM q₀ Unit :=
+  modify fun st => { st with pending := st.pending.insert name constant }
 
 def ElabM.run {α : Type} (ctx : ElabContext) (action : ElabM q₀ α) :
     Task config q₀ (α × Global × ElabInfo) := do

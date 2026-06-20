@@ -33,7 +33,7 @@ def Universe.sample : Nat → Gen Universe
   | fuel + 1 => do
       match ← SampleableExt.interpSample (Fin 4) with
       | 0 => return .zero
-      | 1 => return .level (← SampleableExt.interpSample (Fin 4))
+      | 1 => return .param ((`u).appendIndexAfter (← SampleableExt.interpSample (Fin 4)))
       | 2 => return (← sample fuel).mkSucc
       | 3 => return (← sample fuel).mkMax (← sample fuel)
 
@@ -64,7 +64,7 @@ def Tm.sample (n : Nat) : Nat → Gen (Tm n)
           else
             return .const `x []
       | 1 => return .const `c []
-      | 2 => return .lam .anonymous (← Ty.sample n fuel) (← Tm.sample (n + 1) fuel)
+      | 2 => return .lam .anonymous .explicit (← Ty.sample n fuel) (← Tm.sample (n + 1) fuel)
       | 3 => return .app (← Tm.sample n fuel) (← Tm.sample n fuel)
 end
 

@@ -8,7 +8,7 @@ public import Lean.Data.Format
 namespace Qdt.Frontend.Format
 
 open Lean (Name SyntaxNodeKind Format)
-open Std.Format (text line nest group joinSep)
+open Std.Format (text line nest group fill joinSep)
 
 namespace Prec
 def min   : Nat := 0
@@ -185,18 +185,37 @@ partial def fmtTerm (prec : Nat) (cst : Cst) : Format :=
           match nt[0]?, nt[2]? with
           | some binder, some r =>
               parensIf (prec > Prec.arrow) <|
-                group (fmtExplicitBinder binder ++ " →"
+                group (fmtBinderGroup binder ++ " →"
                         ++ line ++ fmtTerm Prec.arrow r)
           | _, _ => Format.nil
+      | `Lean.Parser.Term.explicit =>
+          let nt := nonTrivia args
+          match nt[1]? with
+          | some ident => "@" ++ fmtTerm Prec.app ident
+          | none       => Format.nil
       | `Lean.Parser.Term.fun =>
           let nt := nonTrivia args
           if h : nt.size >= 3 then
             let body := nt[nt.size - 1]
-            let binders := nt.extract 1 (nt.size - 1) |>.filter
+            let region := (nt.extract 1 (nt.size - 1)).filter
               (fun c => !isAtom "=>" c && !isAtom "⇒" c)
+            let binderDoc :=
+              match region.toList.findIdx? (isAtom ":") with
+              | some ci =>
+                  let names := region.extract 0 ci
+                  let tyF := match region[ci + 1]? with
+                    | some tyC => flatten (fmtTerm Prec.min tyC)
+                    | none     => Format.nil
+                  joinSep (names.toList.map fmtBinder) " " ++ " : " ++ tyF
+              | none =>
+                  match region[0]? with
+                  | some (Cst.node `Lean.Parser.Term.explicitBinder bargs) =>
+                      if region.size == 1 then fmtTypedBinder "" "" bargs
+                      else joinSep (region.toList.map fmtBinderMinimal) " "
+                  | _ => joinSep (region.toList.map fmtBinderMinimal) " "
             parensIf (prec > Prec.min) <|
               group <|
-                "fun " ++ joinSep (binders.toList.map fmtBinder) " "
+                "fun " ++ binderDoc
                   ++ " =>" ++ nest 2 (line ++ fmtTerm Prec.min body)
           else
             Format.nil
@@ -247,28 +266,46 @@ partial def fmtTerm (prec : Nat) (cst : Cst) : Format :=
           | some c => fmtTerm prec c
           | none   => Format.nil
 
-partial def fmtExplicitBinder (cst : Cst) : Format :=
+partial def fmtTypedBinder (open_ close_ : String) (args : Array Cst) : Format :=
+  let nt := nonTrivia args
+  let colonIdx := nt.toList.findIdx? (isAtom ":")
+  let preColon := match colonIdx with
+    | some i => nt.extract 1 i
+    | none   => nt.extract 1 nt.size
+  let names := preColon.filterMap fun c =>
+    match c with
+    | .token `ident v               => some (text v)
+    | .node `Lean.Parser.Term.hole _ => some "_"
+    | _                              => none
+  let nameF := joinSep names.toList " "
+  match colonIdx.bind (fun i => nt[i + 1]?) with
+  | some tyC =>
+      open_ ++ nameF ++ " : " ++ flatten (fmtTerm Prec.min tyC) ++ close_
+  | none => open_ ++ nameF ++ close_
+
+partial def fmtBinderGroup (cst : Cst) : Format :=
   match cst with
-  | .node `Lean.Parser.Term.explicitBinder args =>
-      let nt := nonTrivia args
-      let colonIdx := nt.toList.findIdx? (isAtom ":")
-      let preColon := match colonIdx with
-        | some i => nt.extract 1 i
-        | none   => nt.extract 1 nt.size
-      let names := preColon.map fmtBinder
-      let nameF := joinSep names.toList " "
-      match colonIdx.bind (fun i => nt[i + 1]?) with
-      | some tyC =>
-          "(" ++ nameF ++ " : " ++ flatten (fmtTerm Prec.min tyC) ++ ")"
-      | none => "(" ++ nameF ++ ")"
+  | .node `Lean.Parser.Term.explicitBinder args => fmtTypedBinder "(" ")" args
+  | .node `Lean.Parser.Term.implicitBinder args => fmtTypedBinder "{" "}" args
   | _ => fmtBinder cst
 
 partial def fmtBinder (cst : Cst) : Format :=
   match cst with
   | .token `ident v                          => text v
   | .node `Lean.Parser.Term.hole _           => "_"
-  | .node `Lean.Parser.Term.explicitBinder _ => fmtExplicitBinder cst
+  | .node `Lean.Parser.Term.explicitBinder _ => fmtBinderGroup cst
+  | .node `Lean.Parser.Term.implicitBinder _ => fmtBinderGroup cst
   | _ => Format.nil
+
+partial def fmtBinderMinimal (cst : Cst) : Format :=
+  match cst with
+  | .token `ident v                => text v
+  | .node `Lean.Parser.Term.hole _ => "_"
+  | .node `Lean.Parser.Term.explicitBinder args =>
+      if (nonTrivia args).any (isAtom ":") then fmtTypedBinder "(" ")" args
+      else fmtTypedBinder "" "" args
+  | .node `Lean.Parser.Term.implicitBinder args => fmtTypedBinder "{" "}" args
+  | _ => fmtBinder cst
 
 partial def fmtLevel (prec : Nat) (cst : Cst) : Format :=
   match cst with
@@ -340,22 +377,31 @@ def collectSig (cst : Cst) : Array Format × Option Format := Id.run do
         let c := nt[i]
         match c with
         | .node `Lean.Parser.Term.explicitBinder _ =>
-            binders := binders.push (fmtExplicitBinder c)
+            binders := binders.push (fmtBinderMinimal c)
+        | .node `Lean.Parser.Term.implicitBinder _ =>
+            binders := binders.push (fmtBinderMinimal c)
+        | .token `ident v =>
+            binders := binders.push (text v)
+        | .node `Lean.Parser.Term.hole _ =>
+            binders := binders.push "_"
         | .token `atom ":" =>
             if hh : i + 1 < nt.size then
-              tyOpt := some (flatten (fmtTerm Prec.min nt[i + 1]))
+              tyOpt := some (fmtTerm Prec.min nt[i + 1])
             stop := true
         | _ => ()
         i := i + 1
       return (binders, tyOpt)
   | _ => return (#[], none)
 
-def sigCore (binders : Array Format) (tyOpt : Option Format) : Format :=
-  match binders.isEmpty, tyOpt with
-  | true,  none   => Format.nil
-  | true,  some t => " : " ++ t
-  | false, none   => " " ++ joinSep binders.toList " "
-  | false, some t => " " ++ joinSep binders.toList " " ++ " : " ++ t
+def fmtSig (head : Format) (binders : Array Format) (tyOpt : Option Format) : Format :=
+  let binderPart :=
+    if binders.isEmpty then Format.nil
+    else line ++ fill (joinSep binders.toList line)
+  let tyPart :=
+    match tyOpt with
+    | some t => " :" ++ line ++ t
+    | none   => Format.nil
+  group (head ++ nest 4 (binderPart ++ tyPart))
 
 def fmtDeclId (cst : Cst) : Format :=
   match cst with
@@ -382,14 +428,18 @@ def fmtImport (cst : Cst) : Format :=
       | none => Format.nil
   | _ => Format.nil
 
-def fmtBodyValSimple (cst : Cst) : Format :=
+def fmtDeclVal (cst : Cst) : Option Format :=
   match cst with
   | .node _ args =>
-      let nt := nonTrivia args
-      match nt[1]? with
-      | some body => group (" :=" ++ nest 2 (line ++ fmtTerm Prec.min body))
-      | none      => Format.nil
-  | _ => Format.nil
+      match (nonTrivia args)[1]? with
+      | some body => some (fmtTerm Prec.min body)
+      | none      => none
+  | _ => none
+
+def fmtDeclBody (sigF : Format) (body : Cst) : Format :=
+  match fmtDeclVal body with
+  | some v => group (sigF ++ " :=" ++ nest 2 (line ++ v))
+  | none   => sigF
 
 def fmtDefinition (cst : Cst) : Format :=
   match cst with
@@ -398,7 +448,7 @@ def fmtDefinition (cst : Cst) : Format :=
       match nt[1]?, nt[2]?, nt[3]? with
       | some declId, some sig, some body =>
           let (binders, tyOpt) := collectSig sig
-          "def " ++ fmtDeclId declId ++ sigCore binders tyOpt ++ fmtBodyValSimple body
+          fmtDeclBody (fmtSig ("def " ++ fmtDeclId declId) binders tyOpt) body
       | _, _, _ => Format.nil
   | _ => Format.nil
 
@@ -409,7 +459,7 @@ def fmtExample (cst : Cst) : Format :=
       match nt[1]?, nt[2]? with
       | some sig, some body =>
           let (binders, tyOpt) := collectSig sig
-          "example" ++ sigCore binders tyOpt ++ fmtBodyValSimple body
+          fmtDeclBody (fmtSig "example" binders tyOpt) body
       | _, _ => Format.nil
   | _ => Format.nil
 
@@ -420,7 +470,7 @@ def fmtAxiom (cst : Cst) : Format :=
       match nt[1]?, nt[2]? with
       | some declId, some sig =>
           let (binders, tyOpt) := collectSig sig
-          "axiom " ++ fmtDeclId declId ++ sigCore binders tyOpt
+          fmtSig ("axiom " ++ fmtDeclId declId) binders tyOpt
       | _, _ => Format.nil
   | _ => Format.nil
 
@@ -433,7 +483,7 @@ def fmtCtor (cst : Cst) : Format :=
           match getIdent? nameC with
           | some s =>
               let (binders, tyOpt) := collectSig sig
-              "| " ++ text s ++ sigCore binders tyOpt
+              fmtSig ("| " ++ text s) binders tyOpt
           | none => Format.nil
       | _, _ => Format.nil
   | _ => Format.nil
@@ -447,7 +497,7 @@ def fmtInductive (cst : Cst) : Format :=
           let (binders, tyOpt) := collectSig sig
           let ctors := nt.toList.drop 3
           let header :=
-            "inductive " ++ fmtDeclId declId ++ sigCore binders tyOpt ++ " where"
+            fmtSig ("inductive " ++ fmtDeclId declId) binders tyOpt ++ " where"
           let ctorBlock :=
             if ctors.isEmpty then Format.nil
             else nest 2 (line ++ joinSep (ctors.map fmtCtor) line)
@@ -464,13 +514,7 @@ def fmtStructField (cst : Cst) : Format :=
           match getIdent? nameC with
           | some s =>
               let (binders, tyOpt) := collectSig sig
-              let tyF := match tyOpt with
-                | some t => " : " ++ t
-                | none   => Format.nil
-              let bindF :=
-                if binders.isEmpty then Format.nil
-                else " " ++ joinSep binders.toList " "
-              "(" ++ text s ++ bindF ++ tyF ++ ")"
+              "(" ++ fmtSig (text s) binders tyOpt ++ ")"
           | none => Format.nil
       | _, _ => Format.nil
   | _ => Format.nil
@@ -484,7 +528,7 @@ def fmtStructure (cst : Cst) : Format :=
           let (binders, tyOpt) := collectSig sig
           let fields := nt.toList.drop 3
           let header :=
-            "structure " ++ fmtDeclId declId ++ sigCore binders tyOpt ++ " where"
+            fmtSig ("structure " ++ fmtDeclId declId) binders tyOpt ++ " where"
           let fieldBlock :=
             if fields.isEmpty then Format.nil
             else nest 2 (line ++ joinSep (fields.map fmtStructField) line)

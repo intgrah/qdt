@@ -13,9 +13,11 @@ namespace Qdt
 open Lean (Name)
 
 structure ConstantInfo where
-  numUnivParams : Nat
+  univParams : List Name
   ty : Ty 0
 deriving Repr, Hashable
+
+def ConstantInfo.numUnivParams (info : ConstantInfo) : Nat := info.univParams.length
 
 structure DefinitionInfo extends ConstantInfo where
   tm : Tm 0
@@ -95,13 +97,13 @@ def Constant.substUMVars (f : UMVarId → Option Universe) : Constant → Consta
         ty := info.ty.substUMVars f
         recRules := info.recRules.map (fun r => { r with rhs := r.rhs.substUMVars f }) }
 
-def Constant.setNumUnivParams (n : Nat) : Constant → Constant
-  | .definition info => .definition { info with numUnivParams := n }
-  | .opaque info => .opaque { info with numUnivParams := n }
-  | .axiom info => .axiom { info with numUnivParams := n }
-  | .constructor info => .constructor { info with numUnivParams := n }
-  | .inductive info => .inductive { info with numUnivParams := n }
-  | .recursor info => .recursor { info with numUnivParams := n }
+def Constant.setUnivParams (ps : List Name) : Constant → Constant
+  | .definition info => .definition { info with univParams := ps }
+  | .opaque info => .opaque { info with univParams := ps }
+  | .axiom info => .axiom { info with univParams := ps }
+  | .constructor info => .constructor { info with univParams := ps }
+  | .inductive info => .inductive { info with univParams := ps }
+  | .recursor info => .recursor { info with univParams := ps }
 
 def Constant.extendConstUnivs (extras : List Universe) (name : Name) :
     Constant → Constant

@@ -1,6 +1,6 @@
 module
 
-public import Qdt.Structure
+public import Qdt.Inductive.Structure
 import Qdt.Bidirectional
 import Qdt.HitPrimitive
 import Qdt.Params
@@ -103,6 +103,11 @@ def checkDuplicateUnivParams (params : List Name) : Option Error :=
           loop (seen.insert n) ns
   loop ∅ params
 
+def checkStuckUniverseConstraints : OptionT (ElabM q₀) Unit := do
+  let stuck ← OptionT.lift (Universe.stuckConstraints q₀)
+  if let some (lhs, rhs) := stuck[0]? then
+    raiseError q₀ (.stuckUniverseConstraint lhs rhs)
+
 def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   if let some e := checkDuplicateUnivParams d.univParams then
     raiseError q₀ e
@@ -119,17 +124,20 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
         let tyVal ← ty.eval q₀ paramCtx.env
         let tm ← OptionT.lift (withChild q₀ 4 (checkTm q₀ paramCtx tyVal d.body))
         pure (tm, ty)
-  let _ ← Universe.retryPostponed q₀
+  OptionT.lift (resumePostponed q₀ true)
+  checkStuckUniverseConstraints q₀
   let tm ← tm.zonk q₀
   let ty ← ty.zonk q₀
-  let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
+  let paramTys ← paramTys.mapM (fun (n, bi, t) => return (n, bi, ← t.zonk q₀))
   let tmClosed := Tm.lams paramTys tm
   let tyClosed := Ty.pis paramTys ty
   let (promotedNames, subst) :=
     promoteUniverseMVars d.univParams (tyClosed.freeUMVars ++ tmClosed.freeUMVars)
+  for id in (tyClosed.freeUMVars ++ tmClosed.freeUMVars).eraseDups do
+    if let some u := subst id then Universe.assignUMVar q₀ id u
   let ty := ty.substUMVars subst
   let tm := tm.substUMVars subst
-  let paramTys ← paramTys.mapM (fun (n, t) => return (n, t.substUMVars subst))
+  let paramTys ← paramTys.mapM (fun (n, bi, t) => return (n, bi, t.substUMVars subst))
   let allUnivParams := d.univParams ++ promotedNames
   withReader (fun (ctx : ElabContext) => { ctx with univParams := allUnivParams }) do
     resolveHoleHovers q₀
@@ -138,10 +146,15 @@ def Definition.elab (d : Definition) : OptionT (ElabM q₀) Unit := do
   let ty := Ty.pis paramTys ty
   let hadUnsolved ← reportUnsolvedMetas q₀
   if hadUnsolved then
+    unless ty.hasExprMVar || ty.hasUMVar do
+      withReader (fun (ctx : ElabContext) => { ctx with univParams := allUnivParams }) do
+        let sorryBody ← emitSorryAxiom q₀ TermContext.empty ty
+        let _ ← addConstant q₀ d.name
+          (.definition { univParams := allUnivParams, ty, tm := sorryBody })
     return
-  checkUnusedUniverseParams q₀ d.name d.univParams (ty.usedLevels ++ tm.usedLevels)
+  checkUnusedUniverseParams q₀ d.name d.univParams (ty.usedParams ++ tm.usedParams)
   let _ ← addConstant q₀ d.name
-    (.definition { numUnivParams := allUnivParams.length, ty, tm })
+    (.definition { univParams := allUnivParams, ty, tm })
 
 def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams e.univParams then
@@ -155,7 +168,8 @@ def Example.elab (e : Example) : OptionT (ElabM q₀) Unit := do
       let _term ← OptionT.lift (withChild q₀ 2 (checkTm q₀ paramCtx expected e.body))
   | none =>
       let (_term, _tyVal) ← withChild q₀ 2 (inferTm q₀ paramCtx e.body)
-  let _ ← Universe.retryPostponed q₀
+  OptionT.lift (resumePostponed q₀ true)
+  checkStuckUniverseConstraints q₀
   resolveHoleHovers q₀
   let _ ← reportUnsolvedMetas q₀
 
@@ -165,13 +179,16 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   resetMetas q₀
   let (paramCtx, paramTys) ← withChild q₀ 2 (Params.elab q₀ a.params)
   let ty ← OptionT.lift (withChild q₀ 3 (checkTy q₀ paramCtx a.ty))
-  let _ ← Universe.retryPostponed q₀
+  OptionT.lift (resumePostponed q₀ true)
+  checkStuckUniverseConstraints q₀
   let ty ← ty.zonk q₀
-  let paramTys ← paramTys.mapM (fun (n, t) => return (n, ← t.zonk q₀))
+  let paramTys ← paramTys.mapM (fun (n, bi, t) => return (n, bi, ← t.zonk q₀))
   let tyClosed := Ty.pis paramTys ty
   let (promotedNames, subst) := promoteUniverseMVars a.univParams tyClosed.freeUMVars
+  for id in tyClosed.freeUMVars.eraseDups do
+    if let some u := subst id then Universe.assignUMVar q₀ id u
   let ty := ty.substUMVars subst
-  let paramTys ← paramTys.mapM (fun (n, t) => return (n, t.substUMVars subst))
+  let paramTys ← paramTys.mapM (fun (n, bi, t) => return (n, bi, t.substUMVars subst))
   let allUnivParams := a.univParams ++ promotedNames
   withReader (fun (ctx : ElabContext) => { ctx with univParams := allUnivParams }) do
     resolveHoleHovers q₀
@@ -180,46 +197,64 @@ def Axiom.elab (a : Axiom) : OptionT (ElabM q₀) Unit := do
   let hadUnsolved ← reportUnsolvedMetas q₀
   if hadUnsolved then
     return
-  checkUnusedUniverseParams q₀ a.name a.univParams ty.usedLevels
-  let numUnivParams := allUnivParams.length
-  let entry := (Hit.recogniseAxiom a.name numUnivParams ty).getD
-    (.axiom { numUnivParams, ty })
+  checkUnusedUniverseParams q₀ a.name a.univParams ty.usedParams
+  let entry := (Hit.recogniseAxiom a.name allUnivParams ty).getD
+    (.axiom { univParams := allUnivParams, ty })
   let _ ← addConstant q₀ a.name entry
 
 def Inductive.elab (info : Inductive) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError q₀ err
   let result ← Inductive.elab' q₀ info
+  resolveHoleHovers q₀
+  let _ ← reportUnsolvedMetas q₀
+  if (result.indEntry.snd :: result.recEntry.snd ::
+      result.ctorEntries.map Prod.snd).any Constant.hasExprMVar then
+    return
   let allConsts := result.indEntry.snd :: result.recEntry.snd ::
     result.ctorEntries.map Prod.snd
   let allMVars := allConsts.flatMap Constant.freeUMVars
-  let (promotedNames, subst) := promoteUniverseMVars info.univParams allMVars
-  let promotedCount := promotedNames.length
+  let (promotedNames, subst) :=
+    promoteUniverseMVars result.recEntry.snd.toConstantInfo.univParams allMVars
   let updateConst (c : Constant) : Constant :=
     let c := c.substUMVars subst
-    c.setNumUnivParams (c.toConstantInfo.numUnivParams + promotedCount)
-  replaceEntry q₀ result.indEntry.fst (updateConst result.indEntry.snd)
-  replaceEntry q₀ result.recEntry.fst (updateConst result.recEntry.snd)
+    c.setUnivParams (c.toConstantInfo.univParams ++ promotedNames)
+  let _ ← addConstant q₀ result.indEntry.fst (updateConst result.indEntry.snd)
+  let _ ← addConstant q₀ result.recEntry.fst (updateConst result.recEntry.snd)
   for (cname, cconst) in result.ctorEntries do
-    replaceEntry q₀ cname (updateConst cconst)
+    let _ ← addConstant q₀ cname (updateConst cconst)
   let updatedInd := updateConst result.indEntry.snd
   let updatedRec := updateConst result.recEntry.snd
   let ctorUsed := result.ctorEntries.flatMap (fun (_, c) =>
-    (updateConst c).ty.usedLevels)
+    (updateConst c).ty.usedParams)
   checkUnusedUniverseParams q₀ info.name info.univParams
-    (updatedInd.ty.usedLevels ++ updatedRec.ty.usedLevels ++ ctorUsed)
+    (updatedInd.ty.usedParams ++ updatedRec.ty.usedParams ++ ctorUsed)
   let _ ← result.ctorEntries.foldlM (init := 0) fun i (ctorName, ctorConst) => do
-    withChild q₀ (4 + i) (emitHover q₀ (.signature ctorName .nil (updateConst ctorConst).ty))
+    let updated := updateConst ctorConst
+    withReader (fun (ctx : ElabContext) => { ctx with univParams := updated.toConstantInfo.univParams }) do
+      withChild q₀ (4 + i) (emitHover q₀ (.signature ctorName .nil updated.ty))
     return i + 1
 
 def Structure.elab (info : Structure) : OptionT (ElabM q₀) Unit := do
   if let some err := checkDuplicateUnivParams info.univParams then
     raiseError q₀ err
   let result ← Structure.elab' q₀ info
+  resolveHoleHovers q₀
+  let _ ← reportUnsolvedMetas q₀
+  if (result.indResult.indEntry.snd :: result.indResult.recEntry.snd ::
+      (result.indResult.ctorEntries.map Prod.snd ++ result.projEntries.map Prod.snd)).any
+      Constant.hasExprMVar then
+    return
+  let _ ← addConstant q₀ result.indResult.indEntry.fst result.indResult.indEntry.snd
+  let _ ← addConstant q₀ result.indResult.recEntry.fst result.indResult.recEntry.snd
+  for (cname, cconst) in result.indResult.ctorEntries do
+    let _ ← addConstant q₀ cname cconst
+  for (pname, pconst) in result.projEntries do
+    let _ ← addConstant q₀ pname pconst
   let allConsts := result.indResult.indEntry.snd ::
     result.indResult.recEntry.snd ::
     result.indResult.ctorEntries.map Prod.snd ++ result.projEntries.map Prod.snd
-  let used := allConsts.flatMap (fun c => c.ty.usedLevels)
+  let used := allConsts.flatMap (fun c => c.ty.usedParams)
   checkUnusedUniverseParams q₀ info.name info.univParams used
 
 end Qdt

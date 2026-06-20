@@ -29,16 +29,16 @@ mutual
 
 def Ty.subst {m n : Nat} (σ : Subst m n) : Ty m → Ty n
   | .u i => .u i
-  | .pi x a b => .pi x (a.subst σ) (b.subst σ.up)
+  | .pi x bi a b => .pi x bi (a.subst σ) (b.subst σ.up)
   | .el t => .el (t.subst σ)
 
 def Tm.subst {m n : Nat} (σ : Subst m n) : Tm m → Tm n
   | .u' i => .u' i
   | .var i => σ i
   | .const name us => .const name us
-  | .lam x a body => .lam x (a.subst σ) (body.subst σ.up)
+  | .lam x bi a body => .lam x bi (a.subst σ) (body.subst σ.up)
   | .app f a => .app (f.subst σ) (a.subst σ)
-  | .pi' x a b => .pi' x (a.subst σ) (b.subst σ.up)
+  | .pi' x bi a b => .pi' x bi (a.subst σ) (b.subst σ.up)
   | .proj i t => .proj i (t.subst σ)
   | .letE x ty t body => .letE x (ty.subst σ) (t.subst σ) (body.subst σ.up)
   | .mvar id => .mvar id
@@ -62,7 +62,7 @@ mutual
 theorem Ty.ren_eq_subst_var {m n} (ξ : Ren m n) :
     ∀ A : Ty m, A.ren ξ = A.subst ξ.toSubst
   | .u .. => rfl
-  | .pi _ _ _ => by
+  | .pi _ _ _ _ => by
     simp only [Ty.ren, Ty.subst, Ty.ren_eq_subst_var, Subst.subst_comp_up]
   | .el t => by simp only [Ty.ren, Ty.subst, Tm.ren_eq_subst_var ξ t]
 
@@ -71,10 +71,10 @@ theorem Tm.ren_eq_subst_var {m n} (ξ : Ren m n) :
   | .u' .. => rfl
   | .var _ => rfl
   | .const .. => rfl
-  | .lam _ _ _ => by
+  | .lam _ _ _ _ => by
       simp only [Tm.ren, Tm.subst, Ty.ren_eq_subst_var, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
-  | .pi' _ _ _ => by
+  | .pi' _ _ _ _ => by
       simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var, Subst.subst_comp_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_eq_subst_var]
   | .letE .. => by
@@ -134,7 +134,7 @@ mutual
 theorem Ty.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
     (A : Ty l) → (A.ren ξ).subst σ = A.subst (σ ∘ ξ)
   | .u .. => rfl
-  | .pi _ _ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
+  | .pi _ _ _ _ => by simp only [Ty.ren, Ty.subst, Ty.ren_subst, Subst.comp_ren_up]
   | .el .. => by simp only [Ty.ren, Ty.subst, Tm.ren_subst]
 
 theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
@@ -142,9 +142,9 @@ theorem Tm.ren_subst {l m n} (ξ : Ren l m) (σ : Subst m n) :
   | .u' .. => rfl
   | .var _ => rfl
   | .const .. => rfl
-  | .lam _ _ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
+  | .lam _ _ _ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
   | .app .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
-  | .pi' _ _ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
+  | .pi' _ _ _ _ => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Subst.comp_ren_up]
   | .proj .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst]
   | .letE .. => by simp only [Tm.ren, Tm.subst, Tm.ren_subst, Ty.ren_subst, Subst.comp_ren_up]
   | .mvar _ => rfl
@@ -163,7 +163,7 @@ mutual
 theorem Ty.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
     ∀ A : Ty l, (A.subst σ).ren ξ = A.subst (Tm.ren ξ ∘ σ)
   | .u .. => rfl
-  | .pi _ _ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
+  | .pi _ _ _ _ => by simp only [Ty.subst, Ty.ren, Ty.subst_ren, Subst.ren_comp_up]
   | .el .. => by simp only [Ty.subst, Ty.ren, Tm.subst_ren]
 
 theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
@@ -171,9 +171,9 @@ theorem Tm.subst_ren {l m n} (σ : Subst l m) (ξ : Ren m n) :
   | .u' .. => rfl
   | .var _ => rfl
   | .const .. => rfl
-  | .lam _ _ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .lam _ _ _ _ => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
   | .app .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
-  | .pi' _ _ _ => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
+  | .pi' _ _ _ _ => by simp only [Tm.subst, Tm.ren, Tm.subst_ren, Subst.ren_comp_up]
   | .proj .. => by simp only [Tm.subst, Tm.ren, Tm.subst_ren]
   | .letE .. => by simp only [Tm.subst, Tm.ren, Ty.subst_ren, Tm.subst_ren, Subst.ren_comp_up]
   | .mvar _ => rfl
@@ -197,7 +197,7 @@ mutual
 theorem Ty.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
     ∀ A : Ty l, (A.subst σ).subst τ = A.subst (σ.comp τ)
   | .u .. => rfl
-  | .pi _ _ _ => by simp only [Ty.subst, Ty.comp_subst, Subst.up_comp]
+  | .pi _ _ _ _ => by simp only [Ty.subst, Ty.comp_subst, Subst.up_comp]
   | .el .. => by simp only [Ty.subst, Tm.comp_subst]
 
 @[simp]
@@ -206,9 +206,9 @@ theorem Tm.comp_subst {l m n} (σ : Subst l m) (τ : Subst m n) :
   | .u' .. => rfl
   | .var .. => rfl
   | .const .. => rfl
-  | .lam _ _ _ => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
+  | .lam _ _ _ _ => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
   | .app .. => by simp only [Tm.subst, Tm.comp_subst]
-  | .pi' _ _ _ => by simp only [Tm.subst, Tm.comp_subst, Subst.up_comp]
+  | .pi' _ _ _ _ => by simp only [Tm.subst, Tm.comp_subst, Subst.up_comp]
   | .proj .. => by simp only [Tm.subst, Tm.comp_subst]
   | .letE .. => by simp only [Tm.subst, Ty.comp_subst, Tm.comp_subst, Subst.up_comp]
   | .mvar _ => rfl
@@ -226,7 +226,7 @@ end SubstitutionLemmas
 def Subst.beta {n : Nat} (s : Tm n) : Subst (n + 1) n := s .: Subst.id n
 
 def Ty.applyArg {n} : Ty n → Tm n → Option (Ty n)
-  | .pi _ _ body, arg => some (body.subst (Subst.beta arg))
+  | .pi _ _ _ body, arg => some (body.subst (Subst.beta arg))
   | _, _ => none
 
 @[simp]

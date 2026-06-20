@@ -70,6 +70,21 @@ def any
   | nil => false
   | snoc ts t => f t || ts.any f
 
+def splitAt {T : Nat → Type u} {a : Nat} (mid : Nat) (ha : a ≤ mid) :
+    {b : Nat} → (hb : mid ≤ b) → Tele T a b → Tele T a mid × Tele T mid b
+  | _, hb, .nil =>
+      have h_eq : mid = a := Nat.le_antisymm hb ha
+      ⟨h_eq ▸ Tele.nil, h_eq ▸ Tele.nil⟩
+  | b + 1, hb, .snoc ts t =>
+      if h_eq : mid = b + 1 then
+        ⟨h_eq ▸ ts.snoc t, h_eq ▸ Tele.nil⟩
+      else
+        have hb' : mid ≤ b := by
+          have : mid < b + 1 := Nat.lt_of_le_of_ne hb h_eq
+          omega
+        let (left, right) := splitAt mid ha hb' ts
+        (left, right.snoc t)
+
 @[specialize]
 def dmap
     {a b : Nat}

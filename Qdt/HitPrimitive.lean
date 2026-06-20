@@ -43,10 +43,10 @@ def quotientRecRule : RecursorRule 5 where
   rhs := Tm.app (Tm.var 2) (Tm.var 0)
 
 public def Hit.recogniseAxiom
-    (name : Name) (numUnivParams : Nat) (ty : Ty 0) : Option Constant :=
+    (name : Name) (univParams : List Name) (ty : Ty 0) : Option Constant :=
   match name with
   | `trunc => some <| .inductive {
-      numUnivParams,
+      univParams,
       ty
       numParams := 2
       numIndices := 0
@@ -54,12 +54,12 @@ public def Hit.recogniseAxiom
       ctorNames := #v[`trunc.tr]
     }
   | `trunc.tr => some <| .constructor {
-      numUnivParams,
+      univParams,
       ty,
       indName := `trunc
     }
   | `trunc.rec => some <| .recursor {
-      numUnivParams,
+      univParams,
       ty
       recName := `trunc.rec
       numParams := 2
@@ -70,7 +70,7 @@ public def Hit.recogniseAxiom
       recRules := #v[truncRecRule]
     }
   | `quotient => some <| .inductive {
-      numUnivParams,
+      univParams,
       ty
       numParams := 2
       numIndices := 0
@@ -78,9 +78,9 @@ public def Hit.recogniseAxiom
       ctorNames := #v[`quotient.class_of]
       pathCtorNames := #[`quotient.eq_of_rel]
     }
-  | `quotient.class_of => some <| .constructor { numUnivParams, ty, indName := `quotient }
+  | `quotient.class_of => some <| .constructor { univParams, ty, indName := `quotient }
   | `quotient.rec => some <| .recursor {
-      numUnivParams,
+      univParams,
       ty
       recName := `quotient.rec
       numParams := 2

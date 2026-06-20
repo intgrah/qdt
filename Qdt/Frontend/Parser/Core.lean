@@ -1,6 +1,7 @@
 module
 
 public import Qdt.Frontend.Cst
+public import Lean.Data.Trie
 
 @[expose] public section
 
@@ -122,26 +123,6 @@ instance : OrElse ParserFn where
   else
     let c := String.Pos.Raw.get s.input ⟨s.pos⟩
     { s with pos := s.pos + c.utf8Size }
-
-def atomRawAuxFn (lit : String) (i : Nat) (s : State) : State :=
-  if hi : i ≥ lit.utf8ByteSize then s.pushSyntax (.token `atom lit)
-  else if hs₀ : s.pos ≥ s.input.utf8ByteSize then
-    s.setError s!"expected '{lit}'"
-  else
-    have hs : (⟨s.pos⟩ : String.Pos.Raw) < s.input.rawEndPos := by
-      simp [String.Pos.Raw.lt_iff, String.rawEndPos]
-      omega
-    have hl : (⟨i⟩ : String.Pos.Raw) < lit.rawEndPos := by
-      simp [String.Pos.Raw.lt_iff, String.rawEndPos]
-      omega
-    if s.input.getUTF8Byte ⟨s.pos⟩ hs == lit.getUTF8Byte ⟨i⟩ hl then
-      atomRawAuxFn lit (i + 1) { s with pos := s.pos + 1 }
-    else
-      s.setError s!"expected '{lit}'"
-termination_by lit.utf8ByteSize - i
-decreasing_by omega
-
-@[inline] def atomRawFn (lit : String) : ParserFn := atomRawAuxFn lit 0
 
 def wsAdvanceFn (s : State) : State :=
   match h : s.peekChar? with
@@ -281,14 +262,16 @@ def readIdentChars (s : State) : String × State :=
       else ("", s)
   | none => ("", s)
 
-def keywords : List String :=
-  ["fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import", "sorry", "Type"]
+def tokenList : List String :=
+  [ "(", ")", "{", "}", ":", ":=", ".", ",", ";", "+", "=", "=>", "⇒", "→", "->", "|", "_", "@",
+    "fun", "let", "def", "example", "axiom", "inductive", "structure", "where", "import",
+    "sorry", "Type", "max" ]
 
-@[inline] def isKeyword (s : String) : Bool :=
-  match s with
-  | "fun" | "let" | "def" | "example" | "axiom" | "inductive"
-  | "structure" | "where" | "import" | "sorry" | "Type" => true
-  | _ => false
+def tokens : Lean.Data.Trie String :=
+  tokenList.foldl (fun t s => t.insert s s) .empty
+
+@[inline] def isReserved (s : String) : Bool :=
+  (tokens.find? s).isSome
 
 @[inline] def tokenizeIdentAt (s : State) : State :=
   if s.identCache.startPos == s.pos then s
@@ -310,17 +293,9 @@ def identRawFn : ParserFn := fun s =>
   let entry := s.identCache
   let name := entry.value
   if name.isEmpty then s.setError "expected identifier"
-  else if isKeyword name then s.setError "keyword in identifier position"
+  else if isReserved name then s.setError "keyword in identifier position"
   else
     { s with pos := entry.stopPos }.pushSyntax (.token `ident name)
-
-/-- Consume a keyword that the caller has just peeked via `peekIdentStr`.
-    Uses the ident cache to skip rescanning. Pushes `.token atom kw`. -/
-@[inline] def consumeKeywordFn (kw : String) : ParserFn := fun s =>
-  if s.identCache.startPos == s.pos && s.identCache.value == kw then
-    { s with pos := s.identCache.stopPos }.pushSyntax (.token `atom kw)
-  else
-    atomRawFn kw s
 
 def numAdvanceFn (s : State) : State :=
   match h : s.peekChar? with
@@ -346,6 +321,35 @@ def numRawFn : ParserFn := fun s =>
       else s.setError "expected number"
   | none => s.setError "expected number"
 
+inductive Tok where
+  | atom (s : String)
+  | ident (s : String)
+  | num (s : String)
+  | unknown
+deriving Inhabited, BEq
+
+def peekTok (s : State) : Tok :=
+  match s.peekChar? with
+  | none => .unknown
+  | some c =>
+      if c.isDigit then
+        .num (String.Pos.Raw.extract s.input ⟨s.pos⟩ ⟨(numAdvanceFn s).pos⟩)
+      else if Lean.isIdFirst c then
+        let name := (tokenizeIdentAt s).identCache.value
+        if isReserved name then .atom name else .ident name
+      else
+        match Lean.Data.Trie.matchPrefix s.input tokens ⟨s.pos⟩ with
+        | some tk => .atom tk
+        | none    => .unknown
+
+def symbolFn (sym : String) : ParserFn := fun s =>
+  match peekTok s with
+  | .atom v =>
+      if v == sym then
+        { s with pos := s.pos + sym.utf8ByteSize }.pushSyntax (.token `atom sym)
+      else s.setError s!"expected '{sym}'"
+  | _ => s.setError s!"expected '{sym}'"
+
 partial def manyFn (p : ParserFn) : ParserFn := fun s =>
   let iniPos := s.pos
   let iniSz := s.stackSize
@@ -362,7 +366,7 @@ partial def skipUntilRecoveryFn : ParserFn := fun s =>
     let (id?, s) := peekIdentStr s
     match id? with
     | some k =>
-        if isKeyword k then s
+        if isReserved k then s
         else
           match s.peekChar? with
           | some c => skipUntilRecoveryFn { s with pos := s.pos + c.utf8Size }
@@ -406,20 +410,18 @@ def sep1Fn (p sep : ParserFn) : ParserFn := fun s =>
   if s.hasError then s else manyFn (atomicFn (sep >> p)) s
 
 @[inline] def commaSep1Fn (p : ParserFn) : ParserFn :=
-  sep1Fn p (triviaFn >> atomRawFn "," >> triviaFn)
+  sep1Fn p (triviaFn >> symbolFn "," >> triviaFn)
 
 @[inline] def wsSep1Fn (p : ParserFn) : ParserFn :=
   sep1Fn p triviaFn
 
 def holeFn : ParserFn :=
-  nodeFn `Lean.Parser.Term.hole (atomRawFn "_")
+  nodeFn `Lean.Parser.Term.hole (symbolFn "_")
 
 def binderNameFn : ParserFn := fun s =>
-  let p2 := s.peekString 2
-  match p2.toList with
-  | '_' :: c :: _ => if Lean.isIdRest c then identRawFn s else holeFn s
-  | '_' :: [] => holeFn s
-  | _ => identRawFn s
+  match peekTok s with
+  | .atom "_" => holeFn s
+  | _         => identRawFn s
 
 mutual
 
@@ -427,7 +429,7 @@ partial def levelAtomFn : ParserFn := fun s =>
   match s.peekChar? with
   | some '(' =>
       nodeFn `Lean.Parser.Level.paren
-        (atomRawFn "(" >> triviaFn >> levelFn >> triviaFn >> atomRawFn ")") s
+        (symbolFn "(" >> triviaFn >> levelFn >> triviaFn >> symbolFn ")") s
   | some ch =>
       if ch.isDigit then
         nodeFn `Lean.Parser.Level.num numRawFn s
@@ -436,9 +438,9 @@ partial def levelAtomFn : ParserFn := fun s =>
         match id? with
         | some "max" =>
             nodeFn `Lean.Parser.Level.max
-              (consumeKeywordFn "max" >> wsFn >> sep1Fn levelAtomFn triviaFn) s
+              (symbolFn "max" >> wsFn >> sep1Fn levelAtomFn triviaFn) s
         | some name =>
-            if isKeyword name then s.setError "expected level"
+            if isReserved name then s.setError "expected level"
             else nodeFn `Lean.Parser.Level.ident identRawFn s
         | none => s.setError "expected level"
   | none => s.setError "expected level"
@@ -449,7 +451,7 @@ partial def levelFn : ParserFn := fun s =>
   if s.hasError then s
   else
     let iniPos := s.pos
-    let s' := atomicFn (triviaFn >> atomRawFn "+" >> triviaFn >> numRawFn) s
+    let s' := atomicFn (triviaFn >> symbolFn "+" >> triviaFn >> numRawFn) s
     if s'.hasError && s'.pos == iniPos then s'.restore (iniSz + 1) iniPos
     else if s'.hasError then s'
     else s'.mkNode `Lean.Parser.Level.addLit iniSz
@@ -457,17 +459,38 @@ partial def levelFn : ParserFn := fun s =>
 partial def univParamsFn : ParserFn :=
   optionalFn (atomicFn
     (nodeFn `Lean.Parser.Command.univParams
-      (atomRawFn "." >> atomRawFn "{" >> triviaFn >> sep1Fn identRawFn (triviaFn >> atomRawFn "," >> triviaFn) >> triviaFn >> atomRawFn "}")))
+      (symbolFn "." >> symbolFn "{" >> triviaFn >> sep1Fn identRawFn (triviaFn >> symbolFn "," >> triviaFn) >> triviaFn >> symbolFn "}")))
 
 partial def univArgsFn : ParserFn :=
   optionalFn (atomicFn
     (nodeFn `Lean.Parser.Term.univArgs
-      (atomRawFn "." >> atomRawFn "{" >> triviaFn >> sep1Fn levelFn (triviaFn >> atomRawFn "," >> triviaFn) >> triviaFn >> atomRawFn "}")))
+      (symbolFn "." >> symbolFn "{" >> triviaFn >> sep1Fn levelFn (triviaFn >> symbolFn "," >> triviaFn) >> triviaFn >> symbolFn "}")))
 
 partial def explicitBinderFn : ParserFn :=
   nodeFn `Lean.Parser.Term.explicitBinder
-    (atomRawFn "(" >> triviaFn >> sep1Fn binderNameFn triviaFn >> triviaFn >>
-     atomRawFn ":" >> triviaFn >> termFn >> triviaFn >> atomRawFn ")")
+    (symbolFn "(" >> triviaFn >> sep1Fn binderNameFn triviaFn >> triviaFn >>
+     optionalFn (symbolFn ":" >> triviaFn >> termFn >> triviaFn) >> symbolFn ")")
+
+partial def implicitBinderFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.implicitBinder
+    (symbolFn "{" >> triviaFn >> sep1Fn binderNameFn triviaFn >> triviaFn >>
+     optionalFn (symbolFn ":" >> triviaFn >> termFn >> triviaFn) >> symbolFn "}")
+
+partial def explicitBinderTypedFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.explicitBinder
+    (symbolFn "(" >> triviaFn >> sep1Fn binderNameFn triviaFn >> triviaFn >>
+     symbolFn ":" >> triviaFn >> termFn >> triviaFn >> symbolFn ")")
+
+partial def implicitBinderTypedFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.implicitBinder
+    (symbolFn "{" >> triviaFn >> sep1Fn binderNameFn triviaFn >> triviaFn >>
+     symbolFn ":" >> triviaFn >> termFn >> triviaFn >> symbolFn "}")
+
+partial def binderFn : ParserFn := fun s =>
+  match s.peekChar? with
+  | some '{' => implicitBinderFn s
+  | some '(' => explicitBinderFn s
+  | _ => binderNameFn s
 
 partial def termFn : ParserFn := prattFn 0
 
@@ -491,14 +514,7 @@ partial def prattLoopFn (minPrec : Nat) (s : State) : State :=
 partial def leadingFn (_minPrec : Nat) : ParserFn := fun s =>
   if s.pos ≥ s.input.utf8ByteSize then s.setError "expected expression"
   else
-    let isHole : Bool :=
-      match s.peekChar? with
-      | some '_' =>
-        let nextPos := s.pos + 1
-        if nextPos ≥ s.input.utf8ByteSize then true
-        else !Lean.isIdRest (String.Pos.Raw.get s.input ⟨nextPos⟩)
-      | _ => false
-    if isHole then holeFn s
+    if peekTok s == .atom "_" then holeFn s
     else
     let (id?, s) := peekIdentStr s
     match id? with
@@ -509,6 +525,8 @@ partial def leadingFn (_minPrec : Nat) : ParserFn := fun s =>
     | _ =>
         match s.peekChar? with
         | some '(' => (atomicFn parseUnitFn <|> parseParenOrPiFn) s
+        | some '{' => parseImplicitDepArrowFn s
+        | some '@' => parseExplicitAppFn s
         | some c =>
             if c.isDigit then
               nodeFn `Lean.Parser.Term.num numRawFn s
@@ -521,71 +539,55 @@ partial def trailingFn (minPrec : Nat) (s : State) : State :=
   let iniPos := s.pos
   let sTrivia := triviaFn s
   let triviaProgressed := sTrivia.pos > iniPos
-  let mkTrailing (kind : SyntaxNodeKind) (s : State) : State :=
-    s.mkNode kind (iniSz - 1)
-  match sTrivia.peekChar? with
-  | some '-' =>
-      let sOp := (atomicFn (atomRawFn "->")) sTrivia
-      if !sOp.hasError then
-        if minPrec > 25 then sOp.restore iniSz iniPos
-        else
-          let s' := (triviaFn >> prattFn 25) sOp
-          if s'.hasError then s' else mkTrailing `Lean.Parser.Term.arrow s'
-      else
-        if !triviaProgressed then sTrivia.restore iniSz iniPos
-        else tryAppArgFn minPrec iniSz iniPos sTrivia
-  | some '→' =>
-      if minPrec > 25 then sTrivia.restore iniSz iniPos
-      else
-        let s' := (atomRawFn "→" >> triviaFn >> prattFn 25) sTrivia
-        if s'.hasError then s' else mkTrailing `Lean.Parser.Term.arrow s'
-  | some '=' =>
-      if minPrec > 50 then sTrivia.restore iniSz iniPos
-      else
-        let s' := (atomRawFn "=" >> triviaFn >> prattFn 51) sTrivia
-        if s'.hasError then s' else mkTrailing `«term_=_» s'
-  | some '+' =>
-      if minPrec > 65 then sTrivia.restore iniSz iniPos
-      else
-        let s' := (atomRawFn "+" >> triviaFn >> prattFn 66) sTrivia
-        if s'.hasError then s' else mkTrailing `«term_+_» s'
-  | _ =>
-      if !triviaProgressed then sTrivia.restore iniSz iniPos
-      else tryAppArgFn minPrec iniSz iniPos sTrivia
+  let stop := sTrivia.restore iniSz iniPos
+  let infixOp (sym : String) (gate rprec : Nat) (kind : SyntaxNodeKind) : State :=
+    if minPrec > gate then stop
+    else
+      let s' := (symbolFn sym >> triviaFn >> prattFn rprec) sTrivia
+      if s'.hasError then s' else s'.mkNode kind (iniSz - 1)
+  let app : State :=
+    if !triviaProgressed then stop
+    else tryAppArgFn minPrec iniSz iniPos sTrivia
+  match peekTok sTrivia with
+  | .atom "->"    => infixOp "->" 25 25 `Lean.Parser.Term.arrow
+  | .atom "→"     => infixOp "→"  25 25 `Lean.Parser.Term.arrow
+  | .atom "="     => infixOp "="  50 51 `«term_=_»
+  | .atom "+"     => infixOp "+"  65 66 `«term_+_»
+  | .ident _ | .num _ | .atom "(" | .atom "_" | .atom "sorry" | .atom "Type" | .atom "@" => app
+  | _             => stop
 
 partial def tryAppArgFn (minPrec : Nat) (iniSz iniPos : Nat) (s : State) : State :=
   if minPrec > 1024 then s.restore iniSz iniPos
   else
-    let sArg := atomicFn atomArgFn s
-    if sArg.hasError then sArg.restore iniSz iniPos
+    let argStart := s.pos
+    let sArg := atomArgFn s
+    if sArg.hasError then
+      if sArg.pos == argStart then sArg.restore iniSz iniPos
+      else sArg
     else sArg.mkNode `Lean.Parser.Term.app (iniSz - 1)
 
 partial def atomArgFn : ParserFn := fun s =>
-  let isHole : Bool :=
-    if s.pos ≥ s.input.utf8ByteSize then false
-    else
-      match String.Pos.Raw.get s.input ⟨s.pos⟩ with
-      | '_' =>
-        let nextPos := s.pos + 1
-        if nextPos ≥ s.input.utf8ByteSize then true
-        else !Lean.isIdRest (String.Pos.Raw.get s.input ⟨nextPos⟩)
-      | _ => false
-  if isHole then holeFn s
+  if peekTok s == .atom "_" then holeFn s
   else
   let (id?, s) := peekIdentStr s
   match id? with
   | some "sorry" => parseSorryFn s
   | some "Type" => parseTypeAtomFn s
   | some name =>
-      if isKeyword name then s.setError "keyword"
+      if isReserved name then s.setError "keyword"
       else parseIdentWithUnivFn s
   | none =>
       match s.peekChar? with
       | some '(' => (atomicFn parseUnitFn <|> parseParenFn) s
+      | some '@' => parseExplicitAppFn s
       | some c =>
           if c.isDigit then nodeFn `Lean.Parser.Term.num numRawFn s
           else s.setError "expected argument"
       | none => s.setError "expected argument"
+
+partial def parseExplicitAppFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.explicit
+    (symbolFn "@" >> parseIdentWithUnivFn)
 
 partial def parseIdentWithUnivFn : ParserFn := fun s =>
   let iniSz := s.stackSize
@@ -601,29 +603,28 @@ partial def parseIdentWithUnivFn : ParserFn := fun s =>
 
 partial def parseLamFn : ParserFn :=
   nodeFn `Lean.Parser.Term.fun
-    (consumeKeywordFn "fun" >> wsFn >> sep1Fn parseFunBinderFn triviaFn >> triviaFn >>
-     (atomicFn (atomRawFn "=>") <|> atomRawFn "⇒") >> triviaFn >> termFn)
+    (symbolFn "fun" >> wsFn >> sep1Fn parseFunBinderFn triviaFn >> triviaFn >>
+     optionalFn (symbolFn ":" >> triviaFn >> termFn >> triviaFn) >>
+     (atomicFn (symbolFn "=>") <|> symbolFn "⇒") >> triviaFn >> termFn)
 
 partial def parseFunBinderFn : ParserFn := fun s =>
   match s.peekChar? with
   | some '(' => explicitBinderFn s
+  | some '{' => implicitBinderFn s
   | _ => binderNameFn s
 
 partial def optTypeAnnotFn : ParserFn := fun s =>
-  let p2 := s.peekString 2
-  if p2 == ":=" then s
-  else
-    match s.peekChar? with
-    | some ':' => (atomRawFn ":" >> triviaFn >> termFn >> triviaFn) s
-    | _ => s
+  match peekTok s with
+  | .atom ":" => (symbolFn ":" >> triviaFn >> termFn >> triviaFn) s
+  | _ => s
 
 partial def parseLetFn : ParserFn :=
   nodeFn `Lean.Parser.Term.let
-    (consumeKeywordFn "let" >> wsFn >> identRawFn >> triviaFn >> optTypeAnnotFn >>
-     atomRawFn ":=" >> triviaFn >> termFn >> triviaFn >> atomRawFn ";" >> triviaFn >> termFn)
+    (symbolFn "let" >> wsFn >> identRawFn >> triviaFn >> optTypeAnnotFn >>
+     symbolFn ":=" >> triviaFn >> termFn >> triviaFn >> symbolFn ";" >> triviaFn >> termFn)
 
 partial def parseSorryFn : ParserFn :=
-  nodeFn `Lean.Parser.Term.sorry (consumeKeywordFn "sorry")
+  nodeFn `Lean.Parser.Term.sorry (symbolFn "sorry")
 
 partial def optLevelFn : ParserFn := fun s =>
   let iniSz := s.stackSize
@@ -632,31 +633,36 @@ partial def optLevelFn : ParserFn := fun s =>
   if s'.hasError && s'.pos == iniPos then s'.restore iniSz iniPos else s'
 
 partial def parseTypeFn : ParserFn :=
-  nodeFn `Lean.Parser.Term.type (consumeKeywordFn "Type" >> optLevelFn)
+  nodeFn `Lean.Parser.Term.type (symbolFn "Type" >> optLevelFn)
 
 partial def parseTypeAtomFn : ParserFn :=
-  nodeFn `Lean.Parser.Term.type (consumeKeywordFn "Type")
+  nodeFn `Lean.Parser.Term.type (symbolFn "Type")
 
 partial def parseUnitFn : ParserFn :=
-  nodeFn `Lean.Parser.Term.unit (atomRawFn "(" >> triviaFn >> atomRawFn ")")
+  nodeFn `Lean.Parser.Term.unit (symbolFn "(" >> triviaFn >> symbolFn ")")
 
 partial def parseParenFn : ParserFn := fun s =>
   let iniSz := s.stackSize
-  let s := (atomRawFn "(" >> triviaFn >> termFn >> triviaFn) s
+  let s := (symbolFn "(" >> triviaFn >> termFn >> triviaFn) s
   if s.hasError then s.mkNode `Lean.Parser.Term.paren iniSz
   else
     match s.peekChar? with
     | some ':' =>
-        let s := (atomRawFn ":" >> triviaFn >> termFn >> triviaFn >> atomRawFn ")") s
+        let s := (symbolFn ":" >> triviaFn >> termFn >> triviaFn >> symbolFn ")") s
         s.mkNode `Lean.Parser.Term.typeAscription iniSz
     | _ =>
-        let s := atomRawFn ")" s
+        let s := symbolFn ")" s
         s.mkNode `Lean.Parser.Term.paren iniSz
 
 partial def parseDepArrowFn : ParserFn :=
   nodeFn `Lean.Parser.Term.depArrow
-    (explicitBinderFn >> triviaFn >>
-     (atomicFn (atomRawFn "->") <|> atomRawFn "→") >> triviaFn >> prattFn 25)
+    (explicitBinderTypedFn >> triviaFn >>
+     (atomicFn (symbolFn "->") <|> symbolFn "→") >> triviaFn >> prattFn 25)
+
+partial def parseImplicitDepArrowFn : ParserFn :=
+  nodeFn `Lean.Parser.Term.depArrow
+    (implicitBinderTypedFn >> triviaFn >>
+     (atomicFn (symbolFn "->") <|> symbolFn "→") >> triviaFn >> prattFn 25)
 
 partial def parseParenOrPiFn : ParserFn :=
   atomicFn parseDepArrowFn <|> parseParenFn
@@ -666,58 +672,56 @@ end
 def declIdFn : ParserFn :=
   nodeFn `Lean.Parser.Command.declId (identRawFn >> univParamsFn)
 
-def typeSigFn : ParserFn := fun s =>
-  let p2 := s.peekString 2
-  if p2 == ":=" then s.setError "not a type sig"
-  else (wsFn >> atomRawFn ":" >> triviaFn >> termFn) s
+def typeSigFn : ParserFn :=
+  wsFn >> symbolFn ":" >> triviaFn >> termFn
 
 def optTypeSigFn : ParserFn := optionalFn (atomicFn typeSigFn)
 
 def optDeclSigFn : ParserFn :=
   nodeFn `Lean.Parser.Command.optDeclSig
-    (manyFn (atomicFn (triviaFn >> explicitBinderFn)) >> optTypeSigFn)
+    (manyFn (atomicFn (triviaFn >> binderFn)) >> optTypeSigFn)
 
 def declSigFn : ParserFn :=
   nodeFn `Lean.Parser.Command.declSig
-    (manyFn (atomicFn (triviaFn >> explicitBinderFn)) >> triviaFn >> atomRawFn ":" >> triviaFn >> termFn)
+    (manyFn (atomicFn (triviaFn >> binderFn)) >> triviaFn >> symbolFn ":" >> triviaFn >> termFn)
 
 def declValSimpleFn : ParserFn :=
-  nodeFn `Lean.Parser.Command.declValSimple (atomRawFn ":=" >> triviaFn >> termFn)
+  nodeFn `Lean.Parser.Command.declValSimple (symbolFn ":=" >> triviaFn >> termFn)
 
 def parseDefinitionFn : ParserFn :=
   nodeFn `Lean.Parser.Command.definition
-    (consumeKeywordFn "def" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >> declValSimpleFn)
+    (symbolFn "def" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >> declValSimpleFn)
 
 def parseExampleFn : ParserFn :=
   nodeFn `Lean.Parser.Command.example
-    (consumeKeywordFn "example" >> optDeclSigFn >> triviaFn >> declValSimpleFn)
+    (symbolFn "example" >> optDeclSigFn >> triviaFn >> declValSimpleFn)
 
 def parseAxiomFn : ParserFn :=
   nodeFn `Lean.Parser.Command.axiom
-    (consumeKeywordFn "axiom" >> wsFn >> declIdFn >> declSigFn)
+    (symbolFn "axiom" >> wsFn >> declIdFn >> declSigFn)
 
 def parseCtorFn : ParserFn :=
   nodeFn `Lean.Parser.Command.ctor
-    (atomRawFn "|" >> triviaFn >> identRawFn >> optDeclSigFn)
+    (symbolFn "|" >> triviaFn >> identRawFn >> optDeclSigFn)
 
 def parseInductiveFn : ParserFn :=
   nodeFn `Lean.Parser.Command.inductive
-    (consumeKeywordFn "inductive" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >>
-     optionalFn (atomicFn (atomRawFn "where")) >> triviaFn >>
+    (symbolFn "inductive" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >>
+     optionalFn (atomicFn (symbolFn "where")) >> triviaFn >>
      optionalFn (atomicFn parseCtorFn) >>
      manyFn (atomicFn (triviaFn >> parseCtorFn)))
 
 def parseStructFieldFn : ParserFn :=
   nodeFn `Lean.Parser.Command.structField
-    (atomRawFn "(" >> triviaFn >> identRawFn >> optDeclSigFn >> triviaFn >> atomRawFn ")")
+    (symbolFn "(" >> triviaFn >> identRawFn >> optDeclSigFn >> triviaFn >> symbolFn ")")
 
 def parseStructureFn : ParserFn :=
   nodeFn `Lean.Parser.Command.structure
-    (consumeKeywordFn "structure" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >>
-     atomRawFn "where" >> manyFn (atomicFn (triviaFn >> parseStructFieldFn)))
+    (symbolFn "structure" >> wsFn >> declIdFn >> optDeclSigFn >> triviaFn >>
+     symbolFn "where" >> manyFn (atomicFn (triviaFn >> parseStructFieldFn)))
 
 def parseImportFn : ParserFn :=
-  nodeFn `Lean.Parser.Command.import (atomRawFn "import" >> wsFn >> identRawFn)
+  nodeFn `Lean.Parser.Command.import (symbolFn "import" >> wsFn >> identRawFn)
 
 def parseCommandFn : ParserFn := fun s =>
   let (id?, s) := peekIdentStr s

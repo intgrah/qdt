@@ -16,7 +16,7 @@ inductive ConvState
   | flex
 
 def Ctx.lookupTy : {n : Nat} → Idx n → Ctx 0 n → Ty n
-  | _ + 1, ⟨0, _⟩, .snoc _ ⟨_, ty⟩ => ty.shiftAfter 0 1
+  | _ + 1, ⟨0, _⟩, .snoc _ ⟨_, _, ty⟩ => ty.shiftAfter 0 1
   | _ + 1, ⟨i + 1, h⟩, .snoc rest _ =>
       (Ctx.lookupTy ⟨i, by omega⟩ rest).shiftAfter 0 1
 
@@ -27,22 +27,22 @@ partial def Tm.inferTy {a : Nat} (q₀ : Key) (paramCtx : Ctx 0 a) : Tm a →
   | .const c us => do
       let some info ← fetchConstantInfo q₀ c | return none
       if info.numUnivParams != us.length then return none
-      return some (info.ty.substLevels us).wkClosed
+      return some (info.ty.instantiateParams info.univParams us).wkClosed
   | .app f arg => do
       let some fTy ← Tm.inferTy q₀ paramCtx f | return none
-      let .pi _ _ body := fTy | return none
+      let .pi _ _ _ body := fTy | return none
       return some (body.subst (Subst.beta arg))
-  | .lam name ty body => do
-      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, ty)) body | return none
-      return some (.pi name ty bodyTy)
-  | .pi' name dom cod => do
+  | .lam name bi ty body => do
+      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, bi, ty)) body | return none
+      return some (.pi name bi ty bodyTy)
+  | .pi' name bi dom cod => do
       let some domTy ← Tm.inferTy q₀ paramCtx dom | return none
       let .u uA := domTy | return none
-      let some codTy ← Tm.inferTy q₀ (paramCtx.snoc (name, .el dom)) cod | return none
+      let some codTy ← Tm.inferTy q₀ (paramCtx.snoc (name, bi, .el dom)) cod | return none
       let .u uB := codTy | return none
       return some (.u (uA.mkMax uB))
   | .letE name ty rhs body => do
-      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, ty)) body | return none
+      let some bodyTy ← Tm.inferTy q₀ (paramCtx.snoc (name, .explicit, ty)) body | return none
       return some (bodyTy.subst (Subst.beta rhs))
   | .proj i t => do
       let some tTy ← Tm.inferTy q₀ paramCtx t | return none
@@ -53,15 +53,47 @@ partial def Tm.inferTy {a : Nat} (q₀ : Key) (paramCtx : Ctx 0 a) : Tm a →
       if indInfo.numCtors ≠ 1 then return none
       let some ctorName := indInfo.ctorNames.toList.head? | return none
       let some ctorInfo ← fetchConstructor q₀ ctorName | return none
-      let ctorTy : Ty a := (ctorInfo.ty.substLevels us).wkClosed
+      let ctorTy : Ty a := (ctorInfo.ty.instantiateParams ctorInfo.univParams us).wkClosed
       let applied := List.range i |>.foldl (fun ty j => ty.bind (·.applyArg (.proj j t)))
                        (structArgs.foldl (fun ty arg => ty.bind (·.applyArg arg)) (some ctorTy))
       return applied.bind fun
-        | .pi _ fieldTy _ => some fieldTy
+        | .pi _ _ fieldTy _ => some fieldTy
         | _ => none
   | .mvar id => do
       let info ← getMetaInfo q₀ id
       return some (Ty.pis info.ctx info.ty).wkClosed
+
+def Ty.resultUniverseAfter {a : Nat} (n : Nat) (ty : Ty a) : Option Universe :=
+  match n, ty with
+  | 0, .u lvl => some lvl
+  | n + 1, .pi _ _ _ cod => Ty.resultUniverseAfter n cod
+  | _, _ => none
+
+partial def Tm.typeUniverse? {a : Nat} (q₀ : Key) (paramCtx : Ctx 0 a) (t : Tm a) :
+    ElabM q₀ (Option Universe) := do
+  let (head, args) := t.splitApps
+  let n := args.length
+  match head with
+  | .u' u => if n == 0 then return some u.mkSucc else return none
+  | .pi' name bi dom cod =>
+      if n != 0 then return none
+      let some uA ← Tm.typeUniverse? q₀ paramCtx dom | return none
+      let some uB ← Tm.typeUniverse? q₀ (paramCtx.snoc (name, bi, .el dom)) cod | return none
+      return some (uA.mkMax uB)
+  | .var i => return Ty.resultUniverseAfter n (paramCtx.lookupTy i)
+  | .const c us =>
+      let some info ← fetchConstantInfo q₀ c | return none
+      if info.numUnivParams != us.length then return none
+      let ty : Ty a := (info.ty.instantiateParams info.univParams us).wkClosed
+      return Ty.resultUniverseAfter n ty
+  | .mvar id =>
+      let info ← getMetaInfo q₀ id
+      let ty : Ty a := (Ty.pis info.ctx info.ty).wkClosed
+      return Ty.resultUniverseAfter n ty
+  | _ =>
+      match ← Tm.inferTy q₀ paramCtx t with
+      | some (.u u) => return some u
+      | _ => return none
 
 mutual
 
@@ -86,12 +118,12 @@ public partial def VTm.conv {n} (cctx : VCtx n) (a b : VTm n) (cs : ConvState :=
         match a', b' with
         | .neutral n₁', .neutral n₂' => n₁'.conv cctx n₂' cs
         | _, _ => a'.conv cctx b' cs
-  | .lam name aTy ⟨env₁, body₁⟩, .lam _ _ ⟨env₂, body₂⟩ => do
+  | .lam name _ aTy ⟨env₁, body₁⟩, .lam _ _ _ ⟨env₂, body₂⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← body₁.eval q₀ (env₁.weaken.cons var)
       let b₂Val ← body₂.eval q₀ (env₂.weaken.cons var)
       b₁Val.conv (cctx.snoc (.bound name aTy)) b₂Val cs
-  | .lam name aTy ⟨env, body⟩, other => do
+  | .lam name _ aTy ⟨env, body⟩, other => do
       let var : VTm (n + 1) := VTm.varAt n
       let bVal ← body.eval q₀ (env.weaken.cons var)
       match other.weaken (m := n + 1) with
@@ -99,7 +131,7 @@ public partial def VTm.conv {n} (cctx : VCtx n) (a b : VTm n) (cs : ConvState :=
           let oVal ← (VTm.neutral ne).app q₀ var
           bVal.conv (cctx.snoc (.bound name aTy)) oVal cs
       | _ => return false
-  | other, .lam name aTy ⟨env, body⟩ => do
+  | other, .lam name _ aTy ⟨env, body⟩ => do
       let var : VTm (n + 1) := VTm.varAt n
       let bVal ← body.eval q₀ (env.weaken.cons var)
       match other.weaken (m := n + 1) with
@@ -107,7 +139,7 @@ public partial def VTm.conv {n} (cctx : VCtx n) (a b : VTm n) (cs : ConvState :=
           let oVal ← (VTm.neutral ne).app q₀ var
           oVal.conv (cctx.snoc (.bound name aTy)) bVal cs
       | _ => return false
-  | .pi' name a₁ ⟨env₁, b₁⟩, .pi' _ a₂ ⟨env₂, b₂⟩ => do
+  | .pi' name _ a₁ ⟨env₁, b₁⟩, .pi' _ _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.conv cctx a₂ cs) then return false
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← b₁.eval q₀ (env₁.weaken.cons var)
@@ -143,13 +175,13 @@ partial def solveMVarFOApprox {n} (id : MVarId) (cctx : VCtx n) (sp : Spine n) (
   | .neutral ⟨rhsHead, .app sp' lastArg⟩ =>
       match sp with
       | .app spRest spLast =>
-          if !(← spLast.conv cctx lastArg cs) then return false
+          if !(← spLast.conv cctx lastArg .flex) then return false
           VTm.conv cctx (.neutral ⟨.mvar id, spRest⟩) (.neutral ⟨rhsHead, sp'⟩) cs
       | _ => return false
   | .glued ⟨rhsHead, .app sp' lastArg⟩ _ =>
       match sp with
       | .app spRest spLast =>
-          if !(← spLast.conv cctx lastArg cs) then return false
+          if !(← spLast.conv cctx lastArg .flex) then return false
           VTm.conv cctx (.neutral ⟨.mvar id, spRest⟩) (.neutral ⟨rhsHead, sp'⟩) cs
       | _ => return false
   | _ => return false
@@ -262,17 +294,17 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
 partial def Spine.conv {n} (cctx : VCtx n) :
     Spine n → Spine n → ConvState → ElabM q₀ Bool
   | .nil, .nil, _ => return true
-  | .app sp₁ t₁, .app sp₂ t₂, cs =>
-      return (← sp₁.conv cctx sp₂ cs) && (← t₁.conv cctx t₂ cs)
+  | .app sp₁ t₁, .app sp₂ t₂, cs => do
+      if ← sp₁.conv cctx sp₂ cs then t₁.conv cctx t₂ cs else return false
   | .proj sp₁ i₁, .proj sp₂ i₂, cs =>
-      return i₁ == i₂ && (← sp₁.conv cctx sp₂ cs)
+      if i₁ == i₂ then sp₁.conv cctx sp₂ cs else return false
   | _, _, _ => return false
 
 public partial def VTy.conv {n} (cctx : VCtx n) (a b : VTy n) (cs : ConvState := .rigid) :
     ElabM q₀ Bool :=
   match a, b with
   | .u i₁, .u i₂ => Universe.solveUEq q₀ i₁ i₂
-  | .pi name a₁ ⟨env₁, b₁⟩, .pi _ a₂ ⟨env₂, b₂⟩ => do
+  | .pi name _ a₁ ⟨env₁, b₁⟩, .pi _ _ a₂ ⟨env₂, b₂⟩ => do
       if !(← a₁.conv cctx a₂ cs) then return false
       let var : VTm (n + 1) := VTm.varAt n
       let b₁Val ← b₁.eval q₀ (env₁.weaken.cons var)
@@ -287,18 +319,106 @@ public partial def VTy.conv {n} (cctx : VCtx n) (a b : VTy n) (cs : ConvState :=
       (VTm.neutral ⟨.mvar id, sp⟩).conv cctx bVTm cs
   | _, _ => return false
 
+partial def stripTrailingMatch {n} (cctx : VCtx n) :
+    Nat → Spine n → VTm n → ElabM q₀ (Option (Spine n × VTm n))
+  | 0, sp, rhs => return some (sp, rhs)
+  | k + 1, .app spRest spLast, .neutral ⟨h, .app rhsRest rhsLast⟩ => do
+      if ← spLast.conv cctx rhsLast then
+        stripTrailingMatch cctx k spRest (.neutral ⟨h, rhsRest⟩)
+      else return none
+  | _, _, _ => return none
+
 partial def solveMVarChecked {n} (id : MVarId) (cctx : VCtx n) (sp : Spine n) (rhs : VTm n) :
     ElabM q₀ Bool := do
   let info ← getMetaInfo q₀ id
-  let normalizedTy ← (← info.ty.eval q₀ (Env.identity info.arity)).quote q₀
+  let normalizedTy ←
+    match info.tyNorm with
+    | some t => pure t
+    | none => do
+        let t ← (← info.ty.eval q₀ (Env.identity info.arity)).quote q₀
+        unless info.ty.hasMeta do setMetaTyNorm q₀ info id t
+        pure t
   let infoNorm : MetaInfo := { info with ty := normalizedTy }
+  let (sp, rhs) ←
+    match sp.toAppList with
+    | some args =>
+        let nNonpat := args.length - (Spine.patternPrefix args).length
+        if nNonpat == 0 then pure (sp, rhs)
+        else
+          let saved ← get
+          match ← stripTrailingMatch cctx nNonpat sp rhs with
+          | some res => pure res
+          | none => do set saved; pure (sp, rhs)
+    | none => pure (sp, rhs)
   let some soln ← infoNorm.solve q₀ id cctx sp rhs | return false
-  assignMeta q₀ infoNorm id soln
   if let some codU := normalizedTy.getResultUniverse? then
-    if let some (.u bodyU) ← Tm.inferTy q₀ info.ctx soln then
-      let _ ← Universe.solveUEq q₀ codU bodyU
+    if let some bodyU ← Tm.typeUniverse? q₀ info.ctx soln then
+      unless ← Universe.solveUEq q₀ codU bodyU do return false
+  assignMeta q₀ infoNorm id soln
   return true
 
 end
+
+def VTm.convSpec {n} (cctx : VCtx n) (a b : VTm n) : ElabM q₀ Bool := do
+  let s ← get
+  let r ← VTm.conv q₀ cctx a b
+  set s
+  return r
+
+def Ty.toTm {n} : Ty n → Tm n
+  | .u lv => .u' lv
+  | .pi nm bi dom cod => .pi' nm bi dom.toTm cod.toTm
+  | .el t => t
+
+mutual
+
+partial def Ty.replaceConv {m} (tctx : TermContext m) (target rep : Tm m) : Ty m → ElabM q₀ (Ty m)
+  | .u lv => return .u lv
+  | .pi nm bi dom cod => do
+      let dom' ← Ty.replaceConv tctx target rep dom
+      let tctx' ← tctx.bindV q₀ nm (← dom.eval q₀ tctx.env)
+      let cod' ← Ty.replaceConv tctx' target.weaken rep.weaken cod
+      return .pi nm bi dom' cod'
+  | .el t => return .el (← Tm.replaceConv tctx target rep t)
+
+partial def Tm.replaceConv {m} (tctx : TermContext m) (target rep : Tm m) (t : Tm m) :
+    ElabM q₀ (Tm m) := do
+  if (← VTm.convSpec q₀ tctx.ctx (← t.eval q₀ tctx.env) (← target.eval q₀ tctx.env)) then
+    return rep
+  match t with
+  | .u' lv => return .u' lv
+  | .var i => return .var i
+  | .const nm us => return .const nm us
+  | .mvar id => return .mvar id
+  | .app f a => return .app (← Tm.replaceConv tctx target rep f) (← Tm.replaceConv tctx target rep a)
+  | .proj k s => return .proj k (← Tm.replaceConv tctx target rep s)
+  | .lam nm bi ty body => do
+      let ty' ← Ty.replaceConv tctx target rep ty
+      let tctx' ← tctx.bindV q₀ nm (← ty.eval q₀ tctx.env)
+      let body' ← Tm.replaceConv tctx' target.weaken rep.weaken body
+      return .lam nm bi ty' body'
+  | .pi' nm bi a b => do
+      let a' ← Tm.replaceConv tctx target rep a
+      let tctx' ← tctx.bindV q₀ nm (← (Ty.el a).eval q₀ tctx.env)
+      let b' ← Tm.replaceConv tctx' target.weaken rep.weaken b
+      return .pi' nm bi a' b'
+  | .letE nm ty rhs body => do
+      let ty' ← Ty.replaceConv tctx target rep ty
+      let rhs' ← Tm.replaceConv tctx target rep rhs
+      let tctx' ← tctx.defineV q₀ nm (← ty.eval q₀ tctx.env) (← rhs.eval q₀ tctx.env)
+      let body' ← Tm.replaceConv tctx' target.weaken rep.weaken body
+      return .letE nm ty' rhs' body'
+
+end
+
+def Ty.kabstract {n} (tctx : TermContext n) (name : Lean.Name) (discrTy : VTy n) (discr : Tm n)
+    (T : Ty n) : ElabM q₀ (Ty (n + 1)) := do
+  let tctx' ← tctx.bindV q₀ name discrTy
+  Ty.replaceConv q₀ tctx' discr.weaken (.var ⟨0, by omega⟩) T.weaken
+
+def Tm.kabstract {n} (tctx : TermContext n) (name : Lean.Name) (discrTy : VTy n) (discr : Tm n)
+    (t : Tm n) : ElabM q₀ (Tm (n + 1)) := do
+  let tctx' ← tctx.bindV q₀ name discrTy
+  Tm.replaceConv q₀ tctx' discr.weaken (.var ⟨0, by omega⟩) t.weaken
 
 end Qdt

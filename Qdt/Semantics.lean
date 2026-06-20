@@ -21,15 +21,15 @@ mutual
 
 inductive VTy : Nat → Type
   | u {n} : Universe → VTy n
-  | pi {n} : Name → VTy n → ClosTy n → VTy n
+  | pi {n} : Name → BinderInfo → VTy n → ClosTy n → VTy n
   | el {n} : Neutral n → VTy n
 deriving Repr, Hashable
 
 inductive VTm : Nat → Type
   | u' {n} : Universe → VTm n
   | neutral {n} : Neutral n → VTm n
-  | lam {n} : Name → VTy n → ClosTm n → VTm n
-  | pi' {n} : Name → VTm n → ClosTm n → VTm n
+  | lam {n} : Name → BinderInfo → VTy n → ClosTm n → VTm n
+  | pi' {n} : Name → BinderInfo → VTm n → ClosTm n → VTm n
   | glued {n} : Neutral n → GluedKey → VTm n
 deriving Repr, Hashable
 
@@ -69,49 +69,6 @@ end
 
 instance {n} : Inhabited (VTy n) := ⟨.u .zero⟩
 instance {n} : Inhabited (VTm n) := ⟨.u' .zero⟩
-
-mutual
-
-def VTy.substLevels {n} (subst : List Universe) : VTy n → VTy n
-  | .u i => .u (i.subst subst)
-  | .pi x dom codom => .pi x (dom.substLevels subst) (codom.substLevels subst)
-  | .el ne => .el (ne.substLevels subst)
-
-def GluedKey.substLevels (subst : List Universe) : GluedKey → GluedKey
-  | .const name us => .const name (us.map (·.subst subst))
-  | .mvar id => .mvar id
-
-def VTm.substLevels {n} (subst : List Universe) : VTm n → VTm n
-  | .u' i => .u' (i.subst subst)
-  | .neutral ne => .neutral (ne.substLevels subst)
-  | .lam x ty body => .lam x (ty.substLevels subst) (body.substLevels subst)
-  | .pi' x dom codom => .pi' x (dom.substLevels subst) (codom.substLevels subst)
-  | .glued ne key => .glued (ne.substLevels subst) (key.substLevels subst)
-
-def Neutral.substLevels {n} (subst : List Universe) : Neutral n → Neutral n
-  | ⟨head, spine⟩ => ⟨head.substLevels subst, spine.substLevels subst⟩
-
-def Head.substLevels {n} (subst : List Universe) : Head n → Head n
-  | .var lvl => .var lvl
-  | .const name us => .const name (us.map (·.subst subst))
-  | .mvar id => .mvar id
-
-def Spine.substLevels {n} (subst : List Universe) : Spine n → Spine n
-  | .nil => .nil
-  | .app sp t => .app (sp.substLevels subst) (t.substLevels subst)
-  | .proj sp i => .proj (sp.substLevels subst) i
-
-def ClosTy.substLevels {n} (subst : List Universe) : ClosTy n → ClosTy n
-  | ⟨env, ty⟩ => ⟨env.substLevels subst, ty.substLevels subst⟩
-
-def ClosTm.substLevels {n} (subst : List Universe) : ClosTm n → ClosTm n
-  | ⟨env, tm⟩ => ⟨env.substLevels subst, tm.substLevels subst⟩
-
-def Env.substLevels {n m} (subst : List Universe) : Env n m → Env n m
-  | .nil => .nil
-  | .cons t rest => .cons (t.substLevels subst) (rest.substLevels subst)
-
-end
 
 @[inline] def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
 @[inline] def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
@@ -173,15 +130,15 @@ mutual
 @[implemented_by VTy.weaken_impl]
 def VTy.weaken' (h : n ≤ m) : VTy n → VTy m
   | .u i => .u i
-  | .pi x dom codom => .pi x (dom.weaken' h) (codom.weaken' h)
+  | .pi x bi dom codom => .pi x bi (dom.weaken' h) (codom.weaken' h)
   | .el ne => .el (ne.weaken' h)
 
 @[implemented_by VTm.weaken_impl]
 def VTm.weaken' (h : n ≤ m) : VTm n → VTm m
   | .u' i => .u' i
   | .neutral ne => .neutral (ne.weaken' h)
-  | .lam x ty body => .lam x (ty.weaken' h) (body.weaken' h)
-  | .pi' name dom codom => .pi' name (dom.weaken' h) (codom.weaken' h)
+  | .lam x bi ty body => .lam x bi (ty.weaken' h) (body.weaken' h)
+  | .pi' name bi dom codom => .pi' name bi (dom.weaken' h) (codom.weaken' h)
   | .glued ne key => .glued (ne.weaken' h) key
 
 @[implemented_by Head.weaken_impl]

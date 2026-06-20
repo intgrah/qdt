@@ -1,12 +1,40 @@
 module
 
 public import Qdt.Semantics
+public import Qdt.Theory.Substitution.Basic
 
 @[expose] public section
 
 namespace Qdt
 
 open Lean (Name)
+
+structure BoundView (n : Nat) where
+  arity : Nat
+  subst : Subst n arity
+  tys : Ctx 0 arity
+  origLvls : Array (Lvl n)
+
+def BoundView.empty : BoundView 0 where
+  arity := 0
+  subst := fun ⟨_, h⟩ => absurd h (Nat.not_lt_zero _)
+  tys := .nil
+  origLvls := #[]
+
+def BoundView.bind {n} (rv : BoundView n) (name : Name) (tyInner : Ty rv.arity) :
+    BoundView (n + 1) :=
+  let castOld (l : Lvl n) : Lvl (n + 1) := ⟨l.val, Nat.lt_succ_of_lt l.isLt⟩
+  { arity := rv.arity + 1
+    subst := rv.subst.up
+    tys := rv.tys.snoc (name, .explicit, tyInner)
+    origLvls := (rv.origLvls.map castOld).push ⟨n, Nat.lt_succ_self _⟩ }
+
+def BoundView.define {n} (rv : BoundView n) (valueInner : Tm rv.arity) : BoundView (n + 1) :=
+  let castOld (l : Lvl n) : Lvl (n + 1) := ⟨l.val, Nat.lt_succ_of_lt l.isLt⟩
+  { arity := rv.arity
+    subst := Subst.cons valueInner rv.subst
+    tys := rv.tys
+    origLvls := rv.origLvls.map castOld }
 
 structure VEntry (n : Nat) where
   name : Name
@@ -24,18 +52,24 @@ def VCtx : Nat → Type := Tele VEntry 0
 structure TermContext (n : Nat) where
   ctx : VCtx n
   env : Env n n -- Pre-weakened environment
+  view : BoundView n
 
 def TermContext.empty : TermContext 0 where
   ctx := Tele.nil
   env := Env.nil
+  view := BoundView.empty
 
-def TermContext.bind {n} (name : Name) (ty : VTy n) (tctx : TermContext n) : TermContext (n + 1) where
+def TermContext.bind {n} (tctx : TermContext n) (name : Name) (ty : VTy n)
+    (tyInner : Ty tctx.view.arity) : TermContext (n + 1) where
   ctx := tctx.ctx.snoc (.bound name ty)
   env := tctx.env.weaken.cons (VTm.varAt n)
+  view := tctx.view.bind name tyInner
 
-def TermContext.define {n} (name : Name) (ty : VTy n) (value : VTm n) (tctx : TermContext n) : TermContext (n + 1) where
+def TermContext.define {n} (tctx : TermContext n) (name : Name) (ty : VTy n) (value : VTm n)
+    (valueInner : Tm tctx.view.arity) : TermContext (n + 1) where
   ctx := tctx.ctx.snoc (.defined name ty value)
   env := tctx.env.weaken.cons value.weaken
+  view := tctx.view.define valueInner
 
 def VCtx.lookupNameTy {n} : Idx n → VCtx n → Name × VTy n
   | ⟨0, _⟩, .snoc _ entry => (entry.name, entry.ty.weaken)
