@@ -47,8 +47,8 @@ def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty
   emitHover q₀ (.localVar name ctx.names (← ty.quote q₀))
 
 public partial def checkAstUniverse : Ast → OptionT (ElabM q₀) Universe
-  | .node `Level.zero _ => do return .zero
-  | .node `Level.succ cs => do return (← checkAstUniverse cs[0]!).mkSucc
+  | .node `Level.zero _ => return .zero
+  | .node `Level.succ cs => return (← checkAstUniverse cs[0]!).mkSucc
   | .node `Level.max cs => do
       if h : cs.size = 0 then failure
       else
@@ -166,17 +166,16 @@ mutual
 partial def Tm.hasSyntheticSorry {n} : Tm n → ElabM q₀ Bool
   | .u' _ | .var _ => return false
   | .const name _ => isSyntheticSorryName q₀ name
-  | .lam _ _ ty body => do return (← ty.hasSyntheticSorry) || (← body.hasSyntheticSorry)
-  | .app f a => do return (← f.hasSyntheticSorry) || (← a.hasSyntheticSorry)
-  | .pi' _ _ a b => do return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
+  | .lam _ _ ty body => return (← ty.hasSyntheticSorry) || (← body.hasSyntheticSorry)
+  | .app f a => return (← f.hasSyntheticSorry) || (← a.hasSyntheticSorry)
+  | .pi' _ _ a b => return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
   | .proj _ t => t.hasSyntheticSorry
-  | .letE _ ty rhs body => do
-      return (← ty.hasSyntheticSorry) || (← rhs.hasSyntheticSorry) || (← body.hasSyntheticSorry)
+  | .letE _ ty rhs body => return (← ty.hasSyntheticSorry) || (← rhs.hasSyntheticSorry) || (← body.hasSyntheticSorry)
   | .mvar id => metaIsErrored q₀ id
 
 partial def Ty.hasSyntheticSorry {n} : Ty n → ElabM q₀ Bool
   | .u _ => return false
-  | .pi _ _ a b => do return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
+  | .pi _ _ a b => return (← a.hasSyntheticSorry) || (← b.hasSyntheticSorry)
   | .el t => t.hasSyntheticSorry
 end
 
@@ -215,7 +214,10 @@ end
 
 def Constant.hasExprMVar : Constant → Bool
   | .definition info => info.ty.hasExprMVar || info.tm.hasExprMVar
-  | .opaque info | .axiom info | .constructor info | .inductive info => info.ty.hasExprMVar
+  | .opaque info
+  | .axiom info
+  | .constructor info
+  | .inductive info => info.ty.hasExprMVar
   | .recursor info => info.ty.hasExprMVar || info.recRules.toList.any (·.rhs.hasExprMVar)
 
 def raiseTypeMismatch {n} {α : Type}
@@ -656,8 +658,6 @@ partial def checkTmCoreBody {n : Nat} (ctx : TermContext n) (expected : VTy n) :
           emitType q₀ ctx expected
           return .lam x bi (← a.quote q₀) body
         | .node `Binder.implicit bs =>
-          if bi != .implicit then
-            raiseError q₀ (.binderMismatch ctx.names (← expected.quote q₀))
           let x := bs[0]!.getName
           match bs[1]! with
           | .missing => pure ()

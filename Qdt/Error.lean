@@ -23,7 +23,6 @@ inductive Error
   | inferSorry
   | expectedFunctionType {c} (names : List Name) (got : Ty c)
   | typeMismatch {c} (names : List Name) (expected : Ty c) (got : Ty c)
-  | binderMismatch {c} (names : List Name) (expected : Ty c)
   | unboundVariable (name : Name)
   | unboundUniverseVariable (name : Name)
   | alreadyDefined (name : Name)
@@ -68,8 +67,6 @@ def Error.format (e : Error) : String :=
     s!"Expected function type, got {got.fmt names Prec.min}"
   | .typeMismatch names expected got =>
     s!"Type mismatch: expected\n{expected.fmt names Prec.min},\ngot\n{got.fmt names Prec.min}"
-  | .binderMismatch names expected =>
-    s!"Lambda binder is implicit, but the expected type is {expected.fmt names Prec.min}"
   | .unboundVariable name =>
     s!"Unbound variable {name}"
   | .unboundUniverseVariable name =>
@@ -79,7 +76,7 @@ def Error.format (e : Error) : String :=
   | .duplicateImport name =>
     s!"ambiguous declaration '{name}': defined in multiple imported modules"
   | .unresolvedImport name =>
-    s!"unresolved import '{name}': no such module under the project root"
+    s!"unknown module prefix '{name}'"
   | .typeFamilyCtorReturnTypeRequired ctorName =>
     s!"{ctorName}: constructor must specify return type for inductive type family"
   | .inductiveReturnTypeMustBeTypeUniverse indName =>
