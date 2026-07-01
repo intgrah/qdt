@@ -6,6 +6,7 @@ import Std.Category
 import Std.Empty
 import Std.Eq
 import Std.Fin
+import Std.Funext
 import Std.HEq
 import Std.Init
 import Std.Interval

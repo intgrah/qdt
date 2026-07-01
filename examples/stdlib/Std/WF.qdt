@@ -1,5 +1,6 @@
 import Std.Eq
 import Std.Init
+import Std.Funext
 import Std.Relation
 
 inductive W.{u, v} {α : Type u} (β : α → Type v) : Type (max u v) where

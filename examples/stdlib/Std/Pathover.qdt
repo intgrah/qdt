@@ -7,3 +7,9 @@ inductive Pathover.{u, v}
 
 def Pathover.rfl.{u, v} {α : Type u} (P : α → Type v) (a : α) (b : P a) : Pathover P b rfl b :=
   Pathover.idpo
+
+def Pathover.const.{u, v} {α : Type u} (C : Type v) {a a' : α} (q : a = a')
+    {b b' : C} (e : b = b') : Pathover (fun _ : α => C) b q b' :=
+  @Eq.rec α a (fun a' q => Pathover (fun _ : α => C) b q b')
+    (@Eq.rec C b (fun b' _ => Pathover (fun _ : α => C) b rfl b') Pathover.idpo b' e)
+    a' q

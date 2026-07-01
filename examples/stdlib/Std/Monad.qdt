@@ -1,5 +1,6 @@
 import Std.Eq
 import Std.Init
+import Std.Funext
 
 structure Functor.{u, v} (f : Type u → Type v) : Type (max (u + 1) v) where
   (map {α β : Type u} : (α → β) → f α → f β)

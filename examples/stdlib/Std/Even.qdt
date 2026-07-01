@@ -1,5 +1,6 @@
 import Std.Eq
 import Std.Init
+import Std.Funext
 import Std.Nat
 import Std.HSet
 import Std.Equiv

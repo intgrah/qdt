@@ -11,7 +11,3 @@ def comp_assoc.{u, v, w, x}
     {α : Type u} {β : Type v} {γ : Type w} {δ : Type x} (f : γ → δ) (g : β → γ) (h : α → β) :
     comp (comp f g) h = comp f (comp g h) :=
   rfl
-
-axiom funext.{u, v}
-    {α : Type u} {β : α → Type v} {f g : (x : α) → β x} (h : (x : α) → f x = g x) :
-    f = g

@@ -1,0 +1,22 @@
+import Std.Eq
+import Std.Bool
+import Std.Unit
+import Std.Pathover
+import Std.Quotient
+import Std.Interval
+
+def funext.{u, v}
+    {α : Type u} {β : α → Type v} {f g : (x : α) → β x} (h : (x : α) → f x = g x) :
+    f = g :=
+  let Pc : (x : α) → Bool → β x := fun x => @Bool.rec (fun _ => β x) (f x) (g x);
+  let epath : (x : α) → (a a' : Bool) → Pc x a = Pc x a' :=
+    fun x =>
+      @Bool.rec
+        (fun a => (a' : Bool) → Pc x a = Pc x a')
+        (@Bool.rec (fun a' => Pc x Bool.true = Pc x a') rfl (h x))
+        (@Bool.rec (fun a' => Pc x Bool.false = Pc x a') (Eq.symm (h x)) rfl);
+  let Pp : (x : α) → (a a' : Bool) → (hr : I.rel a a') → Pathover (fun _ : I => β x) (Pc x a) (quotient.eq_of_rel Bool I.rel a a' hr) (Pc x a') :=
+    fun x a a' hr => Pathover.const (β x) (quotient.eq_of_rel Bool I.rel a a' hr) (epath x a a');
+  let H : (x : α) → I → β x := fun x => @quotient.rec Bool I.rel (fun _ => β x) (Pc x) (Pp x);
+  let q : I → (x : α) → β x := fun i x => H x i;
+  congrArg q I.seg
