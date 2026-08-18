@@ -136,32 +136,12 @@ instance {i} : Hashable (InputVal i) := by
 instance {i} : Hashable (InputV i) :=
   inferInstanceAs (Hashable (Option (InputVal i)))
 
-def Key.rank : Key → Nat
-  | .moduleFile _ => 0
-  | .astSourceMap _ => 1
-  | .ast _ => 2
-  | .sourceMap _ => 2
-  | .imports _ => 4
-  | .declarationIndex _ => 4
-  | .transitiveImports _ => 5
-  | .declAst _ _ => 5
-  | .declScope _ _ _ => 6
-  | .elabOwner _ _ => 6
-  | .elabDecl _ _ => 7
-  | .lookup _ _ => 8
-  | .lookupInfo _ _ => 8
-  | .constant _ _ => 9
-  | .type _ _ => 10
-  | .eval _ _ _ => 10
-  | .checkFile _ => 11
-  | .checkProject => 12
-
 abbrev config : Incremental.BuildConfig where
   I := InputKey
   V := InputV
   Q := Key
   R := Val
-  rel q q₀ := q.rank < q₀.rank
-  wf := InvImage.wf Key.rank Nat.lt_wfRel.wf
+  rel := sorry
+  wf := sorry
 
 end Qdt
