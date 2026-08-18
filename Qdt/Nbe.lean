@@ -63,13 +63,19 @@ partial def VTm.proj {n} (i : Nat) : VTm n → ElabM q₀ (VTm n)
   | .glued ne key => do (← (VTm.glued ne key).whnf).proj i
   | .pi' .. => panic! "VTm.proj: expected neutral"
 
+partial def deltaReductionOf {n} (name : Name) (us : List Universe) (info : DefinitionInfo) :
+    ElabM q₀ (VTm n) := do
+  if let some v := (← get).deltaCache[(name, us)]? then
+    return VTm.weaken (Nat.zero_le n) v
+  let v ← (info.tm.instantiateParams info.univParams us).eval Env.nil
+  modify fun st => { st with deltaCache := st.deltaCache.insert (name, us) v }
+  return VTm.weaken (Nat.zero_le n) v
+
 partial def deltaReduction {n} (name : Name) (us : List Universe) : ElabM q₀ (Option (VTm n)) := do
   if let some v := (← get).deltaCache[(name, us)]? then
     return some (VTm.weaken (Nat.zero_le n) v)
   let some (.definition info) ← fetchConstant q₀ name | return none
-  let v ← (info.tm.instantiateParams info.univParams us).eval Env.nil
-  modify fun st => { st with deltaCache := st.deltaCache.insert (name, us) v }
-  return some (VTm.weaken (Nat.zero_le n) v)
+  some <$> deltaReductionOf name us info
 
 
 partial def metaReduction {n} (id : MVarId) (sp : Spine n) :
@@ -92,25 +98,25 @@ partial def applySpine {n} : Spine n → VTm n → ElabM q₀ (VTm n)
   | .app sp arg, v => do (← applySpine sp v).app arg
   | .proj sp i, v => do (← applySpine sp v).proj i
 
+partial def constWhnf {n} (name : Name) (us : List Universe) (sp : Spine n) :
+    ElabM q₀ (VTm n) := do
+  if let some v := (← get).deltaCache[(name, us)]? then
+    return ← (← applySpine sp (VTm.weaken (Nat.zero_le n) v)).whnf
+  match ← fetchConstant q₀ name with
+  | some (.definition info) => (← applySpine sp (← deltaReductionOf name us info)).whnf
+  | some (.recursor info) =>
+    match ← iotaReductionOf info ⟨.const name us, sp⟩ with
+    | some v => v.whnf
+    | none => return .neutral ⟨.const name us, sp⟩
+  | _ => return .neutral ⟨.const name us, sp⟩
+
 partial def VTm.whnf {n} : VTm n → ElabM q₀ (VTm n)
-  | .neutral ⟨.const name us, sp⟩ => do
-    match ← deltaReduction name us with
-    | some v => (← applySpine sp v).whnf
-    | none =>
-      match ← iotaReduction ⟨.const name us, sp⟩ with
-      | some v => v.whnf
-      | none => return .neutral ⟨.const name us, sp⟩
+  | .neutral ⟨.const name us, sp⟩ => constWhnf name us sp
   | .neutral ⟨.mvar id, sp⟩ => do
     match ← metaReduction id sp with
     | some v => v.whnf
     | none => return .neutral ⟨.mvar id, sp⟩
-  | .glued ⟨_, sp⟩ (.const name us) => do
-    match ← deltaReduction name us with
-    | some v => (← applySpine sp v).whnf
-    | none =>
-      match ← iotaReduction ⟨.const name us, sp⟩ with
-      | some v => v.whnf
-      | none => return .neutral ⟨.const name us, sp⟩
+  | .glued ⟨_, sp⟩ (.const name us) => constWhnf name us sp
   | .glued ⟨_, sp⟩ (.mvar id) => do
     match ← metaReduction id sp with
     | some v => v.whnf
@@ -122,12 +128,14 @@ partial def betaReduction {n} (clos : ClosTm n) (arg : VTm n) : ElabM q₀ (VTm 
   let ⟨env, body⟩ := clos
   body.eval (.cons arg env)
 
-partial def iotaReduction {n}
-    (ne : Neutral n) :
+partial def iotaReduction {n} (ne : Neutral n) : ElabM q₀ (Option (VTm n)) := do
+  let ⟨.const recName _, _⟩ := ne | return none
+  let some info ← fetchRecursor q₀ recName | return none
+  iotaReductionOf info ne
+
+partial def iotaReductionOf {n} (info : RecursorInfo) (ne : Neutral n) :
     ElabM q₀ (Option (VTm n)) := do
-  let ⟨.const recName recUs, sp⟩ := ne
-    | return none
-  let some info ← fetchRecursor q₀ recName
+  let ⟨.const _recName recUs, sp⟩ := ne
     | return none
   let some spList := sp.toAppList
     | return none

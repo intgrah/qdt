@@ -20,12 +20,14 @@ inductive InputKey : Type
   | text (filepath : FilePath)
   | inputFiles
   | projectRoot
+  | collectHovers
 deriving DecidableEq, Repr, Inhabited, Hashable
 
 abbrev InputVal : InputKey → Type
   | .text _ => String
   | .inputFiles => HashMap FilePath FilePath
   | .projectRoot => FilePath
+  | .collectHovers => Bool
 
 abbrev InputV := Option ∘ InputVal
 
@@ -94,6 +96,7 @@ def InputKey.display : InputKey → String
   | .text p => s!"text:{p}"
   | .inputFiles => "inputFiles"
   | .projectRoot => "projectRoot"
+  | .collectHovers => "collectHovers"
 
 abbrev Val : Key → Type
   | .astSourceMap _ => Ast × SourceMap × Array Diagnostic

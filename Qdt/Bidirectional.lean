@@ -39,6 +39,7 @@ def freshMeta {n : Nat} (anchor : Path) (ctx : TermContext n) (expected : VTy n)
   emitHover q₀ (.typeOnly ctx.names (← ty.quote q₀))
 
 def emitIdentHover {n : Nat} (ctx : TermContext n) (name : Name) (tm : Tm n) (ty : VTy n) : ElabM q₀ Unit := do
+  if !(← readThe ElabContext).collectHovers then return
   if let .const constName _ := tm then
     if let some info ← fetchConstantInfo q₀ constName then
       withReader (fun (c : ElabContext) => { c with univParams := info.univParams }) do

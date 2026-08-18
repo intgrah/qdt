@@ -99,6 +99,7 @@ mutual
 
 public partial def VTm.conv {n} (cctx : VCtx n) (a b : VTm n) (cs : ConvState := .rigid) :
     ElabM q₀ Bool :=
+  if ptrEq a b then return true else
   match a, b with
   | .u' i₁, .u' i₂ => Universe.solveUEq q₀ i₁ i₂
   | .glued ne₁ _, .glued ne₂ _ => do
@@ -209,6 +210,7 @@ partial def etaConv {n} (cctx : VCtx n) (ne : Neutral n) (other : VTm n) (cs : C
 partial def Neutral.conv {n} (cctx : VCtx n) :
     Neutral n → Neutral n → ConvState → ElabM q₀ Bool
   | ne₁@⟨h₁, sp₁⟩, ne₂@⟨h₂, sp₂⟩, cs => do
+      if ptrEq ne₁ ne₂ then return true
       match h₁, h₂ with
       | .var v₁, .var v₂ =>
           if v₁ == v₂ then sp₁.conv cctx sp₂ cs else return false
@@ -291,17 +293,20 @@ partial def Neutral.conv {n} (cctx : VCtx n) :
               if ← solveMVarChecked i₂ cctx sp₂ (.neutral ne₁) then return true
               solveMVarFOApprox i₂ cctx sp₂ (.neutral ne₁) cs
 
-partial def Spine.conv {n} (cctx : VCtx n) :
-    Spine n → Spine n → ConvState → ElabM q₀ Bool
-  | .nil, .nil, _ => return true
-  | .app sp₁ t₁, .app sp₂ t₂, cs => do
+partial def Spine.conv {n} (cctx : VCtx n) (s₁ s₂ : Spine n) (cs : ConvState) :
+    ElabM q₀ Bool :=
+  if ptrEq s₁ s₂ then return true else
+  match s₁, s₂ with
+  | .nil, .nil => return true
+  | .app sp₁ t₁, .app sp₂ t₂ => do
       if ← sp₁.conv cctx sp₂ cs then t₁.conv cctx t₂ cs else return false
-  | .proj sp₁ i₁, .proj sp₂ i₂, cs =>
+  | .proj sp₁ i₁, .proj sp₂ i₂ =>
       if i₁ == i₂ then sp₁.conv cctx sp₂ cs else return false
-  | _, _, _ => return false
+  | _, _ => return false
 
 public partial def VTy.conv {n} (cctx : VCtx n) (a b : VTy n) (cs : ConvState := .rigid) :
     ElabM q₀ Bool :=
+  if ptrEq a b then return true else
   match a, b with
   | .u i₁, .u i₂ => Universe.solveUEq q₀ i₁ i₂
   | .pi name _ a₁ ⟨env₁, b₁⟩, .pi _ _ a₂ ⟨env₂, b₂⟩ => do

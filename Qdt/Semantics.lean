@@ -70,6 +70,10 @@ end
 instance {n} : Inhabited (VTy n) := ⟨.u .zero⟩
 instance {n} : Inhabited (VTm n) := ⟨.u' .zero⟩
 
+unsafe def ptrEq_impl {α : Type} (a b : α) : Bool := ptrAddrUnsafe a == ptrAddrUnsafe b
+
+@[implemented_by ptrEq_impl] def ptrEq {α : Type} (_a _b : α) : Bool := false
+
 @[inline] def VTm.var {n} (i : Lvl n) : VTm n := .neutral ⟨.var i, .nil⟩
 @[inline] def VTm.varAt (n : Nat) {m} (h : n < m := by omega) : VTm m := .neutral ⟨.var ⟨n, h⟩, .nil⟩
 @[inline] def VTm.const {n} (name : Name) (us : List Universe := []) : VTm n := .neutral ⟨.const name us, .nil⟩

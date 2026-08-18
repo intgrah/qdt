@@ -21,7 +21,7 @@ def runBuildWith (cfg : Config) : IO UInt32 :=
   match cfg.buildSystem with
   | .busy => Runner.runId cfg (Busy config Input tasks)
   | .lessBusy => Runner.runId cfg (LessBusy config Input tasks)
-  | .salsa => Runner.runId cfg (Salsa config Input tasks)
+  | .salsa => Runner.runId cfg (Salsa config Input (fun _ => Hashable.toEmbedding) tasks)
   | .salsaC => Runner.runId cfg (SalsaC config Input tasks)
   | .shake => Runner.runId cfg
       (Shake config Input (fun _ => Hashable.toEmbedding) (fun _ => Hashable.toEmbedding) tasks)

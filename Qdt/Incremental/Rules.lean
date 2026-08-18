@@ -177,11 +177,12 @@ public def tasks : Tasks config
   | .elabOwner filepath owner => do
     let some ast ← (Task.fetch (ℭ := config) (q₀ := Key.elabOwner filepath owner) (Key.declAst filepath owner) sorry : Task config (Key.elabOwner filepath owner) _)
       | return (∅, 1)
+    let collectHovers ← (Task.input (ℭ := config) (q₀ := Key.elabOwner filepath owner) InputKey.collectHovers : Task config (Key.elabOwner filepath owner) _)
     let univParams := getCommandUnivParams ast
     let elabCtx : ElabContext := {
       filepath
       univParams
-      collectHovers := true
+      collectHovers := collectHovers.getD false
       currentDecl := owner
       path := []
     }
@@ -195,11 +196,12 @@ public def tasks : Tasks config
         let (globalEnv, info) ← (Task.fetch (ℭ := config) (q₀ := Key.elabDecl filepath name) (Key.elabOwner filepath owner) sorry : Task config (Key.elabDecl filepath name) _)
         return (globalEnv[name]?, info)
     | none =>
+        let collectHovers ← (Task.input (ℭ := config) (q₀ := Key.elabDecl filepath name) InputKey.collectHovers : Task config (Key.elabDecl filepath name) _)
         let univParams := getCommandUnivParams ast
         let elabCtx : ElabContext := {
           filepath
           univParams
-          collectHovers := true
+          collectHovers := collectHovers.getD false
           currentDecl := name
           path := []
         }

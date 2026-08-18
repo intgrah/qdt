@@ -30,7 +30,7 @@ def test (action : TestM Unit) : IO Unit := do
     if !errors.isEmpty then
       throw (IO.userError ("\n".intercalate errors.toList))
   let inputs : DHashMap InputKey InputVal :=
-    (DHashMap.emptyWithCapacity 64).insert .projectRoot testRoot
+    ((DHashMap.emptyWithCapacity 64).insert .projectRoot testRoot).insert .collectHovers true
   check.run' { inputs, store := testBuild.init inputs }
 
 def fail (msg : String) : TestM Unit :=

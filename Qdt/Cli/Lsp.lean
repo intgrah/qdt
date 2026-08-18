@@ -76,7 +76,7 @@ def ServerM.getProject (filepath : FilePath) : ServerM ProjectState := do
       let configError ← match ← loadProjectConfig root with
         | .ok _ => pure none
         | .error msg => pure (some msg)
-      let inputs ← scanInputs root
+      let inputs ← scanInputs root (collectHovers := true)
       let store := lspBuild.init inputs
       let ps : ProjectState := { root, inputs, store, configError }
       modify fun st => { st with projects := st.projects.insert root ps }

@@ -47,7 +47,8 @@ def loadProjectConfig (root : FilePath) : IO (Except String Unit) := do
       let msgs ← log.toList.mapM (·.toString)
       return .error (s!"failed to parse {tomlPath}:\n" ++ "\n".intercalate msgs)
 
-def scanInputs (root : FilePath) : IO (DHashMap InputKey InputVal) := do
+def scanInputs (root : FilePath) (collectHovers : Bool := false) :
+    IO (DHashMap InputKey InputVal) := do
   let root ← IO.FS.realPath root
   let rawFiles ← listSrcFiles root
   let mut inputs : DHashMap InputKey InputVal := DHashMap.emptyWithCapacity 64
@@ -59,6 +60,7 @@ def scanInputs (root : FilePath) : IO (DHashMap InputKey InputVal) := do
     inputs := inputs.insert (.text absPath) text
   inputs := inputs.insert .inputFiles inputFiles
   inputs := inputs.insert .projectRoot root
+  inputs := inputs.insert .collectHovers collectHovers
   return inputs
 
 end Qdt
